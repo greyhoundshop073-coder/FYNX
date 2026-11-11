@@ -33,6 +33,7 @@ internal object FynxCatalogueMusicPlayback {
     private var player: MediaPlayer? = null
     private var audioManager: AudioManager? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var resumeAfterTransientFocus = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun toggle(context: Context, trackKey: String, file: File) {
@@ -46,6 +47,10 @@ internal object FynxCatalogueMusicPlayback {
                     snapshot = snapshot.copy(isPlaying = false, error = null)
                 } else {
                     if (current.currentPosition >= current.duration) current.seekTo(0)
+                    if (!requestAudioFocus()) {
+                        snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable.")
+                        return
+                    }
                     current.start()
                     snapshot = snapshot.copy(isPlaying = true, error = null)
                 }
@@ -68,13 +73,26 @@ internal object FynxCatalogueMusicPlayback {
                 mainHandler.post {
                     val active = player ?: return@post
                     when (change) {
-                        AudioManager.AUDIOFOCUS_LOSS,
+                        AudioManager.AUDIOFOCUS_LOSS -> {
+                            resumeAfterTransientFocus = false
+                            runCatching { if (active.isPlaying) active.pause() }
+                            snapshot = snapshot.copy(isPlaying = false)
+                            abandonAudioFocus()
+                        }
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> runCatching {
+                            resumeAfterTransientFocus = active.isPlaying
                             if (active.isPlaying) active.pause()
                             snapshot = snapshot.copy(isPlaying = false)
                         }
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> runCatching { active.setVolume(0.2f, 0.2f) }
-                        AudioManager.AUDIOFOCUS_GAIN -> runCatching { active.setVolume(1f, 1f) }
+                        AudioManager.AUDIOFOCUS_GAIN -> runCatching {
+                            active.setVolume(1f, 1f)
+                            if (resumeAfterTransientFocus && player === active) {
+                                active.start()
+                                snapshot = snapshot.copy(isPlaying = true)
+                            }
+                            resumeAfterTransientFocus = false
+                        }
                     }
                 }
             }, mainHandler)
@@ -85,6 +103,7 @@ internal object FynxCatalogueMusicPlayback {
         }
         audioManager = manager
         focusRequest = request
+        resumeAfterTransientFocus = false
 
         val created = MediaPlayer()
         player = created
@@ -125,8 +144,16 @@ internal object FynxCatalogueMusicPlayback {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         runCatching {
             player?.takeIf { it.isPlaying }?.pause()
+            resumeAfterTransientFocus = false
             snapshot = snapshot.copy(isPlaying = false)
+            abandonAudioFocus()
         }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val manager = audioManager ?: return false
+        val request = focusRequest ?: return false
+        return manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     private fun abandonAudioFocus() {
@@ -135,6 +162,7 @@ internal object FynxCatalogueMusicPlayback {
         if (manager != null && request != null) runCatching { manager.abandonAudioFocusRequest(request) }
         audioManager = null
         focusRequest = null
+        resumeAfterTransientFocus = false
     }
 
     private fun releaseCurrent(resetSnapshot: Boolean) {
