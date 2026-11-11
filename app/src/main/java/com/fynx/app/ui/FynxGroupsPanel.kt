@@ -1392,6 +1392,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Report @${reportMemberUsername?.removePrefix("@")} to FYNX for review.")
+                message?.let { Text(it,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall) }
                 OutlinedTextField(reportReason, { reportReason = it.take(500) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 5, label = { Text("Reason") })
             }
         },
