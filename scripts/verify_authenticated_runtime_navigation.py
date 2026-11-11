@@ -1505,25 +1505,26 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             # asset preselected. This is a navigation hand-off only: Send is never tapped.
             story_xml = tap_control(
                 second_editor, ["Your Story"], f"{prefix}-camera-status-handoff",
-                ["Add status", "Close Add status", "Send"]
+                ["Send"]
             )
             if story_xml:
                 screenshot(f"{prefix}-camera-status-composer.png")
                 (ROOT / f"{prefix}-camera-status-composer.xml").write_text(
                     story_xml + chr(10), encoding="utf-8"
                 )
-                status_composer_visible = any(
-                    find_control(story_xml, [label])
-                    for label in ["Add status", "Close Add status", "Send", "Choose a photo or video"]
+                # The selected media must land in the actual Status composer, not merely
+                # the Add status picker or the Stories timeline. Require both composer CTAs.
+                status_composer_visible = (
+                    find_control(story_xml, ["Send"]) is not None
+                    and find_control(story_xml, ["Back from Status composer"]) is not None
                 )
                 if status_composer_visible:
-                    report.append("- PASS Your Story opened a visible Status creator/composer; Send was not tapped")
+                    report.append("- PASS Your Story opened the existing Status composer with the captured media; Send was not tapped")
                 else:
                     FAILURES.append(
-                        prefix + ": Your Story navigation reached the Stories surface but did not expose the Status creator controls"
+                        prefix + ": Your Story hand-off did not expose both Send and Back from Status composer"
                     )
-                # This flow may be hosted as the Home Stories destination. Use Android
-                # Back (the Status panel's BackHandler) rather than inventing a Close label.
+                # System Back must be handled by the innermost Status composer and return to Home.
                 run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
                 time.sleep(0.7)
                 recovered_home = dump_ui(f"{prefix}-camera-status-return-home.xml")
@@ -2475,7 +2476,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     else:
         video_status_xml = tap_control(
             current, ["Status"], f"{prefix}-camera-video-status-handoff",
-            ["Back from Status composer"]
+            ["Send"]
         )
         if not video_status_xml:
             FAILURES.append(prefix + ": Status did not open from the recorded-video preview")
@@ -2487,7 +2488,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             if find_control(video_status_xml, ["Send"]) and find_control(video_status_xml, ["Back from Status composer"]):
                 report.append("- PASS recorded video opened the existing Status composer with Send available; Send was not tapped")
             else:
-                FAILURES.append(prefix + ": recorded video Status composer did not expose its expected media composer actions")
+                FAILURES.append(prefix + ": recorded video Status composer did not expose both Send and Back from Status composer")
             status_closed_xml = tap_control(
                 video_status_xml, ["Back from Status composer"],
                 f"{prefix}-camera-video-status-close", ["Open FYNX camera"]
