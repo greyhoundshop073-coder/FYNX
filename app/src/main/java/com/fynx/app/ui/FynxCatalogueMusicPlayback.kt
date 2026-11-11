@@ -79,11 +79,20 @@ internal object FynxCatalogueMusicPlayback {
                     when (change) {
                         AudioManager.AUDIOFOCUS_LOSS -> {
                             resumeAfterTransientFocus = false
+                            if (snapshot.isPreparing) {
+                                releaseCurrent(resetSnapshot = true)
+                                return@post
+                            }
                             runCatching { if (active.isPlaying) active.pause() }
                             snapshot = snapshot.copy(isPlaying = false)
                             abandonAudioFocus(clear = false)
                         }
                         AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> runCatching {
+                            // A pending initial seek must never start after focus was lost.
+                            if (snapshot.isPreparing) {
+                                releaseCurrent(resetSnapshot = true)
+                                return@post
+                            }
                             resumeAfterTransientFocus = active.isPlaying
                             if (active.isPlaying) active.pause()
                             snapshot = snapshot.copy(isPlaying = false)
