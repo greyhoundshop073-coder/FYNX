@@ -22,6 +22,7 @@ import java.io.File
 internal object FynxCatalogueMusicPlayback {
     data class Snapshot(
         val trackKey: String? = null,
+        val ownerKey: String? = null,
         val isPreparing: Boolean = false,
         val isPlaying: Boolean = false,
         val error: String? = null
@@ -36,9 +37,9 @@ internal object FynxCatalogueMusicPlayback {
     private var resumeAfterTransientFocus = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun toggle(context: Context, trackKey: String, file: File) {
+    fun toggle(context: Context, trackKey: String, file: File, ownerKey: String? = null) {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
-        if (snapshot.trackKey == trackKey && player != null) {
+        if (snapshot.trackKey == trackKey && snapshot.ownerKey == ownerKey && player != null) {
             val current = player ?: return
             if (snapshot.isPreparing) return
             runCatching {
@@ -62,7 +63,7 @@ internal object FynxCatalogueMusicPlayback {
         }
 
         releaseCurrent(resetSnapshot = false)
-        snapshot = Snapshot(trackKey = trackKey, isPreparing = true)
+        snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, isPreparing = true)
         val attributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -115,9 +116,9 @@ internal object FynxCatalogueMusicPlayback {
                 if (player !== prepared) return@setOnPreparedListener
                 runCatching {
                     prepared.start()
-                    snapshot = Snapshot(trackKey = trackKey, isPlaying = true)
+                    snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, isPlaying = true)
                 }.onFailure {
-                    snapshot = Snapshot(trackKey = trackKey, error = it.message)
+                    snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, error = it.message)
                     releaseCurrent(resetSnapshot = false)
                 }
             }
@@ -125,23 +126,34 @@ internal object FynxCatalogueMusicPlayback {
                 if (player !== completed) return@setOnCompletionListener
                 runCatching { completed.seekTo(0) }
                 abandonAudioFocus(clear = false)
-                snapshot = Snapshot(trackKey = trackKey)
+                snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey)
             }
             created.setOnErrorListener { failed, _, _ ->
                 if (player === failed) {
                     releaseCurrent(resetSnapshot = false)
-                    snapshot = Snapshot(trackKey = trackKey, error = "Audio playback failed.")
+                    snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, error = "Audio playback failed.")
                 }
                 true
             }
             created.prepareAsync()
         } catch (error: Exception) {
             releaseCurrent(resetSnapshot = false)
-            snapshot = Snapshot(trackKey = trackKey, error = error.message ?: "Audio playback failed.")
+            snapshot = Snapshot(trackKey = trackKey, ownerKey = ownerKey, error = error.message ?: "Audio playback failed.")
         }
     }
 
     fun pause() {
+        pauseCurrent()
+    }
+
+    /** Pause only the soundtrack owned by the feed post that just left the active slot. */
+    fun pause(ownerKey: String) {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
+        if (snapshot.ownerKey != ownerKey) return
+        pauseCurrent()
+    }
+
+    private fun pauseCurrent() {
         check(Looper.myLooper() == Looper.getMainLooper()) { "Catalogue playback must be controlled on the main thread." }
         runCatching {
             player?.takeIf { it.isPlaying }?.pause()
