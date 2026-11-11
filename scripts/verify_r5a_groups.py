@@ -22,7 +22,7 @@ client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
 settings = read('app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
-check('group membership is required to read messages', "group membership required" in group and "if(!(await member(groupId,req.user.sub)))" in group)
+check('group membership is required to read messages', "group membership required" in group and "JOIN fynx_group_members gm" in group and "WHERE gm.group_id=$1 AND gm.user_id=$2 LIMIT 1" in group and "if(!access)" in group)
 check('group message sender owns attachments', "message_media WHERE id=$1 AND owner_id=$2" in group)
 check('group messages respect account safety state', "account_status" in group and "ACCOUNT_LOCKED" in group and "ACCOUNT_LIMITED" in group)
 check('group messages run trust safety inspection', "inspectTrustSafetyText" in group and "SAFETY_BLOCK" in group)
