@@ -1322,7 +1322,11 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (!member.username.removePrefix("@").equals(current.ownerUsername.removePrefix("@"), true) && !member.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)) {
+                        val isOwnerMember = member.username.removePrefix("@").equals(current.ownerUsername.removePrefix("@"), true)
+                        val isSelfMember = member.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)
+                        if (!isSelfMember) {
+                            TextButton(onClick = { reportMemberUsername = member.username; reportReason = "" }) { Text("Report") }
+                            if (!isOwnerMember) {
                             if (isAdmin && canManage) {
                                 TextButton(enabled = busyMemberAction == null, onClick = {
                                     val demoting = member.role == FynxGroupRole.MODERATOR
@@ -1341,7 +1345,6 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                     }
                                 }) { Text(if (busyMemberAction == member.username) "Saving…" else if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
                             }
-                            TextButton(onClick = { reportMemberUsername = member.username; reportReason = "" }) { Text("Report") }
                             TextButton(enabled = busyMemberAction == null, onClick = {
                                 busyMemberAction = member.username
                                 scope.launch {
@@ -1369,6 +1372,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                                     busyMemberAction = null
                                 }
                             }) { Text("Remove") }
+                            }
                         }
                     }
                 }
