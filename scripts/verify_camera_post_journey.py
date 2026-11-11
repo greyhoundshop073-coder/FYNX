@@ -179,12 +179,17 @@ checks = [
      and "LaunchedEffect(initialMediaUri, initialMediaType)" in status_hub
      and "FynxMatureStatusComposerPanel(" in status_hub
      and "initialMediaUri = selectedInitialMedia?.uri" in status_hub),
-    ("Runtime captures the explicit Status media hand-off and safely returns before the separate Next-to-post journey",
-     '["Status"]' in runtime
+    ("Your Story dismisses Camera Dialog and opens the real Status composer without publishing",
+     'onShareToStatus = { uri, type ->' in home
+     and "showCamera = false" in home
+     and 'onOpenStatusWithMedia(uri, type)' in home
+     and '["Your Story"]' in runtime
+     and '["Send"]' in runtime
      and '["Back from Status composer"]' in runtime
      and "camera-status-composer.png" in runtime
-     and "Your Story opened the existing Status composer with the captured media" in runtime
-     and "Send is never tapped" in runtime
+     and "Your Story opened the existing Status composer with the captured media; Send was not tapped" in runtime
+     and 'input", "KEYCODE_BACK"' in runtime
+     and "camera-status-return-home.xml" in runtime
      and "camera-after-status-photo" in runtime),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
@@ -396,7 +401,7 @@ checks.extend([
      and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
     ("Status-to-post runtime keeps the supported rear camera and never reuses a stale editor hierarchy",
-     "This CI AVD is launched with -camera-front none" in runtime
+     "-camera-front none" in workflow
      and "wait_attempts=80" in runtime
      and "camera_wait_for_control(" in runtime
      and 'enabled=True, timeout=20.0' in runtime
