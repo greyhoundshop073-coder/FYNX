@@ -94,7 +94,7 @@ export function registerBusinessRoutes({ app, auth }) {
 
   // Public business profile and its active, in-stock Marketplace products.
   // Never return owner IDs, private account data, or unlinked seller listings.
-  app.get("/api/business/:username", async (req, res) => {
+  app.get("/api/business/public/:username", async (req, res) => {
     const username = clean(req.params?.username, 32).replace(/^@+/, "").toLowerCase();
     if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: "invalid business username" });
     try {
