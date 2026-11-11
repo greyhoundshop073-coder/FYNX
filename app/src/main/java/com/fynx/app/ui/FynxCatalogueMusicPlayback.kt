@@ -44,6 +44,7 @@ internal object FynxCatalogueMusicPlayback {
             runCatching {
                 if (current.isPlaying) {
                     current.pause()
+                    abandonAudioFocus(clear = false)
                     snapshot = snapshot.copy(isPlaying = false, error = null)
                 } else {
                     if (current.currentPosition >= current.duration) current.seekTo(0)
