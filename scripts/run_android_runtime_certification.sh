@@ -13,6 +13,18 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ] && [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::notice::Running both focused camera and Music picker runtime journeys; no post, Status or music track is published."
+  FYNX_CAMERA_VISUALS_ONLY=1 FYNX_MUSIC_VISUALS_ONLY=0 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  CAMERA_EXIT=$?
+  FYNX_CAMERA_VISUALS_ONLY=0 FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  MUSIC_EXIT=$?
+  if [ "$CAMERA_EXIT" -ne 0 ]; then NAV_EXIT="$CAMERA_EXIT"; else NAV_EXIT="$MUSIC_EXIT"; fi
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  exit "$TEST_EXIT"
+fi
+
 if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   echo "::notice::Capturing the Home composer and Music picker through the debug-only UI entry; no backend account or publishing action is used."
   FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
