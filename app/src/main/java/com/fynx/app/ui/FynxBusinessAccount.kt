@@ -18,6 +18,7 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
     val loadMutex = remember { Mutex() }
     var name by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }; var category by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var website by remember { mutableStateOf("") }
+    var openingHoursText by remember { mutableStateOf("") }; var serviceAreasText by remember { mutableStateOf("") }; var servicesText by remember { mutableStateOf("") }
     var verified by remember { mutableStateOf(false) }; var businessId by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }; var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }; var activeListings by remember { mutableStateOf(0) }; var campaigns by remember { mutableStateOf(0) }; var budget by remember { mutableStateOf(0L) }; var spent by remember { mutableStateOf(0L) }
@@ -31,7 +32,19 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             try {
                 FynxBusinessClient.load(context).onSuccess { p ->
                     businessId = p?.id
-                    if (p != null) { name=p.businessName; username=p.businessUsername; category=p.category; description=p.description; location=p.location; phone=p.phone; website=p.website; verified=p.verified }
+                    if (p != null) {
+                        name=p.businessName; username=p.businessUsername; category=p.category; description=p.description
+                        location=p.location; phone=p.phone; website=p.website; verified=p.verified
+                        openingHoursText = (0 until p.openingHours.length()).mapNotNull { index ->
+                            val day = p.openingHours.names()?.optString(index).orEmpty()
+                            day.takeIf { it.isNotBlank() }?.let { "$it: ${p.openingHours.optString(it)}" }
+                        }.joinToString("\\n")
+                        serviceAreasText = (0 until p.serviceAreas.length()).map { p.serviceAreas.optString(it) }.joinToString(", ")
+                        servicesText = (0 until p.services.length()).mapNotNull { index ->
+                            val item = p.services.optJSONObject(index) ?: return@mapNotNull null
+                            listOf(item.optString("name"), item.optString("price"), item.optString("currency", "NGN"), item.optString("description")).joinToString(" | ")
+                        }.joinToString("\\n")
+                    }
                 }
                 FynxBusinessClient.overview(context).onSuccess { o -> activeListings=o.optInt("activeListings"); campaigns=o.optInt("campaigns"); budget=o.optLong("budgetKobo"); spent=o.optLong("spentKobo") }
                 FynxMarketplaceClient.myListings(context).onSuccess { loaded ->
@@ -59,6 +72,12 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             OutlinedTextField(location,{location=it.take(160)},Modifier.fillMaxWidth(),label={Text("Location")},singleLine=true)
             OutlinedTextField(phone,{phone=it.take(30)},Modifier.fillMaxWidth(),label={Text("Business phone")},singleLine=true)
             OutlinedTextField(website,{website=it.take(200)},Modifier.fillMaxWidth(),label={Text("Website (HTTPS)")},singleLine=true)
+            Divider()
+            Text("Public business information", style=MaterialTheme.typography.titleMedium)
+            OutlinedTextField(openingHoursText,{openingHoursText=it.take(700)},Modifier.fillMaxWidth(),label={Text("Opening hours")},placeholder={Text("Mon: 9am-5pm\\nTue: 9am-5pm")},minLines=3)
+            OutlinedTextField(serviceAreasText,{serviceAreasText=it.take(600)},Modifier.fillMaxWidth(),label={Text("Service areas (comma separated)")},placeholder={Text("Ikeja, Yaba, Surulere")},minLines=2)
+            OutlinedTextField(servicesText,{servicesText=it.take(2400)},Modifier.fillMaxWidth(),label={Text("Services and prices")},placeholder={Text("Hair styling | 5000 | NGN | Wash and styling\\nConsultation | 25 | USD | Online session")},minLines=4)
+            Text("One service per line: Name | Price | NGN/USD | Description. Leave price blank when you quote individually.", color=MaterialTheme.colorScheme.onSurfaceVariant, style=MaterialTheme.typography.bodySmall)
             if (verified) Text("✓ Verified business",color=MaterialTheme.colorScheme.primary)
         }}
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -100,7 +119,7 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             Button(onClick=onBack,modifier=Modifier.weight(1f)){Text("Back")}
             Button(enabled=!loading&&!saving&&name.isNotBlank()&&username.trim().removePrefix("@").isNotBlank()&&category.isNotBlank(),onClick={
                 saving=true; message=null; scope.launch {
-                    try { FynxBusinessClient.save(context,name.trim(),username.trim().removePrefix("@"),category.trim(),description.trim(),location.trim(),phone.trim(),website.trim())
+                    try { FynxBusinessClient.save(context,name.trim(),username.trim().removePrefix("@"),category.trim(),description.trim(),location.trim(),phone.trim(),website.trim(),openingHoursText,serviceAreasText,servicesText)
                         .onSuccess { p -> businessId=p.id; verified=p.verified; message="Business profile saved."; load() }
                         .onFailure { message=it.message ?: "Unable to save business profile." }
                     } finally { saving=false }
