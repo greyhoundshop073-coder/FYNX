@@ -124,7 +124,7 @@ internal object FynxCatalogueMusicPlayback {
             created.setOnCompletionListener { completed ->
                 if (player !== completed) return@setOnCompletionListener
                 runCatching { completed.seekTo(0) }
-                abandonAudioFocus()
+                abandonAudioFocus(clear = false)
                 snapshot = Snapshot(trackKey = trackKey)
             }
             created.setOnErrorListener { failed, _, _ ->
