@@ -285,7 +285,7 @@ jobs:
       - name: Fast build, test and lint
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
       - name: Run isolated Remote Config startup instrumentation
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/fynx-remote-config-foundation-20261110' }}
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/fynx-remote-config-foundation-20261110') || (github.event_name == 'push' && github.ref == 'refs/heads/feat/fynx-remote-config-foundation-20261110') }}
         timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
