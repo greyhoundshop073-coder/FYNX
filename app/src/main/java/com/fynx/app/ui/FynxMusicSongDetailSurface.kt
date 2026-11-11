@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -75,12 +76,22 @@ internal fun FynxMusicSongDetailSurface(
     val context = LocalContext.current
     val numericMediaId = remember(mediaId) { mediaId.toLongOrNull()?.takeIf { it > 0L } }
     var audioFile by remember(mediaId) { mutableStateOf<java.io.File?>(null) }
+    var audioLoading by remember(mediaId) { mutableStateOf(false) }
     var audioLoadFailed by remember(mediaId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(mediaId) {
-        audioFile = null
-        audioLoadFailed = false
-        if (numericMediaId != null) {
+    // Do not download audio merely because a user opened the song destination.
+    // Load it only after an explicit Preview tap to protect mobile data and feed cache.
+    fun loadAndPreview() {
+        if (audioLoading || numericMediaId == null) return
+        val cached = audioFile
+        if (cached != null) {
+            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached)
+            return
+        }
+        scope.launch {
+            audioLoading = true
+            audioLoadFailed = false
             val downloaded = withContext(Dispatchers.IO) {
                 runCatching {
                     FynxMediaCache.getOrDownload(context, "/api/social/music/media/$mediaId", "audio")
@@ -88,8 +99,8 @@ internal fun FynxMusicSongDetailSurface(
             }
             audioFile = downloaded
             audioLoadFailed = downloaded == null
-        } else {
-            audioLoadFailed = true
+            audioLoading = false
+            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) }
         }
     }
 
@@ -187,7 +198,7 @@ internal fun FynxMusicSongDetailSurface(
 
                 if (audioLoadFailed) {
                     Text(
-                        "Preview is unavailable right now. Check your connection and try again later.",
+                        "Preview could not be loaded. Check your connection and tap Preview to retry.",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -199,12 +210,8 @@ internal fun FynxMusicSongDetailSurface(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            audioFile?.let {
-                                FynxCatalogueMusicPlayback.toggle(context, mediaId, it)
-                            }
-                        },
-                        enabled = audioFile != null && !isPreparing,
+                        onClick = { loadAndPreview() },
+                        enabled = numericMediaId != null && !audioLoading && !isPreparing,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(15.dp)
                     ) {
@@ -213,7 +220,14 @@ internal fun FynxMusicSongDetailSurface(
                             contentDescription = null
                         )
                         Spacer(Modifier.size(6.dp))
-                        Text(if (isPreparing) "Preparing…" else if (isPlaying) "Pause preview" else "Preview")
+                        Text(
+                            when {
+                                audioLoading -> "Loading preview…"
+                                isPreparing -> "Preparing…"
+                                isPlaying -> "Pause preview"
+                                else -> "Preview"
+                            }
+                        )
                     }
                     Button(
                         onClick = {
