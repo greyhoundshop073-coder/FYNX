@@ -177,6 +177,11 @@ internal fun FynxMusicPickerSurface(
                                         }
                                         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                             if (previewingTrackId == track.id) {
+                                                FynxRemoteAudio(
+                                                    "/api/social/music/catalogue/" + track.id + "/media",
+                                                    Modifier.width(108.dp),
+                                                    track.durationMs.coerceAtLeast(1_000L)
+                                                )
                                                 IconButton(onClick = onStopPreview, modifier = Modifier.size(34.dp)) {
                                                     Icon(Icons.Default.Stop, contentDescription = "Stop preview", tint = Color(0xFF536D87))
                                                 }
