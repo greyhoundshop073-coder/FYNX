@@ -7,7 +7,7 @@ directory = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalBusinessDirector
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBusinessClient.kt").read_text()
 
 checks = [
-    ("Marketplace exposes the Local Businesses destination", "onOpenBusinesses" in marketplace and 'Text("Local businesses")' in marketplace),
+    ("Marketplace exposes the Local Businesses destination", "onOpenBusinesses" in marketplace and 'Text("Local businesses",' in marketplace),
     ("Marketplace route opens the dedicated directory panel", '"Local Businesses" -> FynxLocalBusinessesPanel' in app),
     ("directory is reachable from the Marketplace screen", 'onOpenBusinesses = { selected = "Local Businesses" }' in app),
     ("directory uses the authenticated FYNX backend base client without adding credentials", 'FynxBackendClient.get(context, url)' in directory),
