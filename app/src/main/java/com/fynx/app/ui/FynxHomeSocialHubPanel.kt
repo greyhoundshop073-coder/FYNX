@@ -978,6 +978,23 @@ fun FynxHomeSocialHubPanel(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
 
                         Row(
+                            Modifier.fillMaxWidth()
+                                .clickable(enabled = !posting) { showMorePostOptions = true }
+                                .semantics(mergeDescendants = true) { contentDescription = "More options" }
+                                .testTag("camera-post-more-options-row")
+                                .padding(vertical = 13.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(25.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("More options", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                                Text("Music, people, media and post styling", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        Row(
                             Modifier.fillMaxWidth().clickable(enabled = !posting) { showDisclosureInfo = true }.padding(vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1056,22 +1073,6 @@ fun FynxHomeSocialHubPanel(
                             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
 
-                        Row(
-                            Modifier.fillMaxWidth()
-                                .clickable(enabled = !posting) { showMorePostOptions = true }
-                                .semantics(mergeDescendants = true) { contentDescription = "More options" }
-                                .testTag("camera-post-more-options-row")
-                                .padding(vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(25.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("More options", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                                Text("Music, people, media and post styling", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
 
                         Row(
                             Modifier.fillMaxWidth().clickable(enabled = !posting) { sharePostCaption() }.padding(vertical = 13.dp),
@@ -1530,7 +1531,10 @@ fun FynxHomeSocialHubPanel(
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
                         showYourStoryAction = cameraEditingMediaUri == null,
                         onShareToStatus = { uri, type ->
-                            showCamera = false
+                            // Keep the Home camera session underneath the Status creator.
+                            // When the creator closes, Home resumes in the camera instead of
+                            // stranding the user back in the old post composer.
+                            showCamera = true
                             showFastCamera = false
                             cameraOpenedFromComposer = false
                             onOpenStatusWithMedia(uri, type)
