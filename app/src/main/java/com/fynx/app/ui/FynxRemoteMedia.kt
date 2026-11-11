@@ -160,7 +160,6 @@ fun FynxRemoteMedia(
     DisposableEffect(resolvedUrl, type) {
         onDispose {
             videoView?.stopPlayback()
-            preparedPlayer?.release()
             preparedPlayer = null
             videoView = null
             (currentAnimatedDrawable as? AnimatedImageDrawable)?.stop()
