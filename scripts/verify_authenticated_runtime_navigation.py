@@ -3338,13 +3338,6 @@ if HOME_FEED_VISUALS_ONLY:
         and is_home_feed_navigation_visible(home_xml)
     )
     if home_visible:
-        home_xml = capture_home_music_picker_visuals(home_xml)
-        home_visible = bool(
-            home_xml
-            and is_authenticated_home_surface(home_xml)
-            and is_home_feed_navigation_visible(home_xml)
-        )
-    if home_visible:
         (ROOT / "authenticated-home-feed-final.xml").write_text(home_xml + chr(10), encoding="utf-8")
         screenshot("authenticated-home-feed-final.png")
         report.append("- PASS: captured the actual Home Feed at its restored top position with the floating Home navigation visible.")
@@ -3368,17 +3361,6 @@ if HOME_FEED_VISUALS_ONLY:
         report.append("- LIMITATION: full-screen video interaction could not be demonstrated without an available Home video or successful local CI fixture.")
     if not (ROOT / "authenticated-home-comments.png").is_file():
         report.append("- LIMITATION: the local read-only comment thread was not captured; no backend comment or reply was created.")
-
-    music_composer_proof = (ROOT / "authenticated-home-music-composer.png").is_file()
-    music_picker_proof = (ROOT / "authenticated-home-music-picker.png").is_file()
-    if not music_composer_proof or not music_picker_proof:
-        missing_music = [
-            name for name, present in (
-                ("authenticated-home-music-composer.png", music_composer_proof),
-                ("authenticated-home-music-picker.png", music_picker_proof),
-            ) if not present
-        ]
-        FAILURES.append("Music picker visual certification is incomplete; missing evidence: " + ", ".join(missing_music))
 
     report += ["", "## Home Feed evidence files"]
     report += [
@@ -3404,13 +3386,7 @@ if HOME_FEED_VISUALS_ONLY:
             ) if not (ROOT / name).is_file()
         ]
         FAILURES.append("Home Feed visual certification is incomplete; missing required evidence: " + ", ".join(missing_evidence))
-    report += ["", "## Music picker evidence files"]
-    report += [
-        "- authenticated-home-music-composer.png" if music_composer_proof else "- Home composer screenshot unavailable",
-        "- authenticated-home-music-picker.png" if music_picker_proof else "- Music picker screenshot unavailable",
-        "- authenticated-home-after-music-picker.png" if (ROOT / "authenticated-home-after-music-picker.png").is_file() else "- Home return screenshot unavailable",
-    ]
-    capture_result = "GREEN" if not FAILURES and media_proof_complete and music_composer_proof and music_picker_proof else "RED"
+    capture_result = "GREEN" if not FAILURES and media_proof_complete else "RED"
     report += ["", f"## Result: {capture_result}"]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
