@@ -7,6 +7,7 @@ legacy = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicLibraryClient.kt").
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt").read_text(encoding="utf-8")
 models = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt").read_text(encoding="utf-8")
 announcements = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")
+app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 music_admin = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")
 feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
 routes = (ROOT / "backend/socialRoutes.js").read_text(encoding="utf-8")
@@ -33,7 +34,7 @@ checks = [
     ("Admin music write routes enforce OWNER-only authorization", routes.count("if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });") == 3),
     ("Admin can publish a track through the real authenticated media path", "FynxProductionMessaging.uploadMedia" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "addMusicTrack" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")),
     ("Failed catalogue publish can be retried without re-uploading audio", "uploadedMediaId" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "Retry publish" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "retained so you can retry publishing without uploading it again" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")),
-    ("Announcement Center music tools are visible only to the server-confirmed OWNER", 'adminRole == "OWNER"' in announcements and "FynxAdminClient.dashboard(context)" in announcements and "FynxMusicAdminPanel()" in announcements),
+    ("Announcement Center music tools use the app shell's server-confirmed OWNER role", "ownerAccess: Boolean = false" in announcements and "FynxAnnouncementsPanel(ownerAccess = adminRole == \"OWNER\")" in app and "if (ownerAccess)" in announcements and "FynxMusicAdminPanel()" in announcements),
     ("Admin Control Center music tools are OWNER-only", 'if (d.role == "OWNER")' in announcements and "FynxMusicAdminPanel()" in announcements),
     ("Admin Control Center keeps seasonal promotion tools available to OWNER and ADMIN", 'if (d.role == "OWNER" || d.role == "ADMIN")' in announcements and "FynxMarketplaceSeasonalPromotionAdminPanel()" in announcements),
     ("Music admin UI accurately states OWNER-only management", "Only the official FYNX OWNER can add, restore or remove catalogue tracks." in music_admin),

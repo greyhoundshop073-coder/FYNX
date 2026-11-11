@@ -15,22 +15,16 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
-fun FynxAnnouncementsPanel() {
+fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
     val context = LocalContext.current
     var items by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    var adminRole by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        FynxAdminClient.dashboard(context).onSuccess { dashboard ->
-            adminRole = dashboard.role.takeIf { it == "OWNER" }
-        }
-    }
     LaunchedEffect(refresh) { loading = true; FynxAdminClient.announcements(context).onSuccess { items = it; error = null }.onFailure { error = it.message ?: "Unable to load announcements." }; loading = false }
     Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(8.dp)); Text("Important updates published by the FYNX team.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(16.dp))
-        if (adminRole == "OWNER") {
+        if (ownerAccess) {
             Card(
                 Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.06f)),

@@ -849,7 +849,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
             "Advertising Dashboard" -> FynxAdvertisingDashboardPanel()
             "Advertising AI" -> { selected = "AI" }
-            "Announcements" -> FynxAnnouncementsPanel()
+            "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)
