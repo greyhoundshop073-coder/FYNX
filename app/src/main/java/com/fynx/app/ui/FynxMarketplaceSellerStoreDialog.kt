@@ -150,7 +150,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         storefrontHasMore = page.hasMore
                         storefrontError = null
                     }
-                    .onFailure { failure ->
+                    .onFailure { failure: Throwable ->
                         storefrontError = if (storefrontListings.isNullOrEmpty()) {
                             marketplaceSafeError(failure, "Products could not load. Check your connection and try again.")
                         } else {
