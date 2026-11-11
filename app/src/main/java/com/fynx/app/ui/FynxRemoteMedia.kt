@@ -162,7 +162,9 @@ fun FynxRemoteMedia(
             videoView?.stopPlayback()
             preparedPlayer = null
             videoView = null
-            (currentAnimatedDrawable as? AnimatedImageDrawable)?.stop()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                (currentAnimatedDrawable as? AnimatedImageDrawable)?.stop()
+            }
             currentBitmap?.takeUnless { it.isRecycled }?.recycle()
         }
     }
