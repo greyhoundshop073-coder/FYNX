@@ -172,14 +172,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
 
     if (selectedBusiness == null) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Marketplace")
-            }
-            Column(Modifier.weight(1f)) {
-                Text("Local Businesses", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Discover shops and services around your area", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(onClick = { load(reset = true) }, enabled = !loading) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh businesses")
             }
