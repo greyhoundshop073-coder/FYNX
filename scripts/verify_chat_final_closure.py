@@ -27,6 +27,9 @@ checks = [
     ("group message edit", "FynxGroupsPanel.kt", "FynxGroupRemoteClient.editMessage"),
     ("group history visibility control", "FynxGroupSettingsPanel.kt", "showHistoryToNewMembers"),
     ("group settings errors are user-safe", "FynxGroupSettingsPanel.kt", "Group permissions could not be saved. Please try again."),
+    ("server recent conversation index", "server.js", 'app.get("/api/messages/recent", auth'),
+    ("Chats list hydrates from server", "ChatsPanel.kt", "FynxProductionMessaging.recentConversations(context)"),
+    ("Groups list hydrates from server", "ChatsPanel.kt", "FynxGroupRemoteClient.loadMyGroups(context)"),
     # The production panel uses the title-cased UI label "Chat Settings".
     ("chat settings", "FynxChatSettingsPanel.kt", "Chat Settings"),
     ("wallpaper", "FynxChatWallpaper.kt", "FynxChatWallpaperBackground"),
