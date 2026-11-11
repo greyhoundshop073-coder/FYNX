@@ -3130,6 +3130,67 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
+    report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT/"FYNX-local-business-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
+        print("\\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("local-business-home.xml") or xml
+    marketplace_xml = tap_control(home_xml, ["Marketplace"], "local-business-marketplace", ["Search products, sellers or categories"])
+    if not marketplace_xml:
+        FAILURES.append("Home -> Marketplace did not expose the Marketplace search surface")
+    else:
+        screenshot("authenticated-marketplace.png")
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(marketplace_xml, "local-business-shortcut-rail-" + str(attempt))
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
+        directory_xml = tap_control(marketplace_xml, ["Local businesses"], "marketplace-local-businesses", ["Search businesses, services or names"])
+        if not directory_xml:
+            FAILURES.append("Marketplace -> Local businesses shortcut could not be opened")
+        else:
+            deadline = time.monotonic() + 12.0
+            latest = directory_xml
+            while time.monotonic() < deadline:
+                latest = dump_ui("local-business-directory-settled.xml") or latest
+                if (find_control(latest, ["Local Businesses"])
+                        and find_control(latest, ["Search businesses, services or names"])
+                        and find_control(latest, ["Area, city or neighbourhood"])):
+                    break
+                time.sleep(0.4)
+            if (find_control(latest, ["Local Businesses"])
+                    and find_control(latest, ["Search businesses, services or names"])
+                    and find_control(latest, ["Area, city or neighbourhood"])):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(latest + chr(10), encoding="utf-8")
+                report.append("- PASS: Local Businesses directory title, search and area controls rendered in the installed APK.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                FAILURES.append("Local Businesses directory did not expose its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            returned = ""
+            back_deadline = time.monotonic() + 8.0
+            while time.monotonic() < back_deadline:
+                returned = dump_ui("local-business-marketplace-back.xml") or returned
+                if find_control(returned, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(returned, ["Search products, sellers or categories"]):
+                screenshot("authenticated-marketplace-local-businesses-back.png")
+                report.append("- PASS: Back returned from Local Businesses to Marketplace.")
+            else:
+                FAILURES.append("Local Businesses Back navigation did not return to Marketplace")
+    report += ["", "## Evidence boundary", "- This is a local UI/navigation certification; no backend directory records or live search results are claimed.", "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT/"FYNX-local-business-runtime.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
+    print("\\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
     fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
     if not fixtures_ready:
