@@ -1473,6 +1473,7 @@ private fun MusicPostPlayer(postId: String, mediaId: String, title: String, arti
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val ownerKey = remember(postId) { "home-post:$postId" }
+    val latestPlaybackActive by rememberUpdatedState(playbackActive)
     var songDetailsOpen by remember(mediaId) { mutableStateOf(false) }
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
     var loadingAudio by remember(mediaId) { mutableStateOf(false) }
@@ -1506,7 +1507,7 @@ private fun MusicPostPlayer(postId: String, mediaId: String, title: String, arti
             file = downloaded
             audioLoadFailed = downloaded == null
             loadingAudio = false
-            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it, ownerKey) }
+            if (latestPlaybackActive) downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it, ownerKey) }
         }
     }
 
