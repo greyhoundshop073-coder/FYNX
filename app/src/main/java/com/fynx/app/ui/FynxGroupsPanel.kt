@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Send
@@ -1292,7 +1293,7 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
             Spacer(Modifier.height(8.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(current.members, key = { it.username }) { member ->
-                    val blocked = management.value.state.blockedUsernames.contains(member.username)
+                    val blocked = management.value.state.blockedUsernames.contains(member.username.removePrefix("@").trim())
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         FynxRemoteProfileAvatar(
                             mediaId = memberPhotoIds[member.username.removePrefix("@").trim()],
