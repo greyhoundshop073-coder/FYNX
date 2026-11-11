@@ -121,6 +121,34 @@ fun FynxHomeSocialHubPanel(
     var aiCaptionSuggestion by remember { mutableStateOf<String?>(null) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
 
+    DisposableEffect(Unit) {
+        val handler: (Long, String, String, Long) -> Unit = { mediaId, title, artist, durationMs ->
+            if (!posting && mediaId > 0L) {
+                // Legacy Home feed posts expose the media asset ID, not catalogue ID.
+                // The current create-post contract accepts this exact media ID.
+                // ID 0 is an explicit unknown sentinel and is never persisted as identity.
+                selectedCatalogueMusic = FynxMusicCatalogueTrack(
+                    id = 0L,
+                    mediaId = mediaId,
+                    title = title,
+                    artist = artist,
+                    durationMs = durationMs
+                )
+                musicPlaying = false
+                musicPreviewId = null
+                showMusicPicker = false
+                showComposer = true
+                notice = null
+            }
+        }
+        FynxMusicSongNavigation.onUseTrack = handler
+        onDispose {
+            if (FynxMusicSongNavigation.onUseTrack === handler) {
+                FynxMusicSongNavigation.onUseTrack = null
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         while (true) { networkLevel = FynxNetworkQuality.current(context); delay(5_000L) }
     }
