@@ -65,6 +65,7 @@ fun FynxVisibleUpdatesPanel(
     onOpenAi: () -> Unit,
     onOpenCamera: () -> Unit = {},
     onOpenFastCamera: () -> Unit = onOpenCamera,
+    onCreatePost: () -> Unit = {},
     onCreateStatus: () -> Unit = onOpenStories,
     onOpenStatusOwner: (String) -> Unit = { onOpenStories() }
 ) {
@@ -280,6 +281,37 @@ fun FynxVisibleUpdatesPanel(
                         Text("Open FYNX AI")
                     }
                 }
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .clip(FynxDesign.LargeCardShape)
+                .clickable(onClick = onCreatePost)
+                .semantics { contentDescription = "Create post" },
+            shape = FynxDesign.LargeCardShape,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)),
+            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.58f))
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+                Text(
+                    "What's on your mind?",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text("Create post", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             }
         }
     }

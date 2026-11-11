@@ -14,8 +14,9 @@ USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -3065,6 +3066,85 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)
 
+def capture_home_music_picker_visuals(home_xml: str) -> str:
+    """Capture the real Home composer and shared official-music picker without publishing."""
+    if not is_authenticated_home_surface(home_xml):
+        FAILURES.append("Home was not visible when Music picker visual certification began.")
+        return home_xml
+
+    composer_xml = tap_control(
+        home_xml,
+        ["Create post"],
+        "home-music-composer",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_xml:
+        return home_xml
+    (ROOT / "authenticated-home-music-composer.xml").write_text(
+        composer_xml + chr(10), encoding="utf-8"
+    )
+
+    picker_xml = tap_control(
+        composer_xml,
+        ["Music"],
+        "home-music-picker",
+        ["Choose your music"],
+        exact_only=True
+    )
+    if not picker_xml:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    (ROOT / "authenticated-home-music-picker.xml").write_text(
+        picker_xml + chr(10), encoding="utf-8"
+    )
+    screenshot("authenticated-home-music-picker.png")
+    if not find_control(picker_xml, ["FYNX MUSIC LIBRARY"]):
+        FAILURES.append("The Music picker opened but its official-library heading was not visible.")
+    if not find_control(picker_xml, ["Search song or artist"]):
+        FAILURES.append("The Music picker opened but its song/artist search field was not visible.")
+
+    if find_control(picker_xml, ["Try again"]):
+        report.append("- NOTE: captured the real Music picker in its retry/error state; catalogue availability was not verified.")
+    elif find_control(picker_xml, ["No official tracks have been published yet."]):
+        report.append("- NOTE: captured the real Music picker empty state; no published catalogue tracks were available to preview.")
+    elif find_control(picker_xml, ["Use"]):
+        report.append("- PASS: captured the real Music picker with published catalogue rows and Use actions visible.")
+    else:
+        report.append("- PASS: captured the real shared Music picker shell and search controls; no track was selected or published.")
+
+    composer_restored = tap_control(
+        picker_xml,
+        ["Close music picker"],
+        "home-music-picker-close",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    home_restored = tap_control(
+        composer_restored,
+        ["Close"],
+        "home-music-composer-close",
+        ["Create post", "Your feed"],
+        exact_only=True
+    )
+    if not home_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        home_restored = dump_ui("authenticated-home-after-music-picker-close.xml")
+
+    if not home_restored or not is_authenticated_home_surface(home_restored):
+        FAILURES.append("The Home composer did not close safely after Music picker screenshot capture.")
+        return home_xml
+
+    screenshot("authenticated-home-after-music-picker.png")
+    report.append("- PASS: captured the actual Home post composer and shared Music picker, then returned to Home without selecting or publishing a track.")
+    return home_restored
+
+
 def secure_access_token_persisted()->bool|None:
     """Check the encrypted token preference without ever reading or printing its value."""
     prefs_file = "shared_prefs/fynx_secure_auth.xml"
@@ -3130,6 +3210,30 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if MUSIC_VISUALS_ONLY:
+    report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("music-picker-home-entry.xml") or xml
+    home_xml = capture_home_music_picker_visuals(home_xml)
+    composer_proof = (ROOT / "authenticated-home-music-composer.png").is_file()
+    picker_proof = (ROOT / "authenticated-home-music-picker.png").is_file()
+    if not composer_proof or not picker_proof:
+        FAILURES.append("Music picker runtime proof is incomplete; both the Home composer and Music picker screenshots are required.")
+    report += ["", "## Music picker evidence files",
+               "- authenticated-home-music-composer.png" if composer_proof else "- Home composer screenshot unavailable",
+               "- authenticated-home-music-picker.png" if picker_proof else "- Music picker screenshot unavailable",
+               "- authenticated-home-after-music-picker.png" if (ROOT / "authenticated-home-after-music-picker.png").is_file() else "- Home return screenshot unavailable",
+               "", f"## Result: {'GREEN' if not FAILURES and composer_proof and picker_proof else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
+
 if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
     report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
     if error:
