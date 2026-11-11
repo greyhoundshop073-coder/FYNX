@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
 import android.graphics.BitmapFactory
+import android.content.ContentValues
+import android.provider.MediaStore
+import android.os.Environment
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
@@ -77,6 +80,49 @@ private fun remoteMediaCacheFile(context: android.content.Context, resolvedUrl: 
 private suspend fun downloadRemoteMedia(context: android.content.Context, resolvedUrl: String, destination: File): Result<FynxBackendClient.DownloadedMedia> =
     FynxBackendClient.downloadToFile(context, resolvedUrl, destination, MAX_REMOTE_MEDIA_BYTES)
 
+private fun saveRemoteMediaToGallery(context: android.content.Context, source: File, contentType: String?, type: String, resolvedUrl: String): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || !source.isFile || source.length() <= 0L) return false
+    val accountKey = FynxAuthStore.accountStorageKey(context) ?: return false
+    val digest = MessageDigest.getInstance("SHA-256").digest(resolvedUrl.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    val account = accountKey.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(80).ifBlank { "account" }
+    val savedKey = "${account}_${digest.take(32)}"
+    val prefs = context.getSharedPreferences("fynx_auto_saved_media", android.content.Context.MODE_PRIVATE)
+    if (prefs.getBoolean(savedKey, false)) return true
+    val mime = contentType?.takeIf { '/' in it } ?: when (type.lowercase()) {
+        "video", "video_note" -> "video/mp4"
+        "gif" -> "image/gif"
+        else -> "image/jpeg"
+    }
+    val isVideo = mime.startsWith("video/")
+    val extension = when (mime.lowercase()) {
+        "image/png" -> "png"
+        "image/gif" -> "gif"
+        "image/webp" -> "webp"
+        "image/heic" -> "heic"
+        "video/quicktime" -> "mov"
+        "video/webm" -> "webm"
+        else -> if (isVideo) "mp4" else "jpg"
+    }
+    val collection = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+    val values = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, "FYNX_${digest.take(16)}.$extension")
+        put(MediaStore.MediaColumns.MIME_TYPE, mime)
+        put(MediaStore.MediaColumns.RELATIVE_PATH, if (isVideo) "${Environment.DIRECTORY_MOVIES}/FYNX" else "${Environment.DIRECTORY_PICTURES}/FYNX")
+        put(MediaStore.MediaColumns.IS_PENDING, 1)
+    }
+    val uri = context.contentResolver.insert(collection, values) ?: return false
+    return try {
+        val output = context.contentResolver.openOutputStream(uri) ?: throw IllegalStateException("Gallery destination unavailable")
+        output.use { stream -> source.inputStream().use { input -> input.copyTo(stream) } }
+        context.contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        prefs.edit().putBoolean(savedKey, true).apply()
+        true
+    } catch (_: Throwable) {
+        runCatching { context.contentResolver.delete(uri, null, null) }
+        false
+    }
+}
+
 @Composable
 fun FynxRemoteMedia(
     mediaUrl: String,
@@ -88,7 +134,8 @@ fun FynxRemoteMedia(
     rounded: Boolean = true,
     autoPlay: Boolean = true,
     playbackActive: Boolean = true,
-    allowImagePreview: Boolean = true
+    allowImagePreview: Boolean = true,
+    autoSaveToGallery: Boolean = false
 ) {
     val context = LocalContext.current
     val resolvedUrl = remember(mediaUrl) { resolveFynxMediaUrl(context, mediaUrl) }
@@ -100,7 +147,7 @@ fun FynxRemoteMedia(
     var videoView by remember(resolvedUrl, type) { mutableStateOf<android.widget.VideoView?>(null) }
     var preparedPlayer by remember(resolvedUrl, type) { mutableStateOf<android.media.MediaPlayer?>(null) }
     var videoPlaying by remember(resolvedUrl, type) { mutableStateOf(false) }
-    LaunchedEffect(resolvedUrl, type, reloadNonce) {
+    LaunchedEffect(resolvedUrl, type, reloadNonce, autoSaveToGallery) {
         kind = "loading"; bitmap = null; animatedDrawable = null; localFile = null; videoView = null; videoPlaying = false
         try {
             val loaded = withContext(Dispatchers.IO) {
@@ -121,6 +168,7 @@ fun FynxRemoteMedia(
                 }
                 result.getOrThrow().let { downloaded ->
                     val contentType = downloaded.contentType.orEmpty()
+                    if (autoSaveToGallery) runCatching { saveRemoteMediaToGallery(context, target, contentType, type, resolvedUrl) }
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
                     val isGif = type.equals("gif", true) || contentType.equals("image/gif", true)
                     if (isVideo) MediaLoadResult.Video(target)
