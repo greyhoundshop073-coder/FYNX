@@ -900,10 +900,15 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         music_deadline = time.monotonic() + 20.0
         music_outcome = "pending"
         while time.monotonic() < music_deadline:
+            if find_control(music_state, ["Sign in to FYNX to browse published music"]):
+                music_outcome = "login_required"
+                break
             if find_control(music_state, ["No FYNX music is published yet"]):
                 music_outcome = "empty"
                 break
-            if find_control(music_state, ["Add"]):
+            # Do not accept the dimmed camera's underlying "Add music" button as
+            # a catalogue-track Add action. Only a rendered track row may qualify.
+            if find_control(music_state, ["Add track", "Add sound"]):
                 music_outcome = "tracks"
                 break
             if find_control(music_state, ["Music catalogue could not be loaded"]):
@@ -912,7 +917,21 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             time.sleep(0.6)
             music_state = dump_ui(f"{prefix}-camera-music-catalogue-wait.xml") or music_state
 
-        if music_outcome == "tracks":
+        if music_outcome == "login_required":
+            screenshot(f"{prefix}-camera-music-login-required.png")
+            if VISUALS_ONLY:
+                report.append("- NOTE camera music picker correctly requires a server-authenticated FYNX account; local-only visual entry cannot certify published-track selection")
+            else:
+                FAILURES.append(prefix + ": authenticated camera session unexpectedly lost access to the published music catalogue")
+            music_closed = tap_control(
+                music_state, ["Close"], f"{prefix}-camera-music-close-login-required",
+                ["Add music"]
+            )
+            if music_closed:
+                camera_xml = music_closed
+            else:
+                FAILURES.append(prefix + ": sign-in-required music picker did not close back to the live camera")
+        elif music_outcome == "tracks":
             music_selected = tap_control(
                 music_state, ["Add"], f"{prefix}-camera-music-select",
                 ["Remove selected music"]
@@ -3293,8 +3312,26 @@ def verify_camera_system_bar_contrast(filename: str, prefix: str) -> bool:
             image = captured.convert("RGB")
             width, height = image.size
             # Sample the central status-bar background, avoiding clock and notification icons.
+            # Android status-bar height varies with density and emulator resolution.
+            # A fixed 84px crop included camera-preview pixels on the 1080x1920 CI
+            # emulator (the real black status bar ended at y=63), falsely failing a
+            # correct black scrim. Detect the first sustained bright row below the
+            # icon-free centre of the status bar, then sample only that system inset.
+            scan_bottom = max(1, min(height, int(height * 0.15)))
+            row_luminance = []
+            for y in range(scan_bottom):
+                row = [image.getpixel((x, y)) for x in range(int(width * 0.20), int(width * 0.80))]
+                row_luminance.append(sum(
+                    0.2126 * red + 0.7152 * green + 0.0722 * blue
+                    for red, green, blue in row
+                ) / max(1, len(row)))
+            status_bar_bottom = next(
+                (index for index in range(max(0, len(row_luminance) - 2))
+                 if all(value > 20 for value in row_luminance[index:index + 3])),
+                max(1, min(height, int(height * 0.04)))
+            )
             band = image.crop((
-                int(width * 0.20), 0, int(width * 0.80), min(height, 84)
+                int(width * 0.20), 0, int(width * 0.80), status_bar_bottom
             )).resize((48, 8))
             pixels = list(band.getdata())
             luminance = [
