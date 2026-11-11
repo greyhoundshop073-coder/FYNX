@@ -74,7 +74,10 @@ internal object FynxCatalogueMusicPlayback {
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build()
         val manager = context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+        // The focus listener compares its request identity to reject stale callbacks.
+        // Declare first, then assign the built request so the callback can safely capture it.
+        lateinit var request: AudioFocusRequest
+        request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(attributes)
             .setOnAudioFocusChangeListener({ change ->
                 mainHandler.post {
@@ -122,12 +125,15 @@ internal object FynxCatalogueMusicPlayback {
                 }
             }, mainHandler)
             .build()
+        // Publish the request before asking for focus: Android may dispatch an
+        // initial focus callback immediately from requestAudioFocus().
+        audioManager = manager
+        focusRequest = request
         if (manager.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            abandonAudioFocus()
             snapshot = Snapshot(trackKey = trackKey, error = "Audio focus is unavailable.")
             return
         }
-        audioManager = manager
-        focusRequest = request
         resumeAfterTransientFocus = false
 
         val created = MediaPlayer()
