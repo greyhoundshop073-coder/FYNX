@@ -23,10 +23,21 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
-            "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
             "REMINDER" -> FynxNotificationFoundation.REMINDERS_CHANNEL
             else -> FynxNotificationFoundation.FRIENDS_CHANNEL
+        }
+        val sourceUsername = data["sourceUsername"]?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
+        val groupId = data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
+            ?: runCatching { Uri.parse(route).lastPathSegment?.takeIf { type == "GROUP" && it.isNotBlank() } }.getOrNull()
+        when (type) {
+            "MESSAGE" -> if (sourceUsername != null &&
+                (!FynxConversationPreferences.chatNotifications(this, sourceUsername) ||
+                    FynxPreferencesStore.isChatMuted(this, sourceUsername))) return
+            "GROUP" -> if (groupId != null &&
+                (!FynxConversationPreferences.groupNotifications(this, groupId) ||
+                    FynxConversationPreferences.groupMuted(this, groupId))) return
         }
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
