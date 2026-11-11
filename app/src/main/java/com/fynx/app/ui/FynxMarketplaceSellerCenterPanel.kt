@@ -198,6 +198,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var moneyNextCursor by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var moneyHasMore by remember(sellerAccountKey) { mutableStateOf(false) }
     var moneyPageLoading by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyPageError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var showDriverAssignments by remember(sellerAccountKey) { mutableStateOf(false) }
     var activeSection by rememberSaveable(sellerAccountKey) { mutableStateOf("Overview") }
     var weeklySellerAwards by remember(sellerAccountKey) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
@@ -238,6 +239,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         scope.launch {
             moneyLoading = true
             moneyError = null
+            moneyPageError = null
             val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary?limit=100")
                 .mapCatching { raw ->
                     val root = JSONObject(raw)
@@ -319,6 +321,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         val requestGeneration = moneyRequestGeneration
         scope.launch {
             moneyPageLoading = true
+            moneyPageError = null
             FynxBackendClient.get(
                 context,
                 "/api/marketplace/settlement/seller/summary?limit=100&cursor=$cursor"
@@ -353,6 +356,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                 Triple(records, nextCursor, root.optBoolean("hasMore", false))
             }.onSuccess { (records, nextCursor, hasMore) ->
                 if (requestGeneration == moneyRequestGeneration) {
+                    moneyPageError = null
                     val existingIds = moneyRecords.mapTo(mutableSetOf()) { it.orderId }
                     moneyRecords = (moneyRecords + records.filterNot { it.orderId in existingIds })
                         .sortedWith(compareByDescending<SellerMoneyRecord> { it.updatedAt }.thenByDescending { it.orderId })
@@ -361,7 +365,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                 }
             }.onFailure { failure ->
                 if (requestGeneration == moneyRequestGeneration) {
-                    moneyError = marketplaceSafeError(failure, "Older seller earnings could not load.")
+                    moneyPageError = marketplaceSafeError(failure, "Older seller earnings could not load.")
                 }
             }
             moneyPageLoading = false
@@ -963,6 +967,12 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                         ) {
                             if (moneyPageLoading) CircularProgressIndicator(Modifier.size(18.dp))
                             else Text("Load older earnings")
+                        }
+                    }
+                    moneyPageError?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { loadMoreMoney() }, enabled = !moneyPageLoading && !moneyLoading) {
+                            Text("Retry loading older records")
                         }
                     }
                     if (moneyPageLoading) Text("Loading older settlement records…", style = MaterialTheme.typography.bodySmall)
