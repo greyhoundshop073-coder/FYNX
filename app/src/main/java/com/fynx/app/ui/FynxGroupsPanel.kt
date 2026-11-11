@@ -909,7 +909,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                             onDragCancel = { replySwipeOffsets[message.id] = 0f }
                                         )
                                     }
-                                    .combinedClickable(onClick = { reactionMessageId = message.id }, onLongClick = { reactionMessageId = message.id })
+                                    .combinedClickable(onClick = { if (!message.deleted) reactionMessageId = message.id }, onLongClick = { if (!message.deleted) reactionMessageId = message.id })
                             ) {
                                 Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else 9.dp, vertical = if (mediaOnly) 0.dp else 5.dp)) {
                                     if (message.replyToId != null) {
