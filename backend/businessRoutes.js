@@ -1,5 +1,6 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
+import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
@@ -34,8 +35,6 @@ export function registerBusinessRoutes({ app, auth }) {
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS opening_hours JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS service_areas JSONB NOT NULL DEFAULT '[]'::jsonb;
       ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS services JSONB NOT NULL DEFAULT '[]'::jsonb;
-      ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES business_profiles(id) ON DELETE SET NULL;
-      CREATE INDEX IF NOT EXISTS marketplace_listings_business_idx ON marketplace_listings(business_id,active,created_at DESC);
     `);
     return schemaReady;
   };
@@ -106,6 +105,9 @@ export function registerBusinessRoutes({ app, auth }) {
       );
       const profile = profileResult.rows[0];
       if (!profile) return res.status(404).json({ error: "business profile not found" });
+      await ensureMarketplaceSchemaForPool(pool);
+      await pool.query("ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES business_profiles(id) ON DELETE SET NULL");
+      await pool.query("CREATE INDEX IF NOT EXISTS marketplace_listings_business_idx ON marketplace_listings(business_id,active,created_at DESC)");
       const productResult = await pool.query(
         `SELECT id::text AS id,title,description,price,currency,category,condition,
                 GREATEST(0, quantity - COALESCE(reserved_quantity,0))::int AS available_quantity,
