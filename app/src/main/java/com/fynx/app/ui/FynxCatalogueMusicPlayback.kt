@@ -149,6 +149,7 @@ internal object FynxCatalogueMusicPlayback {
             if (snapshot.isPreparing) return
             val current = player ?: return
             runCatching {
+                current.isLooping = true
                 if (!current.isPlaying) {
                     if (!requestAudioFocus()) { snapshot = snapshot.copy(isPlaying = false, error = "Audio focus is unavailable."); return }
                     if (current.duration > 0) current.seekTo(positionMs.coerceIn(0L, current.duration.toLong()).toInt())
@@ -158,6 +159,7 @@ internal object FynxCatalogueMusicPlayback {
             return
         }
         toggle(context, trackKey, file, ownerKey)
+        runCatching { player?.isLooping = true }
     }
 
     /** Keeps the soundtrack aligned to the video clock and corrects audible drift. */

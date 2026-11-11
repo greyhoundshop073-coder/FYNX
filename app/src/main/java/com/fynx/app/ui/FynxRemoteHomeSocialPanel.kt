@@ -1105,8 +1105,12 @@ private fun FynxFeedTextureVideo(
     var hasVideoFrame by remember(file) { mutableStateOf(false) }
     var playbackError by remember(file) { mutableStateOf(false) }
     var soundtrackFile by remember(soundtrackMediaId) { mutableStateOf<File?>(null) }
+    var soundtrackEnabled by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackLoading by remember(soundtrackMediaId) { mutableStateOf(false) }
+    var soundtrackFailed by remember(soundtrackMediaId) { mutableStateOf(false) }
     val latestPlaybackActive by rememberUpdatedState(playbackActive)
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Box(
         Modifier.fillMaxSize().then(
@@ -1188,10 +1192,36 @@ private fun FynxFeedTextureVideo(
         }
         if (!soundtrackMediaId.isNullOrBlank() && soundtrackTitle.isNotBlank()) {
             Surface(Modifier.align(Alignment.TopStart).padding(10.dp), shape = RoundedCornerShape(18.dp), color = Color.Black.copy(alpha = 0.68f), tonalElevation = 0.dp) {
-                Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.MusicNote, contentDescription = "Attached music", tint = Color.White, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text(if (soundtrackArtist.isBlank()) soundtrackTitle else "$soundtrackTitle · $soundtrackArtist", color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Column(Modifier.weight(1f, fill = false)) {
+                        Text(if (soundtrackArtist.isBlank()) soundtrackTitle else "$soundtrackTitle · $soundtrackArtist", color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        if (soundtrackLoading) Text("Loading music…", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+                        if (soundtrackFailed) Text("Music unavailable — retry", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                    IconButton(enabled = playbackActive && !soundtrackLoading, onClick = {
+                        if (soundtrackEnabled) {
+                            soundtrackEnabled = false
+                            soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }
+                        } else {
+                            val cached = soundtrackFile
+                            if (cached != null) soundtrackEnabled = true
+                            else scope.launch {
+                                soundtrackLoading = true
+                                soundtrackFailed = false
+                                val downloaded = withContext(Dispatchers.IO) {
+                                    runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/$soundtrackMediaId", "audio") }.getOrNull()
+                                }
+                                soundtrackFile = downloaded
+                                soundtrackFailed = downloaded == null
+                                soundtrackLoading = false
+                                if (latestPlaybackActive && downloaded != null) soundtrackEnabled = true
+                            }
+                        }
+                    }) {
+                        Icon(if (soundtrackEnabled) Icons.Default.Pause else Icons.Default.PlayArrow, if (soundtrackEnabled) "Pause attached music" else "Play attached music", tint = Color.White)
+                    }
                 }
             }
         }
@@ -1264,20 +1294,17 @@ private fun FynxFeedTextureVideo(
         }
     }
 
-    LaunchedEffect(playbackActive, soundtrackMediaId, soundtrackOwnerKey) {
-        val mediaId = soundtrackMediaId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        val owner = soundtrackOwnerKey?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        if (!playbackActive) { FynxCatalogueMusicPlayback.pause(owner); return@LaunchedEffect }
-        val downloaded = withContext(Dispatchers.IO) {
-            runCatching { FynxMediaCache.getOrDownload(context, "/api/social/music/media/$mediaId", "audio") }.getOrNull()
+    LaunchedEffect(playbackActive, soundtrackOwnerKey) {
+        if (!playbackActive) {
+            soundtrackEnabled = false
+            soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }
         }
-        if (latestPlaybackActive && downloaded != null) soundtrackFile = downloaded
     }
-    LaunchedEffect(playing, playbackPositionMs, soundtrackFile, soundtrackMediaId, soundtrackOwnerKey, muted) {
+    LaunchedEffect(soundtrackEnabled, playing, playbackPositionMs, soundtrackFile, soundtrackMediaId, soundtrackOwnerKey, muted) {
         val mediaId = soundtrackMediaId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val owner = soundtrackOwnerKey?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val audioFile = soundtrackFile
-        if (playing && audioFile != null) {
+        if (soundtrackEnabled && playing && audioFile != null) {
             FynxCatalogueMusicPlayback.playAt(context, mediaId, audioFile, owner, playbackPositionMs)
             FynxCatalogueMusicPlayback.setVolume(owner, if (muted) 0f else 0.85f)
             FynxCatalogueMusicPlayback.syncTo(owner, playbackPositionMs)
@@ -1302,7 +1329,7 @@ private fun FynxFeedTextureVideo(
             player.setDataSource(file.absolutePath)
             player.setSurface(surface)
             player.isLooping = true
-            player.setVolume(if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f, if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f)
+            player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f)
             player.setOnPreparedListener {
                 prepared = true
                 playbackPositionMs = it.currentPosition.toLong().coerceAtLeast(0L)
@@ -1332,10 +1359,10 @@ private fun FynxFeedTextureVideo(
             onPlayingChanged(false)
         }
     }
-    LaunchedEffect(muted, prepared) {
+    LaunchedEffect(muted, prepared, soundtrackEnabled) {
         if (!prepared) return@LaunchedEffect
         // Keep the actual decoder volume in sync with the visible mute control.
-        runCatching { player.setVolume(if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f, if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f) }
+        runCatching { player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f) }
     }
     LaunchedEffect(playbackActive, prepared) {
         if (!prepared) return@LaunchedEffect
@@ -1355,8 +1382,8 @@ private fun FynxFeedTextureVideo(
                 .getOrDefault(playbackPositionMs)
         }
     }
-    LaunchedEffect(muted, prepared) {
-        if (prepared) runCatching { player.setVolume(if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f, if (muted) 0f else if (!soundtrackMediaId.isNullOrBlank()) 0.35f else 1f) }
+    LaunchedEffect(muted, prepared, soundtrackEnabled) {
+        if (prepared) runCatching { player.setVolume(if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f, if (muted) 0f else if (soundtrackEnabled) 0.35f else 1f) }
     }
     DisposableEffect(file, soundtrackOwnerKey) {
         onDispose { soundtrackOwnerKey?.let { FynxCatalogueMusicPlayback.pause(it) }; runCatching { player.stop() }; runCatching { player.release() }; textureState.value = null }
