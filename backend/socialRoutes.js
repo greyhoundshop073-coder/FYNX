@@ -293,13 +293,18 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const q = typeof req.query?.q === "string" ? req.query.q.trim().slice(0, 80) : "";
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
+      const limit = Math.min(60, Math.max(1, Number.parseInt(req.query?.limit, 10) || 24));
+      const offset = Math.max(0, Number.parseInt(req.query?.offset, 10) || 0);
       const params = [req.user.sub];
       const where = ["l.active = TRUE", "GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR COALESCE(l.store_name, '') ILIKE $${params.length} OR COALESCE(shop.shop_name, '') ILIKE $${params.length} OR COALESCE(l.location, '') ILIKE $${params.length} OR COALESCE(l.category, '') ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
+      params.push(limit + 1, offset);
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT ${"${params.length - 1}"} OFFSET ${"${params.length}"}`, params);
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      return res.json({ listings: rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })), hasMore });
     } catch (error) { console.error("marketplace listings", error); return res.status(500).json({ error: "marketplace lookup failed" }); }
   });
 

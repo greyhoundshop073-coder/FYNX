@@ -140,6 +140,17 @@ object FynxRemoteSocialClient {
     }
     suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching { raw -> parseListings(raw, activeOmittedMeansActive = true) }
     data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
+    suspend fun marketplaceSellerListingsPage(context: Context, username: String, limit: Int = 24, offset: Int = 0): Result<MarketplaceListingPage> {
+        val seller = username.trim().removePrefix("@")
+        if (seller.isBlank()) return Result.failure(IllegalArgumentException("Seller username is required."))
+        val safeLimit = limit.coerceIn(1, 60)
+        val safeOffset = offset.coerceAtLeast(0)
+        val path = "/api/marketplace/listings?seller=${URLEncoder.encode(seller, "UTF-8")}&limit=$safeLimit&offset=$safeOffset"
+        return FynxBackendClient.get(context, path).mapCatching { raw ->
+            val root = JSONObject(raw)
+            MarketplaceListingPage(parseListings(raw, activeOmittedMeansActive = true), root.optBoolean("hasMore", false))
+        }
+    }
     suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
         val safeLimit = limit.coerceIn(1, 60)
         val safeOffset = offset.coerceAtLeast(0)
