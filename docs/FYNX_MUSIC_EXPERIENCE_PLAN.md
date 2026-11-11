@@ -5,6 +5,14 @@
 **Research checked:** 11 November 2026.  
 **Delivery rule:** Feature PRs target the canonical branch. Never publish a partial APK as the shared FYNX APK.
 
+## Shared music selection surface
+
+- Home post creation and Status creation now share one dedicated full-screen music browser rather than two different compact AlertDialogs.
+- The picker uses a soft translucent glass treatment, rounded white/ice-blue panels, subtle border and elevation, Azure Blue actions, a persistent search field, visible catalogue count, and a vertically scrolling keyed list so longer libraries remain usable.
+- Each track row keeps title, artist and duration together, offers an actual authenticated catalogue preview, and has a clear Use action. Loading, empty, signed-out, network-error and retry states are presented inside the same surface.
+- Home and Status keep their existing selection semantics: Home attaches the exact selected catalogue track to the existing post draft; Status attaches it to the active Status draft or opens a music Status when entered from the add-Status surface. Dismissing the picker clears the preview selection.
+- Catalogue responses currently contain only track ID, media ID, title, artist and duration. The disc artwork is therefore a consistent visual placeholder, not invented album artwork. Real cover art, genre filters and pagination require a backend/API extension; the current list endpoint is capped at 100 tracks.
+
 ## Product goal
 
 Upgrade the existing official FYNX music catalogue into one coherent social-music experience. Do not create a second catalogue, local-upload path for ordinary users, or competing playback implementation.
