@@ -908,7 +908,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 break
             # Do not accept the dimmed camera's underlying "Add music" button as
             # a catalogue-track Add action. Only a rendered track row may qualify.
-            if find_control(music_state, ["Add track", "Add sound"]):
+            if find_control(music_state, ["Add"], exact_only=True):
                 music_outcome = "tracks"
                 break
             if find_control(music_state, ["Music catalogue could not be loaded"]):
@@ -934,7 +934,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         elif music_outcome == "tracks":
             music_selected = tap_control(
                 music_state, ["Add"], f"{prefix}-camera-music-select",
-                ["Remove selected music"]
+                ["Remove selected music"], exact_only=True
             )
             if music_selected:
                 screenshot(f"{prefix}-camera-music-selected.png")
