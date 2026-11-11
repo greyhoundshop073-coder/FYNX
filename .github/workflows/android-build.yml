@@ -12,6 +12,7 @@ on:
       - "gradlew"
       - "gradlew.bat"
       - "scripts/**"
+      - ".github/workflows/android-build.yml"
       - "docs/**"
       - ".github/workflows/android-build.yml"
       - ".maestro/**"
