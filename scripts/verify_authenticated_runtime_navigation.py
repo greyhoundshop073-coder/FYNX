@@ -446,6 +446,46 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     return next_xml
 
 
+def swipe_horizontal_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
+    """Swipe inside the widest visible horizontal scroll rail using its real accessibility bounds."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        if width < 320 or height <= 0 or height >= 320 or width <= height:
+            continue
+        candidates.append((width, left, top, right, bottom))
+    if not candidates:
+        return ""
+    _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+    y = (top + bottom) // 2
+    inset = max(50, min(120, (right - left) // 8))
+    start_x, end_x = right - inset, left + inset
+    if reverse:
+        start_x, end_x = end_x, start_x
+    if abs(start_x - end_x) < 220:
+        return ""
+    run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
+    time.sleep(0.4)
+    return dump_ui(name)
+
+
 def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
     """Swipe inside the largest visible vertical scroll container, not fixed screen coordinates."""
     if not xml_text:
@@ -3090,6 +3130,67 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
+    report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("local-business-home.xml") or xml
+    marketplace_xml = tap_control(home_xml, ["Marketplace"], "local-business-marketplace", ["Search products, sellers or categories"])
+    if not marketplace_xml:
+        FAILURES.append("Home -> Marketplace did not expose the Marketplace search surface")
+    else:
+        screenshot("authenticated-marketplace.png")
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(marketplace_xml, "local-business-shortcut-rail-" + str(attempt))
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
+        directory_xml = tap_control(marketplace_xml, ["Local businesses"], "marketplace-local-businesses", ["Search businesses, services or names"])
+        if not directory_xml:
+            FAILURES.append("Marketplace -> Local businesses shortcut could not be opened")
+        else:
+            deadline = time.monotonic() + 12.0
+            latest = directory_xml
+            while time.monotonic() < deadline:
+                latest = dump_ui("local-business-directory-settled.xml") or latest
+                if (find_control(latest, ["Local Businesses"])
+                        and find_control(latest, ["Search businesses, services or names"])
+                        and find_control(latest, ["Area, city or neighbourhood"])):
+                    break
+                time.sleep(0.4)
+            if (find_control(latest, ["Local Businesses"])
+                    and find_control(latest, ["Search businesses, services or names"])
+                    and find_control(latest, ["Area, city or neighbourhood"])):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(latest + chr(10), encoding="utf-8")
+                report.append("- PASS: Local Businesses directory title, search and area controls rendered in the installed APK.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                FAILURES.append("Local Businesses directory did not expose its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            returned = ""
+            back_deadline = time.monotonic() + 8.0
+            while time.monotonic() < back_deadline:
+                returned = dump_ui("local-business-marketplace-back.xml") or returned
+                if find_control(returned, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(returned, ["Search products, sellers or categories"]):
+                screenshot("authenticated-marketplace-local-businesses-back.png")
+                report.append("- PASS: Back returned from Local Businesses to Marketplace.")
+            else:
+                FAILURES.append("Local Businesses Back navigation did not return to Marketplace")
+    report += ["", "## Evidence boundary", "- This is a local UI/navigation certification; no backend directory records or live search results are claimed.", "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
     fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
     if not fixtures_ready:
@@ -3804,6 +3905,74 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if not scrolled_xml:
                 break
             marketplace_xml = scrolled_xml
+
+        # Exercise the new Local Businesses directory from the real Marketplace shortcut rail.
+        # The screen is useful even when the live backend is unavailable: certify the actual
+        # search/filter UI, but never fabricate a directory result or claim live data loaded.
+        for attempt in range(4):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(
+                marketplace_xml, "marketplace-local-businesses-rail-" + str(attempt)
+            )
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
+        local_business_xml = tap_control(
+            marketplace_xml, ["Local businesses"], "marketplace-local-businesses",
+            ["Search businesses, services or names"]
+        )
+        if local_business_xml:
+            local_business_ready_xml = local_business_xml
+            local_business_deadline = time.monotonic() + 12.0
+            while time.monotonic() < local_business_deadline:
+                local_business_ready_xml = dump_ui("marketplace-local-businesses-settled.xml") or local_business_ready_xml
+                if (
+                    find_control(local_business_ready_xml, ["Local Businesses"])
+                    and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                    and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+                ):
+                    break
+                time.sleep(0.4)
+            if (
+                find_control(local_business_ready_xml, ["Local Businesses"])
+                and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+            ):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                report.append("- PASS: Marketplace -> Local businesses opened the real directory search and area-filter UI; no sample business records were inserted.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                (ROOT/"authenticated-marketplace-local-businesses-incomplete.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                FAILURES.append("Local Businesses directory did not settle to its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            local_business_return_xml = ""
+            local_business_return_deadline = time.monotonic() + 10.0
+            while time.monotonic() < local_business_return_deadline:
+                local_business_return_xml = dump_ui("marketplace-local-businesses-return.xml") or local_business_return_xml
+                if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                marketplace_xml = local_business_return_xml
+                for attempt in range(4):
+                    if find_control(marketplace_xml, ["My Shop"]):
+                        break
+                    rail_xml = swipe_horizontal_scroll_container(
+                        marketplace_xml, "marketplace-local-businesses-return-rail-" + str(attempt), reverse=True
+                    )
+                    if not rail_xml:
+                        break
+                    marketplace_xml = rail_xml
+            else:
+                FAILURES.append("Local Businesses Back did not return to Marketplace")
+        else:
+            FAILURES.append("Marketplace Local businesses shortcut could not be opened")
 
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.

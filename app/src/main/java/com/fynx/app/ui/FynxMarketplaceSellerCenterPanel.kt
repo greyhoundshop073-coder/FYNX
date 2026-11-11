@@ -203,7 +203,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
         "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools",
         "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education",
-        "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"
+        "Garden & Outdoor", "Handmade & Local", "Used", "Business & Workshop Supplies", "Other"
     )
     // Existing legacy categories remain selectable until the seller intentionally picks a supported value.
     val editCategoryOptions = if (

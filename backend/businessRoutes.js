@@ -39,6 +39,53 @@ export function registerBusinessRoutes({ app, auth }) {
     try { await ready(); next(); } catch (error) { console.error("[fynx-business] schema unavailable", error); next(new Error("business service unavailable")); }
   });
 
+  // Public, read-only business discovery. Only fields intentionally entered for a
+  // business profile are returned; internal owner IDs and account metadata stay private.
+  app.get("/api/business/directory", async (req, res) => {
+    const query = clean(req.query?.query, 80);
+    const category = clean(req.query?.category, 60);
+    const location = clean(req.query?.location, 120);
+    const requestedLimit = Number(req.query?.limit);
+    const requestedOffset = Number(req.query?.offset);
+    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 30;
+    const offset = Number.isInteger(requestedOffset) ? Math.min(Math.max(requestedOffset, 0), 100000) : 0;
+    const where = ["active = TRUE"];
+    const params = [];
+    if (query) {
+      params.push(`%${query}%`);
+      const index = params.length;
+      where.push(`(business_name ILIKE $${index} OR business_username ILIKE $${index} OR category ILIKE $${index} OR description ILIKE $${index})`);
+    }
+    if (category) {
+      params.push(`%${category}%`);
+      where.push(`category ILIKE $${params.length}`);
+    }
+    if (location) {
+      params.push(`%${location}%`);
+      where.push(`location ILIKE $${params.length}`);
+    }
+    params.push(limit + 1);
+    const limitIndex = params.length;
+    params.push(offset);
+    const offsetIndex = params.length;
+    try {
+      const result = await pool.query(
+        `SELECT id::text AS id,business_name,business_username,category,description,location,phone,website,verified
+           FROM business_profiles
+          WHERE ${where.join(" AND ")}
+          ORDER BY verified DESC,updated_at DESC,id DESC
+          LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+        params
+      );
+      const hasMore = result.rows.length > limit;
+      const businesses = result.rows.slice(0, limit);
+      return res.json({ businesses, hasMore, limit, offset });
+    } catch (error) {
+      console.error("[fynx-business] directory search failed", error);
+      return res.status(500).json({ error: "business directory is temporarily unavailable" });
+    }
+  });
+
   app.get("/api/business/profile", auth, async (req, res) => {
     try {
       const result = await pool.query(`SELECT id,business_name,business_username,category,description,location,phone,website,verified,active,created_at,updated_at FROM business_profiles WHERE owner_id=$1`, [req.user.sub]);

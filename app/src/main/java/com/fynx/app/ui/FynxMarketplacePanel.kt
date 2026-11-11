@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Face
@@ -166,6 +167,7 @@ internal fun marketplaceSubcategoriesFor(category: String): List<String> = when 
     "office & education" -> listOf("Textbooks", "Stationery", "Office supplies", "Printing supplies", "Office furniture", "Computer accessories")
     "garden & outdoor" -> listOf("Seeds & seedlings", "Plants", "Garden tools", "Irrigation", "Pots & planters", "Outdoor equipment")
     "handmade & local" -> listOf("Handmade crafts", "Local foods", "Traditional textiles", "Art & décor", "Handmade accessories")
+    "used" -> listOf("Used electronics", "Used phones & computers", "Used furniture", "Used vehicles", "Used clothing", "Other used items")
     "business & workshop supplies" -> listOf("Retail & packaging", "Food service supplies", "Commercial equipment", "Cleaning supplies", "Workshop tools", "Office supplies")
     "other" -> listOf("Handmade & local goods", "Collectibles", "Other items")
     else -> emptyList()
@@ -749,7 +751,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1244,6 +1246,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text("My Shop", maxLines = 1)
+                    }
+                    OutlinedButton(onClick = onOpenBusinesses, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
+                        Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("Local businesses", maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
@@ -2599,7 +2606,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("1. Product basics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(title, { title = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH) }, label = { Text("Product name") }, supportingText = { Text("Use a clear name buyers can search for.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Category", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Used", "Business & Workshop Supplies", "Other").forEach { item -> FilterChip(selected = category == item, onClick = { if (category != item) clearCategorySpecificFields(); category = item; subcategory = "" }, label = { Text(item) }, colors = selectedChipColors) } }
         val categorySubcategories = marketplaceSubcategoriesFor(category)
         Text("Subcategory (optional)", style = MaterialTheme.typography.labelLarge)
         if (categorySubcategories.isNotEmpty()) {
