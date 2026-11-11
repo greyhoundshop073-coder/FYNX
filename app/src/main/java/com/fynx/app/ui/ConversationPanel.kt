@@ -894,7 +894,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             onDragCancel = { replySwipeOffsets[message.id] = 0f }
                                         )
                                     }
-                                    .combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })
+                                    .combinedClickable(onClick = { if (!message.deleted) menuMessageId = message.id }, onLongClick = { if (!message.deleted) menuMessageId = message.id })
                             ) {
                             Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else messageHorizontalPadding, vertical = if (mediaOnly) 0.dp else messageVerticalPadding)) {
                                 if (message.pinned) {
