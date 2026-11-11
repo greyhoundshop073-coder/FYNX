@@ -11,6 +11,7 @@ app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding
 music_admin = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8")
 feed = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt").read_text(encoding="utf-8")
 playback = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCatalogueMusicPlayback.kt").read_text(encoding="utf-8")
+media_cache = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt").read_text(encoding="utf-8")
 home_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
 status_picker = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
 picker_surface = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicPickerSurface.kt").read_text(encoding="utf-8")
@@ -57,6 +58,9 @@ checks = [
     ("Home feed soundtrack opens the song destination", "songDetailsOpen" in feed and "FynxMusicSongDetailSurface(" in feed and "View song details" in feed),
     ("Song destination previews through the shared catalogue player", "FynxCatalogueMusicPlayback.toggle" in song_page and '/api/social/music/media/$mediaId' in song_page),
     ("Home feed music is downloaded only after explicit play", "fun playOrPause()" in feed and "loadingAudio" in feed and "LaunchedEffect(mediaId)" not in feed[feed.find("private fun MusicPostPlayer"):feed.find("private fun formatMusicDuration", feed.find("private fun MusicPostPlayer"))]),
+    ("Music cache stays inside account-scoped private app storage", 'File(context.filesDir, "$FYNX_MEDIA_CACHE_DIR/${accountCacheKey(accountKey)}")' in media_cache and "MediaStore" not in media_cache and "Environment.DIRECTORY_DOWNLOADS" not in media_cache),
+    ("Music cache has a bounded local storage budget", "MAX_FYNX_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L" in media_cache and "trim(directory, file)" in media_cache),
+    ("Music playback has no public save or export action", "ACTION_CREATE_DOCUMENT" not in feed and "MediaStore" not in feed and "Environment.DIRECTORY_DOWNLOADS" not in feed),
     ("Feed soundtrack playback is owned by one specific post", 'MusicPostPlayer(post.id, post.musicMediaId!!' in feed and 'val ownerKey = remember(postId) { "home-post:$postId" }' in feed and "ownerKey: String? = null" in playback),
     ("A post leaving the active feed slot pauses only its own soundtrack", "FynxCatalogueMusicPlayback.pause(ownerKey)" in feed and "if (snapshot.ownerKey != ownerKey) return" in playback),
     ("A soundtrack still preparing is released when its post loses focus", "if (snapshot.isPreparing)" in playback and "releaseCurrent(resetSnapshot = true)" in playback),
