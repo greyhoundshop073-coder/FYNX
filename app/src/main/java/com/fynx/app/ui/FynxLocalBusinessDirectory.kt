@@ -134,7 +134,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
         val generation = ++requestGeneration
         val requestedOffset = if (reset) 0 else offset
         scope.launch {
-            if (reset) loading = true else loadingMore = true
+            if (reset) { loading = true; loadingMore = false } else loadingMore = true
             error = null
             FynxBusinessDirectoryClient.search(
                 context = context,
@@ -159,6 +159,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}) {
     }
 
     LaunchedEffect(query, location, category) {
+        requestGeneration += 1
         delay(350)
         load(reset = true)
     }
