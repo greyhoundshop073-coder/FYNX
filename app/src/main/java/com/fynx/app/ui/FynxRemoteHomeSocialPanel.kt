@@ -991,7 +991,7 @@ private fun RemotePostCard(post: FynxRemoteSocialClient.RemotePost, currentUsern
         } else {
             post.mediaUrl?.let { RemoteSocialMedia(it, post.mediaType, openMarketplaceTarget, playbackActive = playbackActive) }
         }
-        if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs)
+        if (!post.musicMediaId.isNullOrBlank()) MusicPostPlayer(post.id, post.musicMediaId!!, post.musicTitle.orEmpty(), post.musicArtist.orEmpty(), post.musicDurationMs, playbackActive)
         if (marketplaceAd) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.End) { OutlinedButton(onClick = { openMarketplaceTarget?.invoke() ?: onOpenMarketplace() }) { Icon(Icons.Default.ShoppingBag, null); Spacer(Modifier.width(5.dp)); Text("View in Marketplace") } }
         if (reactionPickerOpen) Surface(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) { Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) { ReactionChoice("👍", "LIKE", reactionState.currentReaction == "LIKE", onReact = { onReact(post.id, it) }); ReactionChoice("❤️", "LOVE", reactionState.currentReaction == "LOVE", onReact = { onReact(post.id, it) }); ReactionChoice("😂", "LAUGH", reactionState.currentReaction == "LAUGH", onReact = { onReact(post.id, it) }); ReactionChoice("😮", "WOW", reactionState.currentReaction == "WOW", onReact = { onReact(post.id, it) }); ReactionChoice("😢", "SAD", reactionState.currentReaction == "SAD", onReact = { onReact(post.id, it) }) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -1469,23 +1469,30 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
 private fun relative(timestamp: Long): String { val minutes = TimeUnit.MILLISECONDS.toMinutes((System.currentTimeMillis() - timestamp).coerceAtLeast(0L)); return when { minutes < 1 -> "now"; minutes < 60 -> "${minutes}m"; minutes < 1440 -> "${minutes / 60}h"; else -> "${minutes / 1440}d" } }
 
 @Composable
-private fun MusicPostPlayer(mediaId: String, title: String, artist: String, durationMs: Long) {
+private fun MusicPostPlayer(postId: String, mediaId: String, title: String, artist: String, durationMs: Long, playbackActive: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val ownerKey = remember(postId) { "home-post:$postId" }
     var songDetailsOpen by remember(mediaId) { mutableStateOf(false) }
     var file by remember(mediaId) { mutableStateOf<File?>(null) }
     var loadingAudio by remember(mediaId) { mutableStateOf(false) }
     var audioLoadFailed by remember(mediaId) { mutableStateOf(false) }
     val playback = FynxCatalogueMusicPlayback.snapshot
-    val isCurrentTrack = playback.trackKey == mediaId
+    val isCurrentTrack = playback.trackKey == mediaId && playback.ownerKey == ownerKey
     val isPlaying = isCurrentTrack && playback.isPlaying
     val isPreparing = isCurrentTrack && playback.isPreparing
 
+    // Only the post currently occupying the feed's active playback slot may own audio.
+    // A stale/partially visible post can never pause another post's soundtrack.
+    LaunchedEffect(playbackActive, ownerKey) {
+        if (!playbackActive) FynxCatalogueMusicPlayback.pause(ownerKey)
+    }
+
     fun playOrPause() {
-        if (loadingAudio || isPreparing) return
+        if (!playbackActive || loadingAudio || isPreparing) return
         val cached = file
         if (cached != null) {
-            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached)
+            FynxCatalogueMusicPlayback.toggle(context, mediaId, cached, ownerKey)
             return
         }
         scope.launch {
@@ -1499,7 +1506,7 @@ private fun MusicPostPlayer(mediaId: String, title: String, artist: String, dura
             file = downloaded
             audioLoadFailed = downloaded == null
             loadingAudio = false
-            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it) }
+            downloaded?.let { FynxCatalogueMusicPlayback.toggle(context, mediaId, it, ownerKey) }
         }
     }
 
@@ -1519,7 +1526,7 @@ private fun MusicPostPlayer(mediaId: String, title: String, artist: String, dura
             }
             Text(formatMusicDuration(durationMs), style = MaterialTheme.typography.labelSmall, color = FynxDesign.TextSecondary)
             IconButton(
-                enabled = !loadingAudio && !isPreparing,
+                enabled = playbackActive && !loadingAudio && !isPreparing,
                 onClick = { playOrPause() }
             ) {
                 Icon(
