@@ -38,12 +38,12 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
                         openingHoursText = (0 until p.openingHours.length()).mapNotNull { index ->
                             val day = p.openingHours.names()?.optString(index).orEmpty()
                             day.takeIf { it.isNotBlank() }?.let { "$it: ${p.openingHours.optString(it)}" }
-                        }.joinToString("\\n")
+                        }.joinToString("\n")
                         serviceAreasText = (0 until p.serviceAreas.length()).map { p.serviceAreas.optString(it) }.joinToString(", ")
                         servicesText = (0 until p.services.length()).mapNotNull { index ->
                             val item = p.services.optJSONObject(index) ?: return@mapNotNull null
                             listOf(item.optString("name"), item.optString("price"), item.optString("currency", "NGN"), item.optString("description")).joinToString(" | ")
-                        }.joinToString("\\n")
+                        }.joinToString("\n")
                     }
                 }
                 FynxBusinessClient.overview(context).onSuccess { o -> activeListings=o.optInt("activeListings"); campaigns=o.optInt("campaigns"); budget=o.optLong("budgetKobo"); spent=o.optLong("spentKobo") }
@@ -74,9 +74,9 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             OutlinedTextField(website,{website=it.take(200)},Modifier.fillMaxWidth(),label={Text("Website (HTTPS)")},singleLine=true)
             Divider()
             Text("Public business information", style=MaterialTheme.typography.titleMedium)
-            OutlinedTextField(openingHoursText,{openingHoursText=it.take(700)},Modifier.fillMaxWidth(),label={Text("Opening hours")},placeholder={Text("Mon: 9am-5pm\\nTue: 9am-5pm")},minLines=3)
+            OutlinedTextField(openingHoursText,{openingHoursText=it.take(700)},Modifier.fillMaxWidth(),label={Text("Opening hours")},placeholder={Text("Mon: 9am-5pm\nTue: 9am-5pm")},minLines=3)
             OutlinedTextField(serviceAreasText,{serviceAreasText=it.take(600)},Modifier.fillMaxWidth(),label={Text("Service areas (comma separated)")},placeholder={Text("Ikeja, Yaba, Surulere")},minLines=2)
-            OutlinedTextField(servicesText,{servicesText=it.take(2400)},Modifier.fillMaxWidth(),label={Text("Services and prices")},placeholder={Text("Hair styling | 5000 | NGN | Wash and styling\\nConsultation | 25 | USD | Online session")},minLines=4)
+            OutlinedTextField(servicesText,{servicesText=it.take(2400)},Modifier.fillMaxWidth(),label={Text("Services and prices")},placeholder={Text("Hair styling | 5000 | NGN | Wash and styling\nConsultation | 25 | USD | Online session")},minLines=4)
             Text("One service per line: Name | Price | NGN/USD | Description. Leave price blank when you quote individually.", color=MaterialTheme.colorScheme.onSurfaceVariant, style=MaterialTheme.typography.bodySmall)
             if (verified) Text("✓ Verified business",color=MaterialTheme.colorScheme.primary)
         }}
