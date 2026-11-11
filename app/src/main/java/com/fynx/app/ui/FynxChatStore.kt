@@ -131,6 +131,7 @@ object FynxChatStore {
                     put("mediaId", message.mediaId ?: "")
                     put("messageType", message.messageType)
                     put("messagePayload", JSONObject(message.messagePayload))
+                    put("deleted", message.deleted)
                 }
             )
         }
