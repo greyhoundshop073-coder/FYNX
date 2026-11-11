@@ -152,6 +152,17 @@ fun FynxAdminControlCenterPanel() {
     var refreshRevenue by remember { mutableIntStateOf(0) }
     var refreshDashboard by remember { mutableIntStateOf(0) }
     var activeSection by remember { mutableStateOf("Overview") }
+    var confirmationTitle by remember { mutableStateOf("") }
+    var confirmationMessage by remember { mutableStateOf("") }
+    var confirmationLabel by remember { mutableStateOf("Confirm") }
+    var confirmationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    fun requestAdminConfirmation(title: String, message: String, label: String, action: () -> Unit) {
+        confirmationTitle = title
+        confirmationMessage = message
+        confirmationLabel = label
+        confirmationAction = action
+    }
 
     LaunchedEffect(refreshDashboard) {
         loading = true
@@ -412,7 +423,20 @@ fun FynxAdminControlCenterPanel() {
 
             }
             if (activeSection == "People") {
-            if (d.role == "OWNER") { Spacer(Modifier.height(20.dp)); Text("Administration", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Owner-only administrator access.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text("Current Admins", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); if (admins.isEmpty()) Text("No additional Admins yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) else admins.forEach { admin -> Card(Modifier.fillMaxWidth().padding(top = 6.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(admin.displayName.ifBlank { "FYNX Admin" }, style = MaterialTheme.typography.titleMedium); Text("@${admin.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }; TextButton(onClick = { statusMessage = "Removing @${admin.username}..."; scope.launch { FynxAdminClient.revokeAdmin(context, admin.id).onSuccess { statusMessage = "Admin access removed."; refreshAdmins++ }.onFailure { statusMessage = it.message ?: "Admin removal failed." } } }) { Text("Remove") } } } } }
+            if (d.role == "OWNER") { Spacer(Modifier.height(20.dp)); Text("Administration", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Owner-only administrator access.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(6.dp)); Text("Current Admins", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); if (admins.isEmpty()) Text("No additional Admins yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) else admins.forEach { admin -> Card(Modifier.fillMaxWidth().padding(top = 6.dp)) { Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(admin.displayName.ifBlank { "FYNX Admin" }, style = MaterialTheme.typography.titleMedium); Text("@${admin.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }; TextButton(onClick = {
+                requestAdminConfirmation(
+                    "Remove administrator access?",
+                    "This will revoke @${admin.username}'s administrator privileges. The server will verify your owner permission.",
+                    "Remove access"
+                ) {
+                    statusMessage = "Removing @${admin.username}..."
+                    scope.launch {
+                        FynxAdminClient.revokeAdmin(context, admin.id)
+                            .onSuccess { statusMessage = "Admin access removed."; refreshAdmins++ }
+                            .onFailure { statusMessage = it.message ?: "Admin removal failed." }
+                    }
+                }
+            }) { Text("Remove") } } } } }
             Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxSocialClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             targets.take(5).forEach { user ->
                 Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -435,10 +459,16 @@ fun FynxAdminControlCenterPanel() {
                                 }
                             }) { Text("Activate") }
                             if (d.role == "OWNER") OutlinedButton(onClick = {
-                                scope.launch {
-                                    FynxAdminClient.grantAdmin(context, user.id)
-                                        .onSuccess { statusMessage = "@${user.username} is now an Admin."; refreshAdmins++ }
-                                        .onFailure { statusMessage = it.message ?: "Admin grant failed." }
+                                requestAdminConfirmation(
+                                    "Grant administrator access?",
+                                    "@${user.username} will receive FYNX administrator privileges. Only continue if this person is trusted to manage the platform.",
+                                    "Grant access"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.grantAdmin(context, user.id)
+                                            .onSuccess { statusMessage = "@${user.username} is now an Admin."; refreshAdmins++ }
+                                            .onFailure { statusMessage = it.message ?: "Admin grant failed." }
+                                    }
                                 }
                             }) { Text("Make Admin") }
                             OutlinedButton(onClick = {
@@ -499,6 +529,23 @@ fun FynxAdminControlCenterPanel() {
                         }
                     }
                 }
+            }
+            if (confirmationAction != null) {
+                AlertDialog(
+                    onDismissRequest = { confirmationAction = null },
+                    title = { Text(confirmationTitle) },
+                    text = { Text(confirmationMessage) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val action = confirmationAction
+                            confirmationAction = null
+                            action?.invoke()
+                        }) { Text(confirmationLabel) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmationAction = null }) { Text("Go back") }
+                    }
+                )
             }
             statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         }
