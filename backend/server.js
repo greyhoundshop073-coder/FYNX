@@ -16,6 +16,10 @@ import { registerMarketplaceCompletionRoutes } from "./marketplaceCompletion.js"
 import { registerMarketplaceShopProfileRoutes } from "./marketplaceShopProfiles.js";
 import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
+import { registerGroupRoutes } from "./groupRoutes.js";
+import { registerGroupMembershipRoutes } from "./groupMembershipRoutes.js";
+import { registerGroupInviteRoutes } from "./groupInviteRoutes.js";
+import { registerGroupContentRoutes } from "./groupContentRoutes.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
@@ -1157,6 +1161,12 @@ registerMarketplaceCompletionRoutes({ app, pool, auth });
 if (pool) registerMarketplaceShopProfileRoutes({ app, pool, auth });
 if (pool) registerMoneyPlannerRoutes({ app, pool, auth });
 if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
+if (pool) {
+  registerGroupRoutes({ app });
+  registerGroupMembershipRoutes({ app });
+  registerGroupInviteRoutes({ app });
+  registerGroupContentRoutes({ app });
+}
 
 await initDatabase();
 

@@ -47,6 +47,53 @@ export function registerGroupRoutes({ app }) {
   const normalizeRole = role => ['MEMBER','MODERATOR'].includes(String(role||'').toUpperCase()) ? String(role).toUpperCase() : 'MEMBER';
   const messageJson = row => ({id:String(row.id),text:row.deleted_at?'This message was deleted':(row.text||''),senderUsername:row.sender_username||'',timestamp:new Date(row.created_at).getTime(),attachmentMediaId:row.deleted_at?null:(row.attachment_media_id==null?null:String(row.attachment_media_id)),attachmentType:row.deleted_at?null:(row.attachment_type||null),attachmentUrl:row.deleted_at?null:(row.attachment_media_id==null?null:`/api/media/${row.attachment_media_id}`),replyToId:row.reply_to_id||null,reaction:row.reaction||null,edited:Boolean(row.edited_at),deleted:Boolean(row.deleted_at),pinned:Boolean(row.pinned)});
 
+  // Return only groups the authenticated account belongs to. The local Groups
+  // cache is a fallback, never an authority for membership or private group data.
+  app.get('/api/groups', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      const result = await pool.query(`
+        SELECT
+          g.id,
+          g.name,
+          g.description,
+          g.visibility,
+          g.group_photo_media_id,
+          owner.username AS owner_username,
+          COALESCE(
+            json_agg(
+              json_build_object('username', member.username, 'role', gm.role)
+              ORDER BY CASE gm.role WHEN 'ADMIN' THEN 0 WHEN 'MODERATOR' THEN 1 ELSE 2 END, lower(member.username)
+            ) FILTER (WHERE gm.user_id IS NOT NULL),
+            '[]'::json
+          ) AS members
+        FROM fynx_group_members mine
+        JOIN fynx_groups g ON g.id = mine.group_id
+        JOIN users owner ON owner.id = g.owner_id
+        LEFT JOIN fynx_group_members gm ON gm.group_id = g.id
+        LEFT JOIN users member ON member.id = gm.user_id
+        WHERE mine.user_id = $1
+        GROUP BY g.id, owner.username
+        ORDER BY g.updated_at DESC, g.created_at DESC
+      `, [req.user.sub]);
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        groups: result.rows.map(row => ({
+          id: String(row.id),
+          name: row.name,
+          description: row.description || '',
+          visibility: row.visibility || 'PRIVATE',
+          ownerUsername: row.owner_username,
+          groupPhotoMediaId: row.group_photo_media_id == null ? null : String(row.group_photo_media_id),
+          members: Array.isArray(row.members) ? row.members : []
+        }))
+      });
+    } catch (error) {
+      console.error('my groups lookup', error);
+      return res.status(500).json({ error: 'groups lookup failed' });
+    }
+  });
+
   app.post('/api/groups/:groupId/sync',auth,async(req,res)=>{const client=await pool.connect();
     try{
       await ensureSchema(); const groupId=String(req.params?.groupId||''); if(!validId(groupId))return res.status(400).json({error:'invalid group id'});
