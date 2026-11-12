@@ -38,6 +38,12 @@ object FynxAdminClient {
         val summary: String,
         val createdAt: String
     )
+    data class ActivityPage(
+        val items: List<AdminActivity>,
+        val offset: Int,
+        val limit: Int,
+        val hasMore: Boolean
+    )
     data class AdminReport(
         val id: String,
         val reporterUsername: String,
@@ -221,15 +227,25 @@ object FynxAdminClient {
             JSONObject().put("active", active).toString()
         ).map { Unit }
 
-    suspend fun activity(context: Context, query: String = ""): Result<List<AdminActivity>> =
-        FynxBackendClient.get(context, "/api/admin/activity?q=${encode(query)}&limit=50").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("activities") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
+    suspend fun activity(context: Context, query: String = "", offset: Int = 0): Result<ActivityPage> =
+        FynxBackendClient.get(
+            context,
+            "/api/admin/activity?q=${encode(query)}&limit=50&offset=${offset.coerceIn(0, 10000)}"
+        ).mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("activities")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(AdminActivity(item.optString("id"), item.optString("actorRole"), item.optString("actorUsername"), item.optString("actorDisplayName"), item.optString("action"), item.optString("targetType"), item.optString("targetId"), item.optString("summary"), item.optString("createdAt")))
                 }
             }
+            ActivityPage(
+                items = items,
+                offset = value.optInt("offset", offset),
+                limit = value.optInt("limit", 50),
+                hasMore = value.optBoolean("hasMore", false)
+            )
         }
 
     suspend fun reports(context: Context): Result<List<AdminReport>> =
