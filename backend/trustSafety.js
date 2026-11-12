@@ -90,7 +90,12 @@ export function registerTrustSafetyRoutes({ app, pool, auth }) {
         return res.status(400).json({error:"valid content type, content id and report reason are required"});
       let target;
       if(targetType==="SOCIAL_POST") {
-        target=(await pool.query("SELECT id,author_id AS owner_id FROM social_posts WHERE id=$1 AND (visibility='PUBLIC' OR author_id=$2) LIMIT 1",[targetId,req.user.sub])).rows[0];
+        target=(await pool.query(`SELECT p.id,p.author_id AS owner_id FROM social_posts p WHERE p.id=$1 AND (
+          p.visibility='PUBLIC' OR p.author_id=$2
+          OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
+          OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)
+            AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
+        ) LIMIT 1`,[targetId,req.user.sub])).rows[0];
       } else if(targetType==="SOCIAL_COMMENT") {
         target=(await pool.query(`SELECT c.id,c.author_id AS owner_id FROM social_post_comments c JOIN social_posts p ON p.id=c.post_id
           WHERE c.id=$1 AND (p.visibility='PUBLIC' OR p.author_id=$2 OR c.author_id=$2
