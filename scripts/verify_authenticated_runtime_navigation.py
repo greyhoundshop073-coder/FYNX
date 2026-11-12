@@ -3562,6 +3562,10 @@ def wallet_balance_details_ready(xml_text: str) -> bool:
         find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
+        and find_control(xml_text, ["Recent activity"])
+        and find_control(xml_text, ["All"])
+        and find_control(xml_text, ["Money in"])
+        and find_control(xml_text, ["Money out"])
     )
 
 
@@ -3700,25 +3704,40 @@ def capture_wallet_from_features(prefix:str):
     wallet_shell_opened=False
     wallet_settled=False
     wallet_loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    wallet_terminal_markers=("Wallet unavailable", "Balance unavailable until your connection is restored",
+                             "Marketplace earnings unavailable")
+    wallet_top_xml=""
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
         wallet_shell_opened=wallet_destination_ready(wallet_xml)
+        wallet_terminal_unavailable=bool(wallet_xml and all(
+            marker in wallet_xml for marker in wallet_terminal_markers
+        ))
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
-        if wallet_shell_opened and not wallet_still_loading:
+        # In the explicitly debug-local/offline session the app correctly renders
+        # an unavailable state, not an endless spinner. Treat that visible error
+        # as a terminal result, while retaining the exact offline-state assertions.
+        if wallet_shell_opened and (not wallet_still_loading or wallet_terminal_unavailable):
             wallet_settled=True
+            wallet_top_xml=wallet_xml
             break
 
     wallet_opened=wallet_shell_opened and wallet_settled
     if wallet_opened:
-        details_xml, details_ready = capture_wallet_balance_details(prefix, wallet_xml)
+        screenshot("authenticated-wallet-top.png")
+        (ROOT/"authenticated-wallet-top.xml").write_text(wallet_top_xml+chr(10),encoding="utf-8")
+        details_xml, details_ready = capture_wallet_balance_details(prefix, wallet_top_xml)
         if details_ready:
             (ROOT/"authenticated-wallet-balance-details.xml").write_text(
                 details_xml + chr(10), encoding="utf-8"
             )
             screenshot("authenticated-wallet-balance-details.png")
-            wallet_xml = restore_wallet_top(prefix, details_xml)
-            wallet_opened = wallet_destination_ready(wallet_xml)
+            # Keep the verified lower viewport: it contains Balance details and
+            # Recent activity. Do not scroll back to the top and then fail because
+            # UIAutomator did not publish the LazyColumn's restored top bounds.
+            wallet_xml = details_xml
+            wallet_opened = wallet_balance_details_ready(wallet_xml)
         else:
             wallet_opened = False
             result_message = "Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface."
@@ -4171,10 +4190,25 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 report.append("- FAIL: My Shop overview remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
                 FAILURES.append("My Shop overview remained loading after 20 seconds")
 
+            # The public-profile action is intentionally below the overview cards in
+            # the real Seller Center LazyColumn. Scroll the actual content surface until
+            # the accessibility tree exposes it; do not mistake the first viewport for
+            # the complete overview or tap guessed screen coordinates.
+            shop_action_xml = shop_xml
+            for attempt in range(12):
+                if find_control(shop_action_xml, ["View public Marketplace profile"]):
+                    break
+                scrolled_shop_xml = swipe_vertical_scroll_container(
+                    shop_action_xml, "marketplace-my-shop-public-profile-scroll-" + str(attempt)
+                )
+                if not scrolled_shop_xml:
+                    break
+                shop_action_xml = scrolled_shop_xml
+
             # Exercise the exact owner route added by the Marketplace-profile update.
             # This is read-only: it does not save shop details or mutate listings/orders.
             public_profile_xml = tap_control(
-                shop_xml,
+                shop_action_xml,
                 ["View public Marketplace profile"],
                 "marketplace-public-profile",
                 ["Marketplace profile", "Available products"]
