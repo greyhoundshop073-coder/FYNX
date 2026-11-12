@@ -27,6 +27,7 @@ on:
       - "gradlew"
       - "gradlew.bat"
       - "scripts/**"
+      - ".github/workflows/android-build.yml"
       - "docs/**"
       - ".maestro/**"
       - "visual-baselines/**"
