@@ -5,8 +5,18 @@ import org.json.JSONObject
 
 /** Server-authoritative client for public announcements and owner/admin controls. */
 object FynxAdminClient {
-    data class Announcement(val id: String, val title: String, val body: String, val priority: String, val publishedAt: String)
-    data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
+    data class Announcement(
+        val id: String,
+        val title: String,
+        val body: String,
+        val priority: String,
+        val publishedAt: String,
+        val mediaId: String? = null,
+        val linkUrl: String = "",
+        val scheduledAt: String? = null,
+        val published: Boolean = true
+    )
+    data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
     data class MusicTrack(
         val id: String,
@@ -16,6 +26,33 @@ object FynxAdminClient {
         val durationMs: Long,
         val category: String,
         val active: Boolean
+    )
+    data class AdminActivity(
+        val id: String,
+        val actorRole: String,
+        val actorUsername: String,
+        val actorDisplayName: String,
+        val action: String,
+        val targetType: String,
+        val targetId: String,
+        val summary: String,
+        val createdAt: String
+    )
+    data class AdminPage<T>(
+        val items: List<T>,
+        val offset: Int,
+        val limit: Int,
+        val hasMore: Boolean
+    )
+    data class AdminReport(
+        val id: String,
+        val reporterUsername: String,
+        val reporterDisplayName: String,
+        val targetUsername: String,
+        val reason: String,
+        val details: String,
+        val status: String,
+        val createdAt: String
     )
     data class AppealReview(
         val id: String,
@@ -30,6 +67,7 @@ object FynxAdminClient {
         val accountStatus: String,
         val createdAt: String
     )
+    data class AppealDecision(val restored: Boolean)
     data class ProtectionCase(
         val id: String,
         val orderId: String,
@@ -66,22 +104,41 @@ object FynxAdminClient {
         val breakdown: List<RevenueBreakdown>
     )
 
-    suspend fun announcements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/announcements").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("announcements") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    add(Announcement(item.optString("id"), item.optString("title"), item.optString("body"), item.optString("priority", "NORMAL"), item.optString("createdAt")))
-                }
+    private fun parseAnnouncements(raw: String): List<Announcement> {
+        val array = JSONObject(raw).optJSONArray("announcements") ?: return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val mediaId = item.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }
+                val scheduledAt = item.optString("scheduledAt").takeIf { it.isNotBlank() && it != "null" }
+                add(
+                    Announcement(
+                        id = item.optString("id"),
+                        title = item.optString("title"),
+                        body = item.optString("body"),
+                        priority = item.optString("priority", "NORMAL"),
+                        publishedAt = item.optString("publishedAt", item.optString("createdAt")),
+                        mediaId = mediaId,
+                        linkUrl = item.optString("linkUrl"),
+                        scheduledAt = scheduledAt,
+                        published = item.optBoolean("published", true)
+                    )
+                )
             }
         }
+    }
+
+    suspend fun announcements(context: Context): Result<List<Announcement>> =
+        FynxBackendClient.get(context, "/api/announcements").mapCatching(::parseAnnouncements)
+
+    suspend fun adminAnnouncements(context: Context): Result<List<Announcement>> =
+        FynxBackendClient.get(context, "/api/admin/announcements").mapCatching(::parseAnnouncements)
 
     suspend fun dashboard(context: Context): Result<Dashboard> =
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->
             val value = JSONObject(raw)
             val counts = value.optJSONObject("counts") ?: JSONObject()
-            Dashboard(value.optString("role"), counts.optInt("users"), counts.optInt("openReports"), counts.optInt("openAppeals"), counts.optInt("safetyEvents24h"))
+            Dashboard(value.optString("role"), counts.optInt("users"), counts.optInt("openReports"), counts.optInt("openAppeals"), counts.optInt("safetyActions24h"))
         }
 
     suspend fun revenue(context: Context): Result<RevenueReport> =
@@ -171,19 +228,75 @@ object FynxAdminClient {
             JSONObject().put("active", active).toString()
         ).map { Unit }
 
-    suspend fun appeals(context: Context): Result<List<AppealReview>> =
-        FynxBackendClient.get(context, "/api/admin/appeals").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("appeals") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
+    suspend fun activity(context: Context, query: String = "", offset: Int = 0, action: String = ""): Result<AdminPage<AdminActivity>> =
+        FynxBackendClient.get(
+            context,
+            "/api/admin/activity?q=${encode(query)}&action=${encode(action)}&limit=50&offset=${offset.coerceIn(0, 10000)}"
+        ).mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("activities")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AdminActivity(item.optString("id"), item.optString("actorRole"), item.optString("actorUsername"), item.optString("actorDisplayName"), item.optString("action"), item.optString("targetType"), item.optString("targetId"), item.optString("summary"), item.optString("createdAt")))
+                }
+            }
+            AdminPage(
+                items = items,
+                offset = value.optInt("offset", offset),
+                limit = value.optInt("limit", 50),
+                hasMore = value.optBoolean("hasMore", false)
+            )
+        }
+
+    suspend fun reports(context: Context, offset: Int = 0): Result<AdminPage<AdminReport>> =
+        FynxBackendClient.get(context, "/api/admin/reports?limit=50&offset=${offset.coerceIn(0, 10000)}").mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("reports")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AdminReport(
+                        id = item.optString("id"),
+                        reporterUsername = item.optString("reporterUsername"),
+                        reporterDisplayName = item.optString("reporterDisplayName"),
+                        targetUsername = item.optString("targetUsername"),
+                        reason = item.optString("reason"),
+                        details = item.optString("details"),
+                        status = item.optString("status"),
+                        createdAt = item.optString("createdAt")
+                    ))
+                }
+            }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", 50), value.optBoolean("hasMore", false))
+        }
+
+    suspend fun reviewReport(context: Context, reportId: String, status: String): Result<Unit> =
+        FynxBackendClient.patchJson(
+            context,
+            "/api/admin/reports/${encode(reportId)}",
+            JSONObject().put("status", status.trim().uppercase()).toString()
+        ).map { Unit }
+
+    suspend fun appeals(context: Context, offset: Int = 0): Result<AdminPage<AppealReview>> =
+        FynxBackendClient.get(context, "/api/admin/appeals?limit=50&offset=${offset.coerceIn(0, 10000)}").mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("appeals")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(AppealReview(item.optString("id"), item.optString("userId"), item.optString("username"), item.optString("displayName"), item.optString("reportId").takeIf { it.isNotBlank() && it != "null" }, item.optString("subject"), item.optString("details"), item.optString("status"), item.optString("decisionNote"), item.optString("accountStatus"), item.optString("createdAt")))
                 }
             }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", 50), value.optBoolean("hasMore", false))
         }
 
-    suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<Unit> =
-        FynxBackendClient.patchJson(context, "/api/admin/appeals/${encode(appealId)}", JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()).map { Unit }
+    suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<AppealDecision> =
+        FynxBackendClient.patchJson(context, "/api/admin/appeals/${encode(appealId)}", JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()).mapCatching { raw ->
+            val appeal = JSONObject(raw).optJSONObject("appeal")
+                ?: throw IllegalStateException("Appeal decision response was incomplete.")
+            AppealDecision(restored = appeal.optBoolean("restored", false))
+        }
 
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
         val path = if (status.isNullOrBlank()) "/api/admin/marketplace/protection/cases" else "/api/admin/marketplace/protection/cases?status=${encode(status.trim().uppercase())}"
@@ -249,11 +362,64 @@ object FynxAdminClient {
             value.optString("status").ifBlank { value.optString("error", "Request accepted") }
         }
 
-    suspend fun publishAnnouncement(context: Context, title: String, body: String, priority: String): Result<Unit> =
-        FynxBackendClient.postJson(context, "/api/admin/announcements", JSONObject().put("title", title.trim()).put("body", body.trim()).put("priority", priority).toString()).map { Unit }
+    suspend fun publishAnnouncement(
+        context: Context,
+        title: String,
+        body: String,
+        priority: String,
+        mediaId: String? = null,
+        linkUrl: String = "",
+        scheduledAt: String? = null
+    ): Result<Unit> {
+        val payload = JSONObject()
+            .put("title", title.trim())
+            .put("body", body.trim())
+            .put("priority", priority)
+            .put("mediaId", mediaId ?: JSONObject.NULL)
+            .put("linkUrl", linkUrl.trim())
+            .put("scheduledAt", scheduledAt ?: JSONObject.NULL)
+        return FynxBackendClient.postJson(context, "/api/admin/announcements", payload.toString()).map { Unit }
+    }
+
+    suspend fun updateAnnouncement(
+        context: Context,
+        announcementId: String,
+        title: String,
+        body: String,
+        priority: String,
+        mediaId: String?,
+        linkUrl: String,
+        scheduledAt: String?,
+        published: Boolean
+    ): Result<Unit> {
+        val payload = JSONObject()
+            .put("title", title.trim())
+            .put("body", body.trim())
+            .put("priority", priority)
+            .put("mediaId", mediaId ?: JSONObject.NULL)
+            .put("linkUrl", linkUrl.trim())
+            .put("scheduledAt", scheduledAt ?: JSONObject.NULL)
+            .put("published", published)
+        return FynxBackendClient.patchJson(
+            context,
+            "/api/admin/announcements/${encode(announcementId)}",
+            payload.toString()
+        ).map { Unit }
+    }
+
+    suspend fun setAnnouncementPublishing(
+        context: Context,
+        announcementId: String,
+        published: Boolean,
+        scheduledAt: String? = null
+    ): Result<Unit> = FynxBackendClient.patchJson(
+        context,
+        "/api/admin/announcements/${encode(announcementId)}",
+        JSONObject().put("published", published).put("scheduledAt", scheduledAt ?: JSONObject.NULL).toString()
+    ).map { Unit }
 
     suspend fun setAccountStatus(context: Context, userId: String, status: String): Result<Unit> =
-        FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}", JSONObject().put("status", status).toString()).map { Unit }
+        FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}/status", JSONObject().put("status", status).toString()).map { Unit }
 
     suspend fun grantAdmin(context: Context, userId: String): Result<Unit> =
         FynxBackendClient.postJson(context, "/api/admin/admins", JSONObject().put("userId", userId).toString()).map { Unit }

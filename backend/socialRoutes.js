@@ -869,15 +869,45 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch(e) { console.error('social feed',e); res.status(500).json({error:'social feed failed'}); }
   });
   // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
+  let fynxMusicAdminSchemaPromise;
+  async function ensureFynxMusicAdminSchema() {
+    if (!fynxMusicAdminSchemaPromise) {
+      fynxMusicAdminSchemaPromise = (async () => {
+        await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+        await pool.query(`CREATE TABLE IF NOT EXISTS fynx_admin_activity (
+          id BIGSERIAL PRIMARY KEY,
+          actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          actor_role TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_type TEXT NOT NULL DEFAULT '',
+          target_id TEXT NOT NULL DEFAULT '',
+          summary TEXT NOT NULL DEFAULT '',
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_created_idx ON fynx_admin_activity(created_at DESC)");
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_action_idx ON fynx_admin_activity(action,created_at DESC)");
+      })().catch(error => { fynxMusicAdminSchemaPromise = null; throw error; });
+    }
+    return fynxMusicAdminSchemaPromise;
+  }
+
   async function fynxMusicAdminRole(userId) {
-    // Music routes must be safe on a fresh deployment even if no other /api/admin
-    // endpoint has been called yet. The existing adminRoutes module owns this schema,
-    // but this route is independently callable during the same cold start.
-    await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+    // Keep direct Music Library calls safe on a cold deployment, but run DDL once
+    // per process rather than on every OWNER-only request.
+    await ensureFynxMusicAdminSchema();
     const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
     if (first && String(first.id) === String(userId)) return "OWNER";
     const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return result.rowCount ? "ADMIN" : null;
+  }
+
+  async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}, executor = pool) {
+    await executor.query(
+      `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
+       VALUES($1,$2,$3,'music_track',$4,$5,$6::jsonb)`,
+      [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
+    );
   }
 
   app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
@@ -888,20 +918,40 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const mediaId = Number(req.body?.mediaId);
       const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
       const artist = typeof req.body?.artist === 'string' ? req.body.artist.trim().slice(0, 120) : '';
-      const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
+      const durationMs = req.body?.durationMs;
       const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
-      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist) return res.status(400).json({ error: 'audio media, title and artist are required' });
-      const media = await pool.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [mediaId]);
-      if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
-        return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist ||
+          !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > 86400000) {
+        return res.status(400).json({ error: 'audio media, title, artist and a valid duration (1-86400000 ms) are required' });
       }
-      const result = await pool.query(
-        `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
-         VALUES($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
-         RETURNING id,media_id,title,artist,duration_ms,category,active`,
-        [mediaId, title, artist, durationMs, category, req.user.sub]
-      );
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        const media = await client.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1 FOR SHARE', [mediaId]);
+        if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+        }
+        result = await client.query(
+          `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
+           VALUES($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
+           RETURNING id,media_id,title,artist,duration_ms,category,active`,
+          [mediaId, title, artist, durationMs, category, req.user.sub]
+        );
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_PUBLISHED", result.rows[0].id, result.rows[0].title, {
+          mediaId: String(result.rows[0].media_id),
+          category: result.rows[0].category,
+          durationMs: Number(result.rows[0].duration_ms || 0)
+        }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.status(201).json({
         track: {
           id: String(result.rows[0].id),
@@ -922,7 +972,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get('/api/admin/social/music/catalogue', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const result = await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,c.category,c.active,c.created_at FROM fynx_music_catalogue c ORDER BY c.created_at DESC`);
       return res.json({ tracks: result.rows.map((row) => ({
@@ -949,8 +999,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const id = Number(req.params.id);
       const active = req.body?.active === true;
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active', [id, active]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        result = await client.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active,title', [id, active]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, active ? "MUSIC_TRACK_ACTIVATED" : "MUSIC_TRACK_HIDDEN", id, result.rows[0].title, { active }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true, active: Boolean(result.rows[0].active) });
     } catch (error) {
       console.error('admin music catalogue status', error);
@@ -965,8 +1030,22 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureSocialSchema();
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id', [id]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id,title', [id]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_REMOVED", id, result.rows[0].title, {}, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true });
     } catch (error) {
       console.error('admin remove music', error);
@@ -1055,7 +1134,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     }
   });
 
-  // music catalogue selection is server-owned; client metadata is ignored when a track is selected.\n  app.post('/api/social/posts',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const visibility=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility||'').toUpperCase())?String(req.body.visibility).toUpperCase():'PUBLIC';const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];const mediaId=req.body?.mediaId==null?null:Number(req.body.mediaId);const mediaType=typeof req.body?.mediaType==='string'?req.body.mediaType.trim().toLowerCase():null;const backgroundKey=typeof req.body?.textBackground==='string'?req.body.textBackground.trim().toUpperCase():'';const location=typeof req.body?.location==='string'?req.body.location.trim().slice(0,160):null;const musicMediaId=req.body?.musicMediaId==null?null:Number(req.body.musicMediaId);let musicTitle=typeof req.body?.musicTitle==='string'?req.body.musicTitle.trim().slice(0,120):null;let musicArtist=typeof req.body?.musicArtist==='string'?req.body.musicArtist.trim().slice(0,120):null;let musicDurationMs=req.body?.musicDurationMs==null?0:Math.max(0,Math.min(Number(req.body.musicDurationMs)||0,86400000));const feelingActivityType=typeof req.body?.feelingActivityType==='string'?req.body.feelingActivityType.trim().toUpperCase():null;const feelingActivity=typeof req.body?.feelingActivity==='string'?req.body.feelingActivity.trim().slice(0,80):null;const allowedFeelingActivityTypes=['FEELING','ACTIVITY'];if(feelingActivityType!=null&&!allowedFeelingActivityTypes.includes(feelingActivityType))return res.status(400).json({error:'invalid feeling or activity type'});if(feelingActivityType!=null&&!feelingActivity)return res.status(400).json({error:'feeling or activity label is required'});const backgroundStyles={OCEAN:[0xFF1565C0,0xFFFFFFFF],VIOLET:[0xFF6A1B9A,0xFFFFFFFF],EMERALD:[0xFF00695C,0xFFFFFFFF],SUNSET:[0xFFE65100,0xFFFFFFFF],CHARCOAL:[0xFF263238,0xFFFFFFFF]};const backgroundStyle=backgroundKey&&backgroundStyles[backgroundKey]?backgroundStyles[backgroundKey]:null;if(!text&&mediaId==null&&musicMediaId==null)return res.status(400).json({error:'post content is required'});if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});if(mediaId!=null){if(!Number.isInteger(mediaId)||mediaId<1||!['image','video','audio'].includes(mediaType))return res.status(400).json({error:'invalid post media'});const m=await pool.query('SELECT id FROM message_media WHERE id=$1 AND owner_id=$2',[mediaId,req.user.sub]);if(!m.rows[0])return res.status(403).json({error:'media is not owned by this account'})}if(musicMediaId!=null){if(!Number.isInteger(musicMediaId)||musicMediaId<1)return res.status(400).json({error:'invalid music selection'});const m=await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.media_id=$1 AND c.active=TRUE`,[musicMediaId]);if(!m.rows[0]||!String(m.rows[0].mime_type||'').toLowerCase().startsWith('audio/'))return res.status(403).json({error:'music selection is not published in the FYNX catalogue'});musicTitle=m.rows[0].title;musicArtist=m.rows[0].artist;musicDurationMs=Number(m.rows[0].duration_ms||0)}if(visibility==='SELECTED_PEOPLE'){const friends=await pool.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`,[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');const r=await client.query('INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,feeling_activity_type,feeling_activity,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',[req.user.sub,text,visibility,mediaId,mediaType,musicMediaId,musicTitle,musicArtist,musicDurationMs,feelingActivityType,feelingActivity,backgroundStyle?.[0] ? backgroundKey : '',backgroundStyle?.[0] ?? null,backgroundStyle?.[1] ?? null,location]);const postId=r.rows[0].id;if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[postId,rawAudience]);await client.query('COMMIT');res.status(201).json({postId:String(postId)})}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social create post',e);res.status(500).json({error:'post creation failed'})}finally{client.release()}});
+  // music catalogue selection is server-owned; client metadata is ignored when a track is selected.
+  app.post('/api/social/posts',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const visibility=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility||'').toUpperCase())?String(req.body.visibility).toUpperCase():'PUBLIC';const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];const mediaId=req.body?.mediaId==null?null:Number(req.body.mediaId);const mediaType=typeof req.body?.mediaType==='string'?req.body.mediaType.trim().toLowerCase():null;const backgroundKey=typeof req.body?.textBackground==='string'?req.body.textBackground.trim().toUpperCase():'';const location=typeof req.body?.location==='string'?req.body.location.trim().slice(0,160):null;const musicMediaId=req.body?.musicMediaId==null?null:Number(req.body.musicMediaId);let musicTitle=typeof req.body?.musicTitle==='string'?req.body.musicTitle.trim().slice(0,120):null;let musicArtist=typeof req.body?.musicArtist==='string'?req.body.musicArtist.trim().slice(0,120):null;let musicDurationMs=req.body?.musicDurationMs==null?0:Math.max(0,Math.min(Number(req.body.musicDurationMs)||0,86400000));const feelingActivityType=typeof req.body?.feelingActivityType==='string'?req.body.feelingActivityType.trim().toUpperCase():null;const feelingActivity=typeof req.body?.feelingActivity==='string'?req.body.feelingActivity.trim().slice(0,80):null;const allowedFeelingActivityTypes=['FEELING','ACTIVITY'];if(feelingActivityType!=null&&!allowedFeelingActivityTypes.includes(feelingActivityType))return res.status(400).json({error:'invalid feeling or activity type'});if(feelingActivityType!=null&&!feelingActivity)return res.status(400).json({error:'feeling or activity label is required'});const backgroundStyles={OCEAN:[0xFF1565C0,0xFFFFFFFF],VIOLET:[0xFF6A1B9A,0xFFFFFFFF],EMERALD:[0xFF00695C,0xFFFFFFFF],SUNSET:[0xFFE65100,0xFFFFFFFF],CHARCOAL:[0xFF263238,0xFFFFFFFF]};const backgroundStyle=backgroundKey&&backgroundStyles[backgroundKey]?backgroundStyles[backgroundKey]:null;if(!text&&mediaId==null&&musicMediaId==null)return res.status(400).json({error:'post content is required'});if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});if(mediaId!=null){if(!Number.isInteger(mediaId)||mediaId<1||!['image','video','audio'].includes(mediaType))return res.status(400).json({error:'invalid post media'});const m=await pool.query('SELECT id FROM message_media WHERE id=$1 AND owner_id=$2',[mediaId,req.user.sub]);if(!m.rows[0])return res.status(403).json({error:'media is not owned by this account'})}if(musicMediaId!=null){if(!Number.isInteger(musicMediaId)||musicMediaId<1)return res.status(400).json({error:'invalid music selection'});const m=await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.media_id=$1 AND c.active=TRUE`,[musicMediaId]);if(!m.rows[0]||!String(m.rows[0].mime_type||'').toLowerCase().startsWith('audio/'))return res.status(403).json({error:'music selection is not published in the FYNX catalogue'});musicTitle=m.rows[0].title;musicArtist=m.rows[0].artist;musicDurationMs=Number(m.rows[0].duration_ms||0)}if(visibility==='SELECTED_PEOPLE'){const friends=await pool.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`,[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');const r=await client.query('INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,feeling_activity_type,feeling_activity,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',[req.user.sub,text,visibility,mediaId,mediaType,musicMediaId,musicTitle,musicArtist,musicDurationMs,feelingActivityType,feelingActivity,backgroundStyle?.[0] ? backgroundKey : '',backgroundStyle?.[0] ?? null,backgroundStyle?.[1] ?? null,location]);const postId=r.rows[0].id;if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[postId,rawAudience]);await client.query('COMMIT');res.status(201).json({postId:String(postId)})}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social create post',e);res.status(500).json({error:'post creation failed'})}finally{client.release()}});
   app.delete('/api/social/posts/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const r=await pool.query('DELETE FROM social_posts WHERE id=$1 AND author_id=$2 RETURNING id',[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'post not found'});res.json({ok:true})}catch(e){res.status(500).json({error:'post deletion failed'})}});
   app.get('/api/social/posts/:id/audience',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const post=(await pool.query('SELECT id,visibility FROM social_posts WHERE id=$1 AND author_id=$2',[id,req.user.sub])).rows[0];if(!post)return res.status(404).json({error:'post not found'});const audience=await pool.query('SELECT user_id FROM social_post_audience WHERE post_id=$1 ORDER BY user_id',[id]);return res.json({visibility:post.visibility,userIds:audience.rows.map(r=>String(r.user_id))});}catch(e){return res.status(500).json({error:'post audience lookup failed'})}});
   app.patch('/api/social/posts/:id',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const id=Number(req.params.id);const visibility=String(req.body?.visibility||'').toUpperCase();const allowed=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'];if(!allowed.includes(visibility))return res.status(400).json({error:'invalid post audience'});const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});const owned=(await client.query('SELECT id FROM social_posts WHERE id=$1 AND author_id=$2',[id,req.user.sub])).rows[0];if(!owned)return res.status(404).json({error:'post not found'});if(visibility==='SELECTED_PEOPLE'){const friends=await client.query('SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status=\'accepted\' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])',[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');await client.query('UPDATE social_posts SET visibility=$2 WHERE id=$1 AND author_id=$3',[id,visibility,req.user.sub]);await client.query('DELETE FROM social_post_audience WHERE post_id=$1',[id]);if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[id,rawAudience]);await client.query('COMMIT');return res.json({ok:true,postId:String(id),visibility});}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social update post audience',e);return res.status(500).json({error:'post audience update failed'});}finally{client.release();}});

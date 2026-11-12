@@ -9,6 +9,8 @@ Before editing code, every contributor/chat/agent MUST read:
 
 Inspect the latest canonical branch head and open pull requests before starting.
 
+**Active Owner/Admin Control Center continuation:** For the remaining work tracked by PR #527, read and follow [docs/ADMIN_CONTROL_CENTER_CONTINUATION.md](docs/ADMIN_CONTROL_CENTER_CONTINUATION.md). Resume its existing branch and grouped work; do not restart or create a parallel implementation. Keep that handoff updated as grouped work is completed.
+
 - Start every work branch from the latest `integration/fynx-single-apk-20261013`.
 - Every feature PR must use `integration/fynx-single-apk-20261013` as its base. Do not merge work into `main` or a competing APK branch as the delivery path.
 - Do not create or announce a separate “latest APK” from a feature branch. The shared APK is built only from the latest merged canonical branch commit.

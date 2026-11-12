@@ -240,6 +240,7 @@ fun MarketplacePromotionalBanner(
                 onOpenCategory(slide.destinationValue)
             slide.destinationType == "SHOP" && slide.destinationValue.isNotBlank() ->
                 onOpenSeller(slide.destinationValue)
+            slide.destinationType == "NONE" -> Unit
             else -> onShopNow()
         }
     }
@@ -411,7 +412,7 @@ private fun MarketplacePromotionalSlide(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                Button(
+                if (slide.destinationType != "NONE") Button(
                     onClick = onClick,
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF12233C)),
                     contentPadding = PaddingValues(horizontal = 15.dp, vertical = 7.dp)

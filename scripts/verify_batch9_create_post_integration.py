@@ -41,7 +41,7 @@ checks = [
         "selectedAudienceIds = emptySet()"
     ])),
     ("Admin music library is available", "FynxMusicAdminPanel" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt").read_text(encoding="utf-8") and "FynxMusicAdminPanel()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt").read_text(encoding="utf-8")),
-    ("Music writes are server-admin protected", "fynxMusicAdminRole" in routes and "/api/admin/social/music/catalogue" in routes and "FYNX admin access required" in routes),
+    ("Music catalogue management is protected by the server-side OWNER role", "fynxMusicAdminRole" in routes and "/api/admin/social/music/catalogue" in routes and "if (role !== 'OWNER')" in routes and "FYNX owner access required for music management" in routes),
     ("Dedicated Batch 9 integration gate is wired into CI", "scripts/verify_batch9_create_post_integration.py" in workflow),
 ]
 

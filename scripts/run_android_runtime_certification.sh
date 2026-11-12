@@ -13,6 +13,36 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
+  # Admin permissions and account queues require the live OWNER/ADMIN backend.
+  # Do not let an unrelated Marketplace/Wallet capture turn this Admin PR red,
+  # and never claim the Admin screen was runtime-certified without real role auth.
+  BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\/+$/,""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
+  mkdir -p fynx-runtime-screenshots
+  {
+    echo "# FYNX Admin Control Center runtime certification"
+    echo
+    echo "- Scope: PR #527 Admin Control Center."
+    echo "- Android instrumentation exit code: ${TEST_EXIT}"
+    echo "- Backend health HTTP status: ${BACKEND_STATUS}"
+    echo "- Admin UI runtime: BLOCKED until the backend is healthy and a real OWNER/ADMIN test session is available."
+    echo "- Marketplace, My Shop and Wallet visual capture: NOT RUN; these are separate workstreams and are not used to fail this Admin-only PR."
+    echo "- No role, account, moderation, announcement or publishing mutation was performed."
+    echo
+    if [ "${TEST_EXIT}" -eq 0 ]; then
+      echo "## Result: BUILD_AND_INSTRUMENTATION_GREEN; ADMIN_RUNTIME_BLOCKED"
+    else
+      echo "## Result: RED (Android instrumentation failed)"
+    fi
+  } > fynx-runtime-screenshots/FYNX-admin-runtime-certification.md
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    echo "::error::Admin PR Android instrumentation failed; see instrumentation logs."
+  else
+    echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
+  fi
+  exit "${TEST_EXIT}"
+fi
+
 if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   echo "::notice::Capturing the Home composer and Music picker through the debug-only UI entry; no backend account or publishing action is used."
   FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
