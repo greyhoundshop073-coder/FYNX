@@ -69,6 +69,7 @@ fun FynxHomeSocialHubPanel(
     initialCaption: String? = null,
     onCaptionConsumed: () -> Unit = {},
     cameraRequest: Int = 0,
+    cameraInitialMode: CameraMode = CameraMode.PHOTO,
     onCameraRequestConsumed: () -> Unit = {},
     onOpenChats: () -> Unit = {},
     onOpenStories: () -> Unit = {},
@@ -1631,6 +1632,7 @@ fun FynxHomeSocialHubPanel(
                 Box(Modifier.fillMaxSize().background(Color(0xFF000000))) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
+                        initialMode = cameraInitialMode,
                         initialMediaUri = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.sourceUri ?: it },
                         initialMediaType = cameraEditingMediaUri?.let { uri -> capturedTypes.getOrNull(capturedUris.indexOf(uri)) },
                         initialTextOverlays = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.overlays }.orEmpty(),
