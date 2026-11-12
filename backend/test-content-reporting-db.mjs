@@ -10,7 +10,8 @@ await db.connect();
 const routes = new Map();
 const app = {
   post(path, ...handlers) { routes.set(`POST ${path}`, handlers.at(-1)); },
-  get(path, ...handlers) { routes.set(`GET ${path}`, handlers.at(-1)); }
+  get(path, ...handlers) { routes.set(`GET ${path}`, handlers.at(-1)); },
+  patch(path, ...handlers) { routes.set(`PATCH ${path}`, handlers.at(-1)); }
 };
 registerTrustSafetyRoutes({ app, pool: db, auth: (_req, _res, next) => next?.() });
 
