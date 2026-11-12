@@ -699,6 +699,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             remoteSearchError = null
             return@LaunchedEffect
         }
+        remoteSearchMessages = emptyList()
+        remoteSearchHasMore = false
+        remoteSearchCursor = null
+        remoteSearchError = null
         delay(350)
         loadPrivateSearchPage(query)
     }
