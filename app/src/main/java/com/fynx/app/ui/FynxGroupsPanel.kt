@@ -78,11 +78,18 @@ import kotlinx.coroutines.withContext
 /** Merge a server refresh without discarding older pages already loaded by the user.
  * Server copies win for matching IDs; locally queued unsent messages remain visible.
  */
-internal fun mergeGroupMessageRefresh(existing: List<ChatMessage>, latestRemote: List<ChatMessage>): List<ChatMessage> {
+internal fun mergeGroupMessageRefresh(
+    existing: List<ChatMessage>,
+    latestRemote: List<ChatMessage>,
+    authorizedOlderMessageIds: Set<String>
+): List<ChatMessage> {
     val refreshedIds = latestRemote.asSequence().map { it.id }.toSet()
-    return (existing.filter { it.id !in refreshedIds } + latestRemote)
-        .distinctBy { it.id }
-        .sortedBy { it.timestamp }
+    // Never resurrect cached delivered history unless this session fetched it from the
+    // authenticated history endpoint. This preserves the new-member history privacy rule.
+    val retained = existing.filter {
+        it.id !in refreshedIds && (it.id in authorizedOlderMessageIds || !it.delivered)
+    }
+    return (retained + latestRemote).distinctBy { it.id }.sortedBy { it.timestamp }
 }
 
 @Composable
@@ -318,6 +325,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var hasOlderGroupMessages by remember(groupId) { mutableStateOf(false) }
     var olderGroupMessagesCursor by remember(groupId) { mutableStateOf<String?>(null) }
+    var authorizedOlderGroupMessageIds by remember(groupId) { mutableStateOf<Set<String>>(emptySet()) }
     var loadingOlderGroupMessages by remember { mutableStateOf(false) }
     LaunchedEffect(groupId) {
         // Group and message stores grow over time; parse them away from the UI thread.
@@ -330,6 +338,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         groupLoadComplete = true
     }
     val latestMessages by rememberUpdatedState(messages)
+    val latestAuthorizedOlderGroupMessageIds by rememberUpdatedState(authorizedOlderGroupMessageIds)
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
@@ -594,7 +603,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             }
                         }
                         // Keep older delivered pages in memory; the server page is only the newest window.
-                        val mergedMessages = mergeGroupMessageRefresh(messages, remoteMessages)
+                        val mergedMessages = mergeGroupMessageRefresh(messages, remoteMessages, authorizedOlderGroupMessageIds)
                         messages = mergedMessages
                         if (showError) syncMessage = null
                         runCatching {
@@ -676,7 +685,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
                                 }
                                 // Realtime fetches the newest server window, not the complete history.
-                                val merged = mergeGroupMessageRefresh(latestMessages, remoteMessages)
+                                val merged = mergeGroupMessageRefresh(latestMessages, remoteMessages, latestAuthorizedOlderGroupMessageIds)
                                 messages = merged
                                 // Group history may contain years of chat JSON. Keep
                                 // local persistence off Main just like initial restoration.
@@ -870,7 +879,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     val older = page.messages.mapNotNull { item ->
                                         runCatching { FynxGroupRemoteClient.toChatMessage(item, currentUsername, FynxBackendClient.baseUrl(context)) }.getOrNull()
                                     }
-                                    messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                    authorizedOlderGroupMessageIds = authorizedOlderGroupMessageIds + older.map { it.id }
+                                    messages = mergeGroupMessageRefresh(messages, older, authorizedOlderGroupMessageIds)
                                     hasOlderGroupMessages = page.hasMore
                                     olderGroupMessagesCursor = page.nextBefore
                                     withContext(Dispatchers.IO) { FynxChatStore.save(context, "group_$groupId", messages) }
