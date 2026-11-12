@@ -233,10 +233,17 @@ export function registerGroupMembershipRoutes({ app }) {
     try {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
-      const actor = await member(groupId, req.user.sub);
-      if (!isAdmin(actor?.role)) return res.status(403).json({ error: 'group admin permission required' });
       await client.query('BEGIN');
-      await client.query('SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId]);
+      const group = (await client.query('SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
+      if (!group) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'group not found' });
+      }
+      const actor = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!isAdmin(actor?.role)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group admin permission required' });
+      }
       const requested = (await client.query('SELECT r.user_id,u.username FROM fynx_group_join_requests r JOIN users u ON u.id=r.user_id WHERE r.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1', [groupId, cleanUsername(req.params?.username)])).rows[0];
       if (!requested) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'join request not found' }); }
       const inserted = await insertMemberIfCapacity(client, groupId, requested.user_id);

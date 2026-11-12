@@ -18,7 +18,6 @@ import { registerMoneyPlannerRoutes } from "./moneyPlanner.js";
 import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.js";
 import { registerGroupRoutes } from "./groupRoutes.js";
 import { registerGroupMembershipRoutes } from "./groupMembershipRoutes.js";
-import { registerGroupInviteRoutes } from "./groupInviteRoutes.js";
 import { registerGroupContentRoutes } from "./groupContentRoutes.js";
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
@@ -1200,7 +1199,6 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 if (pool) {
   registerGroupRoutes({ app });
   registerGroupMembershipRoutes({ app });
-  registerGroupInviteRoutes({ app });
   registerGroupContentRoutes({ app });
 }
 
