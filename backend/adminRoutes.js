@@ -297,9 +297,14 @@ export function registerAdminRoutes({ app }) {
       if(status==='ACCEPTED'&&appeal.report_id!=null){
         const linkedReport=(await client.query('SELECT target_user_id FROM safety_reports WHERE id=$1 FOR UPDATE',[appeal.report_id])).rows[0];
         if(linkedReport&&String(linkedReport.target_user_id)===String(appeal.user_id)){
+          // Serialize appeal restoration with manual account-status changes,
+          // which lock the same user row before updating safety state.
+          const account=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[appeal.user_id])).rows[0];
+          if(account){
           await client.query(`INSERT INTO fynx_account_safety(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
           await client.query(`INSERT INTO safety_settings(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
           restored=true;
+          }
         }
       }
       await recordAdminActivity(req,'APPEAL_DECIDED','safety_appeal',appealId,`Appeal ${status.toLowerCase()}`,{status,decisionNote:note,restored},client);
