@@ -8,12 +8,16 @@ SOURCE = Path("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")
 CLIENT = Path("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")
 BACKEND = Path("backend/adminRoutes.js")
 MEDIA_SERVER = Path("backend/server.js")
+ADVERTISING = Path("backend/marketplaceAdvertising.js")
+SOCIAL = Path("backend/socialRoutes.js")
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
+advertising = ADVERTISING.read_text(encoding="utf-8") if ADVERTISING.is_file() else ""
+social = SOCIAL.read_text(encoding="utf-8") if SOCIAL.is_file() else ""
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -122,6 +126,19 @@ require("FynxAdminClient.publishAnnouncement(" in source and "announcementSchedu
         "announcement composer is missing image/link/scheduling controls")
 require("uriHandler.openUri(link)" in source and "FynxRemoteMedia(" in source,
         "public announcements must render uploaded images and open validated links")
+
+# Marketplace promotions and the OWNER-only Music Library must appear in the same searchable audit history.
+require("recordMarketplaceAdminActivity" in advertising and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in advertising,
+        "Marketplace promotion administration must initialize and write to admin activity history")
+for action in ("SEASONAL_PROMOTION_CREATED", "SEASONAL_PROMOTION_ACTIVATED",
+               "SEASONAL_PROMOTION_DEACTIVATED", "SEASONAL_PROMOTION_DELETED"):
+    require(action in advertising, f"Marketplace promotion action is not audited: {action}")
+require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
+        "Music Library administration must initialize and write to admin activity history")
+for action in ("MUSIC_TRACK_PUBLISHED", "MUSIC_TRACK_ACTIVATED", "MUSIC_TRACK_HIDDEN", "MUSIC_TRACK_REMOVED"):
+    require(action in social, f"Music Library action is not audited: {action}")
+require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER')") >= 3,
+        "Music catalogue write endpoints must enforce OWNER role server-side")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
