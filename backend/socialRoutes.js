@@ -874,10 +874,35 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     // endpoint has been called yet. The existing adminRoutes module owns this schema,
     // but this route is independently callable during the same cold start.
     await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+    await pool.query(`CREATE TABLE IF NOT EXISTS fynx_admin_activity (
+      id BIGSERIAL PRIMARY KEY,
+      actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      actor_role TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL DEFAULT '',
+      target_id TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_created_idx ON fynx_admin_activity(created_at DESC)");
+    await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_action_idx ON fynx_admin_activity(action,created_at DESC)");
     const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
     if (first && String(first.id) === String(userId)) return "OWNER";
     const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return result.rowCount ? "ADMIN" : null;
+  }
+
+  async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}) {
+    try {
+      await pool.query(
+        `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
+         VALUES($1,$2,$3,'music_track',$4,$5,$6::jsonb)`,
+        [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
+      );
+    } catch (error) {
+      console.error('admin music activity audit write failed', error);
+    }
   }
 
   app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
@@ -902,6 +927,11 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
          RETURNING id,media_id,title,artist,duration_ms,category,active`,
         [mediaId, title, artist, durationMs, category, req.user.sub]
       );
+      await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_PUBLISHED", result.rows[0].id, result.rows[0].title, {
+        mediaId: String(result.rows[0].media_id),
+        category: result.rows[0].category,
+        durationMs: Number(result.rows[0].duration_ms || 0)
+      });
       return res.status(201).json({
         track: {
           id: String(result.rows[0].id),
@@ -949,8 +979,9 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const id = Number(req.params.id);
       const active = req.body?.active === true;
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active', [id, active]);
+      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active,title', [id, active]);
       if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      await recordMusicAdminActivity(req.user.sub, role, active ? "MUSIC_TRACK_ACTIVATED" : "MUSIC_TRACK_HIDDEN", id, result.rows[0].title, { active });
       return res.json({ ok: true, active: Boolean(result.rows[0].active) });
     } catch (error) {
       console.error('admin music catalogue status', error);
@@ -965,8 +996,9 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureSocialSchema();
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id', [id]);
+      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id,title', [id]);
       if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_REMOVED", id, result.rows[0].title, {});
       return res.json({ ok: true });
     } catch (error) {
       console.error('admin remove music', error);
