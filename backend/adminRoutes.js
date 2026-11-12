@@ -195,11 +195,13 @@ export function registerAdminRoutes({ app }) {
     const note=typeof req.body?.note==='string'?req.body.note.trim().slice(0,500):'';
     if(!/^[1-9]\d*$/.test(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
     if(targetId===String(req.user.sub))return res.status(400).json({error:'administrators cannot change their own account status'});
-    const targetRole=await role(targetId);
-    if(targetRole==='OWNER'&&req.fynxAdminRole!=='OWNER')return res.status(403).json({error:'only the owner can manage the owner account'});
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
+      const target=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[targetId])).rows[0];
+      if(!target){await client.query('ROLLBACK');return res.status(404).json({error:'user not found'});}
+      const targetRole=await role(targetId);
+      if(targetRole==='OWNER'&&req.fynxAdminRole!=='OWNER'){await client.query('ROLLBACK');return res.status(403).json({error:'only the owner can manage the owner account'});}
       const result=await client.query(`INSERT INTO fynx_account_safety(user_id,account_status,status_note) VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET account_status=EXCLUDED.account_status,status_note=EXCLUDED.status_note,updated_at=NOW() RETURNING user_id,account_status,status_note,updated_at`,[targetId,status,note]);
       await client.query(`INSERT INTO safety_settings(user_id,account_status,status_note) VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET account_status=EXCLUDED.account_status,status_note=EXCLUDED.status_note,updated_at=NOW()`,[targetId,status,note]);
       await recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED','user',targetId,`Account status changed to ${status}`,{status,note},client);
