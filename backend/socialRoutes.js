@@ -960,7 +960,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get('/api/admin/social/music/catalogue', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const result = await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,c.category,c.active,c.created_at FROM fynx_music_catalogue c ORDER BY c.created_at DESC`);
       return res.json({ tracks: result.rows.map((row) => ({
