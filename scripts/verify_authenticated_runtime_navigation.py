@@ -391,6 +391,76 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             return ""
     return after
 
+def tap_first_private_chat_if_present(xml_text: str, name: str = "private-chat-entry") -> str:
+    """Open only a row carrying ChatsPanel's explicit 'Open chat with …' semantics.
+
+    The Chats tab can also contain group cards. Never infer a private conversation
+    from arbitrary clickable text or row geometry.
+    """
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        description = (node.attrib.get("content-desc") or "").strip()
+        if not description.startswith("Open chat with "):
+            continue
+
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        if target is node and target.attrib.get("clickable", "false").lower() != "true":
+            continue
+
+        bounds = target.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        center = _center(target)
+        if center and 250 <= width <= 1080 and 50 <= height <= 190 and 120 <= center[1] <= 1750:
+            candidates.append((center[1], width * height, target, description))
+
+    if not candidates:
+        return ""
+    _, _, target, description = min(candidates, key=lambda item: (item[0], item[1]))
+    x, y = _center(target)
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 18.0
+    after = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        after = dump_ui(f"{name}-after-open.xml")
+        if after and (
+            find_control(after, ["Message composer", "Edit message composer", "Chat message composer area"])
+            or find_control(after, ["No messages here yet"])
+        ):
+            return after
+    if not after:
+        FAILURES.append(name + " caused the app UI to disappear after selecting " + description)
+    else:
+        FAILURES.append(name + " selected " + description + " but ConversationPanel markers were absent; visible markers: " + visible_marker_summary(after))
+    return ""
+
+
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
@@ -3230,7 +3300,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         (ROOT / "authenticated-chat-hub.xml").write_text(chat_hub + "\n", encoding="utf-8")
         report.append("- PASS: Home -> Chat opened the real Chats hub")
         before_private_failures = len(FAILURES)
-        private_xml = tap_first_real_chat_or_group_if_present(chat_hub, "private-chat-entry")
+        private_xml = tap_first_private_chat_if_present(chat_hub, "private-chat-entry")
         if private_xml:
             private_xml = wait_for_conversation_ui("authenticated-private-chat-settled.xml", timeout=18.0) or private_xml
             screenshot("authenticated-private-chat-conversation.png")
