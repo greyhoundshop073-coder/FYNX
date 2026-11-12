@@ -72,6 +72,23 @@ require('activeSection == "Activity"' in source, "activity history section is mi
 require("FynxAdminClient.activity(context, activityQuery)" in source, "activity history is not connected to the backend")
 require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
 
+# Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
+require('"/api/admin/reports"' in client and "FynxAdminClient.reports(context)" in source,
+        "reported-account queue is not connected end to end")
+require("reports.take(20).forEach" in source and "FynxAdminClient.reviewReport(context, report.id" in source,
+        "reported-account review actions are not rendered")
+require("FynxAdminClient.appeals(context)" in source and "FynxAdminClient.reviewAppeal(context, appeal.id" in source,
+        "appeal review actions are not connected to the queue")
+
+# The audit event must commit with the safety state change, not after a response-worthy mutation.
+require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
+require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminActivity(req,'APPEAL_DECIDED'" in backend,
+        "report and appeal decisions must be audited")
+require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
+        "account status changes must be audited")
+require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
+        "appeal decisions must lock the appeal and reject final-state rewrites")
+
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
