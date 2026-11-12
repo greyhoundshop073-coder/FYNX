@@ -100,7 +100,8 @@ export function registerTrustSafetyRoutes({ app, pool, auth }) {
         target=(await pool.query(`SELECT c.id,c.author_id AS owner_id FROM social_post_comments c JOIN social_posts p ON p.id=c.post_id
           WHERE c.id=$1 AND (p.visibility='PUBLIC' OR p.author_id=$2 OR c.author_id=$2
             OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
-            OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience x WHERE x.post_id=p.id AND x.user_id=$2)))
+            OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience x WHERE x.post_id=p.id AND x.user_id=$2)
+              AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')))
           LIMIT 1`,[targetId,req.user.sub])).rows[0];
       } else {
         target=(await pool.query("SELECT id,seller_id AS owner_id FROM marketplace_listings WHERE id=$1 AND active=TRUE LIMIT 1",[targetId])).rows[0];

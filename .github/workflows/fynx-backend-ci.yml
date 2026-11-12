@@ -193,6 +193,9 @@ jobs:
       - name: Run Marketplace weekly-seller awards verification
         run: node verify-marketplace-weekly-sellers.mjs
 
+      - name: Run content reporting PostgreSQL integration tests
+        run: node test-content-reporting-db.mjs
+
       - name: Verify notification bootstrap idempotency
         run: node verify-notification-bootstrap-idempotency.mjs
       - name: Verify Home post reaction SQL contract
