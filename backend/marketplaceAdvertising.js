@@ -224,18 +224,12 @@ async function requireMarketplaceAdmin(req, res, auth) {
   return role;
 }
 
-async function recordMarketplaceAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}) {
-  try {
-    await pool.query(
-      `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
-       VALUES($1,$2,$3,'marketplace_promotion',$4,$5,$6::jsonb)`,
-      [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
-    );
-  } catch (error) {
-    // The administrative mutation has already succeeded. Keep its response truthful
-    // and emit an operational error instead of reporting a failed action after commit.
-    console.error("[fynx-ads] admin activity audit write failed", error);
-  }
+async function recordMarketplaceAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}, executor = pool) {
+  await executor.query(
+    `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
+     VALUES($1,$2,$3,'marketplace_promotion',$4,$5,$6::jsonb)`,
+    [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
+  );
 }
 
 function seasonalPromotionPayload(row) {
@@ -412,11 +406,22 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         );
         if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
       }
-      const result = await pool.query(
-        "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
-        [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
-      );
-      await recordMarketplaceAdminActivity(auth.userId, role, "SEASONAL_PROMOTION_CREATED", result.rows[0].id, headline, { promotionType, occasionKey, active, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), destinationType });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query("BEGIN");
+        result = await client.query(
+          "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
+          [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
+        );
+        await recordMarketplaceAdminActivity(auth.userId, role, "SEASONAL_PROMOTION_CREATED", result.rows[0].id, headline, { promotionType, occasionKey, active, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), destinationType }, client);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.status(201).json({ promotion: seasonalPromotionPayload(result.rows[0]) });
     } catch (error) {
       console.error("[fynx-ads] seasonal promotion create failed", error);
@@ -432,9 +437,23 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       if (!role) return;
       const id = positiveInt(req.params.id);
       if (!id || typeof req.body?.active !== "boolean") return res.status(400).json({ error: "valid promotion id and active flag are required" });
-      const result = await pool.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
-      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
-      await recordMarketplaceAdminActivity(auth.userId, role, req.body.active ? "SEASONAL_PROMOTION_ACTIVATED" : "SEASONAL_PROMOTION_DEACTIVATED", id, result.rows[0].headline, { active: req.body.active });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query("BEGIN");
+        result = await client.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
+        if (!result.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "seasonal promotion not found" });
+        }
+        await recordMarketplaceAdminActivity(auth.userId, role, req.body.active ? "SEASONAL_PROMOTION_ACTIVATED" : "SEASONAL_PROMOTION_DEACTIVATED", id, result.rows[0].headline, { active: req.body.active }, client);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ promotion: seasonalPromotionPayload(result.rows[0]) });
     } catch (error) {
       console.error("[fynx-ads] seasonal promotion update failed", error);
@@ -450,9 +469,22 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       if (!role) return;
       const id = positiveInt(req.params.id);
       if (!id) return res.status(400).json({ error: "invalid seasonal promotion id" });
-      const result = await pool.query("DELETE FROM marketplace_seasonal_promotions WHERE id=$1 RETURNING id,headline", [id]);
-      if (!result.rowCount) return res.status(404).json({ error: "seasonal promotion not found" });
-      await recordMarketplaceAdminActivity(auth.userId, role, "SEASONAL_PROMOTION_DELETED", id, result.rows[0].headline, {});
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await client.query("DELETE FROM marketplace_seasonal_promotions WHERE id=$1 RETURNING id,headline", [id]);
+        if (!result.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "seasonal promotion not found" });
+        }
+        await recordMarketplaceAdminActivity(auth.userId, role, "SEASONAL_PROMOTION_DELETED", id, result.rows[0].headline, {}, client);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.status(204).end();
     } catch (error) {
       console.error("[fynx-ads] seasonal promotion delete failed", error);
