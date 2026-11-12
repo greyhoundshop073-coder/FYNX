@@ -1110,20 +1110,24 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     reactionMessageId = null
                                 }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) })
                                 
-                                DropdownMenuItem(text = { Text(if (message.pinned) "Unpin" else "Pin") }, onClick = {
-                                    scope.launch {
-                                        FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
-                                            .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                            .onFailure { syncMessage = "Message pin could not be updated yet. Please try again." }
-                                    }
-                                }, leadingIcon = { Icon(Icons.Default.PushPin, null) })
-                                DropdownMenuItem(text = { Text("Delete") }, onClick = {
-                                    scope.launch {
-                                        FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)
-                                            .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
-                                            .onFailure { syncMessage = "Message could not be deleted yet. Please try again." }
-                                    }
-                                }, leadingIcon = { Icon(Icons.Default.Delete, null) })
+                                if (canManageGroup) {
+                                    DropdownMenuItem(text = { Text(if (message.pinned) "Unpin" else "Pin") }, onClick = {
+                                        scope.launch {
+                                            FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)
+                                                .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
+                                                .onFailure { syncMessage = "Message pin could not be updated yet. Please try again." }
+                                        }
+                                    }, leadingIcon = { Icon(Icons.Default.PushPin, null) })
+                                }
+                                if (message.fromMe || canManageGroup) {
+                                    DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                                        scope.launch {
+                                            FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)
+                                                .onSuccess { remote -> val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context)); messages = messages.map { if (it.id == mapped.id) mapped else it }; FynxChatStore.save(context, "group_$groupId", messages); reactionMessageId = null }
+                                                .onFailure { syncMessage = "Message could not be deleted yet. Please try again." }
+                                        }
+                                    }, leadingIcon = { Icon(Icons.Default.Delete, null) })
+                                }
                             }
                         }
                     }                }
