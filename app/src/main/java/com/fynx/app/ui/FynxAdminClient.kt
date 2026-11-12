@@ -17,6 +17,17 @@ object FynxAdminClient {
         val category: String,
         val active: Boolean
     )
+    data class AdminActivity(
+        val id: String,
+        val actorRole: String,
+        val actorUsername: String,
+        val actorDisplayName: String,
+        val action: String,
+        val targetType: String,
+        val targetId: String,
+        val summary: String,
+        val createdAt: String
+    )
     data class AdminReport(
         val id: String,
         val reporterUsername: String,
@@ -180,6 +191,17 @@ object FynxAdminClient {
             "/api/admin/social/music/catalogue/" + encode(trackId),
             JSONObject().put("active", active).toString()
         ).map { Unit }
+
+    suspend fun activity(context: Context, query: String = ""): Result<List<AdminActivity>> =
+        FynxBackendClient.get(context, "/api/admin/activity?q=${encode(query)}&limit=50").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("activities") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AdminActivity(item.optString("id"), item.optString("actorRole"), item.optString("actorUsername"), item.optString("actorDisplayName"), item.optString("action"), item.optString("targetType"), item.optString("targetId"), item.optString("summary"), item.optString("createdAt")))
+                }
+            }
+        }
 
     suspend fun reports(context: Context): Result<List<AdminReport>> =
         FynxBackendClient.get(context, "/api/admin/reports").mapCatching { raw ->
