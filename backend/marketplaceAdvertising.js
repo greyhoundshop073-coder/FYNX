@@ -279,7 +279,7 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
 // settings cannot silently shift the campaign window.
 function parseCampaignTimestamp(value) {
   if (typeof value !== "string") return null;
-  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d{1,3}))?)?(Z|([+-])(\\d{2}):(\\d{2}))$/.exec(value.trim());
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value.trim());
   if (!match) return null;
   const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
   const hour = Number(match[4]), minute = Number(match[5]), second = Number(match[6] || 0);
