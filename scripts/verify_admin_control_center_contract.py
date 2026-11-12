@@ -203,6 +203,10 @@ require('app.patch("/api/admin/marketplace/seasonal-promotions/:id/edit"' in adv
 require("fynx-seasonal-promo:" in advertising and "starts_at < $3 AND ends_at > $2" in advertising and
         "active campaign with this key already overlaps" in advertising,
         "active seasonal campaigns with the same key must reject overlapping time windows")
+require(advertising.count("pg_advisory_xact_lock(hashtext($1))") >= 3 and
+        "SELECT id,occasion_key,starts_at,ends_at,headline FROM marketplace_seasonal_promotions WHERE id=$1 FOR UPDATE" in advertising and
+        "another active campaign with this key already overlaps the schedule" in advertising,
+        "resuming a paused campaign must also enforce active campaign schedule overlap protection")
 require("OffsetDateTime.parse(value.trim()).toInstant()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8"),
         "campaign editing must parse fractional-second UTC timestamps and WAT offsets without shifting their time")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
