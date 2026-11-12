@@ -17,6 +17,26 @@ object FynxAdminClient {
         val category: String,
         val active: Boolean
     )
+    data class ContentReport(
+        val id: String,
+        val targetType: String,
+        val targetId: String,
+        val reporterUsername: String,
+        val ownerUsername: String,
+        val reason: String,
+        val details: String,
+        val contentPreview: String,
+        val status: String,
+        val createdAt: String
+    )
+    data class ModerationAudit(
+        val id: String,
+        val moderatorUsername: String,
+        val previousStatus: String,
+        val newStatus: String,
+        val decisionNote: String,
+        val createdAt: String
+    )
     data class AppealReview(
         val id: String,
         val userId: String,
@@ -170,6 +190,35 @@ object FynxAdminClient {
             "/api/admin/social/music/catalogue/" + encode(trackId),
             JSONObject().put("active", active).toString()
         ).map { Unit }
+
+    suspend fun contentReports(context: Context, status: String = "OPEN"): Result<List<ContentReport>> =
+        FynxBackendClient.get(context, "/api/admin/content-reports?status=" + encode(status.trim().uppercase())).mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ContentReport(item.optString("id"), item.optString("targetType"), item.optString("targetId"), item.optString("reporterUsername"), item.optString("ownerUsername"), item.optString("reason"), item.optString("details"), item.optString("contentPreview"), item.optString("status"), item.optString("createdAt")))
+                }
+            }
+        }
+
+    suspend fun reviewContentReport(context: Context, reportId: String, status: String, decisionNote: String = ""): Result<Unit> {
+        val next = status.trim().uppercase()
+        require(next in setOf("UNDER_REVIEW", "RESOLVED", "DISMISSED")) { "Invalid moderation decision" }
+        require(reportId.toLongOrNull()?.let { it > 0L } == true) { "Invalid report identifier" }
+        return FynxBackendClient.patchJson(context, "/api/admin/content-reports/${encode(reportId)}", JSONObject().put("status", next).put("decisionNote", decisionNote.trim().take(1000)).toString()).map { Unit }
+    }
+
+    suspend fun contentReportAudit(context: Context, reportId: String): Result<List<ModerationAudit>> =
+        FynxBackendClient.get(context, "/api/admin/content-reports/${encode(reportId)}/audit").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("audit") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ModerationAudit(item.optString("id"), item.optString("moderatorUsername"), item.optString("previousStatus"), item.optString("newStatus"), item.optString("decisionNote"), item.optString("createdAt")))
+                }
+            }
+        }
 
     suspend fun appeals(context: Context): Result<List<AppealReview>> =
         FynxBackendClient.get(context, "/api/admin/appeals").mapCatching { raw ->
