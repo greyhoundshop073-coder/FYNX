@@ -62,7 +62,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}, initialMediaUri: Uri? = null, initialMediaType: FynxStatusType? = null, onInitialMediaAccepted: () -> Unit = {}, onOpenUnifiedCamera: () -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}, initialMediaUri: Uri? = null, initialMediaType: FynxStatusType? = null, onInitialMediaAccepted: () -> Unit = {}, onOpenUnifiedCamera: (CameraMode) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
@@ -194,8 +194,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
-                    onCamera = onOpenUnifiedCamera,
-                    onRecordVideo = onOpenUnifiedCamera,
+                    onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) },
+                    onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) },
                     onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
@@ -213,7 +213,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                         openStatusId = openStatusId,
                         onOpenCommandConsumed = onOpenCommandConsumed,
                         onOpenMessage = onOpenMessage,
-                        onCameraClick = onOpenUnifiedCamera,
+                        onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) },
                         onCreateClick = { addStatusOpen = true }
                     )
                 }
