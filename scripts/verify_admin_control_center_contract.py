@@ -91,6 +91,8 @@ require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynx
 require("recordAdminActivity(req,'ADMIN_GRANTED'" in backend and "recordAdminActivity(req,'ADMIN_REVOKED'" in backend and
         "RETURNING user_id" in backend and "await client.query('COMMIT')" in backend,
         "admin grant/revoke and their audit records must be committed atomically")
+require("owner already has owner access" in backend and "u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1)" in backend,
+        "OWNER must not receive a duplicate ADMIN grant or appear in the admin roster")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
 require('"/api/admin/reports?limit=' in client and "FynxAdminClient.reports(context, reportsOffset)" in source,
@@ -177,6 +179,14 @@ for action in ("SEASONAL_PROMOTION_CREATED", "SEASONAL_PROMOTION_ACTIVATED",
     require(action in advertising, f"Marketplace promotion action is not audited: {action}")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
         "Music Library administration must initialize and write to admin activity history")
+require("metadata = {}, executor = pool" in advertising and advertising.count("recordMarketplaceAdminActivity(") >= 4 and
+        advertising.count('await client.query("BEGIN")') >= 3 and advertising.count('await client.query("COMMIT")') >= 3 and
+        "await executor.query(" in advertising,
+        "Marketplace promotion mutations and their audit records must commit atomically")
+require("metadata = {}, executor = pool" in social and social.count("recordMusicAdminActivity(") >= 4 and
+        social.count("await client.query('BEGIN')") >= 3 and social.count("await client.query('COMMIT')") >= 3 and
+        "await executor.query(" in social,
+        "Music Library mutations and their audit records must commit atomically")
 for action in ("MUSIC_TRACK_PUBLISHED", "MUSIC_TRACK_ACTIVATED", "MUSIC_TRACK_HIDDEN", "MUSIC_TRACK_REMOVED"):
     require(action in social, f"Music Library action is not audited: {action}")
 require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER')") >= 3,
