@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - main
+      - "integration/fynx-single-apk-20261013"
       - "fynx-chat-final-closure-mainline"
   pull_request:
-    branches: ["main"]
+    branches: ["main", "integration/fynx-single-apk-20261013"]
   workflow_dispatch:
 
 jobs:

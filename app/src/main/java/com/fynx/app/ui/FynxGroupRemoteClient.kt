@@ -7,7 +7,8 @@ import org.json.JSONObject
 
 object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false)
-    data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0)
+    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean,val nextBefore:String?)
+    data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0,val showHistoryToNewMembers:Boolean=true)
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
     data class RemoteJoinRequest(val username:String,val requestedAt:Long)
@@ -16,6 +17,42 @@ object FynxGroupRemoteClient {
     data class RemotePost(val id:String,val text:String,val authorUsername:String,val marketplaceProductId:String?,val pinned:Boolean,val createdAt:Long,val poll:RemotePoll?)
     data class RemoteEvent(val id:String,val title:String,val description:String,val startsAt:Long,val endsAt:Long?,val location:String,val creatorUsername:String,val goingCount:Int,val maybeCount:Int,val notGoingCount:Int,val myResponse:String?)
     data class RemoteContent(val posts:List<RemotePost>,val events:List<RemoteEvent>)
+
+    suspend fun loadMyGroups(context:Context):Result<List<FynxGroup>> = runCatching {
+        val root = JSONObject(FynxBackendClient.get(context, "/api/groups").getOrThrow())
+        val array = root.optJSONArray("groups") ?: JSONArray()
+        buildList {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val membersJson = item.optJSONArray("members") ?: JSONArray()
+                val members = buildList {
+                    for (memberIndex in 0 until membersJson.length()) {
+                        val member = membersJson.optJSONObject(memberIndex) ?: continue
+                        val role = runCatching {
+                            FynxGroupRole.valueOf(member.optString("role", "MEMBER").uppercase())
+                        }.getOrDefault(FynxGroupRole.MEMBER)
+                        val username = member.optString("username").trim().removePrefix("@")
+                        if (username.isNotBlank()) add(FynxGroupMember(username, role))
+                    }
+                }
+                val visibility = runCatching {
+                    FynxGroupVisibility.valueOf(item.optString("visibility", "PRIVATE").uppercase())
+                }.getOrDefault(FynxGroupVisibility.PRIVATE)
+                val photo = item.optString("groupPhotoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                val group = FynxGroup(
+                    id = item.optString("id"),
+                    name = item.optString("name"),
+                    description = item.optString("description"),
+                    visibility = visibility,
+                    ownerUsername = item.optString("ownerUsername").trim().removePrefix("@"),
+                    members = members,
+                    groupPhotoMediaId = photo
+                )
+                add(FynxGroupsBatch1.create(group)
+                    ?: throw IllegalStateException("The server returned an invalid group record"))
+            }
+        }.distinctBy { it.id }
+    }
 
     suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching { val body=JSONObject().apply{put("ownerUsername",group.ownerUsername.trim().removePrefix("@"));put("name",group.name);put("groupPhotoMediaId",group.groupPhotoMediaId ?: JSONObject.NULL);put("description",group.description);put("visibility",group.visibility.name);put("members",JSONArray().apply{group.members.forEach{member->put(JSONObject().apply{put("username",member.username.trim().removePrefix("@"));put("role",member.role.name)})}})};FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow();Unit }
     suspend fun updateGroupPhoto(context:Context,groupId:String,mediaId:String?):Result<String?> = runCatching { val body=JSONObject().apply{put("mediaId",mediaId?.trim()?.takeIf{it.isNotBlank()}?:JSONObject.NULL)}; val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/photo",body.toString()).getOrThrow()); o.optString("groupPhotoMediaId").takeIf{it.isNotBlank()&&it!="null"} }
@@ -26,8 +63,36 @@ object FynxGroupRemoteClient {
         val member=root.getJSONObject("member")
         RemoteMember(member.optString("username"),member.optString("role","MEMBER"),member.optLong("joinedAt"))
     }
-    suspend fun loadPermissions(context:Context,groupId:String):Result<RemotePermissions> = runCatching { val o=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/permissions").getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",true),o.optBoolean("send_media",true),o.optBoolean("add_members",true),o.optBoolean("invite_links",true),o.optBoolean("approve_new_members",false),o.optInt("disappearing_seconds",0)) }
-    suspend fun updatePermissions(context:Context,groupId:String,permissions:RemotePermissions):Result<RemotePermissions> = runCatching { val body=JSONObject().apply{put("sendMessages",permissions.sendMessages);put("sendMedia",permissions.sendMedia);put("addMembers",permissions.addMembers);put("inviteLinks",permissions.inviteLinks);put("approveNewMembers",permissions.approveNewMembers);put("disappearingSeconds",permissions.disappearingSeconds)};val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/permissions",body.toString()).getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",permissions.sendMessages),o.optBoolean("send_media",permissions.sendMedia),o.optBoolean("add_members",permissions.addMembers),o.optBoolean("invite_links",permissions.inviteLinks),o.optBoolean("approve_new_members",permissions.approveNewMembers),o.optInt("disappearing_seconds",permissions.disappearingSeconds)) }
+    suspend fun promoteMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}/promote","{}").getOrThrow()
+        Unit
+    }
+    suspend fun demoteMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}/demote","{}").getOrThrow()
+        Unit
+    }
+    suspend fun removeMember(context:Context,groupId:String,username:String):Result<Unit> = runCatching {
+        FynxBackendClient.delete(context,"/api/groups/$groupId/members/${Uri.encode(username.trim().removePrefix("@"))}").getOrThrow()
+        Unit
+    }
+    suspend fun transferOwnership(context:Context,groupId:String,username:String):Result<String> = runCatching {
+        val body=JSONObject().put("username",username.trim().removePrefix("@"))
+        JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/ownership",body.toString()).getOrThrow()).optString("ownerUsername").takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("Ownership transfer was not confirmed")
+    }
+    suspend fun leaveGroup(context:Context,groupId:String):Result<Unit> = runCatching {
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/leave","{}").getOrThrow()
+        Unit
+    }
+    suspend fun reportGroup(context:Context,groupId:String,reason:String,username:String?=null):Result<Unit> = runCatching {
+        val body=JSONObject().put("reason",reason.trim().take(500)).apply {
+            username?.trim()?.removePrefix("@")?.takeIf { it.isNotBlank() }?.let { put("username",it) }
+        }
+        FynxBackendClient.postJson(context,"/api/groups/$groupId/reports",body.toString()).getOrThrow()
+        Unit
+    }
+    suspend fun loadPermissions(context:Context,groupId:String):Result<RemotePermissions> = runCatching { val o=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/permissions").getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",true),o.optBoolean("send_media",true),o.optBoolean("add_members",true),o.optBoolean("invite_links",true),o.optBoolean("approve_new_members",false),o.optInt("disappearing_seconds",0),o.optBoolean("show_history_to_new_members",true)) }
+    suspend fun updatePermissions(context:Context,groupId:String,permissions:RemotePermissions):Result<RemotePermissions> = runCatching { val body=JSONObject().apply{put("sendMessages",permissions.sendMessages);put("sendMedia",permissions.sendMedia);put("addMembers",permissions.addMembers);put("inviteLinks",permissions.inviteLinks);put("approveNewMembers",permissions.approveNewMembers);put("disappearingSeconds",permissions.disappearingSeconds);put("showHistoryToNewMembers",permissions.showHistoryToNewMembers)};val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/permissions",body.toString()).getOrThrow()).optJSONObject("permissions")?:JSONObject();RemotePermissions(o.optBoolean("send_messages",permissions.sendMessages),o.optBoolean("send_media",permissions.sendMedia),o.optBoolean("add_members",permissions.addMembers),o.optBoolean("invite_links",permissions.inviteLinks),o.optBoolean("approve_new_members",permissions.approveNewMembers),o.optInt("disappearing_seconds",permissions.disappearingSeconds),o.optBoolean("show_history_to_new_members",permissions.showHistoryToNewMembers)) }
     suspend fun createInvite(context:Context,groupId:String):Result<Pair<String,String>> = runCatching { val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/invites",JSONObject().toString()).getOrThrow());o.getString("token") to o.getString("inviteUri") }
     suspend fun revokeInvite(context:Context,groupId:String,token:String):Result<Unit> = runCatching { FynxBackendClient.postJson(context,"/api/groups/$groupId/invites/${Uri.encode(token)}/revoke",JSONObject().toString()).getOrThrow();Unit }
     suspend fun previewInvite(context:Context,groupId:String,token:String):Result<RemoteInvite> = runCatching { val o=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/invites/${Uri.encode(token)}").getOrThrow());val i=o.getJSONObject("invite");RemoteInvite(i.getString("groupId"),i.getString("token"),i.optString("name","Group"),i.optString("description"),i.optInt("memberCount"),i.optBoolean("approveNewMembers"),o.optBoolean("alreadyMember"),o.optBoolean("pending")) }
@@ -36,9 +101,18 @@ object FynxGroupRemoteClient {
     suspend fun loadJoinRequests(context:Context,groupId:String):Result<List<RemoteJoinRequest>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/join-requests").getOrThrow()).optJSONArray("requests")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteJoinRequest(o.optString("username"),o.optLong("requestedAt")))}} }
     suspend fun approveJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/approve",JSONObject().toString()).getOrThrow();Unit}
     suspend fun rejectJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/reject",JSONObject().toString()).getOrThrow();Unit}
-    suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> = runCatching {
-        val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages").getOrThrow()).optJSONArray("messages")?:JSONArray()
-        buildList {
+    suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> =
+        loadMessagesPage(context,groupId).map { it.messages }
+
+    suspend fun loadMessagesPage(context:Context,groupId:String,before:String?=null,limit:Int=50,query:String?=null):Result<RemoteMessagePage> = runCatching {
+        val cleanSearch = query?.trim()?.take(100)
+        require(cleanSearch == null || cleanSearch.length >= 2) { "Enter at least two characters to search group history." }
+        val queryString = "?limit=${limit.coerceIn(1,100)}" +
+            (before?.takeIf { it.isNotBlank() }?.let { "&before=${Uri.encode(it)}" } ?: "") +
+            (cleanSearch?.let { "&q=${Uri.encode(it)}" } ?: "")
+        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages$queryString").getOrThrow())
+        val a=root.optJSONArray("messages")?:JSONArray()
+        val messages=buildList {
             for(i in 0 until a.length()) {
                 runCatching {
                     val o=a.getJSONObject(i)
@@ -48,6 +122,7 @@ object FynxGroupRemoteClient {
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
+        RemoteMessagePage(messages,root.optBoolean("hasMore"),root.optString("nextBefore").takeIf { it.isNotBlank() && it!="null" })
     }
     suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching { val chatKey="group_$groupId";val persisted=FynxChatStore.load(context,chatKey).firstOrNull{it.id==message.id};var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType?:persisted?.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/');val saved=FynxChatStore.load(context,chatKey);if(saved.any{it.id==message.id})FynxChatStore.save(context,chatKey,saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} }
     suspend fun editMessage(context:Context,groupId:String,messageId:String,text:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","edit");put("text",text)})
@@ -74,7 +149,7 @@ object FynxGroupRemoteClient {
         val safeId=rawId.ifBlank { "group-response-" + o.optLong("timestamp") + "-" + o.optString("senderUsername").hashCode() }
         return RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"))
     }
-    fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=true,replyToId=m.replyToId,reaction=m.reaction,edited=m.edited,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType,senderUsername=m.senderUsername,pinned=m.pinned)
+    fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(if(m.deleted)"Message deleted" else m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=false,replyToId=m.replyToId,reaction=m.reaction,edited=m.edited,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType,senderUsername=m.senderUsername,pinned=m.pinned,deleted=m.deleted)
 }
 
 

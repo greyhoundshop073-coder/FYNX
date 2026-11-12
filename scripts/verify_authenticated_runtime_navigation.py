@@ -15,8 +15,9 @@ PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
 MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
+CHAT_GROUPS_VISUALS_ONLY=os.environ.get("FYNX_CHAT_GROUPS_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -37,6 +38,7 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
         latest=dump_ui(name)
         if latest and (
             "Message..." in latest
+            or "Message…" in latest
             or "Messaging is restricted" in latest
             or "No messages here yet" in latest
             or "Group unavailable" in latest
@@ -383,11 +385,136 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             FAILURES.append(name+" did not enter ConversationPanel; destination UI markers were absent")
             return ""
     if name == "group-chat-entry":
-        if not (find_control(after, ["Message composer", "Chat message composer area"])
-                or find_control(after, ["Messaging is restricted", "No messages here yet"])):
+        if not (find_control(after, ["Message composer", "Chat message composer area", "Message…"])
+                or find_control(after, ["Messaging is restricted", "No messages here yet", "Group unavailable"])):
             FAILURES.append(name+" did not enter FynxGroupConversationPanel; destination UI markers were absent")
             return ""
     return after
+
+def tap_first_private_chat_if_present(xml_text: str, name: str = "private-chat-entry") -> str:
+    """Open only a row carrying ChatsPanel's explicit 'Open chat with …' semantics.
+
+    The Chats tab can also contain group cards. Never infer a private conversation
+    from arbitrary clickable text or row geometry.
+    """
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        description = (node.attrib.get("content-desc") or "").strip()
+        if not description.startswith("Open chat with "):
+            continue
+
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        if target is node and target.attrib.get("clickable", "false").lower() != "true":
+            continue
+
+        bounds = target.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        center = _center(target)
+        if center and 250 <= width <= 1080 and 50 <= height <= 190 and 120 <= center[1] <= 1750:
+            candidates.append((center[1], width * height, target, description))
+
+    if not candidates:
+        return ""
+    _, _, target, description = min(candidates, key=lambda item: (item[0], item[1]))
+    x, y = _center(target)
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 18.0
+    after = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        after = dump_ui(f"{name}-after-open.xml")
+        if after and (
+            find_control(after, ["Message composer", "Edit message composer", "Chat message composer area"])
+            or find_control(after, ["No messages here yet"])
+        ):
+            return after
+    if not after:
+        FAILURES.append(name + " caused the app UI to disappear after selecting " + description)
+    else:
+        FAILURES.append(name + " selected " + description + " but ConversationPanel markers were absent; visible markers: " + visible_marker_summary(after))
+    return ""
+
+
+def tap_first_group_if_present(xml_text: str, name: str = "group-chat-entry") -> str:
+    """Open only a group card carrying FynxGroupsPanel's explicit accessible identity."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        description = (node.attrib.get("content-desc") or "").strip()
+        if not description.startswith("Open group "):
+            continue
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        if target is node and target.attrib.get("clickable", "false").lower() != "true":
+            continue
+        center = _center(target)
+        if center:
+            candidates.append((center[1], target, description))
+    if not candidates:
+        return ""
+    _, target, description = min(candidates, key=lambda item: item[0])
+    x, y = _center(target)
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 20.0
+    after = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        after = dump_ui(f"{name}-after-open.xml")
+        if after and (
+            find_control(after, ["Message composer", "Chat message composer area", "Message…", "Message..."])
+            or find_control(after, ["Messaging is restricted", "No messages here yet"])
+        ):
+            return after
+    if not after:
+        FAILURES.append(name + " caused the app UI to disappear after selecting " + description)
+    else:
+        FAILURES.append(name + " selected " + description + " but group conversation markers were absent; visible markers: " + visible_marker_summary(after))
+    return ""
+
 
 def find_edit_fields(xml_text:str):
     fields=[]
@@ -3210,6 +3337,81 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if CHAT_GROUPS_VISUALS_ONLY:
+    report.append("- Focused Chat/Groups runtime: read-only navigation through the installed APK; no messages are sent, no groups are created, and no membership/settings are changed.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Home entry failed: " + error]
+        (ROOT / "FYNX-chat-groups-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("chat-groups-home.xml") or xml
+    if not (find_control(home_xml, ["Open FYNX camera"]) and find_control(home_xml, ["Chat"]) and find_control(home_xml, ["Friends"])):
+        FAILURES.append("Home header did not expose the real Chat destination")
+    chat_hub = tap_control(home_xml, ["Chat"], "chat-hub", ["Chats", "Messages and groups in one place", "Search names, usernames or latest message"])
+    if not chat_hub:
+        FAILURES.append("Home -> Chat did not open the Chats hub")
+    else:
+        screenshot("authenticated-chat-hub.png")
+        (ROOT / "authenticated-chat-hub.xml").write_text(chat_hub + "\n", encoding="utf-8")
+        report.append("- PASS: Home -> Chat opened the real Chats hub")
+        before_private_failures = len(FAILURES)
+        private_xml = tap_first_private_chat_if_present(chat_hub, "private-chat-entry")
+        if private_xml:
+            private_xml = wait_for_conversation_ui("authenticated-private-chat-settled.xml", timeout=18.0) or private_xml
+            screenshot("authenticated-private-chat-conversation.png")
+            (ROOT / "authenticated-private-chat-conversation.xml").write_text(private_xml + "\n", encoding="utf-8")
+            report.append("- PASS: opened an existing private conversation and captured its composer/empty state")
+        elif len(FAILURES) == before_private_failures:
+            screenshot("authenticated-private-chat-list-empty.png")
+            report.append("- NOT AVAILABLE: no existing private conversation row was present; no test conversation was fabricated")
+        # Return to the Chat hub without mutating the account or conversation.
+        current = dump_ui("chat-groups-after-private-return.xml")
+        if not (find_control(current, ["Search names, usernames or latest message"]) or find_control(current, ["Messages and groups in one place"])):
+            run("adb", "shell", "input", "keyevent", "4"); time.sleep(0.8)
+            current = dump_ui("chat-groups-home-after-private-return.xml")
+            if find_control(current, ["Chat"]):
+                current = tap_control(current, ["Chat"], "chat-hub-restored", ["Chats", "Messages and groups in one place", "Search names, usernames or latest message"])
+        if current and (find_control(current, ["Search names, usernames or latest message"]) or find_control(current, ["Messages and groups in one place"])):
+            chat_hub = current
+        else:
+            FAILURES.append("Could not restore the Chats hub before opening Groups")
+    if chat_hub:
+        groups_tab = tap_control(chat_hub, ["Groups"], "chat-groups-tab", ["No groups yet", "＋ New group", "Create group"])
+        if groups_tab:
+            screenshot("authenticated-chat-groups-list.png")
+            (ROOT / "authenticated-chat-groups-list.xml").write_text(groups_tab + "\n", encoding="utf-8")
+            report.append("- PASS: opened and captured the Groups list from the Chats hub")
+            before_group_failures = len(FAILURES)
+            group_xml = tap_first_group_if_present(groups_tab, "group-chat-entry")
+            if group_xml:
+                group_xml = wait_for_group_conversation_ui("authenticated-group-chat-settled.xml", timeout=20.0) or group_xml
+                screenshot("authenticated-group-chat-conversation.png")
+                (ROOT / "authenticated-group-chat-conversation.xml").write_text(group_xml + "\n", encoding="utf-8")
+                if find_control(group_xml, ["Group unavailable"]):
+                    report.append("- BLOCKED: a real group row opened, but the group is unavailable in this runtime session")
+                    FAILURES.append("existing group conversation opened an unavailable state")
+                else:
+                    report.append("- PASS: opened an existing group conversation and captured its message/composer state")
+            elif len(FAILURES) == before_group_failures:
+                screenshot("authenticated-chat-groups-list-empty.png")
+                report.append("- NOT AVAILABLE: no existing group row was present; no group was created for the test")
+        else:
+            FAILURES.append("Chats hub did not expose its Groups tab")
+    report += ["", "## Captured evidence",
+               "- authenticated-chat-hub.png / authenticated-chat-hub.xml",
+               "- authenticated-chat-groups-list.png / authenticated-chat-groups-list.xml",
+               "- authenticated-private-chat-conversation.png and authenticated-group-chat-conversation.png are included only when existing rows are available",
+               "", "## Evidence boundary",
+               "- Screenshots and hierarchies are captured from the installed APK on the disposable Android emulator.",
+               "- Login mode: " + LOGIN_MODE + ". A debug-only saved-device entry is UI navigation evidence, not server authentication.",
+               "- This read-only journey does not prove message delivery, two-account behavior, backend authorization, history privacy, or live notifications.",
+               "- No messages, groups, members, permissions or settings were created or changed.",
+               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-chat-groups-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 if MUSIC_VISUALS_ONLY:
     report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
     if error:
@@ -3547,13 +3749,81 @@ def find_wallet_feature_entry(xml_text:str):
 
 
 def wallet_destination_ready(xml_text: str) -> bool:
-    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
+    """Confirm the Wallet's top-level screen and usable funding actions in the current viewport."""
     return bool(
         find_control(xml_text, ["FYNX Wallet"])
-        and find_control(xml_text, ["Balance details"])
+        and find_control(xml_text, ["AVAILABLE BALANCE"])
+        and find_control(xml_text, ["Add money"])
+        and find_control(xml_text, ["Withdraw"])
+    )
+
+
+def wallet_balance_details_ready(xml_text: str) -> bool:
+    """Confirm the real, below-fold balance buckets after scrolling the Wallet LazyColumn."""
+    return bool(
+        find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
     )
+
+
+def wallet_activity_ready(xml_text: str) -> bool:
+    """Confirm the actual recent-activity section and its transaction filters."""
+    return bool(
+        find_control(xml_text, ["Recent activity"])
+        and find_control(xml_text, ["All"])
+        and find_control(xml_text, ["Money in"])
+        and find_control(xml_text, ["Money out"])
+    )
+
+
+def capture_wallet_activity(prefix: str, wallet_xml: str) -> tuple[str, bool]:
+    """Scroll separately to Recent activity; it is below the balance-detail cards."""
+    latest = wallet_xml
+    if wallet_activity_ready(latest):
+        return latest, True
+    for attempt in range(8):
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-activity-scroll-" + str(attempt)
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+        if wallet_activity_ready(latest):
+            return latest, True
+    return latest, False
+
+
+def capture_wallet_balance_details(prefix: str, wallet_xml: str) -> tuple[str, bool]:
+    """Scroll the real Wallet viewport to its balance metrics; never infer off-screen content."""
+    latest = wallet_xml
+    if wallet_balance_details_ready(latest):
+        return latest, True
+    for attempt in range(8):
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-balance-details-scroll-" + str(attempt)
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+        if wallet_balance_details_ready(latest):
+            return latest, True
+    return latest, False
+
+
+def restore_wallet_top(prefix: str, wallet_xml: str) -> str:
+    """Return to the actual funding controls after the below-fold metrics have been checked."""
+    latest = wallet_xml
+    for attempt in range(8):
+        if find_control(latest, ["Add money"]) and find_control(latest, ["Withdraw"]):
+            return latest
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-return-top-" + str(attempt), reverse=True
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+    return latest
 
 
 def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
@@ -3570,6 +3840,16 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     while time.monotonic()<deadline:
         latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
         if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+            details_xml, details_ready = capture_wallet_balance_details(prefix + "-marketplace", latest)
+            if not details_ready:
+                break
+            (ROOT/"authenticated-wallet-marketplace-balance-details.xml").write_text(
+                details_xml + chr(10), encoding="utf-8"
+            )
+            screenshot("authenticated-wallet-marketplace-balance-details.png")
+            latest = restore_wallet_top(prefix + "-marketplace", details_xml)
+            if not wallet_destination_ready(latest):
+                break
             screenshot("authenticated-wallet-marketplace-shortcut.png")
             (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
                 latest+chr(10), encoding="utf-8"
@@ -3592,7 +3872,7 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     run("adb","shell","input","keyevent","KEYCODE_BACK")
     time.sleep(0.7)
     back_xml=dump_ui(prefix+"-marketplace-return-after-timeout.xml")
-    return False, "Marketplace Wallet shortcut opened, but Wallet summary sections did not settle within 20 seconds.", back_xml or marketplace_xml
+    return False, "Marketplace Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface.", back_xml or marketplace_xml
 
 
 def capture_wallet_from_features(prefix:str):
@@ -3649,16 +3929,49 @@ def capture_wallet_from_features(prefix:str):
     wallet_shell_opened=False
     wallet_settled=False
     wallet_loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
+    wallet_terminal_markers=("Wallet unavailable", "Balance unavailable until your connection is restored",
+                             "Marketplace earnings unavailable")
+    wallet_top_xml=""
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
         wallet_shell_opened=wallet_destination_ready(wallet_xml)
+        wallet_terminal_unavailable=bool(wallet_xml and all(
+            marker in wallet_xml for marker in wallet_terminal_markers
+        ))
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
-        if wallet_shell_opened and not wallet_still_loading:
+        # In the explicitly debug-local/offline session the app correctly renders
+        # an unavailable state, not an endless spinner. Treat that visible error
+        # as a terminal result, while retaining the exact offline-state assertions.
+        if wallet_shell_opened and (not wallet_still_loading or wallet_terminal_unavailable):
             wallet_settled=True
+            wallet_top_xml=wallet_xml
             break
 
     wallet_opened=wallet_shell_opened and wallet_settled
+    if wallet_opened:
+        screenshot("authenticated-wallet-top.png")
+        (ROOT/"authenticated-wallet-top.xml").write_text(wallet_top_xml+chr(10),encoding="utf-8")
+        details_xml, details_ready = capture_wallet_balance_details(prefix, wallet_top_xml)
+        if details_ready:
+            (ROOT/"authenticated-wallet-balance-details.xml").write_text(
+                details_xml + chr(10), encoding="utf-8"
+            )
+            screenshot("authenticated-wallet-balance-details.png")
+            activity_xml, activity_ready = capture_wallet_activity(prefix, details_xml)
+            if activity_ready:
+                (ROOT/"authenticated-wallet-recent-activity.xml").write_text(
+                    activity_xml + chr(10), encoding="utf-8"
+                )
+                screenshot("authenticated-wallet-recent-activity.png")
+                wallet_xml = activity_xml
+                wallet_opened = True
+            else:
+                wallet_opened = False
+                result_message = "Wallet balance buckets were captured, but the separate Recent activity section and filters were not exposed after scrolling."
+        else:
+            wallet_opened = False
+            result_message = "Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface."
     authenticated_wallet_errors=[]
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         authenticated_wallet_error_markers=(
@@ -4078,56 +4391,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             FAILURES.append("Marketplace Local businesses shortcut could not be opened")
 
-        # Product details are only captured when an actual visible listing card exposes a price.
-        # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
-        product_target = marketplace_product_card_target(marketplace_xml)
-        if product_target:
-            px, py = product_target
-            run("adb", "logcat", "-c")
-            run("adb", "shell", "input", "tap", str(px), str(py))
-            time.sleep(1.2)
-            detail_xml = dump_ui("marketplace-product-detail-probe.xml")
-            detail_markers = ["Add to cart", "Buy now", "Message seller", "Your listing"]
-            if detail_xml and any(find_control(detail_xml, [label]) for label in detail_markers):
-                screenshot("authenticated-marketplace-product-detail.png")
-                (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
-                report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
-            else:
-                report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.8)
-            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
-        else:
-            report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
-
-        # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
-        # exactly: substring matching would also match "sellers" in the search field.
-        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
-        for attempt in range(6):
-            if find_control(marketplace_xml, sell_labels, exact_only=True):
-                break
-            scrolled_xml = swipe_vertical_scroll_container(
-                marketplace_xml, "marketplace-publish-cta-scroll-"+str(attempt)+".xml"
-            )
-            if not scrolled_xml:
-                break
-            marketplace_xml = scrolled_xml
-        if find_control(marketplace_xml, sell_labels, exact_only=True):
-            publish_xml = tap_control(
-                marketplace_xml, sell_labels, "marketplace-publishing-flow",
-                ["Product name", "Choose media", "Product media"], exact_only=True
-            )
-            if publish_xml:
-                report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
-                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(0.7)
-                marketplace_xml = dump_ui("marketplace-after-publishing.xml") or marketplace_xml
-            else:
-                report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
-        else:
-            report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
-
-        # Return the actual Marketplace content to its top before opening My Shop.
+        # Certify My Shop while its real shortcut is still visible, before any feed gestures.
         for attempt in range(5):
             if find_control(marketplace_xml, ["My Shop"]):
                 break
@@ -4157,10 +4421,25 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 report.append("- FAIL: My Shop overview remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
                 FAILURES.append("My Shop overview remained loading after 20 seconds")
 
+            # The public-profile action is intentionally below the overview cards in
+            # the real Seller Center LazyColumn. Scroll the actual content surface until
+            # the accessibility tree exposes it; do not mistake the first viewport for
+            # the complete overview or tap guessed screen coordinates.
+            shop_action_xml = shop_xml
+            for attempt in range(12):
+                if find_control(shop_action_xml, ["View public Marketplace profile"]):
+                    break
+                scrolled_shop_xml = swipe_vertical_scroll_container(
+                    shop_action_xml, "marketplace-my-shop-public-profile-scroll-" + str(attempt)
+                )
+                if not scrolled_shop_xml:
+                    break
+                shop_action_xml = scrolled_shop_xml
+
             # Exercise the exact owner route added by the Marketplace-profile update.
             # This is read-only: it does not save shop details or mutate listings/orders.
             public_profile_xml = tap_control(
-                shop_xml,
+                shop_action_xml,
                 ["View public Marketplace profile"],
                 "marketplace-public-profile",
                 ["Marketplace profile", "Available products"]
@@ -4273,6 +4552,71 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     current_shop_xml = dump_ui("marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
         else:
             report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
+
+        # Return to Marketplace after seller-center certification so the remaining buyer checks
+        # start from the actual Marketplace route rather than stale coordinates or hidden chrome.
+        if shop_xml:
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            marketplace_return_deadline = time.monotonic() + 10.0
+            marketplace_return_xml = ""
+            while time.monotonic() < marketplace_return_deadline:
+                marketplace_return_xml = dump_ui("marketplace-after-my-shop-certification.xml") or marketplace_return_xml
+                if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                    marketplace_xml = marketplace_return_xml
+                    break
+                time.sleep(0.4)
+            else:
+                FAILURES.append("My Shop Back did not return to the Marketplace surface")
+
+        # Product details are only captured when an actual visible listing card exposes a price.
+        # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
+        product_target = marketplace_product_card_target(marketplace_xml)
+        if product_target:
+            px, py = product_target
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(px), str(py))
+            time.sleep(1.2)
+            detail_xml = dump_ui("marketplace-product-detail-probe.xml")
+            detail_markers = ["Add to cart", "Buy now", "Message seller", "Your listing"]
+            if detail_xml and any(find_control(detail_xml, [label]) for label in detail_markers):
+                screenshot("authenticated-marketplace-product-detail.png")
+                (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
+                report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
+            else:
+                report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.8)
+            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+
+        # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
+        # exactly: substring matching would also match "sellers" in the search field.
+        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
+        for attempt in range(6):
+            if find_control(marketplace_xml, sell_labels, exact_only=True):
+                break
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "marketplace-publish-cta-scroll-"+str(attempt)+".xml"
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
+        if find_control(marketplace_xml, sell_labels, exact_only=True):
+            publish_xml = tap_control(
+                marketplace_xml, sell_labels, "marketplace-publishing-flow",
+                ["Product name", "Choose media", "Product media"], exact_only=True
+            )
+            if publish_xml:
+                report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-publishing.xml") or marketplace_xml
+            else:
+                report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
+        else:
+            report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
+
     else:
         report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
 
@@ -4631,6 +4975,27 @@ if not FAILURES:
                                 report.append("- PASS actual FynxGroupConversationPanel opened; captured group-chat-inside.png")
                             else:
                                 FAILURES.append("group-chat row did not reach FynxGroupConversationPanel")
+                            group_more = tap_control(group_after, ["More"], "group-more-menu-for-members", ["Members"]) if group_after else None
+                            if group_more:
+                                members_screen = tap_control(group_more, ["Members"], "group-members-dialog", ["Members"])
+                                if members_screen:
+                                    screenshot("group-members-dialog.png")
+                                    report.append("- PASS actual group Members dialog captured, including server-backed member actions")
+                                    members_closed = tap_control(members_screen, ["Done"], "group-members-dialog-close", ["More"]) or dump_ui("group-members-dialog-closed.xml")
+                                    settings_menu = tap_control(members_closed, ["More"], "group-more-menu-for-settings", ["Group settings"])
+                                    if settings_menu:
+                                        settings_screen = tap_control(settings_menu, ["Group settings"], "group-settings-screen")
+                                        if settings_screen:
+                                            screenshot("group-settings-top.png")
+                                            run("adb", "shell", "input", "swipe", "520", "1510", "520", "560", "350")
+                                            time.sleep(.4)
+                                            screenshot("group-settings-management.png")
+                                            report.append("- PASS active Group Settings top and management sections captured")
+                                            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                                else:
+                                    report.append("- Group Members dialog screenshot skipped: Members menu item did not open")
+                            else:
+                                report.append("- Group Members/Settings screenshots skipped: More menu was unavailable")
                             if group_id:
                                 exercise_notification_route("fynx://group/" + group_id, "group-chat")
                         if not group_after:

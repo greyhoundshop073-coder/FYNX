@@ -27,7 +27,7 @@ function route(source, startMarker, endMarker) {
 }
 
 const primaryMediaRoute = route(serverSource, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
-assert.match(primaryMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
+assert.match(primaryMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key,\s*\$\{groupMessageMediaFlag\}\s+FROM message_media mm/);
 assert.doesNotMatch(primaryMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(primaryMediaRoute.indexOf("if (!result.rows[0])") < primaryMediaRoute.indexOf("redirectStoredMedia"));
 

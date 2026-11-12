@@ -18,7 +18,7 @@ This matrix is the finite worklist for certifying Chat. It must be updated from 
 | 3. Media & attachments | image, video, audio, voice, documents, upload/download, failure/retry, playback/preview | 🟡 | Must verify actual APK journeys |
 | 4. Organization | search/navigation, pins, saved/important messages if required, shared content navigation | 🟡 | Must verify against current implementation |
 | 5. Privacy/security/safety | settings, privacy, mute, block/report where exposed, backend authority, secure handling, approved security contract | 🟡 | Security claims require evidence; no theoretical certification |
-| 6. Group Chat | messaging, media, replies/reactions, permissions, mentions, notifications, member/admin behavior, history/search | 🟡 | Verify group-specific journeys and server authority |
+| 6. Group Chat | messaging, media, replies/reactions, permissions, mentions, notifications, member/admin behavior, history/search | 🟡 | Real-user audit: see `FYNX_CHAT_GROUP_USER_JOURNEY_AUDIT_20261111.md`. PR #522 wires member authority, join-time history privacy, active-screen editing, notification/mute controls, mention alerts, group appearance/media saving, leave/transfer/report. Await exact-head CI/runtime and two-account proof; history pagination remains open. |
 | 7. Notifications/realtime | foreground/background, mute, previews, sounds/vibration, push+realtime dedupe, typing/presence | 🟡 | Preserve already-green notification work |
 | 8. Production certification | build/tests/verifiers, APK-visible integration, navigation, real journey, regression | 🔴 | Final gate; cannot pass until Gates 1–7 are green |
 

@@ -131,6 +131,7 @@ object FynxChatStore {
                     put("mediaId", message.mediaId ?: "")
                     put("messageType", message.messageType)
                     put("messagePayload", JSONObject(message.messagePayload))
+                    put("deleted", message.deleted)
                 }
             )
         }
@@ -186,6 +187,25 @@ object FynxChatStore {
                 }
             }
         }.getOrElse { emptyList() }
+    }
+
+    /** Persist a server-hydrated conversation index without recalculating server unread counts. */
+    @Synchronized
+    fun savePreviews(context: Context, previews: List<ChatPreview>) {
+        val array = JSONArray()
+        previews.distinctBy { it.username.trim().removePrefix("@").lowercase() }.forEach { item ->
+            array.put(JSONObject().apply {
+                put("name", item.name)
+                put("username", item.username)
+                put("lastMessage", item.lastMessage)
+                put("time", item.time)
+                put("unreadCount", item.unreadCount)
+                put("online", item.online)
+                put("avatarUri", item.avatarUri ?: "")
+            })
+        }
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(previewKey(context), array.toString()).apply()
     }
 
     fun savePreview(context: Context, preview: ChatPreview) {

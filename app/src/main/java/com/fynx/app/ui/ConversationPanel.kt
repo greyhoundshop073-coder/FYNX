@@ -133,7 +133,16 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
+    var remoteSearchMessages by remember(chat.username) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var remoteSearchHasMore by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchCursor by remember(chat.username) { mutableStateOf<String?>(null) }
+    var remoteSearchLoading by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchError by remember(chat.username) { mutableStateOf<String?>(null) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
+    var selectedMessageIds by remember(chat.username) { mutableStateOf<Set<String>>(emptySet()) }
+    var hasOlderMessages by remember(chat.username) { mutableStateOf(false) }
+    var olderMessagesCursor by remember(chat.username) { mutableStateOf<String?>(null) }
+    var loadingOlderMessages by remember { mutableStateOf(false) }
     var showForwardDialog by remember { mutableStateOf(false) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
     var forwardUsername by remember { mutableStateOf("") }
@@ -223,7 +232,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    FynxInChatSound.play(context)
+                    FynxInChatSound.play(context, chat.username)
                     realtimeClient.acknowledgeMessage(remote.id)
                     conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
                 }
@@ -232,10 +241,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 realtimeState = state
                 if (state == FynxRealtimeClient.State.CONNECTED && !currentUserIdLatest.isNullOrBlank()) {
                     conversationScope.launch {
-                        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
-                            .onSuccess { remoteMessages ->
+                        FynxProductionMessaging.historyPage(context, chat.username.removePrefix("@"))
+                            .onSuccess { historyPage ->
+                                hasOlderMessages = historyPage.hasMore
+                                olderMessagesCursor = historyPage.nextBeforeId
                                 val myId = currentUserIdLatest ?: return@onSuccess
-                                val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
+                                val authoritative = historyPage.messages.mapIndexedNotNull { index, remote ->
                                     runCatching {
                                         FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
                                             if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
@@ -656,7 +667,51 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    suspend fun loadPrivateSearchPage(query: String, beforeId: String? = null, append: Boolean = false) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.length < 2) return
+        remoteSearchLoading = true
+        remoteSearchError = null
+        val myId = currentUserId ?: FynxBackendClient.currentUserId(context).getOrNull()
+        FynxProductionMessaging.searchHistoryPage(context, chat.username.removePrefix("@"), cleanQuery, beforeId)
+            .onSuccess { page ->
+                if (myId.isNullOrBlank()) {
+                    remoteSearchError = "Your account could not be verified for message search."
+                } else {
+                    val found = page.messages.mapNotNull { remote ->
+                        runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull()
+                    }
+                    remoteSearchMessages = if (append) (found + remoteSearchMessages).distinctBy { it.id } else found
+                    remoteSearchHasMore = page.hasMore
+                    remoteSearchCursor = page.nextBeforeId
+                }
+            }
+            .onFailure { remoteSearchError = "Message history search is unavailable. Check your connection and retry." }
+        remoteSearchLoading = false
+    }
+
+    LaunchedEffect(chat.username, searchOpen, searchQuery, currentUserId) {
+        val query = searchQuery.trim()
+        if (!searchOpen || query.length < 2) {
+            remoteSearchMessages = emptyList()
+            remoteSearchHasMore = false
+            remoteSearchCursor = null
+            remoteSearchError = null
+            remoteSearchLoading = false
+            return@LaunchedEffect
+        }
+        remoteSearchMessages = emptyList()
+        remoteSearchHasMore = false
+        remoteSearchCursor = null
+        remoteSearchError = null
+        delay(350)
+        loadPrivateSearchPage(query)
+    }
+
+    val visibleMessages = if (searchQuery.isBlank()) messages
+        else if (searchQuery.trim().length >= 2) remoteSearchMessages
+        else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    fun toggleMessageSelection(messageId:String) { selectedMessageIds = if (messageId in selectedMessageIds) selectedMessageIds - messageId else selectedMessageIds + messageId }
     val pinnedMessage = messages.lastOrNull { it.pinned }
     val messageListState = rememberLazyListState()
 
@@ -735,6 +790,20 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
 
+        if (selectedMessageIds.isNotEmpty()) {
+            Surface(color = glassPalette.backgroundMid.copy(alpha = 0.98f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${selectedMessageIds.size} selected", color = glassPalette.messageText, modifier = Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    TextButton(onClick = {
+                        val copied = messages.filter { it.id in selectedMessageIds }.sortedBy { it.timestamp }.joinToString("\\n") { it.text.ifBlank { "[Attachment]" } }
+                        clipboardManager.setText(AnnotatedString(copied))
+                        selectedMessageIds = emptySet()
+                    }) { Text("Copy") }
+                    TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel") }
+                }
+            }
+        }
+
         if (isNewConversation) {
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
@@ -781,7 +850,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                         newConversationRelation = "loading"
                                         relationshipRefresh++
-                                    }.onFailure { networkError = it.message ?: "Friend action could not be completed." }
+                                    }.onFailure { networkError = "Friend action could not be completed. Please try again." }
                                     sending = false
                                 }
                             }
@@ -803,7 +872,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     sending = true
                                     FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                         .onSuccess { networkError = "User blocked."; onBack() }
-                                        .onFailure { networkError = it.message ?: "This user could not be blocked yet. Please try again." }
+                                        .onFailure { networkError = "This user could not be blocked yet. Please try again." }
                                     sending = false
                                 }
                             }
@@ -816,7 +885,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
 
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) {
+            OutlinedTextField(searchQuery, { searchQuery = it.take(100) }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all messages…") })
+            when {
+                searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full conversation.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteSearchLoading -> Text("Searching message history…", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteSearchError != null -> Text(remoteSearchError!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 -> Text("${remoteSearchMessages.size} matches loaded", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) conversationScope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -836,12 +913,60 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
 
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+            if (hasOlderMessages && searchQuery.isBlank()) {
+                item(key = "load_older_private_messages") {
+                    TextButton(
+                        enabled = !loadingOlderMessages,
+                        onClick = {
+                            val cursor = olderMessagesCursor ?: return@TextButton
+                            conversationScope.launch {
+                                loadingOlderMessages = true
+                                FynxProductionMessaging.historyPage(context, chat.username.removePrefix("@"), cursor).onSuccess { page ->
+                                    val myId = currentUserId ?: return@onSuccess
+                                    val older = page.messages.mapNotNull { remote -> runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull() }
+                                    messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                    hasOlderMessages = page.hasMore
+                                    olderMessagesCursor = page.nextBeforeId
+                                }.onFailure { networkError = "Older messages could not be loaded. Please retry." }
+                                loadingOlderMessages = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (loadingOlderMessages) "Loading older messages…" else "Load older messages") }
+                }
+            }
+            if (searchQuery.trim().length >= 2 && remoteSearchHasMore) {
+                item(key = "load_more_private_search_results") {
+                    TextButton(
+                        enabled = !remoteSearchLoading,
+                        onClick = {
+                            val cursor = remoteSearchCursor ?: return@TextButton
+                            val query = searchQuery.trim()
+                            conversationScope.launch { loadPrivateSearchPage(query, cursor, append = true) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (remoteSearchLoading) "Loading matches…" else "Load more matches") }
+                }
+            }
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
                 }
             }
-            if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
+            if (visibleMessages.isEmpty() && searchQuery.isNotBlank()) {
+                item(key = "fynx-private-search-empty") {
+                    Text(
+                        when {
+                            remoteSearchLoading -> "Searching all messages…"
+                            remoteSearchError != null -> "Search could not be completed. Please retry."
+                            else -> "No matching messages found in this conversation."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glassPalette.messageMuted,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp)
+                    )
+                }
+            } else if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-chat") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f), contentColor = MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
@@ -894,7 +1019,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             onDragCancel = { replySwipeOffsets[message.id] = 0f }
                                         )
                                     }
-                                    .combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })
+                                    .combinedClickable(
+                                        onClick = { if (selectedMessageIds.isNotEmpty()) toggleMessageSelection(message.id) else if (!message.deleted) menuMessageId = message.id },
+                                        onLongClick = { if (!message.deleted) toggleMessageSelection(message.id) }
+                                    )
                             ) {
                             Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else messageHorizontalPadding, vertical = if (mediaOnly) 0.dp else messageVerticalPadding)) {
                                 if (message.pinned) {
@@ -1158,27 +1286,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Forward") }
-                    TextButton(
-                        onClick = {
-                            conversationScope.launch {
-                                FynxProductionMessaging.deleteMessage(context, message.id)
-                                    .onSuccess {
-                                        messages = messages.map { existing ->
-                                            if (existing.id == message.id) existing.copy(
-                                                text = "Message deleted",
-                                                attachmentUri = null,
-                                                attachmentType = null,
-                                                voiceUri = null,
-                                                mediaId = null
-                                            ) else existing
+                    if (message.fromMe) {
+                        TextButton(
+                            onClick = {
+                                conversationScope.launch {
+                                    FynxProductionMessaging.deleteMessage(context, message.id)
+                                        .onSuccess {
+                                            messages = messages.map { existing ->
+                                                if (existing.id == message.id) existing.copy(
+                                                    text = "Message deleted",
+                                                    attachmentUri = null,
+                                                    attachmentType = null,
+                                                    voiceUri = null,
+                                                    mediaId = null
+                                                ) else existing
+                                            }
+                                            menuMessageId = null
                                         }
-                                        menuMessageId = null
-                                    }
-                                    .onFailure { networkError = "Message could not be deleted yet. Please try again." }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Delete") }
+                                        .onFailure { networkError = "Message could not be deleted yet. Please try again." }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Delete") }
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
             }
