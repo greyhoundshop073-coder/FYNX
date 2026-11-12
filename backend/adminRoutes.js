@@ -186,8 +186,10 @@ export function registerAdminRoutes({ app }) {
         const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
         if(raw&&!/^[1-9]\d*$/.test(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
         if(raw){
-          const owned=await client.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[raw,req.user.sub]);
-          if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/')){await client.query('ROLLBACK');return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});}
+          if(String(raw)!==String(existing.media_id??'')){
+            const owned=await client.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[raw,req.user.sub]);
+            if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/')){await client.query('ROLLBACK');return res.status(403).json({error:'replacement announcement image must be an image uploaded by this administrator'});}
+          }
           mediaId=raw;
         }else mediaId=null;
       }
