@@ -235,8 +235,9 @@ require("metadata = {}, executor = pool" in social and social.count("recordMusic
         "Music Library mutations and their audit records must commit atomically")
 for action in ("MUSIC_TRACK_PUBLISHED", "MUSIC_TRACK_ACTIVATED", "MUSIC_TRACK_HIDDEN", "MUSIC_TRACK_REMOVED"):
     require(action in social, f"Music Library action is not audited: {action}")
-require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER')") >= 3,
-        "Music catalogue write endpoints must enforce OWNER role server-side")
+require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER')") >= 4 and
+        "app.get('/api/admin/social/music/catalogue', auth" in social,
+        "Music catalogue management endpoints, including the admin roster/list, must enforce OWNER role server-side")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
