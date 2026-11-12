@@ -125,6 +125,10 @@ require("String(safety.account_status)==='LIMITED'" in groups and
         "LIMITED must enforce restrictions in group messaging and Marketplace checkout")
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
+require("safety_appeals_report_id_fkey" in backend and "safety_appeals_report_id_fkey" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
+        "FOREIGN KEY(report_id) REFERENCES safety_reports(id) ON DELETE SET NULL" in backend and
+        "NOT EXISTS(SELECT 1 FROM safety_reports r WHERE r.id=a.report_id)" in backend,
+        "appeal report links must enforce a consistent nullable foreign key in either schema initialization order")
 require("target_user_id=$2" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
         "appeal.report_id!=null" in backend and "String(linkedReport.target_user_id)===String(appeal.user_id)" in backend and
         "restored=false" in backend,
