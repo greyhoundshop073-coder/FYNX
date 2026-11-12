@@ -16,7 +16,7 @@ object FynxAdminClient {
         val scheduledAt: String? = null,
         val published: Boolean = true
     )
-    data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
+    data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
     data class MusicTrack(
         val id: String,
