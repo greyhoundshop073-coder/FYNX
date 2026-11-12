@@ -672,9 +672,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         if (cleanQuery.length < 2) return
         remoteSearchLoading = true
         remoteSearchError = null
+        val myId = currentUserId ?: FynxBackendClient.currentUserId(context).getOrNull()
         FynxProductionMessaging.searchHistoryPage(context, chat.username.removePrefix("@"), cleanQuery, beforeId)
             .onSuccess { page ->
-                val myId = currentUserId ?: FynxBackendClient.currentUserId(context).getOrNull()
                 if (myId.isNullOrBlank()) {
                     remoteSearchError = "Your account could not be verified for message search."
                 } else {
@@ -697,6 +697,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             remoteSearchHasMore = false
             remoteSearchCursor = null
             remoteSearchError = null
+            remoteSearchLoading = false
             return@LaunchedEffect
         }
         remoteSearchMessages = emptyList()
