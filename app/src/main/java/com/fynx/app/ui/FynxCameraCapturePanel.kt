@@ -1359,7 +1359,7 @@ fun FynxCameraCapturePanel(
                     .fillMaxWidth()
                     // When the keyboard is open, keep the large sheet collapsed so the
                     // compact text/timing toolbar remains visible above the IME.
-                    .fillMaxHeight(if (editingTextOverlayId != null && selectedCameraTool == "Text") 0f else 0.44f)
+                    .fillMaxHeight(if (editingTextOverlayId != null && selectedCameraTool == "Text") 0f else if (previewType == "video" || previewType == "video_note") 0.56f else 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
@@ -1701,6 +1701,7 @@ fun FynxCameraCapturePanel(
                         selected = selectedOverlay,
                         overlayCount = cameraTextOverlays.size,
                         isVideo = previewType == "video" || previewType == "video_note",
+                        videoDurationMs = cameraVideoDurationMs,
                         compact = true,
                         onAdd = ::addCameraTextOverlay,
                         onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
