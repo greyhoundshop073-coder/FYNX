@@ -10,6 +10,7 @@ checks=[
 ("report history is account-scoped",'app.get("/api/social/reports/mine",auth' in trust and "WHERE reporter_id=$1" in trust),
 ("reports reject self-reporting","you cannot report your own account" in trust),
 ("reports reject duplicate open cases","already have an open report" in trust and "INTERVAL '24 hours'" in trust),
+("duplicate report prevention is transaction-safe","pg_advisory_xact_lock(hashtext($1 || ':' || $2))" in trust and "await client.query(\"BEGIN\")" in trust and "await client.query(\"COMMIT\")" in trust and "finally{if(client)client.release();}" in trust),
 ("appeals are authenticated and persisted",'app.post("/api/safety/appeals",auth' in trust and "INSERT INTO safety_appeals" in trust),
 ("appeals can only reference a report against the appellant","SELECT id FROM safety_reports WHERE id=$1 AND target_user_id=$2" in trust and "report is not an account case against this user" in trust),
 ("appeal ownership is bound to the authenticated appellant","INSERT INTO safety_appeals(user_id,report_id,subject,details)" in trust and "req.user.sub,reportId,subject,details" in trust),
