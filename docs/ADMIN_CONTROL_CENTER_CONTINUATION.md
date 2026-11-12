@@ -110,6 +110,15 @@ At final handoff, provide only the essential result: grouped work completed, mea
 
 ---
 
+## 7. Latest verified progress — 12 November 2026
+
+- Latest implementation head: `f431ee87387f30ed7a71ab288b631627670aff8f`.
+- Previous head `573ef7192b18085f183b10e108175773384fd35c`: Backend CI, Android Build and Chat/Group Parity + Layout Safety all completed successfully. Android emulator/runtime screenshot and live production backend probe were skipped.
+- Fixed an appeal ownership/restoration flaw across `backend/trustSafety.js` and `backend/adminRoutes.js`: an appeal linked to a report must now belong to the reported target account, not the reporter; an approved appeal only restores account state when its linked report actually targets that appellant. Unlinked appeals no longer unlock an account merely because they were accepted.
+- Added a regression contract assertion for appeal ownership and safe restoration in `scripts/verify_admin_control_center_contract.py`.
+- Commits in this grouped correction: `c038fcf15d0ab13f2c181f77b3ec29eae5cf3bfc`, `2954533b96411deea0b2a2a5f93aea95e9a14fe0`, `f431ee87387f30ed7a71ab288b631627670aff8f`.
+- CI for the new head had not yet appeared when this note was written. Re-query before relying on this snapshot.
+
 ## 6. Next action
 
 Immediately resume at **Group 1 — Safety and People** after rechecking PR #527 and current CI. Investigate the current report schema, report submission callers, admin middleware/role resolution, appeal transaction behavior, and the audit helper before making the next grouped code change. Continue through Groups 2 and 3 without waiting for another task prompt.
