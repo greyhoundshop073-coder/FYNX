@@ -1549,6 +1549,18 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 draft_xml = wait_for_controls(
                     draft_xml, destination_labels, f"{prefix}-camera-publish-destinations"
                 )
+                # Publish destinations are intentionally below the post details in the
+                # scrollable composer. Scroll its real UIAutomator viewport before declaring
+                # the options missing; checking only the first viewport produced a false red.
+                for scroll_attempt in range(8):
+                    if all(find_control(draft_xml, [label]) for label in destination_labels):
+                        break
+                    scrolled = swipe_vertical_scroll_container(
+                        draft_xml, f"{prefix}-camera-publish-destinations-scroll-{scroll_attempt + 1}"
+                    )
+                    if not scrolled:
+                        break
+                    draft_xml = scrolled
                 missing_destinations = [label for label in destination_labels if not find_control(draft_xml, [label])]
                 if missing_destinations:
                     FAILURES.append(prefix + ": shared composer is missing destination options " + ", ".join(missing_destinations))
@@ -2415,6 +2427,17 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         )
         if video_post_xml:
             destination_labels = ["Home Feed", "Status", "Both"]
+            # The same composer places Publish to below the first viewport. Exercise
+            # the actual scroll container before treating its destination chips as absent.
+            for scroll_attempt in range(8):
+                if all(find_control(video_post_xml, [label]) for label in destination_labels):
+                    break
+                scrolled = swipe_vertical_scroll_container(
+                    video_post_xml, f"{prefix}-camera-video-destination-scroll-{scroll_attempt + 1}"
+                )
+                if not scrolled:
+                    break
+                video_post_xml = scrolled
             missing_destinations = [label for label in destination_labels if not find_control(video_post_xml, [label])]
             screenshot(f"{prefix}-camera-video-destination-options.png")
             (ROOT / f"{prefix}-camera-video-destination-options.xml").write_text(
