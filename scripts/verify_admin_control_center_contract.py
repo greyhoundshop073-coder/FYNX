@@ -85,6 +85,11 @@ require("activityHasMore" in source and "Text(\"Previous\")" in source and "Text
 require("OFFSET $4" in backend and "limit+1" in backend and "Math.min(10000" in backend,
         "activity history API must use bounded database pagination")
 require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
+require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynxAdminRole=actorRole" in backend,
+        "admin roster and role changes must verify and record the true OWNER actor")
+require("recordAdminActivity(req,'ADMIN_GRANTED'" in backend and "recordAdminActivity(req,'ADMIN_REVOKED'" in backend and
+        "RETURNING user_id" in backend and "await client.query('COMMIT')" in backend,
+        "admin grant/revoke and their audit records must be committed atomically")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
 require('"/api/admin/reports?limit=' in client and "FynxAdminClient.reports(context, reportsOffset)" in source,
