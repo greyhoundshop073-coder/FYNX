@@ -62,6 +62,9 @@ check('active Group screen invokes the paginated remote history search', 'loadGr
 check('group client passes query and the stable composite cursor to the server', 'query:String?=null' in client and '&q=' in client and '&before=' in client and 'Uri.encode(it)' in client)
 check('private chat uses authenticated paginated remote history search', 'searchHistoryPage(context' in read('app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt') and 'loadPrivateSearchPage(' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
 check('private search results paginate independently from ordinary older-history pages', 'remoteSearchCursor' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'load_more_private_search_results' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
+check('group pin and unpin controls are only available to admins and moderators', 'if (canManageGroup) {' in group_panel and 'FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)' in group_panel)
+check('group delete controls are available only to the sender or an admin/moderator', 'if (message.fromMe || canManageGroup) {' in group_panel and 'FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)' in group_panel)
+
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
     print(f"R5A_CHECK_{index}: {'PASS' if ok else 'FAIL'}: {name}")
