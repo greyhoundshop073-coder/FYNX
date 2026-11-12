@@ -56,6 +56,12 @@ check('group refresh merges server windows without dropping previously loaded au
 check('periodic group refresh retains only authorized older pages and pending local messages', 'mergeGroupMessageRefresh(messages, remoteMessages, authorizedOlderGroupMessageIds)' in group_panel and 'authorizedOlderGroupMessageIds by remember(groupId)' in group_panel)
 check('group realtime refresh retains only authorized older pages and pending local messages', 'mergeGroupMessageRefresh(latestMessages, remoteMessages, latestAuthorizedOlderGroupMessageIds)' in group_panel and 'latestAuthorizedOlderGroupMessageIds by rememberUpdatedState(authorizedOlderGroupMessageIds)' in group_panel)
 
+check('private history search is scoped to the authenticated pair and hides deleted messages', 'searchQuery.length >= 2' in server and 'strpos(lower(COALESCE(m.text, \'\')), lower($3)) > 0' in server and 'm.deleted_at IS NULL' in server and 'req.user.sub, other.id, searchQuery, beforeId, limit + 1' in server)
+check('group history search requires membership and keeps the new-member join-time privacy boundary', 'searchQuery.length>=2' in group and 'access.show_history_to_new_members' in group and 'm.created_at >= $4' in group and 'm.deleted_at IS NULL' in group and 'strpos(lower(COALESCE(m.text,\'\')),lower($5))>0' in group)
+check('active Group screen invokes the paginated remote history search', 'loadGroupSearchPage(' in group_panel and 'query = cleanQuery' in group_panel and 'remoteGroupSearchCursor' in group_panel)
+check('group client passes query and the stable composite cursor to the server', 'query:String?=null' in client and '&q=\${Uri.encode(it)}' in client and '&before=\${Uri.encode(it)}' in client)
+check('private chat uses authenticated paginated remote history search', 'searchHistoryPage(context' in read('app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt') and 'loadPrivateSearchPage(' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
+check('private search results paginate independently from ordinary older-history pages', 'remoteSearchCursor' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'load_more_private_search_results' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
     print(f"R5A_CHECK_{index}: {'PASS' if ok else 'FAIL'}: {name}")
