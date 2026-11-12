@@ -175,7 +175,7 @@ checks = [
      and "onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in status_hub
      and "FynxCameraCapturePanel(" not in status_hub
       and "cameraInitialMode = homeCameraInitialMode" in app_source
-      and "initialMode = cameraInitialMode" in home
+      and "initialMode = activeCameraInitialMode" in home
      and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app_source),
     ("Shared composer exposes all destinations and uses the existing Status publisher",
      all(f'Text("{label}")' in home for label in ["Home Feed", "Status", "Both"])
