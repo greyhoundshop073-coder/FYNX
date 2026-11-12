@@ -205,6 +205,9 @@ require('app.patch("/api/admin/marketplace/seasonal-promotions/:id/edit"' in adv
         "FynxMarketplaceSeasonalPromotionClient.update(" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8") and
         "editingCampaignId" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8"),
         "seasonal campaign details and dates must be editable from the Owner/Admin panel")
+require('"SEASONAL_PROMOTION_UPDATED" -> "Campaigns updated"' in source and
+        '"SEASONAL_PROMOTION_UPDATED" to "Campaigns updated"' in source,
+        "admin activity history must provide a filter for edited Marketplace campaigns")
 require("fynx-seasonal-promo:" in advertising and "starts_at < $3 AND ends_at > $2" in advertising and
         "active campaign with this key already overlaps" in advertising,
         "active seasonal campaigns with the same key must reject overlapping time windows")
