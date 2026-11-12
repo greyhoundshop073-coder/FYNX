@@ -245,6 +245,19 @@ for action in ("MUSIC_TRACK_PUBLISHED", "MUSIC_TRACK_ACTIVATED", "MUSIC_TRACK_HI
 require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER')") >= 4 and
         "app.get('/api/admin/social/music/catalogue', auth" in social,
         "Music catalogue management endpoints, including the admin roster/list, must enforce OWNER role server-side")
+require("ensureFynxMusicAdminSchema" in social and "fynxMusicAdminSchemaPromise" in social and
+        "fynxMusicAdminSchemaPromise = null" in social,
+        "Music Library role checks must initialize admin schema once per process and retry after initialization failure")
+require("!Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > 86400000" in social,
+        "Music Library must reject missing, fractional, zero, negative and excessive track durations")
+require("function parseCampaignTimestamp(value)" in advertising and
+        "parseCampaignTimestamp(req.body?.startsAt)" in advertising and
+        "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
+        "(Z|([+-])(\\d{2}):(\\d{2}))" in advertising,
+        "seasonal promotion create/edit must require explicit timezone and validate calendar timestamps")
+require("MAX_POSTGRES_BIGINT" in backend and "function isPositivePostgresBigint(value)" in backend and
+        "isPositivePostgresBigint(mediaIdRaw)" in backend and "isPositivePostgresBigint(raw)" in backend,
+        "announcement image IDs must be bounded to positive PostgreSQL BIGINT before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
 # OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
