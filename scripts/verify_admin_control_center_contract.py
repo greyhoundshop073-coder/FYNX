@@ -176,7 +176,7 @@ require("String(raw)!==String(existing.media_id??'')" in backend,
         "editing an announcement must retain its already-authorized image when another admin edits the text")
 require("parsed.protocol!=='https:'" in backend and "parsed.username" in backend and "parsed.password" in backend,
         "announcement links must require HTTPS and reject embedded credentials")
-require("scheduledAt.getTime()<=Date.now()" in backend and "ANNOUNCEMENT_SCHEDULED" in backend,
+require("parseFutureAnnouncementSchedule" in backend and "day > daysInMonth" in backend and "offsetHour > 14" in backend and "scheduledAt.getTime() <= Date.now()" in backend and "ANNOUNCEMENT_SCHEDULED" in backend,
         "announcement schedules must be future-dated and audited")
 require("scheduled_at IS NULL OR scheduled_at<=NOW()" in backend,
         "public announcements must not expose future scheduled items")
