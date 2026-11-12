@@ -1594,16 +1594,16 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             ["New post"]
                         ) or destination_xml
                     draft_xml = destination_xml
-                screenshot(f"{prefix}-camera-create-post-caption.png")
-                (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
-                    draft_xml + chr(10), encoding="utf-8"
-                )
                 # The content viewport may retain a previous scroll offset even though
-                # the fixed New post header is visible. Restore the top before checking
-                # caption/media controls or attempting to type into the caption.
+                # the fixed New post header is visible. Restore the top before capturing
+                # evidence, checking caption/media controls, or attempting to type.
                 draft_xml = camera_scroll_to_top(
                     draft_xml, ["Add description...", "Edit cover"],
                     f"{prefix}-camera-post-details"
+                )
+                screenshot(f"{prefix}-camera-create-post-caption.png")
+                (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
+                    draft_xml + chr(10), encoding="utf-8"
                 )
                 # The upper layout must match the supplied reference: description left,
                 # attached-media preview/Edit cover right, and hashtag/mention helpers below.
