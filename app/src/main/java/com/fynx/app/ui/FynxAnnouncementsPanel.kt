@@ -564,10 +564,19 @@ fun FynxAdminControlCenterPanel() {
                                             }
                                         }) { Text("Review") }
                                         Button(onClick = {
-                                            requestAdminConfirmation("Accept appeal and restore account?", "This accepts appeal #${appeal.id} and asks the server to restore @${appeal.username} to ACTIVE. Confirm only after reviewing the appeal details.", "Approve & restore") {
+                                            requestAdminConfirmation(
+                                                if (appeal.reportId == null) "Accept appeal without linked report?" else "Accept appeal and restore account?",
+                                                if (appeal.reportId == null) "This appeal is not linked to an account report. Accepting it records the decision but will not automatically change @${appeal.username}'s account status." else "This accepts appeal #${appeal.id}. The server restores @${appeal.username} only if the linked report is still a valid account case against this user.",
+                                                if (appeal.reportId == null) "Accept appeal" else "Approve & restore"
+                                            ) {
                                                 scope.launch {
-                                                    FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.")
-                                                        .onSuccess { statusMessage = "Appeal accepted and account restored."; appealsOffset = 0; refreshAppeals++; refreshDashboard++ }
+                                                    FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted after review.")
+                                                        .onSuccess { decision ->
+                                                            statusMessage = if (decision.restored) "Appeal accepted and @${appeal.username} restored to ACTIVE." else "Appeal accepted. No linked account restriction was eligible for automatic restoration; check the account status separately."
+                                                            appealsOffset = 0
+                                                            refreshAppeals++
+                                                            refreshDashboard++
+                                                        }
                                                         .onFailure { statusMessage = it.message ?: "Could not restore account." }
                                                 }
                                             }
