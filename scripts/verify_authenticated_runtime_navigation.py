@@ -137,7 +137,7 @@ def screenshot(name:str) -> bool:
             )
         except (subprocess.TimeoutExpired, OSError):
             result = None
-        if result is not None and result.returncode == 0 and result.stdout.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+        if result is not None and result.returncode == 0 and result.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
             destination.write_bytes(result.stdout)
             return True
         # Recover the ADB transport before retrying; never write stderr into an image file.
