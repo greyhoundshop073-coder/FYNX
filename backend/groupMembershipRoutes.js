@@ -7,6 +7,7 @@ const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const pool = getFynxDatabasePool();
+const validId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(value);
 
 export function registerGroupMembershipRoutes({ app }) {
   if (!pool) return;
@@ -43,6 +44,13 @@ export function registerGroupMembershipRoutes({ app }) {
   const isManager = role => ['ADMIN', 'MODERATOR'].includes(String(role));
   const isAdmin = role => String(role) === 'ADMIN';
   const canManageMembers = role => ['ADMIN', 'MODERATOR'].includes(String(role || '').toUpperCase());
+  const insertMemberIfCapacity = async (db, groupId, userId) => {
+    const inserted = await db.query(`INSERT INTO fynx_group_members(group_id,user_id,role)
+      SELECT $1,$2,'MEMBER' WHERE (SELECT COUNT(*) FROM fynx_group_members WHERE group_id=$1) < 500
+      ON CONFLICT(group_id,user_id) DO NOTHING RETURNING user_id`, [groupId,userId]);
+    if (inserted.rowCount) return true;
+    return Boolean((await db.query('SELECT 1 FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 LIMIT 1', [groupId,userId])).rows[0]);
+  };
 
   app.get('/api/groups/:groupId/members', auth, async (req, res) => {
     try {
@@ -80,7 +88,8 @@ export function registerGroupMembershipRoutes({ app }) {
       if (existing) return res.json({ member: { username: existing.username, role: existing.role, joinedAt: new Date(existing.joined_at).getTime() }, alreadyMember: true });
       const count = Number((await pool.query('SELECT COUNT(*) AS count FROM fynx_group_members WHERE group_id=$1', [groupId])).rows[0]?.count || 0);
       if (count >= 500) return res.status(409).json({ error: 'group member limit reached' });
-      await pool.query(`INSERT INTO fynx_group_members(group_id, user_id, role) VALUES($1, $2, 'MEMBER') ON CONFLICT(group_id, user_id) DO NOTHING`, [groupId, target.id]);
+      const inserted = await insertMemberIfCapacity(pool, groupId, target.id);
+      if (!inserted) return res.status(409).json({ error: 'group member limit reached', code: 'GROUP_MEMBER_LIMIT_REACHED' });
       const added = (await pool.query(`SELECT u.username, m.role, m.created_at AS joined_at FROM fynx_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND m.user_id=$2 LIMIT 1`, [groupId, target.id])).rows[0];
       return res.status(201).json({ member: { username: added.username, role: added.role, joinedAt: new Date(added.joined_at).getTime() }, alreadyMember: false });
     } catch (error) {
@@ -165,8 +174,8 @@ export function registerGroupMembershipRoutes({ app }) {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
       const token = String(req.params?.token || '');
-      const invite = (await pool.query('SELECT i.group_id,i.token,i.revoked_at,g.name,g.description,g.approve_new_members FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1', [groupId, token])).rows[0];
-      if (!invite || invite.revoked_at) return res.status(404).json({ error: 'invite is invalid or revoked' });
+      const invite = (await pool.query('SELECT i.group_id,i.token,i.revoked_at,g.name,g.description,g.approve_new_members,g.invite_links FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1', [groupId, token])).rows[0];
+      if (!invite || invite.revoked_at || !invite.invite_links) return res.status(404).json({ error: 'invite is invalid, revoked, or disabled' });
       const memberCount = Number((await pool.query('SELECT COUNT(*) AS count FROM fynx_group_members WHERE group_id=$1', [groupId])).rows[0]?.count || 0);
       const alreadyMember = Boolean(await member(groupId, req.user.sub));
       const pending = !alreadyMember && Boolean((await pool.query('SELECT 1 FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2 LIMIT 1', [groupId, req.user.sub])).rows[0]);
@@ -183,8 +192,8 @@ export function registerGroupMembershipRoutes({ app }) {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
       const token = String(req.params?.token || '');
-      const invite = (await pool.query('SELECT i.group_id,i.revoked_at,g.approve_new_members FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1', [groupId, token])).rows[0];
-      if (!invite || invite.revoked_at) return res.status(404).json({ error: 'invite is invalid or revoked' });
+      const invite = (await pool.query('SELECT i.group_id,i.revoked_at,g.approve_new_members,g.invite_links FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1', [groupId, token])).rows[0];
+      if (!invite || invite.revoked_at || !invite.invite_links) return res.status(404).json({ error: 'invite is invalid, revoked, or disabled' });
       if (await member(groupId, req.user.sub)) return res.json({ requested: false, alreadyMember: true, pending: false });
       if (!invite.approve_new_members) return res.status(409).json({ error: 'admin approval is not required for this group' });
       await pool.query('INSERT INTO fynx_group_join_requests(group_id,user_id) VALUES($1,$2) ON CONFLICT(group_id,user_id) DO NOTHING', [groupId, req.user.sub]);
@@ -216,10 +225,12 @@ export function registerGroupMembershipRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!isAdmin(actor?.role)) return res.status(403).json({ error: 'group admin permission required' });
-      const requested = (await client.query('SELECT r.user_id,u.username FROM fynx_group_join_requests r JOIN users u ON u.id=r.user_id WHERE r.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1', [groupId, cleanUsername(req.params?.username)])).rows[0];
-      if (!requested) return res.status(404).json({ error: 'join request not found' });
       await client.query('BEGIN');
-      await client.query("INSERT INTO fynx_group_members(group_id,user_id,role) VALUES($1,$2,'MEMBER') ON CONFLICT(group_id,user_id) DO NOTHING", [groupId, requested.user_id]);
+      await client.query('SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId]);
+      const requested = (await client.query('SELECT r.user_id,u.username FROM fynx_group_join_requests r JOIN users u ON u.id=r.user_id WHERE r.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1', [groupId, cleanUsername(req.params?.username)])).rows[0];
+      if (!requested) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'join request not found' }); }
+      const inserted = await insertMemberIfCapacity(client, groupId, requested.user_id);
+      if (!inserted) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'group member limit reached', code: 'GROUP_MEMBER_LIMIT_REACHED' }); }
       await client.query('DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2', [groupId, requested.user_id]);
       await client.query('COMMIT');
       return res.json({ approved: true, username: requested.username });
@@ -252,14 +263,16 @@ export function registerGroupMembershipRoutes({ app }) {
     try {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
-      const invite = (await pool.query(`SELECT i.group_id,i.revoked_at,g.approve_new_members,g.name FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1`, [groupId,String(req.params?.token || '')])).rows[0];
-      if (!invite || invite.revoked_at) return res.status(404).json({ error: 'invite is invalid or revoked' });
+      const invite = (await pool.query(`SELECT i.group_id,i.revoked_at,g.approve_new_members,g.name,g.invite_links FROM fynx_group_invites i JOIN fynx_groups g ON g.id=i.group_id WHERE i.group_id=$1 AND i.token=$2 LIMIT 1`, [groupId,String(req.params?.token || '')])).rows[0];
+      if (!invite || invite.revoked_at || !invite.invite_links) return res.status(404).json({ error: 'invite is invalid, revoked, or disabled' });
       if (await member(groupId, req.user.sub)) return res.json({ joined: true, alreadyMember: true, pending: false });
       if (invite.approve_new_members) {
         await pool.query('INSERT INTO fynx_group_join_requests(group_id,user_id) VALUES($1,$2) ON CONFLICT(group_id,user_id) DO NOTHING', [groupId, req.user.sub]);
         return res.status(202).json({ joined: false, pending: true, message: 'Join request submitted for admin approval.' });
       }
-      await pool.query(`INSERT INTO fynx_group_members(group_id,user_id,role) VALUES($1,$2,'MEMBER') ON CONFLICT(group_id,user_id) DO NOTHING`, [groupId,req.user.sub]);
+      const inserted = await insertMemberIfCapacity(pool, groupId, req.user.sub);
+      if (!inserted) return res.status(409).json({ error: 'group member limit reached', code: 'GROUP_MEMBER_LIMIT_REACHED' });
+      await pool.query('DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2', [groupId,req.user.sub]);
       return res.json({ joined: true, pending: false, groupName: invite.name });
     } catch (error) {
       console.error('group invite join', error);

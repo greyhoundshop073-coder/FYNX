@@ -76,6 +76,11 @@ check('admin join-request listing is implemented and role protected', "app.get('
 check('admin approval creates membership and removes the pending request transactionally', "app.post('/api/groups/:groupId/join-requests/:username/approve', auth" in membership and "DELETE FROM fynx_group_join_requests" in membership and "await client.query('COMMIT')" in membership)
 check('admin rejection removes only the selected pending request', "app.post('/api/groups/:groupId/join-requests/:username/reject', auth" in membership and "targetJoinRequest(groupId" in membership)
 check('direct invite join never reports phantom pending approval', "if (invite.approve_new_members) {" in membership and "INSERT INTO fynx_group_join_requests(group_id,user_id)" in membership)
+check('group membership route validates IDs instead of calling an undefined helper', "const validId = value => typeof value === 'string'" in membership and 'if (!validId(groupId))' in membership)
+check('member capacity is enforced by a shared conditional insert across direct add, invite join and approval', 'insertMemberIfCapacity' in membership and membership.count('insertMemberIfCapacity(') >= 4 and 'GROUP_MEMBER_LIMIT_REACHED' in membership)
+check('disabled invite links invalidate existing previews, requests and joins', membership.count('!invite.invite_links') >= 3 and membership.count('g.invite_links FROM fynx_groups g') >= 2)
+check('approval locks the group row before enforcing the shared 500-member limit', "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership and "await insertMemberIfCapacity(client, groupId, requested.user_id)" in membership)
+check('successful direct invite join clears any stale pending join request', "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership and "await insertMemberIfCapacity(pool, groupId, req.user.sub)" in membership)
 
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
