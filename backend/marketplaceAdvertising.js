@@ -540,11 +540,26 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       let result;
       try {
         await client.query("BEGIN");
-        result = await client.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
-        if (!result.rowCount) {
+        const existing = (await client.query(
+          "SELECT id,occasion_key,starts_at,ends_at,headline FROM marketplace_seasonal_promotions WHERE id=$1 FOR UPDATE",
+          [id]
+        )).rows[0];
+        if (!existing) {
           await client.query("ROLLBACK");
           return res.status(404).json({ error: "seasonal promotion not found" });
         }
+        if (req.body.active) {
+          await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`fynx-seasonal-promo:${existing.occasion_key}`]);
+          const overlap = await client.query(
+            "SELECT id FROM marketplace_seasonal_promotions WHERE occasion_key=$1 AND id<>$2 AND active=TRUE AND starts_at < $4 AND ends_at > $3 LIMIT 1",
+            [existing.occasion_key, id, existing.starts_at, existing.ends_at]
+          );
+          if (overlap.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "another active campaign with this key already overlaps the schedule" });
+          }
+        }
+        result = await client.query("UPDATE marketplace_seasonal_promotions SET active=$1, updated_at=NOW() WHERE id=$2 RETURNING *", [req.body.active, id]);
         await recordMarketplaceAdminActivity(auth.userId, role, req.body.active ? "SEASONAL_PROMOTION_ACTIVATED" : "SEASONAL_PROMOTION_DEACTIVATED", id, result.rows[0].headline, { active: req.body.active }, client);
         await client.query("COMMIT");
       } catch (error) {
