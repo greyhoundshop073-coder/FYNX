@@ -190,9 +190,16 @@ require(re.search(r"^\s*app\.post\('/api/social/posts'", social, re.MULTILINE) i
 # Marketplace promotions and the OWNER-only Music Library must appear in the same searchable audit history.
 require("recordMarketplaceAdminActivity" in advertising and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in advertising,
         "Marketplace promotion administration must initialize and write to admin activity history")
-for action in ("SEASONAL_PROMOTION_CREATED", "SEASONAL_PROMOTION_ACTIVATED",
+for action in ("SEASONAL_PROMOTION_CREATED", "SEASONAL_PROMOTION_UPDATED", "SEASONAL_PROMOTION_ACTIVATED",
                "SEASONAL_PROMOTION_DEACTIVATED", "SEASONAL_PROMOTION_DELETED"):
     require(action in advertising, f"Marketplace promotion action is not audited: {action}")
+require('app.patch("/api/admin/marketplace/seasonal-promotions/:id/edit"' in advertising and
+        "FynxMarketplaceSeasonalPromotionClient.update(" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8") and
+        "editingCampaignId" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8"),
+        "seasonal campaign details and dates must be editable from the Owner/Admin panel")
+require("fynx-seasonal-promo:" in advertising and "starts_at < $3 AND ends_at > $2" in advertising and
+        "active campaign with this key already overlaps" in advertising,
+        "active seasonal campaigns with the same key must reject overlapping time windows")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
         "Music Library administration must initialize and write to admin activity history")
 require("metadata = {}, executor = pool" in advertising and advertising.count("recordMarketplaceAdminActivity(") >= 4 and
