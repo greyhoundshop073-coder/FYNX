@@ -9,7 +9,7 @@ const pool = getFynxDatabasePool();
 const MAX_POSTGRES_BIGINT = 9223372036854775807n;
 function isPositivePostgresBigint(value) {
   const raw = String(value ?? '').trim();
-  if (!/^[1-9]\\d*$/.test(raw)) return false;
+  if (!/^[1-9]\d*$/.test(raw)) return false;
   try { return BigInt(raw) <= MAX_POSTGRES_BIGINT; } catch { return false; }
 }
 
@@ -165,7 +165,7 @@ export function registerAdminRoutes({ app }) {
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
     if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
-    if(mediaIdRaw&&!/^[1-9]\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
+    if(mediaIdRaw&&!isPositivePostgresBigint(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
     if(mediaIdRaw){
       const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
       if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/'))return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});
@@ -209,7 +209,7 @@ export function registerAdminRoutes({ app }) {
       let mediaId=existing.media_id;
       if(Object.prototype.hasOwnProperty.call(req.body||{},'mediaId')){
         const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
-        if(raw&&!/^[1-9]\d*$/.test(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
+        if(raw&&!isPositivePostgresBigint(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
         if(raw){
           if(String(raw)!==String(existing.media_id??'')){
             const owned=await client.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[raw,req.user.sub]);
