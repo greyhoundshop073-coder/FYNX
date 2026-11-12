@@ -165,6 +165,8 @@ fun FynxAdminControlCenterPanel() {
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
     var activityQuery by remember { mutableStateOf("") }
+    var activityAction by remember { mutableStateOf("") }
+    var activityActionMenuExpanded by remember { mutableStateOf(false) }
     var activityOffset by remember { mutableIntStateOf(0) }
     var activityHasMore by remember { mutableStateOf(false) }
     var activityLoading by remember { mutableStateOf(false) }
@@ -255,11 +257,11 @@ fun FynxAdminControlCenterPanel() {
         loading = false
     }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
-    LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset) {
+    LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset, activityAction) {
         if (dashboard != null && activeSection == "Activity") {
             activityLoading = true
             activityError = null
-            FynxAdminClient.activity(context, activityQuery, activityOffset)
+            FynxAdminClient.activity(context, activityQuery, activityOffset, activityAction)
                 .onSuccess {
                     activity = it.items
                     activityHasMore = it.hasMore
@@ -813,6 +815,67 @@ fun FynxAdminControlCenterPanel() {
                     singleLine = true,
                     trailingIcon = { IconButton(onClick = { activityOffset = 0; refreshActivity++ }) { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Search activity") } }
                 )
+                Spacer(Modifier.height(8.dp))
+                Box {
+                    OutlinedButton(onClick = { activityActionMenuExpanded = true }, enabled = !activityLoading) {
+                        Text(
+                            when (activityAction) {
+                                "REPORT_REVIEWED" -> "Report reviews"
+                                "APPEAL_DECIDED" -> "Appeal decisions"
+                                "ACCOUNT_STATUS_CHANGED" -> "Account status"
+                                "ADMIN_GRANTED" -> "Admin grants"
+                                "ADMIN_REVOKED" -> "Admin revocations"
+                                "ANNOUNCEMENT_PUBLISHED" -> "Announcements published"
+                                "ANNOUNCEMENT_SCHEDULED" -> "Announcements scheduled"
+                                "ANNOUNCEMENT_UNPUBLISHED" -> "Announcements unpublished"
+                                "SEASONAL_PROMOTION_CREATED" -> "Campaigns created"
+                                "SEASONAL_PROMOTION_ACTIVATED" -> "Campaigns activated"
+                                "SEASONAL_PROMOTION_DEACTIVATED" -> "Campaigns deactivated"
+                                "SEASONAL_PROMOTION_DELETED" -> "Campaigns deleted"
+                                "MUSIC_TRACK_PUBLISHED" -> "Music published"
+                                "MUSIC_TRACK_ACTIVATED" -> "Music restored"
+                                "MUSIC_TRACK_HIDDEN" -> "Music hidden"
+                                "MUSIC_TRACK_REMOVED" -> "Music removed"
+                                else -> "All activity types"
+                            }
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = activityActionMenuExpanded,
+                        onDismissRequest = { activityActionMenuExpanded = false }
+                    ) {
+                        val actionFilters = listOf(
+                            "" to "All activity types",
+                            "REPORT_REVIEWED" to "Report reviews",
+                            "APPEAL_DECIDED" to "Appeal decisions",
+                            "ACCOUNT_STATUS_CHANGED" to "Account status",
+                            "ADMIN_GRANTED" to "Admin grants",
+                            "ADMIN_REVOKED" to "Admin revocations",
+                            "ANNOUNCEMENT_PUBLISHED" to "Announcements published",
+                            "ANNOUNCEMENT_SCHEDULED" to "Announcements scheduled",
+                            "ANNOUNCEMENT_UNPUBLISHED" to "Announcements unpublished",
+                            "SEASONAL_PROMOTION_CREATED" to "Campaigns created",
+                            "SEASONAL_PROMOTION_ACTIVATED" to "Campaigns activated",
+                            "SEASONAL_PROMOTION_DEACTIVATED" to "Campaigns deactivated",
+                            "SEASONAL_PROMOTION_DELETED" to "Campaigns deleted",
+                            "MUSIC_TRACK_PUBLISHED" to "Music published",
+                            "MUSIC_TRACK_ACTIVATED" to "Music restored",
+                            "MUSIC_TRACK_HIDDEN" to "Music hidden",
+                            "MUSIC_TRACK_REMOVED" to "Music removed"
+                        )
+                        actionFilters.forEach { (value, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    activityAction = value
+                                    activityOffset = 0
+                                    activityActionMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 if (activityLoading) CircularProgressIndicator()
                 else if (activityError != null) {
