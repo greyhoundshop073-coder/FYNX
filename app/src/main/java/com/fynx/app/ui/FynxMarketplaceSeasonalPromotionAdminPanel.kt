@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -54,7 +55,7 @@ private fun marketplaceSeasonalDateFormat(pattern: String) =
     }
 
 private fun parseMarketplaceSeasonalDateTime(value: String): Date? =
-    runCatching { marketplaceSeasonalDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").parse(value.trim()) }
+    runCatching { Date.from(OffsetDateTime.parse(value.trim()).toInstant()) }
         .getOrNull()
 
 private fun formatMarketplaceSeasonalDateTime(value: String): String =
