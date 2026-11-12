@@ -1922,7 +1922,7 @@ def probe_media_stream_types(path: Path) -> set[str] | None:
     }
 
 def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
-    """Record a short real clip from the current Home camera shortcut and inspect it without publishing."""
+    """Record a short real clip from Home direct camera, inspect it, and never tap Next or publish."""
     video_files_before = list_app_cache_videos()
     # The current Home header shortcut opens CameraX directly. Do not wait for the old
     # intermediate New post composer or try to open CameraX a second time from More options.
