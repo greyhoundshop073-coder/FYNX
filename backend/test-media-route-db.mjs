@@ -25,8 +25,13 @@ for (const required of [
   "sp.starts_at <= NOW()",
   "sp.ends_at > NOW()"
 ]) assert.ok(seasonalSqlFragment.includes(required), `seasonal SQL fragment must enforce ${required}`);
-const sql = sqlTemplate.replace("${seasonalMediaAuthorization}", seasonalSqlFragment);
-assert.ok(!sql.includes("${seasonalMediaAuthorization}"), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
+const sql = sqlTemplate
+  .replace("${seasonalMediaAuthorization}", seasonalSqlFragment)
+  // This fixture intentionally omits the optional group schema, matching the
+  // route branch where to_regclass() reports no group tables.
+  .replace("${groupMessageAuthorization}", "")
+  .replace("${groupMessageMediaFlag}", "FALSE AS group_message_media");
+assert.ok(!/\$\{[^}]+\}/.test(sql), "PostgreSQL test query must not contain unexpanded JavaScript placeholders");
 assert.ok(source.includes("to_regclass('public.marketplace_seasonal_promotions')"), "runtime media route must skip the optional campaign table until it exists");
 const db = new Client();
 await db.connect();
