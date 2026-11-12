@@ -437,9 +437,15 @@ fun FynxMarketplaceSellerCenterPanel() {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("My Shop", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Manage your storefront, listings, orders, deliveries and earnings from one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("My Shop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Manage your storefront, listings, orders, deliveries and earnings from one place.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }
             }
@@ -447,7 +453,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         item {
             LazyRow(
                 state = shopSectionsScrollState,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().fynxFadeEnd(shopSectionsScrollState.canScrollForward),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(end = 12.dp)
             ) {

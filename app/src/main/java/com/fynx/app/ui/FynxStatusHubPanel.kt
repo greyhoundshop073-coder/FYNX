@@ -484,7 +484,7 @@ private fun FynxAddStatusPanel(
                 }
             }
             Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().fynxScrollRowWithFade(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -670,10 +670,14 @@ private fun FynxStatusToolPill(
     FilledTonalButton(
         onClick = onClick,
         shape = RoundedCornerShape(50),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         modifier = modifier.height(42.dp)
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(6.dp))
         Text(label)
     }
