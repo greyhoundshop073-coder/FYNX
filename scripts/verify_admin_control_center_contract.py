@@ -89,10 +89,19 @@ require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety re
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
 require('"/api/admin/reports"' in client and "FynxAdminClient.reports(context)" in source,
         "reported-account queue is not connected end to end")
-require("reports.take(20).forEach" in source and "FynxAdminClient.reviewReport(context, report.id" in source,
+require("reports.forEach" in source and "FynxAdminClient.reviewReport(context, report.id" in source,
         "reported-account review actions are not rendered")
-require("FynxAdminClient.appeals(context)" in source and "FynxAdminClient.reviewAppeal(context, appeal.id" in source,
+require("FynxAdminClient.appeals(context, appealsOffset)" in source and "FynxAdminClient.reviewAppeal(context, appeal.id" in source,
         "appeal review actions are not connected to the queue")
+require("FynxAdminClient.reports(context, reportsOffset)" in source and "reportsHasMore" in source and
+        "appealsHasMore" in source and "Text(\"Next\")" in source,
+        "report and appeal review queues must provide Previous/Next pagination")
+require("app.get('/api/admin/reports'" in backend and "app.get('/api/admin/appeals'" in backend and
+        backend.count("LIMIT $1 OFFSET $2") >= 2 and backend.count("limit+1") >= 2 and
+        backend.count("Math.min(10000" ) >= 2,
+        "report and appeal APIs must enforce bounded database pagination")
+require("account reports; content-report types are not presented as account reports" in source,
+        "moderation queue must not misrepresent account reports as content reports")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
 require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
