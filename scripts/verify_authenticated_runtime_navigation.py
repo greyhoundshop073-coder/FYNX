@@ -1598,6 +1598,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                 (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
                     draft_xml + chr(10), encoding="utf-8"
                 )
+                # The content viewport may retain a previous scroll offset even though
+                # the fixed New post header is visible. Restore the top before checking
+                # caption/media controls or attempting to type into the caption.
+                draft_xml = camera_scroll_to_top(
+                    draft_xml, ["Add description...", "Edit cover"],
+                    f"{prefix}-camera-post-details"
+                )
                 # The upper layout must match the supplied reference: description left,
                 # attached-media preview/Edit cover right, and hashtag/mention helpers below.
                 required_top = ["Add description...", "# Hashtags", "@ Mention", "Edit cover"]
@@ -1871,6 +1878,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                                     run("adb", "shell", "input", "swipe", "540", "350", "540", "1450", "450")
                                 time.sleep(0.45)
                                 opened_xml = dump_ui(f"{prefix}-camera-post-draft-return-to-top-{draft_top_attempt+1}.xml") or opened_xml
+                            opened_xml = camera_scroll_to_top(
+                                opened_xml, ["Post caption"],
+                                f"{prefix}-camera-post-draft-reopen"
+                            )
                             screenshot(f"{prefix}-camera-post-draft-reopened-top.png")
                             if find_control(opened_xml, ["Edit text on media"]):
                                 reopened_editor_xml = tap_control(
@@ -2358,7 +2369,10 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         x = (left + right) // 2
         run("adb", "shell", "input", "swipe", str(x), str(bottom - 30), str(x), str(top + 30), "450")
         time.sleep(0.45)
-    if not find_control(editor, ["Video styles"]):
+    # Re-read after the last scroll gesture; a transient empty/stale dump must
+    # not turn a style row that is actually on screen into a false failure.
+    editor = dump_ui(f"{prefix}-camera-video-style-final-viewport.xml") or editor
+    if not find_control(editor, ["Video styles"]) or not find_control(editor, ["Warm Film"]):
         FAILURES.append(prefix + ": Video styles section was not reachable by scrolling the real editor viewport")
     # Re-find the action after the captions UI and vertical scroll may have changed it.
     editor = dump_ui(f"{prefix}-camera-video-before-style-apply.xml") or editor
@@ -3053,6 +3067,39 @@ def camera_scroll_until_control(xml_text: str, labels: list[str], prefix: str, m
             break
     return latest
 
+
+def camera_scroll_to_top(xml_text: str, required_labels: list[str], prefix: str, max_swipes: int = 8) -> str:
+    """Return the real vertical content viewport to its top before testing top-only controls.
+
+    Camera -> composer and Drafts can retain a previous scroll offset. A screenshot
+    of the fixed header is not proof that the scrollable content is at its top.
+    """
+    latest = xml_text
+    for attempt in range(max_swipes):
+        if all(find_control(latest, [label]) for label in required_labels):
+            return latest
+        candidates = []
+        for node in nodes(latest):
+            if node.attrib.get("class") != "android.widget.ScrollView":
+                continue
+            if node.attrib.get("scrollable", "false").lower() != "true":
+                continue
+            bounds = _node_bounds(node)
+            if not bounds:
+                continue
+            left, top, right, bottom = bounds
+            if right - left > 400 and bottom - top > 180:
+                candidates.append(((right-left)*(bottom-top), left, top, right, bottom))
+        if not candidates:
+            break
+        _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+        x = (left + right) // 2
+        inset = max(28, min(56, (bottom-top)//12))
+        # Finger moves down, bringing earlier content back into the viewport.
+        run("adb", "shell", "input", "swipe", str(x), str(top+inset), str(x), str(bottom-inset), "420")
+        time.sleep(0.4)
+        latest = dump_ui(f"{prefix}-top-{attempt+1}.xml") or latest
+    return latest
 
 def verify_post_details_footer_safe_area(xml_text: str, journey: str) -> bool:
     """Require the real Drafts/Post click targets to clear Android's bottom navigation area."""
