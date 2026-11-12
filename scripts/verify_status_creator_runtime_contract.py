@@ -27,6 +27,20 @@ checks = [
         and 'find_click_target(creator, "Text")' in runtime,
     ),
     (
+        "Status Take photo opens the shared camera in Photo mode and safely returns without publishing",
+        'tap("Take photo", "photo-camera-entry", ("Take photo", "Switch front/back camera"))' in runtime
+        and 'find_click_target(photo_camera, "Take photo")' in runtime
+        and 'return_to_home("photo-camera")' in runtime
+        and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
+    ),
+    (
+        "Status Record video opens the shared camera in Video mode without starting a recording",
+        'tap("Record video", "video-camera-entry", ("Record video", "Switch front/back camera"))' in runtime
+        and 'find_click_target(video_camera, "Record video")' in runtime
+        and 'return_to_home("video-camera")' in runtime
+        and "PASS Status Record video opens the shared live CameraX preview in Video mode." in runtime,
+    ),
+    (
         "runtime check dismisses the creator without creating or submitting content",
         'input", "keyevent", "4"' in runtime
         and 'no status, text, photo, voice recording, or media is created or submitted' in runtime
