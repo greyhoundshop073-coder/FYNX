@@ -123,9 +123,29 @@ def capture_runtime_log(name:str):
         FAILURES.append(f"{name} captured a confirmed FYNX crash/ANR in logcat")
     return bool((alive.stdout or "").strip()), "\n".join(crash_lines)
 
-def screenshot(name:str):
-    with (ROOT/name).open("wb") as out:
-        subprocess.run(["adb","exec-out","screencap","-p"],stdout=out,stderr=subprocess.STDOUT,check=False)
+def screenshot(name:str) -> bool:
+    """Save only a valid PNG; transient ADB disconnects must never become fake .png artifacts."""
+    destination = ROOT / name
+    for attempt in range(4):
+        try:
+            result = subprocess.run(
+                ["adb", "exec-out", "screencap", "-p"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=20,
+                check=False
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            result = None
+        if result is not None and result.returncode == 0 and result.stdout.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+            destination.write_bytes(result.stdout)
+            return True
+        # Recover the ADB transport before retrying; never write stderr into an image file.
+        subprocess.run(["adb", "get-state"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=False)
+        time.sleep(0.6 * (attempt + 1))
+    destination.unlink(missing_ok=True)
+    FAILURES.append(f"{name}: screenshot capture failed after ADB recovery retries")
+    return False
 
 def dump_ui(name:str)->str:
     """Read the live accessibility tree with bounded retries for transient emulator/Binder failures."""
@@ -1623,6 +1643,18 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     ["@ Mention"]
                 )
                 if caption_chips_xml:
+                    # Compose state updates synchronously, but accessibility snapshots can lag
+                    # one frame behind the chip click. Re-read the live tree before asserting.
+                    hashtag_deadline = time.monotonic() + 4.0
+                    while time.monotonic() < hashtag_deadline:
+                        visible_caption = " ".join(
+                            (node.attrib.get("text") or "").strip()
+                            for node in nodes(caption_chips_xml)
+                        )
+                        if test_caption + " #" in visible_caption:
+                            break
+                        time.sleep(0.3)
+                        caption_chips_xml = dump_ui(f"{prefix}-camera-post-hashtag-settled.xml") or caption_chips_xml
                     visible_caption = " ".join(
                         (node.attrib.get("text") or "").strip()
                         for node in nodes(caption_chips_xml)
@@ -1806,6 +1838,14 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             ["New post", test_caption, "Post"]
                         )
                         if opened_xml:
+                            # Allow the restored Compose state and local draft media to settle
+                            # before the hierarchy/scroll assertions begin.
+                            restore_deadline = time.monotonic() + 4.0
+                            while time.monotonic() < restore_deadline:
+                                if test_caption in opened_xml:
+                                    break
+                                time.sleep(0.35)
+                                opened_xml = dump_ui(f"{prefix}-camera-post-draft-restore-settled.xml") or opened_xml
                             # Draft reopens in the composer, whose scroll state may still be
                             # below the caption/media controls from the previous visit. Return
                             # to the top before checking caption, URL, and media editor actions.
@@ -2026,7 +2066,31 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         if Path(path).name.startswith("fynx_video_")
         and not Path(path).name.startswith("fynx_video_edit_")
     ]
-    source_cache_path = sorted(new_source_candidates)[-1] if new_source_candidates else ""
+    # CameraX publishes the editor only after Finalize, but allow filesystem writes to settle
+    # before pulling the source. A transient/partial MP4 must not be mistaken for a bad recording.
+    stable_candidates: list[str] = []
+    stable_deadline = time.monotonic() + 15.0
+    previous_sizes: dict[str, int] = {}
+    stable_counts: dict[str, int] = {}
+    while time.monotonic() < stable_deadline:
+        current_candidates = [
+            path for path in list_app_cache_videos() - video_files_before
+            if Path(path).name.startswith("fynx_video_")
+            and not Path(path).name.startswith("fynx_video_edit_")
+        ]
+        for candidate in current_candidates:
+            size_result = run("adb", "shell", "run-as", PACKAGE, "stat", "-c", "%s", candidate, timeout=8)
+            try:
+                size = int((size_result.stdout or "").strip())
+            except ValueError:
+                continue
+            stable_counts[candidate] = stable_counts.get(candidate, 0) + 1 if previous_sizes.get(candidate) == size and size > 1024 else 0
+            previous_sizes[candidate] = size
+        stable_candidates = [candidate for candidate, count in stable_counts.items() if count >= 2]
+        if stable_candidates:
+            break
+        time.sleep(0.5)
+    source_cache_path = sorted(stable_candidates)[-1] if stable_candidates else ""
     source_local = ROOT / f"{prefix}-recorded-source.mp4"
     source_streams: set[str] | None = None
     if not source_cache_path:
@@ -2176,10 +2240,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         caption_xml = ""
         caption_deadline = time.monotonic() + 5.0
         while time.monotonic() < caption_deadline:
+            # KEYCODE_BACK can dismiss a transient editor overlay before Gboard finishes
+            # hiding. Wait for the app hierarchy to return and read the persisted field value.
+            run("adb", "get-state", timeout=8)
             caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml") or caption_xml
             if "FYNXcap" in caption_xml:
                 break
-            time.sleep(0.4)
+            time.sleep(0.5)
         if "FYNXcap" in caption_xml:
             report.append("- PASS manually entered video caption survives keyboard dismissal")
         else:
