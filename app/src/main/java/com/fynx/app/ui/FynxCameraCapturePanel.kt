@@ -1334,15 +1334,9 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    // Give the text/timing tools enough room on compact phones. The old
-                    // 44% panel (and zero-height text-edit branch) clipped Timing and captions.
-                    .fillMaxHeight(
-                        when {
-                            editingTextOverlayId != null && selectedCameraTool == "Text" -> 0.58f
-                            previewType != "image" -> 0.54f
-                            else -> 0.44f
-                        }
-                    )
+                    // When the keyboard is open, keep the large sheet collapsed so the
+                    // compact text/timing toolbar remains visible above the IME.
+                    .fillMaxHeight(if (editingTextOverlayId != null && selectedCameraTool == "Text") 0f else 0.44f)
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
