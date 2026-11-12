@@ -15,8 +15,9 @@ PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
 MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
+CHAT_GROUPS_VISUALS_ONLY=os.environ.get("FYNX_CHAT_GROUPS_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -37,6 +38,7 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
         latest=dump_ui(name)
         if latest and (
             "Message..." in latest
+            or "Message…" in latest
             or "Messaging is restricted" in latest
             or "No messages here yet" in latest
             or "Group unavailable" in latest
@@ -383,8 +385,8 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             FAILURES.append(name+" did not enter ConversationPanel; destination UI markers were absent")
             return ""
     if name == "group-chat-entry":
-        if not (find_control(after, ["Message composer", "Chat message composer area"])
-                or find_control(after, ["Messaging is restricted", "No messages here yet"])):
+        if not (find_control(after, ["Message composer", "Chat message composer area", "Message…"])
+                or find_control(after, ["Messaging is restricted", "No messages here yet", "Group unavailable"])):
             FAILURES.append(name+" did not enter FynxGroupConversationPanel; destination UI markers were absent")
             return ""
     return after
@@ -3210,6 +3212,81 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if CHAT_GROUPS_VISUALS_ONLY:
+    report.append("- Focused Chat/Groups runtime: read-only navigation through the installed APK; no messages are sent, no groups are created, and no membership/settings are changed.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Home entry failed: " + error]
+        (ROOT / "FYNX-chat-groups-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("chat-groups-home.xml") or xml
+    if not (find_control(home_xml, ["Open FYNX camera"]) and find_control(home_xml, ["Chat"]) and find_control(home_xml, ["Friends"])):
+        FAILURES.append("Home header did not expose the real Chat destination")
+    chat_hub = tap_control(home_xml, ["Chat"], "chat-hub", ["Chats", "Messages and groups in one place", "Search names, usernames or latest message"])
+    if not chat_hub:
+        FAILURES.append("Home -> Chat did not open the Chats hub")
+    else:
+        screenshot("authenticated-chat-hub.png")
+        (ROOT / "authenticated-chat-hub.xml").write_text(chat_hub + "\n", encoding="utf-8")
+        report.append("- PASS: Home -> Chat opened the real Chats hub")
+        before_private_failures = len(FAILURES)
+        private_xml = tap_first_real_chat_or_group_if_present(chat_hub, "private-chat-entry")
+        if private_xml:
+            private_xml = wait_for_conversation_ui("authenticated-private-chat-settled.xml", timeout=18.0) or private_xml
+            screenshot("authenticated-private-chat-conversation.png")
+            (ROOT / "authenticated-private-chat-conversation.xml").write_text(private_xml + "\n", encoding="utf-8")
+            report.append("- PASS: opened an existing private conversation and captured its composer/empty state")
+        elif len(FAILURES) == before_private_failures:
+            screenshot("authenticated-private-chat-list-empty.png")
+            report.append("- NOT AVAILABLE: no existing private conversation row was present; no test conversation was fabricated")
+        # Return to the Chat hub without mutating the account or conversation.
+        current = dump_ui("chat-groups-after-private-return.xml")
+        if not (find_control(current, ["Search names, usernames or latest message"]) or find_control(current, ["Messages and groups in one place"])):
+            run("adb", "shell", "input", "keyevent", "4"); time.sleep(0.8)
+            current = dump_ui("chat-groups-home-after-private-return.xml")
+            if find_control(current, ["Chat"]):
+                current = tap_control(current, ["Chat"], "chat-hub-restored", ["Chats", "Messages and groups in one place", "Search names, usernames or latest message"])
+        if current and (find_control(current, ["Search names, usernames or latest message"]) or find_control(current, ["Messages and groups in one place"])):
+            chat_hub = current
+        else:
+            FAILURES.append("Could not restore the Chats hub before opening Groups")
+    if chat_hub:
+        groups_tab = tap_control(chat_hub, ["Groups"], "chat-groups-tab", ["No groups yet", "＋ New group", "Create group"])
+        if groups_tab:
+            screenshot("authenticated-chat-groups-list.png")
+            (ROOT / "authenticated-chat-groups-list.xml").write_text(groups_tab + "\n", encoding="utf-8")
+            report.append("- PASS: opened and captured the Groups list from the Chats hub")
+            before_group_failures = len(FAILURES)
+            group_xml = tap_first_real_chat_or_group_if_present(groups_tab, "group-chat-entry")
+            if group_xml:
+                group_xml = wait_for_group_conversation_ui("authenticated-group-chat-settled.xml", timeout=20.0) or group_xml
+                screenshot("authenticated-group-chat-conversation.png")
+                (ROOT / "authenticated-group-chat-conversation.xml").write_text(group_xml + "\n", encoding="utf-8")
+                if find_control(group_xml, ["Group unavailable"]):
+                    report.append("- BLOCKED: a real group row opened, but the group is unavailable in this runtime session")
+                    FAILURES.append("existing group conversation opened an unavailable state")
+                else:
+                    report.append("- PASS: opened an existing group conversation and captured its message/composer state")
+            elif len(FAILURES) == before_group_failures:
+                screenshot("authenticated-chat-groups-list-empty.png")
+                report.append("- NOT AVAILABLE: no existing group row was present; no group was created for the test")
+        else:
+            FAILURES.append("Chats hub did not expose its Groups tab")
+    report += ["", "## Captured evidence",
+               "- authenticated-chat-hub.png / authenticated-chat-hub.xml",
+               "- authenticated-chat-groups-list.png / authenticated-chat-groups-list.xml",
+               "- authenticated-private-chat-conversation.png and authenticated-group-chat-conversation.png are included only when existing rows are available",
+               "", "## Evidence boundary",
+               "- Screenshots and hierarchies are captured from the installed APK on the disposable Android emulator.",
+               "- Login mode: " + LOGIN_MODE + ". A debug-only saved-device entry is UI navigation evidence, not server authentication.",
+               "- This read-only journey does not prove message delivery, two-account behavior, backend authorization, history privacy, or live notifications.",
+               "- No messages, groups, members, permissions or settings were created or changed.",
+               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-chat-groups-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 if MUSIC_VISUALS_ONLY:
     report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
     if error:
