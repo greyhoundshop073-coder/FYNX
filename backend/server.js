@@ -608,6 +608,18 @@ app.get("/api/media/:id", auth, async (req, res) => {
             AND sp.ends_at > NOW()
         )`
       : "";
+    const announcementMediaTable = await pool.query(
+      "SELECT to_regclass('public.fynx_announcements') AS relation, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='scheduled_at') AS has_schedule"
+    );
+    const announcementMediaAuthorization = announcementMediaTable.rows[0]?.relation && announcementMediaTable.rows[0]?.has_schedule
+      ? `OR EXISTS (
+          SELECT 1
+          FROM fynx_announcements a
+          WHERE a.media_id = mm.id
+            AND a.published = TRUE
+            AND (a.scheduled_at IS NULL OR a.scheduled_at <= NOW())
+        )`
+      : "";
     let result = await pool.query(`
       SELECT mm.mime_type, mm.storage_provider, mm.object_key
       FROM message_media mm
@@ -643,6 +655,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
               )
           )
           ${seasonalMediaAuthorization}
+          ${announcementMediaAuthorization}
           OR EXISTS (
             SELECT 1
             FROM users u
