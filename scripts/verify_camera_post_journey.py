@@ -249,7 +249,7 @@ checks = [
      and "camera-after-retake.png" in runtime
      and "camera-create-post-caption.png" in runtime
      and "camera-post-details-options.png" in runtime
-     and "camera-status-composer.png" in runtime
+     and "camera-video-destination-options.png" in runtime
      and all(label in runtime for label in ["New post", "Add description...", "Post"])
      and "# Hashtags" in home and "@ Mention" in home
      and "gallery_recovered = False" in runtime
@@ -389,7 +389,7 @@ checks.extend([
     ("Unified camera routing preserves the supported rear lens and returns Status camera requests to Home",
      "-camera-front none" in workflow
      and 'onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 }' in app_source
-     and "camera destination options" in runtime
+     and "camera-video-destination-options.png" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
     ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
      "fun openCameraTextEditor()" in camera
@@ -482,7 +482,7 @@ checks.extend([
      and "video text timing dialog did not expose Show from and Show until" in runtime),
     ("Reopened draft media is edited from disposable copies, never directly from the saved source",
      'mutableStateOf<Uri?>(null)' in camera
-     and "copyCameraGalleryMediaToCache(context, source)" in camera
+     and "copyCameraGalleryMediaToCache(context, source, initialMediaType)" in camera
      and "releaseUnneededInitialMediaCopies" in camera
      and "if (!initialMediaHandedOff)" in camera),
     ("Selected content media waits for its working copy before live CameraX can bind",
