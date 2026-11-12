@@ -1287,6 +1287,30 @@ fun FynxCameraCapturePanel(
                 )
             }
             if (editingTextOverlayId == null && previewType == "image") {
+                // Keep Rotate in the fixed top action row. The right-hand tool rail scrolls
+                // inside a short viewport, while the lower editor dock overlays the preview;
+                // leaving Rotate in that rail made it unreachable on normal phone screens.
+                Surface(
+                    onClick = { if (!enhancing && !applyingFilter) rotatePhoto() },
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 10.dp, end = 8.dp)
+                        .semantics { contentDescription = "Rotate photo" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFF25364A).copy(alpha = 0.72f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(Icons.Default.RotateRight, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                        Text("Rotate", color = Color.White, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            if (editingTextOverlayId == null && previewType == "image") {
                 Column(
                     modifier = Modifier.align(Alignment.TopEnd)
                         .statusBarsPadding()
@@ -1315,7 +1339,6 @@ fun FynxCameraCapturePanel(
                         else { selectedCameraTool = "AI Studio"; showEditorToolOptions = true }
                     }
                     CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }
-                    CameraEditorRailAction("Rotate", Icons.Default.RotateRight, selected = false, enabled = !enhancing && !applyingFilter) { rotatePhoto() }
                 }
             } else if (editingTextOverlayId == null) {
                 Column(
