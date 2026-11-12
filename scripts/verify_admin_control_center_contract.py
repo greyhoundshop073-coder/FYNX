@@ -30,6 +30,9 @@ def require(condition: bool, message: str) -> None:
 
 require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")
+require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
+        "safetyActions24h:counts[3]" in backend and "safetyActions24h" in client,
+        "24-hour safety dashboard metric must count real recorded administrative safety decisions")
 require('d.role == "OWNER" || d.role == "ADMIN"' in source, "owner/admin dashboard gate is missing")
 require('if (d.role == "OWNER")' in source, "owner-only admin management gate is missing")
 require("fun requestAdminConfirmation(" in source, "shared confirmation helper is missing")
