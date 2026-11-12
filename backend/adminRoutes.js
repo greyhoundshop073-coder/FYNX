@@ -13,7 +13,11 @@ export function registerAdminRoutes({ app }) {
     if (!schemaPromise) schemaPromise = pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE TABLE IF NOT EXISTS fynx_announcements (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL' CHECK(priority IN ('NORMAL','IMPORTANT','URGENT')), published BOOLEAN NOT NULL DEFAULT TRUE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-      CREATE INDEX IF NOT EXISTS fynx_announcements_feed_idx ON fynx_announcements(published,created_at DESC);
+      ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
+      ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS link_url TEXT NOT NULL DEFAULT '';
+      ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
+      ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS fynx_announcements_feed_idx ON fynx_announcements(published,scheduled_at,created_at DESC);
       CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE, login_alerts BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED')), status_note TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS safety_settings (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE, login_alerts BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE', status_note TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE TABLE IF NOT EXISTS safety_reports (id BIGSERIAL PRIMARY KEY, reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL, target_username TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','RESOLVED','DISMISSED')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS safety_reports_admin_idx ON safety_reports(status,created_at ASC); CREATE TABLE IF NOT EXISTS safety_appeals (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, report_id BIGINT, subject TEXT NOT NULL, details TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','ACCEPTED','REJECTED')), decision_note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS safety_appeals_admin_idx ON safety_appeals(status,created_at DESC);
       CREATE TABLE IF NOT EXISTS fynx_revenue_transactions (
         id UUID PRIMARY KEY,
@@ -79,7 +83,12 @@ export function registerAdminRoutes({ app }) {
     return Number(result.rows[0]?.count || 0);
   };
 
-  app.get('/api/announcements',auth,async(req,res)=>{try{await ensureSchema();const result=await pool.query(`SELECT id,title,body,priority,created_at,updated_at FROM fynx_announcements WHERE published=TRUE ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,created_at DESC LIMIT 50`);res.set('Cache-Control','no-store');return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,createdAt:a.created_at,updatedAt:a.updated_at}))});}catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
+  app.get('/api/announcements',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,scheduled_at,published,published_at,created_at,updated_at FROM fynx_announcements WHERE published=TRUE AND (scheduled_at IS NULL OR scheduled_at<=NOW()) ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,COALESCE(published_at,scheduled_at,created_at) DESC LIMIT 50`);
+    res.set('Cache-Control','no-store');
+    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at||a.created_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+  }catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
 
   app.get('/api/admin/dashboard',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const counts=await Promise.all([countRows('users'),countRows('safety_reports',"status IN ('OPEN','UNDER_REVIEW')"),countRows('safety_appeals',"status IN ('OPEN','UNDER_REVIEW')"),countRows('fynx_safety_events',"created_at >= NOW()-INTERVAL '24 hours'")]);return res.json({role:req.fynxAdminRole,counts:{users:counts[0],openReports:counts[1],openAppeals:counts[2],safetyEvents24h:counts[3]}});}catch(error){console.error('admin dashboard',error);return res.status(500).json({error:'admin dashboard unavailable'});}});
 
@@ -91,7 +100,72 @@ export function registerAdminRoutes({ app }) {
 
   app.get('/api/admin/admins',auth,async(req,res)=>{try{await ensureSchema();if((await requireAdmin(req,res))===null)return;const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});}catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
-  app.post('/api/admin/announcements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const title=typeof req.body?.title==='string'?req.body.title.trim().slice(0,120):'';const body=typeof req.body?.body==='string'?req.body.body.trim().slice(0,4000):'';const priority=typeof req.body?.priority==='string'?req.body.priority.trim().toUpperCase():'NORMAL';const published=req.body?.published===undefined?true:Boolean(req.body.published);if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});const result=await pool.query(`INSERT INTO fynx_announcements(title,body,priority,published,author_id) VALUES($1,$2,$3,$4,$5) RETURNING id,title,body,priority,published,created_at,updated_at`,[title,body,priority,published,req.user.sub]);await recordAdminActivity(req,'ANNOUNCEMENT_PUBLISHED','announcement',result.rows[0].id,title,{priority,published});return res.status(201).json({announcement:{...result.rows[0],id:String(result.rows[0].id)}});}catch(error){console.error('announcement create',error);return res.status(500).json({error:'announcement creation failed'});}});
+  app.get('/api/admin/announcements',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,scheduled_at,published,published_at,created_at,updated_at FROM fynx_announcements ORDER BY COALESCE(scheduled_at,published_at,created_at) DESC LIMIT 100`);
+    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+  }catch(error){console.error('admin announcements list',error);return res.status(500).json({error:'admin announcements unavailable'});}});
+
+  app.post('/api/admin/announcements',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const title=typeof req.body?.title==='string'?req.body.title.trim().slice(0,120):'';
+    const body=typeof req.body?.body==='string'?req.body.body.trim().slice(0,4000):'';
+    const priority=typeof req.body?.priority==='string'?req.body.priority.trim().toUpperCase():'NORMAL';
+    const mediaIdRaw=req.body?.mediaId==null?'':String(req.body.mediaId).trim();
+    const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):'';
+    const scheduledRaw=typeof req.body?.scheduledAt==='string'?req.body.scheduledAt.trim():'';
+    const scheduledAt=scheduledRaw?new Date(scheduledRaw):null;
+    const published=req.body?.published===undefined?true:req.body.published===true;
+    if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
+    if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
+    if(scheduledRaw&&(!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a valid future ISO date/time'});
+    if(mediaIdRaw&&!/^[1-9]\\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
+    if(mediaIdRaw){
+      const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
+      if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/'))return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});
+    }
+    if(linkUrl){try{const parsed=new URL(linkUrl);if(!['http:','https:'].includes(parsed.protocol)||!parsed.hostname)return res.status(400).json({error:'announcement link must use HTTPS or HTTP'});}catch{return res.status(400).json({error:'announcement link is invalid'});}}
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      const result=await client.query(`INSERT INTO fynx_announcements(title,body,priority,published,author_id,media_id,link_url,scheduled_at,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,title,body,priority,media_id,link_url,scheduled_at,published,published_at,created_at,updated_at`,[title,body,priority,published,req.user.sub,mediaIdRaw||null,linkUrl,scheduledAt,published&&!scheduledAt?new Date():null]);
+      const row=result.rows[0];
+      await recordAdminActivity(req,scheduledAt?'ANNOUNCEMENT_SCHEDULED':'ANNOUNCEMENT_PUBLISHED','announcement',row.id,title,{priority,published,scheduledAt:scheduledAt?.toISOString()||null,hasImage:Boolean(mediaIdRaw),hasLink:Boolean(linkUrl)},client);
+      await client.query('COMMIT');
+      return res.status(201).json({announcement:{id:String(row.id),title:row.title,body:row.body,priority:row.priority,mediaId:row.media_id==null?null:String(row.media_id),linkUrl:row.link_url||'',scheduledAt:row.scheduled_at,published:Boolean(row.published),publishedAt:row.published_at,createdAt:row.created_at,updatedAt:row.updated_at}});
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }catch(error){console.error('announcement create',error);return res.status(500).json({error:'announcement creation failed'});}});
+
+  app.patch('/api/admin/announcements/:announcementId',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const announcementId=String(req.params.announcementId||'');
+    const published=req.body?.published;
+    if(!/^[1-9]\\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
+    let scheduledAt;
+    if(hasSchedule){
+      const raw=typeof req.body.scheduledAt==='string'?req.body.scheduledAt.trim():'';
+      scheduledAt=raw?new Date(raw):null;
+      if(raw&&(!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a valid future ISO date/time'});
+    }
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      const existing=(await client.query('SELECT id,title,scheduled_at,published FROM fynx_announcements WHERE id=$1 FOR UPDATE',[announcementId])).rows[0];
+      if(!existing){await client.query('ROLLBACK');return res.status(404).json({error:'announcement not found'});}
+      const nextSchedule=hasSchedule?scheduledAt:existing.scheduled_at;
+      const publishedAt=published&&!nextSchedule?new Date():null;
+      const result=await client.query(`UPDATE fynx_announcements SET published=$1,scheduled_at=$2,published_at=$3,updated_at=NOW() WHERE id=$4 RETURNING id,title,scheduled_at,published,published_at,updated_at`,[published,nextSchedule,publishedAt,announcementId]);
+      const row=result.rows[0];
+      const action=!published?'ANNOUNCEMENT_UNPUBLISHED':nextSchedule?'ANNOUNCEMENT_SCHEDULED':'ANNOUNCEMENT_PUBLISHED';
+      await recordAdminActivity(req,action,'announcement',row.id,row.title,{published,scheduledAt:nextSchedule,previousPublished:existing.published},client);
+      await client.query('COMMIT');
+      return res.json({announcement:{id:String(row.id),title:row.title,scheduledAt:row.scheduled_at,published:Boolean(row.published),publishedAt:row.published_at,updatedAt:row.updated_at}});
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }catch(error){console.error('admin announcement update',error);return res.status(500).json({error:'announcement update failed'});}});
 
   app.patch('/api/admin/accounts/:userId/status',auth,async(req,res)=>{try{
     await ensureSchema();
