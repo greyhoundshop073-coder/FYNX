@@ -840,6 +840,7 @@ fun FynxAdminControlCenterPanel() {
                                 "ANNOUNCEMENT_PUBLISHED" -> "Announcements published"
                                 "ANNOUNCEMENT_SCHEDULED" -> "Announcements scheduled"
                                 "ANNOUNCEMENT_UNPUBLISHED" -> "Announcements unpublished"
+                                "ANNOUNCEMENT_UPDATED" -> "Announcements edited"
                                 "SEASONAL_PROMOTION_CREATED" -> "Campaigns created"
                                 "SEASONAL_PROMOTION_UPDATED" -> "Campaigns updated"
                                 "SEASONAL_PROMOTION_ACTIVATED" -> "Campaigns activated"
@@ -868,6 +869,7 @@ fun FynxAdminControlCenterPanel() {
                             "ANNOUNCEMENT_PUBLISHED" to "Announcements published",
                             "ANNOUNCEMENT_SCHEDULED" to "Announcements scheduled",
                             "ANNOUNCEMENT_UNPUBLISHED" to "Announcements unpublished",
+                            "ANNOUNCEMENT_UPDATED" to "Announcements edited",
                             "SEASONAL_PROMOTION_CREATED" to "Campaigns created",
                             "SEASONAL_PROMOTION_UPDATED" to "Campaigns updated",
                             "SEASONAL_PROMOTION_ACTIVATED" to "Campaigns activated",
