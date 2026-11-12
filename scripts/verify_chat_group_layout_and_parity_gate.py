@@ -110,6 +110,7 @@ require("active Group search uses server-returned matches, not only cached messa
 require("group pin controls respect manager roles before calling the server", "if (canManageGroup) {" in ACTIVE_GROUP and "FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)" in ACTIVE_GROUP)
 require("group delete controls respect sender or manager permissions", "if (message.fromMe || canManageGroup) {" in ACTIVE_GROUP and "FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)" in ACTIVE_GROUP)
 
+require("private Chat delete action is hidden for messages the current user does not own", "if (message.fromMe) {" in PRIVATE and "FynxProductionMessaging.deleteMessage(context, message.id)" in PRIVATE)
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
