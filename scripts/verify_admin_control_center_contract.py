@@ -136,6 +136,9 @@ require("String(safety.account_status)==='LIMITED'" in groups and
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
 require("pg_advisory_xact_lock(hashtext('fynx_safety_appeals_report_fk'))" in backend and "pg_advisory_xact_lock(hashtext('fynx_safety_appeals_report_fk'))" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
+        "DO $fynx$ BEGIN" in backend and "END $fynx$;" in backend and
+        "DO $fynx$ BEGIN" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
+        "END $fynx$;" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
         "to_regclass('safety_appeals')" in backend and "to_regclass('safety_appeals')" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
         "safety_appeals_report_id_fkey" in backend and "safety_appeals_report_id_fkey" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
         "FOREIGN KEY(report_id) REFERENCES safety_reports(id) ON DELETE SET NULL" in backend and
