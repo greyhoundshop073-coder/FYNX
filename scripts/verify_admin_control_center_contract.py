@@ -152,6 +152,8 @@ require("target_user_id=$2" in (ROOT / "backend/trustSafety.js").read_text(encod
         "appeal.report_id!=null" in backend and "String(linkedReport.target_user_id)===String(appeal.user_id)" in backend and
         "restored=false" in backend,
         "appeals must belong to the restricted target account and may only restore that account for its linked report")
+require("SELECT id FROM users WHERE id=$1 FOR UPDATE" in backend and "Serialize appeal restoration with manual account-status changes" in backend,
+        "approved appeal restoration must serialize on the user row with manual account-status changes")
 
 # Announcement publishing reuses authenticated FYNX media, validates links and persists schedules.
 for column in (
