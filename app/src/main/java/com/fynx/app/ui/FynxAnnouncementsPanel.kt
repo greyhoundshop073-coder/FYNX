@@ -193,6 +193,9 @@ fun FynxAdminControlCenterPanel() {
     var announcementMediaId by remember { mutableStateOf<String?>(null) }
     var announcementLinkUrl by remember { mutableStateOf("") }
     var announcementScheduleAt by remember { mutableStateOf("") }
+    var editingAnnouncementId by remember { mutableStateOf<String?>(null) }
+    var editingAnnouncementPublished by remember { mutableStateOf(true) }
+    var announcementPriority by remember { mutableStateOf("NORMAL") }
     var announcementUploading by remember { mutableStateOf(false) }
     var adminAnnouncementItems by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
     var adminAnnouncementsLoading by remember { mutableStateOf(false) }
@@ -998,24 +1001,31 @@ fun FynxAdminControlCenterPanel() {
                             enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 4000 && !announcementUploading,
                             onClick = {
                                 requestAdminConfirmation(
-                                    if (isScheduled) "Schedule this official announcement?" else "Publish this official announcement?",
-                                    "This will " + (if (isScheduled) "schedule" else "publish") + " " + title.trim() + " in the FYNX official feed. The server validates its time, image ownership and link before saving.",
-                                    if (isScheduled) "Schedule announcement" else "Publish announcement"
+                                    if (editingAnnouncementId != null) "Save announcement changes?" else if (isScheduled) "Schedule this official announcement?" else "Publish this official announcement?",
+                                    (if (editingAnnouncementId != null) "This updates " else "This will " + (if (isScheduled) "schedule" else "publish") + " ") + title.trim() + " in the FYNX official feed. The server validates its time, image ownership and link before saving.",
+                                    if (editingAnnouncementId != null) "Save changes" else if (isScheduled) "Schedule announcement" else "Publish announcement"
                                 ) {
-                                    statusMessage = if (isScheduled) "Scheduling..." else "Publishing..."
+                                    statusMessage = if (editingAnnouncementId != null) "Saving announcement..." else if (isScheduled) "Scheduling..." else "Publishing..."
                                     scope.launch {
-                                        FynxAdminClient.publishAnnouncement(
-                                            context, title.trim(), body.trim(), "NORMAL",
-                                            announcementMediaId, announcementLinkUrl.trim(),
-                                            announcementScheduleAt.trim().takeIf { it.isNotBlank() }
+                                        val schedule = announcementScheduleAt.trim().takeIf { it.isNotBlank() }
+                                        val saveResult = editingAnnouncementId?.let { id ->
+                                            FynxAdminClient.updateAnnouncement(context, id, title.trim(), body.trim(), announcementPriority,
+                                                announcementMediaId, announcementLinkUrl.trim(), schedule, editingAnnouncementPublished)
+                                        } ?: FynxAdminClient.publishAnnouncement(
+                                            context, title.trim(), body.trim(), announcementPriority,
+                                            announcementMediaId, announcementLinkUrl.trim(), schedule
                                         )
+                                        saveResult
                                             .onSuccess {
                                                 title = ""
                                                 body = ""
                                                 announcementMediaId = null
                                                 announcementLinkUrl = ""
                                                 announcementScheduleAt = ""
-                                                statusMessage = if (isScheduled) "Announcement scheduled." else "Announcement published."
+                                                announcementPriority = "NORMAL"
+                                                editingAnnouncementId = null
+                                                editingAnnouncementPublished = true
+                                                statusMessage = if (editingAnnouncementId != null) "Announcement updated." else if (isScheduled) "Announcement scheduled." else "Announcement published."
                                                 refreshAdminAnnouncements++
                                             }
                                             .onFailure { statusMessage = it.message ?: "Announcement could not be saved." }
@@ -1025,7 +1035,7 @@ fun FynxAdminControlCenterPanel() {
                         ) {
                             Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(if (isScheduled) "Schedule announcement" else "Publish announcement")
+                            Text(if (editingAnnouncementId != null) "Save announcement changes" else if (isScheduled) "Schedule announcement" else "Publish announcement")
                         }
                     }
                 }
@@ -1055,6 +1065,17 @@ fun FynxAdminControlCenterPanel() {
                                     style = MaterialTheme.typography.labelSmall
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = {
+                                        editingAnnouncementId = item.id
+                                        editingAnnouncementPublished = item.published
+                                        announcementPriority = item.priority
+                                        title = item.title
+                                        body = item.body
+                                        announcementMediaId = item.mediaId
+                                        announcementLinkUrl = item.linkUrl
+                                        announcementScheduleAt = item.scheduledAt?.toString().orEmpty()
+                                        statusMessage = "Editing announcement: " + item.title
+                                    }) { Text("Edit") }
                                     if (item.published) {
                                         OutlinedButton(onClick = {
                                             requestAdminConfirmation(
