@@ -30,6 +30,7 @@ checks = [
     ("server recent conversation index", "server.js", 'app.get("/api/messages/recent", auth'),
     ("Chats list hydrates from server", "ChatsPanel.kt", "FynxProductionMessaging.recentConversations(context)"),
     ("Groups list hydrates from server", "ChatsPanel.kt", "FynxGroupRemoteClient.loadMyGroups(context)"),
+    ("Groups list client calls authenticated endpoint", "FynxGroupRemoteClient.kt", 'FynxBackendClient.get(context, "/api/groups")'),
     # The production panel uses the title-cased UI label "Chat Settings".
     ("chat settings", "FynxChatSettingsPanel.kt", "Chat Settings"),
     ("wallpaper", "FynxChatWallpaper.kt", "FynxChatWallpaperBackground"),
@@ -40,6 +41,19 @@ checks = [
 for label, filename, needle in checks:
     text = (APP / filename).read_text(encoding="utf-8")
     if needle not in text:
+        raise SystemExit(f"CHAT CLOSURE RED: {label} missing expected implementation marker: {needle}")
+
+# Backend routes are checked from the backend root, not the Android source tree.
+backend_checks = [
+    ("authenticated group-list endpoint", ROOT / "backend/groupRoutes.js", "app.get('/api/groups', auth"),
+    ("group-list membership scoping", ROOT / "backend/groupRoutes.js", "WHERE mine.user_id = $1"),
+    ("production group route registration", ROOT / "backend/server.js", "registerGroupRoutes({ app });"),
+    ("production group membership route registration", ROOT / "backend/server.js", "registerGroupMembershipRoutes({ app });"),
+    ("production group invite route registration", ROOT / "backend/server.js", "registerGroupInviteRoutes({ app });"),
+    ("production group content route registration", ROOT / "backend/server.js", "registerGroupContentRoutes({ app });"),
+]
+for label, path, needle in backend_checks:
+    if needle not in path.read_text(encoding="utf-8"):
         raise SystemExit(f"CHAT CLOSURE RED: {label} missing expected implementation marker: {needle}")
 
 # User-facing recovery surfaces must not leak raw backend/exception messages.
