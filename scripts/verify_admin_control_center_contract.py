@@ -4,14 +4,15 @@ from pathlib import Path
 import re
 import sys
 
-SOURCE = Path("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")
-CLIENT = Path("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")
-BACKEND = Path("backend/adminRoutes.js")
-MEDIA_SERVER = Path("backend/server.js")
-ADVERTISING = Path("backend/marketplaceAdvertising.js")
-SOCIAL = Path("backend/socialRoutes.js")
-GROUPS = Path("backend/groupRoutes.js")
-MARKETPLACE_CHECKOUT = Path("backend/marketplaceCheckout.js")
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt"
+CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"
+BACKEND = ROOT / "backend/adminRoutes.js"
+MEDIA_SERVER = ROOT / "backend/server.js"
+ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
+SOCIAL = ROOT / "backend/socialRoutes.js"
+GROUPS = ROOT / "backend/groupRoutes.js"
+MARKETPLACE_CHECKOUT = ROOT / "backend/marketplaceCheckout.js"
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
@@ -122,7 +123,7 @@ require("String(safety.account_status)==='LIMITED'" in groups and
         "LIMITED must enforce restrictions in group messaging and Marketplace checkout")
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
-require("target_user_id=$2" in Path("backend/trustSafety.js").read_text(encoding="utf-8") and
+require("target_user_id=$2" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
         "appeal.report_id!=null" in backend and "String(linkedReport.target_user_id)===String(appeal.user_id)" in backend and
         "restored=false" in backend,
         "appeals must belong to the restricted target account and may only restore that account for its linked report")
