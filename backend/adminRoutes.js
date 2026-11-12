@@ -6,6 +6,22 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const pool = getFynxDatabasePool();
 
+// Validate calendar fields before Date.parse, which normalizes impossible dates.
+function parseFutureAnnouncementSchedule(value) {
+  if (!value) return { valid: true, date: null };
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return { valid: false, date: null };
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const hour = Number(match[4]), minute = Number(match[5]), second = Number(match[6] || 0);
+  const offsetHour = Number(match[10] || 0), offsetMinute = Number(match[11] || 0);
+  const daysInMonth = month >= 1 && month <= 12 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : 0;
+  if (!daysInMonth || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59 ||
+      offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return { valid: false, date: null };
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.getTime() <= Date.now()) return { valid: false, date: null };
+  return { valid: true, date };
+}
+
 export function registerAdminRoutes({ app }) {
   if (!pool) return;
   let schemaPromise;
@@ -136,11 +152,12 @@ export function registerAdminRoutes({ app }) {
     const mediaIdRaw=req.body?.mediaId==null?'':String(req.body.mediaId).trim();
     const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):'';
     const scheduledRaw=typeof req.body?.scheduledAt==='string'?req.body.scheduledAt.trim():'';
-    const scheduledAt=scheduledRaw?new Date(scheduledRaw):null;
+    const parsedSchedule=parseFutureAnnouncementSchedule(scheduledRaw);
+    const scheduledAt=parsedSchedule.date;
     const published=req.body?.published===undefined?true:req.body.published===true;
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
-    if(scheduledRaw&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledRaw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
+    if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
     if(mediaIdRaw&&!/^[1-9]\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
     if(mediaIdRaw){
       const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
@@ -169,8 +186,9 @@ export function registerAdminRoutes({ app }) {
     let scheduledAt;
     if(hasSchedule){
       const raw=typeof req.body.scheduledAt==='string'?req.body.scheduledAt.trim():'';
-      scheduledAt=raw?new Date(raw):null;
-      if(raw&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
+      const parsedSchedule=parseFutureAnnouncementSchedule(raw);
+      scheduledAt=parsedSchedule.date;
+      if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
     }
     const client=await pool.connect();
     try{
