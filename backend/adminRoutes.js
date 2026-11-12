@@ -120,7 +120,7 @@ export function registerAdminRoutes({ app }) {
     const published=req.body?.published===undefined?true:req.body.published===true;
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
-    if(scheduledRaw&&(!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a valid future ISO date/time'});
+    if(scheduledRaw&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(scheduledRaw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
     if(mediaIdRaw&&!/^[1-9]\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
     if(mediaIdRaw){
       const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
@@ -149,7 +149,7 @@ export function registerAdminRoutes({ app }) {
     if(hasSchedule){
       const raw=typeof req.body.scheduledAt==='string'?req.body.scheduledAt.trim():'';
       scheduledAt=raw?new Date(raw):null;
-      if(raw&&(!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a valid future ISO date/time'});
+      if(raw&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
     }
     const client=await pool.connect();
     try{
