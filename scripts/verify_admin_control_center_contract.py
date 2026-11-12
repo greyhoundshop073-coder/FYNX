@@ -250,6 +250,8 @@ require("ensureFynxMusicAdminSchema" in social and "fynxMusicAdminSchemaPromise"
         "Music Library role checks must initialize admin schema once per process and retry after initialization failure")
 require("!Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > 86400000" in social,
         "Music Library must reject missing, fractional, zero, negative and excessive track durations")
+require(r"(?:\.(\d{1,3}))?" in advertising,
+        "campaign timestamp parser must accept ISO-8601 fractional seconds using a literal decimal point")
 require("function parseCampaignTimestamp(value)" in advertising and
         "parseCampaignTimestamp(req.body?.startsAt)" in advertising and
         "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
