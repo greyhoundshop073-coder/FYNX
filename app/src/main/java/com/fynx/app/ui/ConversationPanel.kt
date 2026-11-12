@@ -886,7 +886,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
 
         if (searchOpen) {
-            OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all messages…") })
+            OutlinedTextField(searchQuery, { searchQuery = it.take(100) }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all messages…") })
             when {
                 searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full conversation.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteSearchLoading -> Text("Searching message history…", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
