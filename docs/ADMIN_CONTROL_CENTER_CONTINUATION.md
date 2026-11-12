@@ -163,3 +163,12 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Replaced wildcard matching with case-insensitive literal substring matching via PostgreSQL `POSITION(LOWER($1) IN LOWER(...))` across action, summary, target ID and actor username. The query remains parameterized and bounded.
 - Added a contract assertion requiring the literal-search expression and rejecting the old wildcard expression.
 - This is backend/search correctness hardening; live OWNER/ADMIN database behavior and UI runtime remain subject to the existing environment-dependent verification gates.
+
+
+## Atomic account-report submission — 12 November 2026
+
+- Commit `54d5635b217ee9543b30ce18969c4d012066913b`: account-report creation now uses one database transaction and a transaction-scoped advisory lock keyed by reporter/account before checking for an existing OPEN or UNDER_REVIEW report and inserting the new case.
+- Root cause addressed: the previous duplicate check and INSERT were separate pool queries. Two concurrent submissions could both pass the check and create duplicate open cases. The lock serializes only submissions for the same reporter/account; unrelated reports remain independent.
+- Commit `b2f5277dd4abd4027b04c8bbe8bc39e9b185abe6`: Large Badge #9 Trust & Safety verifier now requires the transaction, scoped advisory lock, commit and connection release.
+- This is source-level concurrency hardening. The CI verifier is not a live concurrent database test; credential-backed database concurrency and OWNER/ADMIN runtime verification remain outstanding.
+- Re-run all three PR workflows on the latest head before taking this grouped correction as accepted. Keep PR #527 open and do not merge without approval.
