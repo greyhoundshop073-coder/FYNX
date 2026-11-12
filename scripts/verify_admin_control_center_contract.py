@@ -214,6 +214,9 @@ require('app.patch("/api/admin/marketplace/seasonal-promotions/:id/edit"' in adv
 require('"SEASONAL_PROMOTION_UPDATED" -> "Campaigns updated"' in source and
         '"SEASONAL_PROMOTION_UPDATED" to "Campaigns updated"' in source,
         "admin activity history must provide a filter for edited Marketplace campaigns")
+require('"ANNOUNCEMENT_UPDATED" -> "Announcements edited"' in source and
+        '"ANNOUNCEMENT_UPDATED" to "Announcements edited"' in source,
+        "admin activity history must expose edited announcements as a searchable action type")
 require("fynx-seasonal-promo:" in advertising and "starts_at < $3 AND ends_at > $2" in advertising and
         "active campaign with this key already overlaps" in advertising,
         "active seasonal campaigns with the same key must reject overlapping time windows")
