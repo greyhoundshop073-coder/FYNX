@@ -401,7 +401,7 @@ checks.extend([
      and 'CameraEditorRailAction("Text", Icons.Default.TextFields, selectedCameraTool == "Text") { openCameraTextEditor() }' in camera
      and "editingTextOverlayId == null && previewType == \"image\"" in camera
      and "} else if (editingTextOverlayId == null) {" in camera
-     and 'label for label in ["Looks", "Face FX", "Background", "AI Studio", "Rotate"]' in runtime
+     and 'label for label in ["Looks", "Face FX", "Background", "AI Studio"]' in runtime
      and "text-editing keyboard view hides the right-side effect rail and keeps Done visible" in runtime),
     ("Runtime accessibility helpers detect leaf controls and caption verification handles keyboard-owned hierarchies",
      'return node is not None and node.attrib.get("enabled", "true").lower() != "false"' in runtime
@@ -423,7 +423,7 @@ checks.extend([
      'for field in line.split(",")' in runtime
      and 'if field.strip()' in runtime
      and "return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}" not in runtime),
-    ("Photo editor tools remain above the bottom dock in a bounded scrollable rail",
+    ("Photo editor keeps the five editing actions in a bounded scrollable rail and exposes Rotate in the fixed top row", "Modifier.align(Alignment.TopEnd)" in camera and "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)" in camera and ".verticalScroll(rememberScrollState())" in camera and all(f'CameraEditorRailAction("{label}"' in camera for label in ["Looks", "Face FX", "Background", "AI Studio", "Text"]) and 'Text("Rotate", color = Color.White' in camera and 'contentDescription = "Rotate photo"' in camera and 'CameraEditorRailAction("Rotate"' not in camera),
      "Modifier.align(Alignment.TopEnd)" in camera
      and "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)" in camera
      and ".verticalScroll(rememberScrollState())" in camera
