@@ -253,7 +253,7 @@ object FynxAdminClient {
         FynxBackendClient.postJson(context, "/api/admin/announcements", JSONObject().put("title", title.trim()).put("body", body.trim()).put("priority", priority).toString()).map { Unit }
 
     suspend fun setAccountStatus(context: Context, userId: String, status: String): Result<Unit> =
-        FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}", JSONObject().put("status", status).toString()).map { Unit }
+        FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}/status", JSONObject().put("status", status).toString()).map { Unit }
 
     suspend fun grantAdmin(context: Context, userId: String): Result<Unit> =
         FynxBackendClient.postJson(context, "/api/admin/admins", JSONObject().put("userId", userId).toString()).map { Unit }
