@@ -11,6 +11,26 @@ const pool = getFynxDatabasePool();
 let schemaPromise;
 
 const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
+
+function parseSellerSettlementCursor(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 512) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    const updatedAt = new Date(decoded?.updatedAt);
+    const orderId = parseUuid(decoded?.orderId);
+    if (!orderId || !Number.isFinite(updatedAt.getTime())) return null;
+    return { updatedAt: updatedAt.toISOString(), orderId };
+  } catch {
+    return null;
+  }
+}
+
+function createSellerSettlementCursor(row) {
+  return Buffer.from(JSON.stringify({
+    updatedAt: new Date(row.updated_at).toISOString(),
+    orderId: String(row.order_id)
+  })).toString('base64url');
+}
 const amountSubunit = (value, currency) => {
   const normalized = String(currency || '').trim().toUpperCase();
   if (!['NGN', 'USD'].includes(normalized)) return null;
@@ -255,6 +275,11 @@ export function registerMarketplaceSettlementRoutes({ app }) {
   app.get('/api/marketplace/settlement/seller/summary', auth, async (req, res) => {
     try {
       await ensureSchema();
+      const requestedLimit = Number.parseInt(String(req.query.limit || '100'), 10);
+      const pageLimit = Number.isInteger(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 100;
+      const cursorValue = req.query.cursor == null ? null : String(req.query.cursor);
+      const cursor = cursorValue == null || cursorValue === '' ? null : parseSellerSettlementCursor(cursorValue);
+      if (cursorValue && !cursor) return res.status(400).json({ error: 'invalid seller settlement cursor' });
       const result = await pool.query(`
         SELECT
           o.id AS order_id,
@@ -278,9 +303,14 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           LIMIT 1
         ) payout ON TRUE
         WHERE o.seller_id = $1
-        ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC
-        LIMIT 100
-      `, [req.user.sub]);
+          AND ($2::timestamptz IS NULL OR
+            (COALESCE(payout.updated_at, o.updated_at, o.created_at), o.id) < ($2::timestamptz, $3::uuid))
+        ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC, o.id DESC
+        LIMIT $4
+      `, [req.user.sub, cursor?.updatedAt || null, cursor?.orderId || null, pageLimit + 1]);
+      const hasMore = result.rows.length > pageLimit;
+      const pageRows = result.rows.slice(0, pageLimit);
+      const nextCursor = hasMore && pageRows.length ? createSellerSettlementCursor(pageRows[pageRows.length - 1]) : null;
       const totalsResult = await pool.query(`
         WITH seller_settlements AS (
           SELECT
@@ -346,7 +376,7 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           marketplaceFees: Number(row.marketplace_fees || 0),
           netEarnings: Number(row.net_earnings || 0)
         })),
-        settlements: result.rows.map((row) => ({
+        settlements: pageRows.map((row) => ({
           orderId: String(row.order_id),
           title: String(row.title || 'FYNX order'),
           currency: String(row.currency || 'NGN').toUpperCase(),
@@ -358,7 +388,9 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN'),
           orderStatus: String(row.order_status || 'UNKNOWN'),
           updatedAt: row.updated_at
-        }))
+        })),
+        hasMore,
+        nextCursor
       });
     } catch (error) {
       console.error('marketplace seller settlement summary', error);
