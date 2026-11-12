@@ -168,6 +168,8 @@ require("hasContent=['title','body','priority','mediaId','linkUrl']" in backend 
         "announcement edits must update validated content, image and link in the same audited transaction")
 require("message_media WHERE id=$1 AND owner_id=$2" in backend and "startsWith('image/')" in backend,
         "announcement images must be uploaded by the current admin and must be images")
+require("String(raw)!==String(existing.media_id??'')" in backend,
+        "editing an announcement must retain its already-authorized image when another admin edits the text")
 require("parsed.protocol!=='https:'" in backend and "parsed.username" in backend and "parsed.password" in backend,
         "announcement links must require HTTPS and reject embedded credentials")
 require("scheduledAt.getTime()<=Date.now()" in backend and "ANNOUNCEMENT_SCHEDULED" in backend,
