@@ -137,7 +137,7 @@ object FynxAdminClient {
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->
             val value = JSONObject(raw)
             val counts = value.optJSONObject("counts") ?: JSONObject()
-            Dashboard(value.optString("role"), counts.optInt("users"), counts.optInt("openReports"), counts.optInt("openAppeals"), counts.optInt("safetyEvents24h"))
+            Dashboard(value.optString("role"), counts.optInt("users"), counts.optInt("openReports"), counts.optInt("openAppeals"), counts.optInt("safetyActions24h"))
         }
 
     suspend fun revenue(context: Context): Result<RevenueReport> =
