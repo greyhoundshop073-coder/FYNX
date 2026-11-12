@@ -261,7 +261,7 @@ export function registerAdminRoutes({ app }) {
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
-      const appeal=(await client.query('SELECT id,user_id,status FROM safety_appeals WHERE id=$1 FOR UPDATE',[appealId])).rows[0];
+      const appeal=(await client.query('SELECT id,user_id,report_id,status FROM safety_appeals WHERE id=$1 FOR UPDATE',[appealId])).rows[0];
       if(!appeal){await client.query('ROLLBACK');return res.status(404).json({error:'appeal not found'});}
       if(!['OPEN','UNDER_REVIEW'].includes(appeal.status)){
         await client.query('ROLLBACK');
@@ -272,14 +272,19 @@ export function registerAdminRoutes({ app }) {
         return res.status(409).json({error:'appeal is already under review'});
       }
       const updated=await client.query(`UPDATE safety_appeals SET status=$1,decision_note=$2,updated_at=NOW() WHERE id=$3 RETURNING id,user_id,status,decision_note,updated_at`,[status,note,appealId]);
-      if(status==='ACCEPTED'){
-        await client.query(`INSERT INTO fynx_account_safety(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
-        await client.query(`INSERT INTO safety_settings(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
+      let restored=false;
+      if(status==='ACCEPTED'&&appeal.report_id!=null){
+        const linkedReport=(await client.query('SELECT target_user_id FROM safety_reports WHERE id=$1 FOR UPDATE',[appeal.report_id])).rows[0];
+        if(linkedReport&&String(linkedReport.target_user_id)===String(appeal.user_id)){
+          await client.query(`INSERT INTO fynx_account_safety(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
+          await client.query(`INSERT INTO safety_settings(user_id,account_status,status_note) VALUES($1,'ACTIVE',$2) ON CONFLICT(user_id) DO UPDATE SET account_status='ACTIVE',status_note=EXCLUDED.status_note,updated_at=NOW()`,[appeal.user_id,note||'Account restored after approved appeal.']);
+          restored=true;
+        }
       }
-      await recordAdminActivity(req,'APPEAL_DECIDED','safety_appeal',appealId,`Appeal ${status.toLowerCase()}`,{status,decisionNote:note,restored:status==='ACCEPTED'},client);
+      await recordAdminActivity(req,'APPEAL_DECIDED','safety_appeal',appealId,`Appeal ${status.toLowerCase()}`,{status,decisionNote:note,restored},client);
       await client.query('COMMIT');
       const row=updated.rows[0];
-      return res.json({appeal:{id:String(row.id),userId:String(row.user_id),status:row.status,decisionNote:row.decision_note,updatedAt:row.updated_at,restored:status==='ACCEPTED'}});
+      return res.json({appeal:{id:String(row.id),userId:String(row.user_id),status:row.status,decisionNote:row.decision_note,updatedAt:row.updated_at,restored}});
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }catch(error){console.error('admin appeal decision',error);return res.status(500).json({error:'appeal decision failed'});}});
 
