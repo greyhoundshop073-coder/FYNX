@@ -802,6 +802,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var error by remember { mutableStateOf<String?>(null) }
     var discoveryFallbackWarning by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var reportListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var reportListingReason by remember { mutableStateOf("Scam or fraud") }
+    var reportListingBusy by remember { mutableStateOf(false) }
+    var reportListingNotice by remember { mutableStateOf<String?>(null) }
     var sellerStoreUsername by remember(currentUsername) { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
@@ -1856,7 +1860,37 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             },
             onOpenAssistant = { listingId -> onOpenAi(listingId) },
+            onReport = { reportListing = listing; reportListingReason = "Scam or fraud"; reportListingNotice = null },
             onClose = { selected = null }
+        )
+    }
+    reportListing?.let { listing ->
+        val reasons = listOf("Scam or fraud", "Counterfeit or prohibited item", "Misleading product information", "Inappropriate or harmful content", "Spam or duplicate listing", "Other")
+        AlertDialog(
+            onDismissRequest = { if (!reportListingBusy) { reportListing = null; reportListingNotice = null } },
+            title = { Text("Report Marketplace listing") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(reportListingNotice ?: "Choose why this listing should be reviewed.")
+                    if (reportListingNotice?.startsWith("Report submitted") != true) reasons.forEach { reason ->
+                        Row(Modifier.fillMaxWidth().clickable(enabled = !reportListingBusy) { reportListingReason = reason }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = reportListingReason == reason, onClick = { reportListingReason = reason }, enabled = !reportListingBusy)
+                            Text(reason, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportListingBusy && reportListingNotice?.startsWith("Report submitted") != true, onClick = {
+                    reportListingBusy = true; reportListingNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitContentReport(context, "MARKETPLACE_LISTING", listing.id, reportListingReason)
+                            .onSuccess { reportListingNotice = "Report submitted for review."; reportListingBusy = false }
+                            .onFailure { reportListingNotice = it.message ?: "Report could not be submitted."; reportListingBusy = false }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportListingBusy, onClick = { reportListing = null; reportListingNotice = null }) { Text("Close") } }
         )
     }
     sellerStoreUsername?.let { username ->
@@ -2075,6 +2109,7 @@ private fun MarketplaceDetails(
     onToggleSavedProduct: (String) -> Unit,
     onWatchPrice: (String) -> Unit,
     onOpenAssistant: (String) -> Unit,
+    onReport: () -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
@@ -2087,6 +2122,7 @@ private fun MarketplaceDetails(
             onShare = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title), onShareToStatus = onShareToStatus) },
             canPurchase = canPurchase
         )
+        TextButton(onClick = onReport, modifier = Modifier.fillMaxWidth()) { Text("Report this listing") }
         if (!canPurchase) {
             Text("This is your listing. Buyers can see it in Marketplace, but you cannot buy your own product.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
