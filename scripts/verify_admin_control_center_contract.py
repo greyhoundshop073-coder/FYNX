@@ -195,6 +195,9 @@ require(re.search(r"^\s*app\.post\('/api/social/posts'", social, re.MULTILINE) i
 # Marketplace promotions and the OWNER-only Music Library must appear in the same searchable audit history.
 require("recordMarketplaceAdminActivity" in advertising and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in advertising,
         "Marketplace promotion administration must initialize and write to admin activity history")
+require("LOWER(COALESCE(mime_type,'')) LIKE 'image/%'" in advertising and
+        "p.artwork_media_id=m.id" in advertising,
+        "seasonal campaign artwork must be an image and existing attached artwork can be retained safely by another admin")
 for action in ("SEASONAL_PROMOTION_CREATED", "SEASONAL_PROMOTION_UPDATED", "SEASONAL_PROMOTION_ACTIVATED",
                "SEASONAL_PROMOTION_DEACTIVATED", "SEASONAL_PROMOTION_DELETED"):
     require(action in advertising, f"Marketplace promotion action is not audited: {action}")
