@@ -25,7 +25,7 @@ checks = [
     ("backend exposes authorized post media", "app.get('/api/social/posts/:id/media'" in backend and "visibleSocialPost(postId, req.user.sub)" in backend),
     ("production prestart installs multi-media backend", "socialMultiMediaBootstrap.js" in startup and "installSocialMultiMedia" in startup),
     ("composer routes publishing through the multi-media client", "FynxMultiMediaPostClient.createPost" in composer),
-    ("composer keeps real caption support", "What's on your mind?" in composer and 'put("text", caption)' in client and "val caption = text.trim().take(4000)" in client),
+    ("composer keeps real caption support", ("What's on your mind?" in composer or '"Add description..."' in composer) and "BasicTextField(" in composer and "value = text" in composer and "onValueChange = { value ->" in composer and 'put("text", caption)' in client and "val caption = text.trim().take(4000)" in client),
 ]
 
 failed = [name for name, ok in checks if not ok]

@@ -11,7 +11,7 @@ bootstrap = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
-    ("Feeling/Activity chip is enabled", 'ComposerQuickChip("Feeling/Activity", Icons.Default.SentimentSatisfied, enabled = !posting && postingAllowed)' in composer),
+    ("More options exposes the existing Feeling/Activity picker action", 'Text("Feeling / Activity")' in composer and 'showFeelingActivityPicker = true' in composer and 'enabled = !posting && postingAllowed' in composer),
     ("Real Feeling/Activity picker exists", "showFeelingActivityPicker" in composer and 'AlertDialog(' in composer and 'FynxFeelingActivityLibrary.options' in composer),
     ("Picker supports search", "feelingActivitySearch" in composer and 'label = { Text("Search") }' in composer),
     ("Selection can be removed before publishing", 'selectedFeelingActivity = null' in composer and '"Remove feeling or activity"' in composer),

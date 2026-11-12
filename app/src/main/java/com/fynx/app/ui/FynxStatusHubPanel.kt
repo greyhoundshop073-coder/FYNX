@@ -62,7 +62,7 @@ private data class FynxRecentMedia(
 
 /** Single Status/Stories surface. */
 @Composable
-fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}) {
+fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? = null, onOpenCommandConsumed: () -> Unit = {}, onOpenMessage: (String) -> Unit = {}, startWithCreator: Boolean = false, onExitCreator: () -> Unit = {}, initialText: String? = null, onInitialTextAccepted: () -> Unit = {}, onComposerVisibilityChange: (Boolean) -> Unit = {}, initialMediaUri: Uri? = null, initialMediaType: FynxStatusType? = null, onInitialMediaAccepted: () -> Unit = {}, onOpenUnifiedCamera: (CameraMode) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(startWithCreator) }
@@ -84,6 +84,28 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         composing = true
         addStatusOpen = false
         onInitialTextAccepted()
+    }
+
+    // Accept media handed off from the Home camera's "Your Story" action.
+    // This enters the existing Status composer; it does not publish automatically.
+    LaunchedEffect(initialMediaUri, initialMediaType) {
+        val mediaUri = initialMediaUri ?: return@LaunchedEffect
+        val mediaType = initialMediaType ?: return@LaunchedEffect
+        if (mediaType != FynxStatusType.PHOTO && mediaType != FynxStatusType.VIDEO) {
+            onInitialMediaAccepted()
+            return@LaunchedEffect
+        }
+        selectedInitialMedia = FynxRecentMedia(
+            uri = mediaUri,
+            isVideo = mediaType == FynxStatusType.VIDEO,
+            dateAddedSeconds = System.currentTimeMillis() / 1000L
+        )
+        selectedInitialType = mediaType
+        cameraError = null
+        cameraOpen = false
+        composing = true
+        addStatusOpen = false
+        onInitialMediaAccepted()
     }
     var statusMusicSearch by remember { mutableStateOf("") }
     var statusMusicCatalogue by remember { mutableStateOf<List<FynxMusicCatalogueTrack>>(emptyList()) }
@@ -172,20 +194,8 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { if (startWithCreator) onExitCreator() else addStatusOpen = false },
-                    onCamera = {
-                        cameraInitialMode = CameraMode.PHOTO
-                        if (!cameraOpen) {
-                            cameraError = null
-                            cameraOpen = true
-                        }
-                    },
-                    onRecordVideo = {
-                        cameraInitialMode = CameraMode.VIDEO
-                        if (!cameraOpen) {
-                            cameraError = null
-                            cameraOpen = true
-                        }
-                    },
+                    onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) },
+                    onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) },
                     onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
                     onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
@@ -203,13 +213,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                         openStatusId = openStatusId,
                         onOpenCommandConsumed = onOpenCommandConsumed,
                         onOpenMessage = onOpenMessage,
-                        onCameraClick = {
-                            if (!cameraOpen) {
-                                cameraError = null
-                                cameraInitialMode = CameraMode.PHOTO
-                                cameraOpen = true
-                            }
-                        },
+                        onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) },
                         onCreateClick = { addStatusOpen = true }
                     )
                 }
@@ -261,26 +265,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
         }
     }
 
-    if (cameraOpen) {
-        Dialog(
-            onDismissRequest = { cameraOpen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-        ) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                // The camera panel applies safe insets to its own header and bottom
-                // controls. Insetting this full-screen container a second time clips
-                // the Photo/shutter/Video row in the Status camera dialog.
-                Box(Modifier.fillMaxSize()) {
-                    FynxCameraCapturePanel(
-                        onCaptured = { uri, type -> openCapturedStatus(uri, type) },
-                        initialMode = cameraInitialMode,
-                        onDismiss = { cameraOpen = false },
-                        statusCapture = true
-                    )
-                }
-            }
-        }
-    }
+
 }
 
 @Composable

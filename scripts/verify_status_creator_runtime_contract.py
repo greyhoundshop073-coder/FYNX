@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard the isolated, read-only Status creator runtime certification."""
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,20 @@ checks = [
         'tap("Create your status", "create", ("Voice", "Text"))' in runtime
         and 'find_click_target(creator, "Voice")' in runtime
         and 'find_click_target(creator, "Text")' in runtime,
+    ),
+    (
+        "Status Take photo opens the shared camera in Photo mode and safely returns without publishing",
+        re.search(r'tap\(\s*"Take photo"\s*,\s*"photo-camera-entry"\s*,\s*\("Take photo"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
+        and 'find_click_target(photo_camera, "Take photo")' in runtime
+        and 'return_to_home("photo-camera")' in runtime
+        and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
+    ),
+    (
+        "Status Record video opens the shared camera in Video mode without starting a recording",
+        re.search(r'tap\(\s*"Record video"\s*,\s*"video-camera-entry"\s*,\s*\("Record video"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
+        and 'find_click_target(video_camera, "Record video")' in runtime
+        and 'return_to_home("video-camera")' in runtime
+        and "PASS Status Record video opens the shared live CameraX preview in Video mode." in runtime,
     ),
     (
         "runtime check dismisses the creator without creating or submitting content",
@@ -67,7 +82,7 @@ checks = [
     (
         "existing Status source gate still verifies the Home creator callback and Voice/Text choices",
         'Home Status plus opens the full Add status hub' in status_gate
-        and 'Add status exposes video recording and gallery selection' in status_gate
+        and 'Add Status video action opens the shared camera and gallery selection remains available' in status_gate
         and 'Add status Voice opens the composer in voice mode' in status_gate,
     ),
 ]
