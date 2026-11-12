@@ -75,6 +75,23 @@ object FynxProductionMessaging {
         }
     }
 
+    suspend fun searchHistoryPage(context: Context, username: String, query: String, beforeId: String? = null, limit: Int = 40): Result<RemoteMessagePage> {
+        val cleanQuery = query.trim().take(100)
+        if (cleanQuery.length < 2) return Result.failure(IllegalArgumentException("Enter at least two characters to search message history."))
+        val pageQuery = "?limit=${limit.coerceIn(1, 100)}&q=${Uri.encode(cleanQuery)}" +
+            (beforeId?.takeIf { it.isNotBlank() }?.let { "&beforeId=${Uri.encode(it)}" } ?: "")
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}$pageQuery").mapCatching { raw ->
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("messages") ?: JSONArray()
+            val messages = buildList {
+                for (index in 0 until array.length()) {
+                    runCatching { fromJson(array.getJSONObject(index)) }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            RemoteMessagePage(messages, root.optBoolean("hasMore"), root.optString("nextBeforeId").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
+
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
         val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
         return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}").mapCatching { raw ->
