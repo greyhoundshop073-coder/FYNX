@@ -619,7 +619,39 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
-    reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
+    reportPost?.let { post ->
+        var selectedReportReason by remember(post.id) { mutableStateOf("Harassment or bullying") }
+        val reportReasons = listOf("Harassment or bullying", "Scam or fraud", "Hate or abusive content", "Violence or dangerous content", "Spam or misleading content", "Other")
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } },
+            title = { Text("Report post") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(reportNotice ?: "Choose the reason that best describes this post. FYNX will send it for review.")
+                    if (reportNotice == null || reportNotice?.startsWith("Report submitted") == false) {
+                        reportReasons.forEach { reason ->
+                            Row(Modifier.fillMaxWidth().clickable(enabled = !reportBusy) { selectedReportReason = reason }, verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = selectedReportReason == reason, onClick = { selectedReportReason = reason }, enabled = !reportBusy)
+                                Text(reason, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportBusy && reportNotice?.startsWith("Report submitted") != true, onClick = {
+                    reportBusy = true
+                    reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitContentReport(context, "SOCIAL_POST", post.id, selectedReportReason)
+                            .onSuccess { reportNotice = "Report submitted for review."; reportBusy = false; delay(900L); reportPost = null; reportNotice = null }
+                            .onFailure { reportNotice = it.message ?: "Report could not be submitted. Please try again."; reportBusy = false }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }
+        )
+    }
     quotePost?.let { original ->
         AlertDialog(
             onDismissRequest = { if (!quoteBusy) { quotePost = null; quoteText = "" } },
