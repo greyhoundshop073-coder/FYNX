@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 
 import androidx.compose.foundation.layout.*
@@ -14,12 +16,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
 fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     var items by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -126,6 +130,21 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         Text(announcement.body, style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        announcement.mediaId?.takeIf { it.isNotBlank() }?.let { mediaId ->
+                            FynxRemoteMedia(
+                                mediaUrl = "/api/media/$mediaId",
+                                type = "image",
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                autoPlay = false
+                            )
+                        }
+                        announcement.linkUrl.takeIf { it.isNotBlank() }?.let { link ->
+                            TextButton(onClick = { runCatching { uriHandler.openUri(link) } }) {
+                                Icon(androidx.compose.material.icons.Icons.Default.OpenInNew, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Open FYNX link")
+                            }
+                        }
                         if (announcement.publishedAt.isNotBlank()) {
                             Text(announcement.publishedAt, style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -163,6 +182,14 @@ fun FynxAdminControlCenterPanel() {
     var protectionError by remember { mutableStateOf<String?>(null) }
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
+    var announcementMediaId by remember { mutableStateOf<String?>(null) }
+    var announcementLinkUrl by remember { mutableStateOf("") }
+    var announcementScheduleAt by remember { mutableStateOf("") }
+    var announcementUploading by remember { mutableStateOf(false) }
+    var adminAnnouncementItems by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
+    var adminAnnouncementsLoading by remember { mutableStateOf(false) }
+    var adminAnnouncementsError by remember { mutableStateOf<String?>(null) }
+    var refreshAdminAnnouncements by remember { mutableIntStateOf(0) }
     var targetQuery by remember { mutableStateOf("") }
     var targets by remember { mutableStateOf<List<FynxSocialClient.User>>(emptyList()) }
     var targetMessage by remember { mutableStateOf<String?>(null) }
@@ -191,6 +218,29 @@ fun FynxAdminControlCenterPanel() {
         confirmationAction = action
     }
 
+    val announcementImagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val mimeType = context.contentResolver.getType(uri)?.lowercase().orEmpty()
+            if (!mimeType.startsWith("image/")) {
+                statusMessage = "Choose an image file for the announcement."
+            } else {
+                announcementUploading = true
+                statusMessage = "Uploading announcement image..."
+                scope.launch {
+                    FynxProductionMessaging.uploadMedia(context, uri, mimeType)
+                        .onSuccess { uploaded ->
+                            announcementMediaId = uploaded.id
+                            statusMessage = "Announcement image attached."
+                        }
+                        .onFailure { statusMessage = it.message ?: "Image upload failed." }
+                    announcementUploading = false
+                }
+            }
+        }
+    }
+
     LaunchedEffect(refreshDashboard) {
         loading = true
         FynxAdminClient.dashboard(context)
@@ -207,6 +257,17 @@ fun FynxAdminControlCenterPanel() {
                 .onSuccess { activity = it }
                 .onFailure { activityError = it.message ?: "Activity history unavailable." }
             activityLoading = false
+        }
+    }
+
+    LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection) {
+        if (dashboard != null && activeSection == "Announcements") {
+            adminAnnouncementsLoading = true
+            adminAnnouncementsError = null
+            FynxAdminClient.adminAnnouncements(context)
+                .onSuccess { adminAnnouncementItems = it }
+                .onFailure { adminAnnouncementsError = it.message ?: "Announcement management is unavailable." }
+            adminAnnouncementsLoading = false
         }
     }
 
@@ -690,7 +751,7 @@ fun FynxAdminControlCenterPanel() {
                 Spacer(Modifier.height(16.dp))
                 Text("Create an official update", style = MaterialTheme.typography.titleLarge,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("Write a clear message for the FYNX community. Publishing sends it to the existing official announcements feed.",
+                Text("Attach an image, add a safe external link, publish immediately or schedule for a future time.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
                     border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .18f))) {
@@ -699,7 +760,46 @@ fun FynxAdminControlCenterPanel() {
                             label = { Text("Announcement title") }, singleLine = true)
                         OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(),
                             label = { Text("Message to users") }, minLines = 4,
-                            supportingText = { Text("${body.length}/2000 characters") })
+                            supportingText = { Text(body.length.toString() + "/4000 characters") })
+                        OutlinedTextField(
+                            value = announcementLinkUrl,
+                            onValueChange = { announcementLinkUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("External link (optional)") },
+                            placeholder = { Text("https://example.com") },
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = announcementScheduleAt,
+                            onValueChange = { announcementScheduleAt = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Schedule time (optional)") },
+                            placeholder = { Text("2026-11-12T16:30:00+01:00") },
+                            supportingText = { Text("Leave blank to publish now. For scheduling, use ISO 8601 with a timezone offset.") },
+                            singleLine = true
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                enabled = !announcementUploading,
+                                onClick = { announcementImagePicker.launch("image/*") }
+                            ) {
+                                Icon(androidx.compose.material.icons.Icons.Default.AddPhotoAlternate, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(if (announcementUploading) "Uploading..." else if (announcementMediaId == null) "Add image" else "Change image")
+                            }
+                            if (announcementMediaId != null) {
+                                TextButton(onClick = { announcementMediaId = null }) { Text("Remove image") }
+                            }
+                        }
+                        announcementMediaId?.let { mediaId ->
+                            FynxRemoteMedia(
+                                mediaUrl = "/api/media/$mediaId",
+                                type = "image",
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp),
+                                autoPlay = false
+                            )
+                        }
                         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = .06f))) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -708,28 +808,103 @@ fun FynxAdminControlCenterPanel() {
                                 Text(title.ifBlank { "Your announcement title" }, style = MaterialTheme.typography.titleMedium)
                                 Text(body.ifBlank { "Your message will appear here as users read the official FYNX update." },
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (announcementLinkUrl.isNotBlank()) Text(announcementLinkUrl, color = FynxDesign.AzureBlue)
                             }
                         }
+                        val isScheduled = announcementScheduleAt.isNotBlank()
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 2000,
+                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 4000 && !announcementUploading,
                             onClick = {
                                 requestAdminConfirmation(
-                                    "Publish this official announcement?",
-                                    "This will send ${title.trim()} to the existing FYNX announcements feed. Check the preview and wording before publishing.",
-                                    "Publish announcement"
+                                    if (isScheduled) "Schedule this official announcement?" else "Publish this official announcement?",
+                                    "This will " + (if (isScheduled) "schedule" else "publish") + " " + title.trim() + " in the FYNX official feed. The server validates its time, image ownership and link before saving.",
+                                    if (isScheduled) "Schedule announcement" else "Publish announcement"
                                 ) {
-                                    statusMessage = "Publishing..."
+                                    statusMessage = if (isScheduled) "Scheduling..." else "Publishing..."
                                     scope.launch {
-                                        FynxAdminClient.publishAnnouncement(context, title.trim(), body.trim(), "NORMAL")
-                                            .onSuccess { title = ""; body = ""; statusMessage = "Announcement published. Refresh the public feed to verify it." }
-                                            .onFailure { statusMessage = it.message ?: "Publish failed." }
+                                        FynxAdminClient.publishAnnouncement(
+                                            context, title.trim(), body.trim(), "NORMAL",
+                                            announcementMediaId, announcementLinkUrl.trim(),
+                                            announcementScheduleAt.trim().takeIf { it.isNotBlank() }
+                                        )
+                                            .onSuccess {
+                                                title = ""
+                                                body = ""
+                                                announcementMediaId = null
+                                                announcementLinkUrl = ""
+                                                announcementScheduleAt = ""
+                                                statusMessage = if (isScheduled) "Announcement scheduled." else "Announcement published."
+                                                refreshAdminAnnouncements++
+                                            }
+                                            .onFailure { statusMessage = it.message ?: "Announcement could not be saved." }
                                     }
                                 }
                             }
                         ) {
                             Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null)
-                            Spacer(Modifier.width(8.dp)); Text("Publish announcement")
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (isScheduled) "Schedule announcement" else "Publish announcement")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(18.dp))
+                Text("Manage announcements", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Cancel scheduled items or publish an unpublished announcement immediately.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                when {
+                    adminAnnouncementsLoading -> CircularProgressIndicator()
+                    adminAnnouncementsError != null -> {
+                        Text(adminAnnouncementsError!!, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { refreshAdminAnnouncements++ }) { Text("Retry") }
+                    }
+                    adminAnnouncementItems.isEmpty() -> Text("No announcements have been created yet.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> adminAnnouncementItems.forEach { item ->
+                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(item.title, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (!item.published) "Unpublished"
+                                    else if (item.scheduledAt != null) "Scheduled: " + item.scheduledAt
+                                    else "Published",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (item.published) {
+                                        OutlinedButton(onClick = {
+                                            requestAdminConfirmation(
+                                                "Unpublish this announcement?",
+                                                "This removes " + item.title + " from the public announcements feed. You can publish it again later.",
+                                                "Unpublish"
+                                            ) {
+                                                scope.launch {
+                                                    FynxAdminClient.setAnnouncementPublishing(context, item.id, false, null)
+                                                        .onSuccess { statusMessage = "Announcement unpublished."; refreshAdminAnnouncements++ }
+                                                        .onFailure { statusMessage = it.message ?: "Could not unpublish announcement." }
+                                                }
+                                            }
+                                        }) { Text(if (item.scheduledAt != null) "Cancel schedule" else "Unpublish") }
+                                    } else {
+                                        Button(onClick = {
+                                            requestAdminConfirmation(
+                                                "Publish this announcement now?",
+                                                "This makes " + item.title + " visible in the public announcements feed immediately.",
+                                                "Publish now"
+                                            ) {
+                                                scope.launch {
+                                                    FynxAdminClient.setAnnouncementPublishing(context, item.id, true, null)
+                                                        .onSuccess { statusMessage = "Announcement published."; refreshAdminAnnouncements++ }
+                                                        .onFailure { statusMessage = it.message ?: "Could not publish announcement." }
+                                                }
+                                            }
+                                        }) { Text("Publish now") }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
