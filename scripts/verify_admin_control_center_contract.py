@@ -87,7 +87,7 @@ require("OFFSET $4" in backend and "limit+1" in backend and "Math.min(10000" in 
 require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
-require('"/api/admin/reports"' in client and "FynxAdminClient.reports(context, reportsOffset)" in source,
+require('"/api/admin/reports?limit=' in client and "FynxAdminClient.reports(context, reportsOffset)" in source,
         "reported-account queue is not connected end to end")
 require("reports.forEach" in source and "FynxAdminClient.reviewReport(context, report.id" in source,
         "reported-account review actions are not rendered")
