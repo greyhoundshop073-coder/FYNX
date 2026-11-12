@@ -163,6 +163,9 @@ require("app.get('/api/admin/announcements'" in backend and "app.post('/api/admi
         "protected announcement management/list and create endpoints are missing")
 require("app.patch('/api/admin/announcements/:announcementId'" in backend,
         "announcement publish/unpublish/schedule endpoint is missing")
+require("hasContent=['title','body','priority','mediaId','linkUrl']" in backend and
+        "ANNOUNCEMENT_UPDATED" in backend and "UPDATE fynx_announcements SET title=$1,body=$2,priority=$3,media_id=$4,link_url=$5" in backend,
+        "announcement edits must update validated content, image and link in the same audited transaction")
 require("message_media WHERE id=$1 AND owner_id=$2" in backend and "startsWith('image/')" in backend,
         "announcement images must be uploaded by the current admin and must be images")
 require("parsed.protocol!=='https:'" in backend and "parsed.username" in backend and "parsed.password" in backend,
@@ -179,8 +182,9 @@ require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_s
         "published announcement images must be authorized by the protected media route")
 require("ActivityResultContracts.GetContent()" in source and "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in source,
         "announcement image attachment must use the existing authenticated media uploader")
-require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source,
-        "announcement admin queue must support listing and publishing/cancellation")
+require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source and
+        "FynxAdminClient.updateAnnouncement(context" in source and "editingAnnouncementId = item.id" in source,
+        "announcement admin queue must support listing, editing, publishing and cancellation")
 require("FynxAdminClient.publishAnnouncement(" in source and "announcementScheduleAt" in source and "announcementLinkUrl" in source,
         "announcement composer is missing image/link/scheduling controls")
 require("uriHandler.openUri(link)" in source and "Text(\"Open link\")" in source and "FynxRemoteMedia(" in source,
