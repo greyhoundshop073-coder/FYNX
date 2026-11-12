@@ -759,6 +759,7 @@ function rowToMessage(row) {
 
 app.get("/api/messages/recent", auth, async (req, res) => {
   try {
+    res.set("Cache-Control", "no-store");
     const result = await pool.query(`
       WITH latest AS (
         SELECT DISTINCT ON (CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END)
@@ -816,6 +817,7 @@ app.get("/api/messages/:username", auth, async (req, res) => {
     if (!other) return res.status(404).json({ error: "user not found" });
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
     if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
+    res.set("Cache-Control", "no-store");
     const requestedLimit = Number.parseInt(String(req.query?.limit || "50"), 10);
     const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
     const beforeIdRaw = String(req.query?.beforeId || "").trim();
