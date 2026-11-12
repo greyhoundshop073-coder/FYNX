@@ -242,6 +242,19 @@ require("if (role !== 'OWNER')" in social and social.count("if (role !== 'OWNER'
         "app.get('/api/admin/social/music/catalogue', auth" in social,
         "Music catalogue management endpoints, including the admin roster/list, must enforce OWNER role server-side")
 
+# The Admin PR must not inherit Marketplace/Wallet visual failures when its live
+# OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
+# Admin runtime limitation must be explicit rather than reported as certified.
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete-20261112" in workflow,
+        "Admin PR must select its own runtime certification scope")
+require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
+        "FYNX-admin-runtime-certification.md" in runtime_runner and
+        "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
+        'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
+        "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
