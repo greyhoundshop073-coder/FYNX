@@ -123,14 +123,15 @@ require("app.patch('/api/admin/announcements/:announcementId'" in backend,
         "announcement publish/unpublish/schedule endpoint is missing")
 require("message_media WHERE id=$1 AND owner_id=$2" in backend and "startsWith('image/')" in backend,
         "announcement images must be uploaded by the current admin and must be images")
-require("parsed.protocol" in backend and "http:" in backend and "https:" in backend,
-        "announcement external links must be protocol-validated")
+require("parsed.protocol!=='https:'" in backend and "parsed.username" in backend and "parsed.password" in backend,
+        "announcement links must require HTTPS and reject embedded credentials")
 require("scheduledAt.getTime()<=Date.now()" in backend and "ANNOUNCEMENT_SCHEDULED" in backend,
         "announcement schedules must be future-dated and audited")
 require("scheduled_at IS NULL OR scheduled_at<=NOW()" in backend,
         "public announcements must not expose future scheduled items")
 require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_server and
-        "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()" in media_server,
+        "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()" in media_server and
+        "has_media_id" in media_server and "announcementMediaTable.rows[0]?.has_media_id" in media_server,
         "published announcement images must be authorized by the protected media route")
 require("ActivityResultContracts.GetContent()" in source and "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in source,
         "announcement image attachment must use the existing authenticated media uploader")
@@ -138,8 +139,14 @@ require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminCl
         "announcement admin queue must support listing and publishing/cancellation")
 require("FynxAdminClient.publishAnnouncement(" in source and "announcementScheduleAt" in source and "announcementLinkUrl" in source,
         "announcement composer is missing image/link/scheduling controls")
-require("uriHandler.openUri(link)" in source and "FynxRemoteMedia(" in source,
+require("uriHandler.openUri(link)" in source and "Text(\"Open link\")" in source and "FynxRemoteMedia(" in source,
         "public announcements must render uploaded images and open validated links")
+require('Text("YYYY-MM-DDTHH:mm:ss+01:00")' in source,
+        "announcement schedule hint must remain timezone-aware without a stale fixed date")
+require("does not sign the user out or disable other FYNX features" in source,
+        "account lock confirmation must accurately describe its enforced scope")
+require(re.search(r"^\\s*app\\.post\\('/api/social/posts'", social, re.MULTILINE) is not None,
+        "social post route must remain registered outside the preceding comment")
 
 # Marketplace promotions and the OWNER-only Music Library must appear in the same searchable audit history.
 require("recordMarketplaceAdminActivity" in advertising and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in advertising,
