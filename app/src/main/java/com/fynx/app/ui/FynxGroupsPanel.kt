@@ -306,6 +306,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupLoadComplete by remember(groupId) { mutableStateOf(false) }
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var hasOlderGroupMessages by remember(groupId) { mutableStateOf(false) }
+    var olderGroupMessagesCursor by remember(groupId) { mutableStateOf<String?>(null) }
+    var loadingOlderGroupMessages by remember { mutableStateOf(false) }
     LaunchedEffect(groupId) {
         // Group and message stores grow over time; parse them away from the UI thread.
         val local = withContext(Dispatchers.IO) {
@@ -561,9 +564,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         val selected = currentGroup ?: return@LaunchedEffect
         runCatching {
             suspend fun refreshGroupMessages(showError: Boolean) {
-                FynxGroupRemoteClient.loadMessages(context, groupId)
-                    .onSuccess { remote ->
-                        val remoteMessages = remote.mapIndexedNotNull { index, item ->
+                FynxGroupRemoteClient.loadMessagesPage(context, groupId)
+                    .onSuccess { page ->
+                        hasOlderGroupMessages = page.hasMore
+                        olderGroupMessagesCursor = page.nextBefore
+                        val remoteMessages = page.messages.mapIndexedNotNull { index, item ->
                             runCatching {
                                 FynxGroupRemoteClient.toChatMessage(
                                     item,
@@ -847,6 +852,30 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+            if (hasOlderGroupMessages && searchQuery.isBlank()) {
+                item(key = "load_older_group_messages") {
+                    TextButton(
+                        enabled = !loadingOlderGroupMessages,
+                        onClick = {
+                            val cursor = olderGroupMessagesCursor ?: return@TextButton
+                            scope.launch {
+                                loadingOlderGroupMessages = true
+                                FynxGroupRemoteClient.loadMessagesPage(context, groupId, cursor).onSuccess { page ->
+                                    val older = page.messages.mapNotNull { item ->
+                                        runCatching { FynxGroupRemoteClient.toChatMessage(item, currentUsername, FynxBackendClient.baseUrl(context)) }.getOrNull()
+                                    }
+                                    messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                    hasOlderGroupMessages = page.hasMore
+                                    olderGroupMessagesCursor = page.nextBefore
+                                    withContext(Dispatchers.IO) { FynxChatStore.save(context, "group_$groupId", messages) }
+                                }.onFailure { syncMessage = "Older group messages could not be loaded. Please retry." }
+                                loadingOlderGroupMessages = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (loadingOlderGroupMessages) "Loading older messages…" else "Load older messages") }
+                }
+            }
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
