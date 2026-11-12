@@ -731,37 +731,17 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         screenshot(f"{prefix}-home-camera-control-missing.png")
         (ROOT / f"{prefix}-home-camera-control-missing.xml").write_text(home + chr(10), encoding="utf-8")
         return home
-    composer_xml = tap_control(
-        home, ["Open FYNX camera"], f"{prefix}-home-camera-composer",
-        ["Add description..."]
-    )
-    if not composer_xml:
-        return home_xml
-
-    # "More options" sits below the first viewport in the New post scroll area.
-    # Scroll the actual accessible container until the row has real, non-zero bounds;
-    # never tap a clipped Compose semantics node at (0, 0).
-    options_view_xml = composer_xml
-    for scroll_index in range(5):
-        if find_control(options_view_xml, ["More options"]):
-            break
-        options_view_xml = swipe_vertical_scroll_container(
-            options_view_xml, f"{prefix}-composer-more-options-scroll-{scroll_index}"
-        ) or options_view_xml
-    options_xml = tap_control(
-        options_view_xml, ["More options"], f"{prefix}-composer-more-options",
-        ["Take photo or video", "Add photo or video"]
-    )
-    camera_xml = tap_control_permission_aware(
-        options_xml, ["Take photo or video"], f"{prefix}-composer-camera",
+    # The current Home header action opens the shared Camera preview directly.
+    # Do not look for the New Post caption field or tap the composer-only
+    # "More options" action here: those controls belong to a later destination.
+    # Require the real live-camera switch control before proceeding so a wrong
+    # screen or a broken route remains a genuine runtime failure.
+    camera_xml = tap_control(
+        home, ["Open FYNX camera"], f"{prefix}-home-camera-preview",
         ["Switch front/back camera"]
-    ) if options_xml else ""
+    )
     if not camera_xml:
-        run("adb", "shell", "input", "keyevent", "4")
-        time.sleep(0.8)
-        run("adb", "shell", "input", "keyevent", "4")
-        time.sleep(0.8)
-        return dump_ui(f"{prefix}-camera-return-home.xml") or composer_xml
+        return home_xml
 
     # Record the emulator's actual camera inventory. The legacy "emulated" front source
     # may not enumerate a CameraX device, so do not claim a front-lens pass unless the
