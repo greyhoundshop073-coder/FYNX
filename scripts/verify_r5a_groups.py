@@ -52,6 +52,9 @@ check('group history cursor uses the same descending timestamp and id order as t
 check('group history cursor is passed through by the Android client without millisecond truncation', 'before=${Uri.encode(it)}' in client and 'nextBefore' in client)
 check('active Group Chat exposes its server-backed message edit operation', 'FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)' in group_panel and 'Text("Edit")' in group_panel)
 check('active Group Chat offers member mention suggestions', 'val mentionSuggestions' in group_panel and 'Mention a member' in group_panel)
+check('group refresh merges server windows without dropping previously loaded older messages', 'internal fun mergeGroupMessageRefresh(' in group_panel and 'existing.filter { it.id !in refreshedIds } + latestRemote' in group_panel)
+check('periodic group refresh retains older delivered pages and pending local messages', 'mergeGroupMessageRefresh(messages, remoteMessages)' in group_panel)
+check('group realtime refresh retains older delivered pages and pending local messages', 'mergeGroupMessageRefresh(latestMessages, remoteMessages)' in group_panel)
 
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
