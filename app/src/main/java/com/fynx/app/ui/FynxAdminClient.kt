@@ -227,10 +227,10 @@ object FynxAdminClient {
             JSONObject().put("active", active).toString()
         ).map { Unit }
 
-    suspend fun activity(context: Context, query: String = "", offset: Int = 0): Result<AdminPage<AdminActivity>> =
+    suspend fun activity(context: Context, query: String = "", offset: Int = 0, action: String = ""): Result<AdminPage<AdminActivity>> =
         FynxBackendClient.get(
             context,
-            "/api/admin/activity?q=${encode(query)}&limit=50&offset=${offset.coerceIn(0, 10000)}"
+            "/api/admin/activity?q=${encode(query)}&action=${encode(action)}&limit=50&offset=${offset.coerceIn(0, 10000)}"
         ).mapCatching { raw ->
             val value = JSONObject(raw)
             val array = value.optJSONArray("activities")
