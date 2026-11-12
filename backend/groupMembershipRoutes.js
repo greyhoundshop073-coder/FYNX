@@ -45,8 +45,13 @@ export function registerGroupMembershipRoutes({ app }) {
   const isAdmin = role => String(role) === 'ADMIN';
   const canManageMembers = role => ['ADMIN', 'MODERATOR'].includes(String(role || '').toUpperCase());
   const insertMemberIfCapacity = async (db, groupId, userId) => {
-    const inserted = await db.query(`INSERT INTO fynx_group_members(group_id,user_id,role)
-      SELECT $1,$2,'MEMBER' WHERE (SELECT COUNT(*) FROM fynx_group_members WHERE group_id=$1) < 500
+    const inserted = await db.query(`WITH available_group AS (
+      UPDATE fynx_groups SET updated_at=updated_at
+      WHERE id=$1 AND (SELECT COUNT(*) FROM fynx_group_members WHERE group_id=$1) < 500
+      RETURNING id
+    )
+    INSERT INTO fynx_group_members(group_id,user_id,role)
+      SELECT available_group.id,$2,'MEMBER' FROM available_group
       ON CONFLICT(group_id,user_id) DO NOTHING RETURNING user_id`, [groupId,userId]);
     if (inserted.rowCount) return true;
     return Boolean((await db.query('SELECT 1 FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 LIMIT 1', [groupId,userId])).rows[0]);
