@@ -13,6 +13,28 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
+  # Chat/Groups PRs must never fall through to the unrelated Marketplace/My Shop
+  # visual journey. Dedicated Chat/Groups emulator navigation remains pending.
+  echo "::notice::Chat/Groups runtime scope selected. Unrelated workstreams are not executed."
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    RESULT="BLOCKED: Android instrumentation tests failed before Chat/Groups runtime navigation."
+  else
+    RESULT="SKIPPED: dedicated Chat/Groups emulator navigation is not yet implemented in this runner; source parity and Android build/tests are covered by their own CI gates. No Chat/Groups runtime screenshot or live-backend behavior is claimed."
+  fi
+  {
+    echo "# FYNX Chat/Groups Runtime Certification"
+    echo
+    echo "- Scope: Private Chat and Group Chat only."
+    echo "- Android instrumentation exit: ${TEST_EXIT}"
+    echo "- ${RESULT}"
+    echo "- Marketplace, My Shop, Wallet, Home, Status and camera visual journeys were not run by this Chat/Groups job."
+    echo "- Live backend, two-account delivery, private/group message delivery, member controls and history authorization remain unverified by this runtime job."
+  } > fynx-runtime-screenshots/FYNX-chat-groups-runtime.md
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  exit "${TEST_EXIT}"
+fi
+
 if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   echo "::notice::Capturing the Home composer and Music picker through the debug-only UI entry; no backend account or publishing action is used."
   FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
