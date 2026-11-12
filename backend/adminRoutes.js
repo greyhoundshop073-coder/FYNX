@@ -139,7 +139,7 @@ export function registerAdminRoutes({ app }) {
       const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
       if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/'))return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});
     }
-    if(linkUrl){try{const parsed=new URL(linkUrl);if(!['http:','https:'].includes(parsed.protocol)||!parsed.hostname)return res.status(400).json({error:'announcement link must use HTTPS or HTTP'});}catch{return res.status(400).json({error:'announcement link is invalid'});}}
+    if(linkUrl){try{const parsed=new URL(linkUrl);if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password)return res.status(400).json({error:'announcement link must be a valid HTTPS URL without embedded credentials'});}catch{return res.status(400).json({error:'announcement link is invalid'});}}
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
