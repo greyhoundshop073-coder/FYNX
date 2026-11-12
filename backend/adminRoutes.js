@@ -111,7 +111,14 @@ export function registerAdminRoutes({ app }) {
 
   app.get('/api/admin/ai-entitlements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT plan,active,COUNT(*)::int AS users FROM fynx_ai_entitlements GROUP BY plan,active ORDER BY plan,active`);return res.json({entitlements:result.rows,chargingEnabled:false,source:'entitlement foundation only'});}catch(error){console.error('ai entitlements',error);return res.status(500).json({error:'AI entitlement report unavailable'});}});
 
-  app.get('/api/admin/admins',auth,async(req,res)=>{try{await ensureSchema();if((await requireAdmin(req,res))===null)return;const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});}catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
+  app.get('/api/admin/admins',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const actorRole=await requireAdmin(req,res);
+    if(actorRole===null)return;
+    if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
+    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);
+    return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});
+  }catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
   app.get('/api/admin/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
