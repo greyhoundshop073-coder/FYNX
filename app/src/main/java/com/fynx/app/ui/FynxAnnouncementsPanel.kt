@@ -713,6 +713,27 @@ fun FynxAdminControlCenterPanel() {
                                 }
                             }) { Text(if (marketplaceDrivers.any { it.userId == user.id && it.active }) "Revoke Driver" else "Approve Driver") }
                         }
+                        Text(
+                            "Limited status blocks Marketplace purchases and sending group messages without fully locking the account.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                requestAdminConfirmation(
+                                    "Temporarily limit this account?",
+                                    "@${user.username} will be blocked from Marketplace purchases and sending group messages. Other FYNX access remains available where supported.",
+                                    "Limit account"
+                                ) {
+                                    scope.launch {
+                                        FynxAdminClient.setAccountStatus(context, user.id, "LIMITED")
+                                            .onSuccess { statusMessage = "@${user.username} is now limited." }
+                                            .onFailure { statusMessage = it.message ?: "Account restriction failed." }
+                                    }
+                                }
+                            }
+                        ) { Text("Limit Marketplace + group messaging") }
                     }
                 }
             }
