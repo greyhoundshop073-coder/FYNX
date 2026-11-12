@@ -95,12 +95,18 @@ export function registerAdminRoutes({ app }) {
       const status=typeof req.query?.status==='string'?req.query.status.trim().toUpperCase():'OPEN';
       if(!['OPEN','UNDER_REVIEW','RESOLVED','DISMISSED','ALL'].includes(status))return res.status(400).json({error:'invalid report status'});
       const result=await pool.query(`SELECT r.id,r.target_type,r.target_id,r.target_owner_id,r.reason,r.details,r.status,r.created_at,r.updated_at,
-        reporter.username AS reporter_username,owner.username AS owner_username
+        reporter.username AS reporter_username,owner.username AS owner_username,
+        CASE r.target_type
+          WHEN 'SOCIAL_POST' THEN (SELECT p.text FROM social_posts p WHERE p.id=r.target_id)
+          WHEN 'SOCIAL_COMMENT' THEN (SELECT c.text FROM social_post_comments c WHERE c.id=r.target_id)
+          WHEN 'MARKETPLACE_LISTING' THEN (SELECT l.title || E'\\n' || l.description FROM marketplace_listings l WHERE l.id=r.target_id)
+          ELSE NULL
+        END AS content_preview
         FROM safety_content_reports r JOIN users reporter ON reporter.id=r.reporter_id
         JOIN users owner ON owner.id=r.target_owner_id
         WHERE ($1='ALL' OR r.status=$1)
         ORDER BY CASE r.status WHEN 'OPEN' THEN 0 WHEN 'UNDER_REVIEW' THEN 1 ELSE 2 END,r.created_at ASC LIMIT 200`,[status]);
-      return res.json({reports:result.rows.map(row=>({id:String(row.id),targetType:row.target_type,targetId:String(row.target_id),targetOwnerId:String(row.target_owner_id),ownerUsername:row.owner_username||'',reporterUsername:row.reporter_username||'',reason:row.reason,details:row.details,status:row.status,createdAt:row.created_at,updatedAt:row.updated_at}))});
+      return res.json({reports:result.rows.map(row=>({id:String(row.id),targetType:row.target_type,targetId:String(row.target_id),targetOwnerId:String(row.target_owner_id),ownerUsername:row.owner_username||'',reporterUsername:row.reporter_username||'',reason:row.reason,details:row.details,contentPreview:row.content_preview||'',status:row.status,createdAt:row.created_at,updatedAt:row.updated_at}))});
     } catch(error) { console.error('admin content reports',error); return res.status(500).json({error:'content reports unavailable'}); }
   });
   app.patch('/api/admin/content-reports/:reportId',auth,async(req,res)=>{
