@@ -427,10 +427,6 @@ checks.extend([
      and 'if field.strip()' in runtime
      and "return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}" not in runtime),
     ("Photo editor keeps the five editing actions in a bounded scrollable rail and exposes Rotate in the fixed top row", "Modifier.align(Alignment.TopEnd)" in camera and "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)" in camera and ".verticalScroll(rememberScrollState())" in camera and all(f'CameraEditorRailAction("{label}"' in camera for label in ["Looks", "Face FX", "Background", "AI Studio", "Text"]) and 'Text("Rotate", color = Color.White' in camera and 'contentDescription = "Rotate photo"' in camera and 'CameraEditorRailAction("Rotate"' not in camera),
-     "Modifier.align(Alignment.TopEnd)" in camera
-     and "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)" in camera
-     and ".verticalScroll(rememberScrollState())" in camera
-     and 'CameraEditorRailAction("Rotate"' in camera
      and "modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp)" in camera),
     ("Saved image/video draft media type falls back to persisted type if file MIME is unavailable",
      "copyCameraGalleryMediaToCache(context, source, initialMediaType)" in camera
