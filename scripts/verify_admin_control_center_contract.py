@@ -122,7 +122,7 @@ require("String(safety.account_status)==='LIMITED'" in groups and
         "LIMITED must enforce restrictions in group messaging and Marketplace checkout")
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
-require("target_user_id=$2" in (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8") and
+require("target_user_id=$2" in Path("backend/trustSafety.js").read_text(encoding="utf-8") and
         "appeal.report_id!=null" in backend and "String(linkedReport.target_user_id)===String(appeal.user_id)" in backend and
         "restored=false" in backend,
         "appeals must belong to the restricted target account and may only restore that account for its linked report")
