@@ -471,8 +471,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const active = req.body?.active === true;
       if (!id) return res.status(400).json({ error: "valid promotion id is required" });
       if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
-      if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) return res.status(400).json({ error: "invalid campaign destination" });
-      if ((destinationType === "MARKETPLACE" && destinationValue) || (destinationType !== "MARKETPLACE" && !destinationValue)) {
+      if (!["NONE", "MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) return res.status(400).json({ error: "invalid campaign destination" });
+      if (((destinationType === "MARKETPLACE" || destinationType === "NONE") && destinationValue) || (!["MARKETPLACE", "NONE"].includes(destinationType) && !destinationValue)) {
         return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
       }
       if (destinationType === "CATEGORY") {
