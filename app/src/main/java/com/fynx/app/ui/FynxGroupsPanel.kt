@@ -599,6 +599,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             remoteGroupSearchHasMore = false
             remoteGroupSearchCursor = null
             remoteGroupSearchError = null
+            remoteGroupSearchLoading = false
             return@LaunchedEffect
         }
         remoteGroupSearchMessages = emptyList()
