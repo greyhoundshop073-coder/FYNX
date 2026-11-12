@@ -67,6 +67,7 @@ object FynxAdminClient {
         val accountStatus: String,
         val createdAt: String
     )
+    data class AppealDecision(val restored: Boolean)
     data class ProtectionCase(
         val id: String,
         val orderId: String,
@@ -290,8 +291,12 @@ object FynxAdminClient {
             AdminPage(items, value.optInt("offset", offset), value.optInt("limit", 50), value.optBoolean("hasMore", false))
         }
 
-    suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<Unit> =
-        FynxBackendClient.patchJson(context, "/api/admin/appeals/${encode(appealId)}", JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()).map { Unit }
+    suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<AppealDecision> =
+        FynxBackendClient.patchJson(context, "/api/admin/appeals/${encode(appealId)}", JSONObject().put("status", status).put("decisionNote", decisionNote.take(500)).toString()).mapCatching { raw ->
+            val appeal = JSONObject(raw).optJSONObject("appeal")
+                ?: throw IllegalStateException("Appeal decision response was incomplete.")
+            AppealDecision(restored = appeal.optBoolean("restored", false))
+        }
 
     suspend fun marketplaceProtectionCases(context: Context, status: String? = null): Result<List<ProtectionCase>> {
         val path = if (status.isNullOrBlank()) "/api/admin/marketplace/protection/cases" else "/api/admin/marketplace/protection/cases?status=${encode(status.trim().uppercase())}"
