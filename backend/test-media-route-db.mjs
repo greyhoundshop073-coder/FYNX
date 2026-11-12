@@ -25,8 +25,22 @@ for (const required of [
   "sp.starts_at <= NOW()",
   "sp.ends_at > NOW()"
 ]) assert.ok(seasonalSqlFragment.includes(required), `seasonal SQL fragment must enforce ${required}`);
-const sql = sqlTemplate.replace("${seasonalMediaAuthorization}", seasonalSqlFragment);
-assert.ok(!sql.includes("${seasonalMediaAuthorization}"), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
+const announcementVariableStart = source.indexOf("const announcementMediaAuthorization = announcementMediaTable.rows[0]?.relation");
+assert.notEqual(announcementVariableStart, -1, "announcement media authorization must be schema-guarded");
+const announcementTemplateStart = source.indexOf("? `", announcementVariableStart);
+const announcementTemplateEnd = source.indexOf("`", announcementTemplateStart + 3);
+assert.ok(announcementTemplateStart > announcementVariableStart && announcementTemplateEnd > announcementTemplateStart, "announcement SQL fragment extraction failed");
+const announcementSqlFragment = source.slice(announcementTemplateStart + 3, announcementTemplateEnd).trim();
+for (const required of [
+  "FROM fynx_announcements a",
+  "a.media_id = mm.id",
+  "a.published = TRUE",
+  "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()"
+]) assert.ok(announcementSqlFragment.includes(required), `announcement SQL fragment must enforce ${required}`);
+const sql = sqlTemplate
+  .replace("${seasonalMediaAuthorization}", seasonalSqlFragment)
+  .replace("${announcementMediaAuthorization}", announcementSqlFragment);
+assert.ok(!sql.includes("${seasonalMediaAuthorization}") && !sql.includes("${announcementMediaAuthorization}"), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
 assert.ok(source.includes("to_regclass('public.marketplace_seasonal_promotions')"), "runtime media route must skip the optional campaign table until it exists");
 const db = new Client();
 await db.connect();
@@ -40,9 +54,10 @@ try {
     "CREATE TEMP TABLE privacy_settings (user_id BIGINT, profile_visibility TEXT)",
     "CREATE TEMP TABLE friendships (user_id BIGINT, friend_id BIGINT, status TEXT)",
     "CREATE TEMP TABLE statuses (media_id BIGINT, expires_at TIMESTAMPTZ, owner_id BIGINT, audience TEXT)",
+    "CREATE TEMP TABLE fynx_announcements (media_id BIGINT, published BOOLEAN, scheduled_at TIMESTAMPTZ)",
     "CREATE TEMP TABLE marketplace_seasonal_promotions (artwork_media_id BIGINT, active BOOLEAN, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ)"
   ].join(";"));
-  for (const row of [[100,1],[101,4],[106,1],[107,3],[108,2],[109,1],[110,1],[111,4],[112,5],[113,5],[114,99],[115,1],[116,1],[117,60],[118,61],[119,62],[120,63]]) {
+  for (const row of [[100,1],[101,4],[106,1],[107,3],[108,2],[109,1],[110,1],[111,4],[112,5],[113,5],[114,99],[115,1],[116,1],[117,60],[118,61],[119,62],[120,63],[121,10],[122,10],[123,10]]) {
     await db.query("INSERT INTO message_media(id,owner_id,mime_type) VALUES($1,$2,'image/jpeg')", row);
   }
   await db.query("INSERT INTO marketplace_listings(id,seller_id,active,quantity,currency,media_ids) VALUES (1,1,TRUE,3,'NGN','[\"100\",\"101\"]'), (2,1,FALSE,3,'NGN','[\"106\"]'), (3,3,TRUE,3,'USD','[\"107\"]'), (4,1,TRUE,0,'NGN','[\"115\"]'), (5,1,TRUE,2,'EUR','[\"116\"]')");
@@ -52,6 +67,7 @@ try {
   await db.query("INSERT INTO privacy_settings VALUES(1,'Everyone'),(4,'My friends')");
   await db.query("INSERT INTO statuses VALUES(112,NOW()+INTERVAL '1 hour',5,'EVERYONE'),(113,NOW()+INTERVAL '1 hour',5,'FRIENDS')");
   await db.query("INSERT INTO marketplace_seasonal_promotions VALUES (117,TRUE,NOW()-INTERVAL '1 hour',NOW()+INTERVAL '1 hour'), (118,FALSE,NOW()-INTERVAL '1 hour',NOW()+INTERVAL '1 hour'), (119,TRUE,NOW()-INTERVAL '2 hours',NOW()-INTERVAL '1 hour'), (120,TRUE,NOW()+INTERVAL '1 hour',NOW()+INTERVAL '2 hours')");
+  await db.query("INSERT INTO fynx_announcements VALUES (121,TRUE,NOW()-INTERVAL '1 hour'),(122,TRUE,NOW()+INTERVAL '1 hour'),(123,FALSE,NULL)");
   const allowed = async (id, viewer) => (await db.query(sql,[id,viewer])).rows.length > 0;
   const cases = [
     [100,2,true,"seller-owned active listing"],
@@ -71,10 +87,13 @@ try {
     [117,2,true,"currently active seasonal banner artwork"],
     [118,2,false,"paused seasonal campaign artwork"],
     [119,2,false,"expired seasonal campaign artwork"],
-    [120,2,false,"future seasonal campaign artwork"]
+    [120,2,false,"future seasonal campaign artwork"],
+    [121,2,true,"published announcement image"],
+    [122,2,false,"future scheduled announcement image"],
+    [123,2,false,"unpublished announcement image"]
   ];
   for (const [id,viewer,expected,name] of cases) assert.equal(await allowed(id,viewer),expected,name);
-  console.log(`PostgreSQL media authorization integration tests passed (${cases.length} cases, including seasonal campaign windows).`);
+  console.log(`PostgreSQL media authorization integration tests passed (${cases.length} cases, including campaign and announcement publication windows).`);
 } finally {
   await db.end();
 }
