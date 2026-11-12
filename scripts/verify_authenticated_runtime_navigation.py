@@ -2341,39 +2341,30 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     else:
         FAILURES.append(prefix + ": video Text tool did not open")
 
-    # Scroll vertically inside the actual video-editor viewport until the style row
-    # is visible. A horizontal swipe at the caption field's old screen coordinate does
-    # not reliably reach a carousel that is still below the fold.
-    for style_scroll_attempt in range(8):
-        editor = dump_ui(f"{prefix}-camera-video-style-viewport-{style_scroll_attempt + 1}.xml") or editor
-        if find_control(editor, ["Video styles"]) and find_control(editor, ["Cinematic"]):
-            break
-        scroll_viewports = []
-        for node in nodes(editor):
-            if node.attrib.get("class") != "android.widget.ScrollView":
-                continue
-            if node.attrib.get("scrollable", "false").lower() != "true":
-                continue
-            bounds = node.attrib.get("bounds", "")
-            try:
-                lt, rb = bounds.split("][", 1)
-                left, top = map(int, lt.strip("[]").split(","))
-                right, bottom = map(int, rb.strip("[]").split(","))
-                if right - left > 400 and bottom - top > 80:
-                    scroll_viewports.append((right-left, bottom-top, left, top, right, bottom))
-            except (ValueError, IndexError):
-                continue
-        if not scroll_viewports:
-            break
-        _, _, left, top, right, bottom = max(scroll_viewports, key=lambda item: item[1])
-        x = (left + right) // 2
-        run("adb", "shell", "input", "swipe", str(x), str(bottom - 30), str(x), str(top + 30), "450")
-        time.sleep(0.45)
-    # Re-read after the last scroll gesture; a transient empty/stale dump must
-    # not turn a style row that is actually on screen into a false failure.
-    editor = dump_ui(f"{prefix}-camera-video-style-final-viewport.xml") or editor
-    if not find_control(editor, ["Video styles"]) or not find_control(editor, ["Warm Film"]):
-        FAILURES.append(prefix + ": Video styles section was not reachable by scrolling the real editor viewport")
+    # The visible heading is not consistently included in UIAutomator's Compose
+    # hierarchy. Verify the actual style tiles, and do not scroll when they are
+    # already visible: that previously moved the style row out of view and caused
+    # a false runtime failure.
+    editor = camera_restore_video_style_row(
+        dump_ui(f"{prefix}-camera-video-style-precheck.xml") or editor,
+        prefix + "-camera-video-style-precheck"
+    )
+    required_style_tiles = ["Cinematic", "Warm Film"]
+    missing_style_tiles = [
+        label for label in required_style_tiles
+        if not find_control(editor, [label]) or not control_is_clickable(editor, [label])
+    ]
+    if missing_style_tiles:
+        FAILURES.append(
+            prefix + ": video style selector did not expose tappable tiles: "
+            + ", ".join(missing_style_tiles)
+        )
+    else:
+        report.append("- PASS video style selector exposes tappable Cinematic and Warm Film tiles")
+        screenshot(f"{prefix}-camera-video-style-selector.png")
+        (ROOT / f"{prefix}-camera-video-style-selector.xml").write_text(
+            editor + chr(10), encoding="utf-8"
+        )
     # Re-find the action after the captions UI and vertical scroll may have changed it.
     editor = dump_ui(f"{prefix}-camera-video-before-style-apply.xml") or editor
     style = find_control(editor, ["Cinematic"])
@@ -2453,14 +2444,18 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             editor, ["Apply text / effects"], enabled=True, timeout=150.0,
             prefix=prefix + f"-camera-video-{slug}-ready"
         )
+        # Caption editing/export can leave the vertical editor panel scrolled down.
+        # Restore the real style row first, then horizontally reveal this specific tile
+        # using the carousel's current accessibility bounds.
+        current_editor = camera_restore_video_style_row(
+            current_editor, prefix + f"-camera-video-{slug}-restore-row"
+        )
+        current_editor = camera_scroll_horizontal_until_control(
+            current_editor, [style_label], prefix + f"-camera-video-{slug}-carousel"
+        )
         style_node = find_control(current_editor, [style_label])
-        if not style_node:
-            run("adb", "shell", "input", "swipe", "1220", "2360", "300", "2360", "420")
-            time.sleep(0.5)
-            current_editor = dump_ui(f"{prefix}-camera-video-{slug}-styles-scroll.xml") or current_editor
-            style_node = find_control(current_editor, [style_label])
-        if not style_node:
-            FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
+        if not style_node or not control_is_clickable(current_editor, [style_label]):
+            FAILURES.append(prefix + f": video style {style_label} was not reachable as a tappable carousel item")
             break
         edited_before = list_app_cache_videos()
         _, style_x, style_y = style_node
@@ -3099,6 +3094,92 @@ def camera_scroll_to_top(xml_text: str, required_labels: list[str], prefix: str,
         run("adb", "shell", "input", "swipe", str(x), str(top+inset), str(x), str(bottom-inset), "420")
         time.sleep(0.4)
         latest = dump_ui(f"{prefix}-top-{attempt+1}.xml") or latest
+    return latest
+
+
+def camera_restore_video_style_row(xml_text: str, prefix: str, max_swipes: int = 8) -> str:
+    """Bring the real video-style row back into view using its measured vertical viewport.
+
+    The caption field can call BringIntoView while the keyboard opens. That scroll
+    position survives editing/export, so the style row may be clipped above the
+    scroll viewport. Stop only when at least one actual style tile is visible and
+    tappable; the visual section heading is not consistently exported by UIAutomator.
+    """
+    latest = xml_text
+    style_labels = ["Natural", "Cinematic", "Warm Film", "Vintage", "B&W", "Vivid"]
+    for attempt in range(max_swipes + 1):
+        visible_styles = [
+            label for label in style_labels
+            if find_control(latest, [label]) and control_is_clickable(latest, [label])
+        ]
+        if visible_styles:
+            return latest
+
+        scroll_viewports = []
+        for node in nodes(latest):
+            if node.attrib.get("class") != "android.widget.ScrollView":
+                continue
+            if node.attrib.get("scrollable", "false").lower() != "true":
+                continue
+            bounds = _node_bounds(node)
+            if not bounds:
+                continue
+            left, top, right, bottom = bounds
+            if right - left > 400 and bottom - top > 180:
+                scroll_viewports.append(((right - left) * (bottom - top), left, top, right, bottom))
+        if not scroll_viewports or attempt == max_swipes:
+            break
+
+        _, left, top, right, bottom = max(scroll_viewports, key=lambda item: item[0])
+        x = (left + right) // 2
+        inset = max(28, min(56, (bottom - top) // 12))
+        # Finger moves down inside the measured ScrollView to reveal earlier content.
+        run("adb", "shell", "input", "swipe", str(x), str(top + inset),
+            str(x), str(bottom - inset), "420")
+        time.sleep(0.45)
+        latest = dump_ui(f"{prefix}-vertical-{attempt + 1}.xml") or latest
+
+    screenshot(f"{prefix}-not-restored.png")
+    (ROOT / f"{prefix}-not-restored.xml").write_text(latest + chr(10), encoding="utf-8")
+    return latest
+
+
+def camera_scroll_horizontal_until_control(
+    xml_text: str, labels: list[str], prefix: str, max_swipes: int = 8
+) -> str:
+    """Reveal an off-screen style tile with a swipe measured from its real carousel."""
+    latest = xml_text
+    for attempt in range(max_swipes + 1):
+        if find_control(latest, labels) and control_is_clickable(latest, labels):
+            return latest
+
+        carousels = []
+        for node in nodes(latest):
+            if node.attrib.get("class") != "android.widget.HorizontalScrollView":
+                continue
+            if node.attrib.get("scrollable", "false").lower() != "true":
+                continue
+            bounds = _node_bounds(node)
+            if not bounds:
+                continue
+            left, top, right, bottom = bounds
+            if right - left > 200 and bottom - top > 35:
+                carousels.append(((right - left) * (bottom - top), left, top, right, bottom))
+        if not carousels or attempt == max_swipes:
+            break
+
+        _, left, top, right, bottom = max(carousels, key=lambda item: item[0])
+        inset = max(24, min(48, (right - left) // 10))
+        y = (top + bottom) // 2
+        # Finger moves left to reveal later carousel items. Coordinates are inside
+        # the actual HorizontalScrollView rather than a fixed device-specific y value.
+        run("adb", "shell", "input", "swipe", str(right - inset), str(y),
+            str(left + inset), str(y), "420")
+        time.sleep(0.45)
+        latest = dump_ui(f"{prefix}-horizontal-{attempt + 1}.xml") or latest
+
+    screenshot(f"{prefix}-not-reachable.png")
+    (ROOT / f"{prefix}-not-reachable.xml").write_text(latest + chr(10), encoding="utf-8")
     return latest
 
 def verify_post_details_footer_safe_area(xml_text: str, journey: str) -> bool:
