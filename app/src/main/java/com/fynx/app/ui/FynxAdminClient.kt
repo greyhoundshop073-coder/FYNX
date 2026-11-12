@@ -17,6 +17,16 @@ object FynxAdminClient {
         val category: String,
         val active: Boolean
     )
+    data class AdminReport(
+        val id: String,
+        val reporterUsername: String,
+        val reporterDisplayName: String,
+        val targetUsername: String,
+        val reason: String,
+        val details: String,
+        val status: String,
+        val createdAt: String
+    )
     data class AppealReview(
         val id: String,
         val userId: String,
@@ -169,6 +179,33 @@ object FynxAdminClient {
             context,
             "/api/admin/social/music/catalogue/" + encode(trackId),
             JSONObject().put("active", active).toString()
+        ).map { Unit }
+
+    suspend fun reports(context: Context): Result<List<AdminReport>> =
+        FynxBackendClient.get(context, "/api/admin/reports").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AdminReport(
+                        id = item.optString("id"),
+                        reporterUsername = item.optString("reporterUsername"),
+                        reporterDisplayName = item.optString("reporterDisplayName"),
+                        targetUsername = item.optString("targetUsername"),
+                        reason = item.optString("reason"),
+                        details = item.optString("details"),
+                        status = item.optString("status"),
+                        createdAt = item.optString("createdAt")
+                    ))
+                }
+            }
+        }
+
+    suspend fun reviewReport(context: Context, reportId: String, status: String): Result<Unit> =
+        FynxBackendClient.patchJson(
+            context,
+            "/api/admin/reports/${encode(reportId)}",
+            JSONObject().put("status", status.trim().uppercase()).toString()
         ).map { Unit }
 
     suspend fun appeals(context: Context): Result<List<AppealReview>> =
