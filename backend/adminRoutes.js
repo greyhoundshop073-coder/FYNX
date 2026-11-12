@@ -99,7 +99,7 @@ export function registerAdminRoutes({ app }) {
     const targetId=String(req.params.userId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.note==='string'?req.body.note.trim().slice(0,500):'';
-    if(!/^[1-9]\\d*$/.test(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
+    if(!/^[1-9]\d*$/.test(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
     if(targetId===String(req.user.sub))return res.status(400).json({error:'administrators cannot change their own account status'});
     const targetRole=await role(targetId);
     if(targetRole==='OWNER'&&req.fynxAdminRole!=='OWNER')return res.status(403).json({error:'only the owner can manage the owner account'});
@@ -121,7 +121,7 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const reportId=String(req.params.reportId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
-    if(!/^[1-9]\\d*$/.test(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
+    if(!/^[1-9]\d*$/.test(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
@@ -141,7 +141,7 @@ export function registerAdminRoutes({ app }) {
     const appealId=String(req.params.appealId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.decisionNote==='string'?req.body.decisionNote.trim().slice(0,500):'';
-    if(!/^[1-9]\\d*$/.test(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
+    if(!/^[1-9]\d*$/.test(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
