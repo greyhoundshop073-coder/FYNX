@@ -180,3 +180,11 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Root cause addressed: manual account-status changes already lock that user row, but appeal restoration did not. Concurrent manual restriction and appeal acceptance could therefore race and overwrite the latest account decision.
 - Commit `adb13297c28ccf124cb3d05c43e1d3842880e1ad`: the Admin contract verifier now requires the shared user-row lock and its concurrency rationale.
 - This is transaction-level serialization in source; credential-backed concurrent database testing and OWNER/ADMIN runtime verification remain outstanding. Re-run all three PR workflows on the newest head before accepting this group.
+
+
+## Announcement scheduling hardening — 12 November 2026
+
+- `backend/adminRoutes.js` now validates real calendar dates before parsing announcement schedules. Impossible dates (for example, February 30), invalid clock fields, and timezone offsets beyond ISO-8601's maximum are rejected instead of being silently normalized by JavaScript `Date`.
+- The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
+- Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
+- This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
