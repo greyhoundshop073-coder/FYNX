@@ -893,16 +893,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     return result.rowCount ? "ADMIN" : null;
   }
 
-  async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}) {
-    try {
-      await pool.query(
-        `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
-         VALUES($1,$2,$3,'music_track',$4,$5,$6::jsonb)`,
-        [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
-      );
-    } catch (error) {
-      console.error('admin music activity audit write failed', error);
-    }
+  async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}, executor = pool) {
+    await executor.query(
+      `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
+       VALUES($1,$2,$3,'music_track',$4,$5,$6::jsonb)`,
+      [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
+    );
   }
 
   app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
@@ -916,22 +912,34 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
       const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
       if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist) return res.status(400).json({ error: 'audio media, title and artist are required' });
-      const media = await pool.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [mediaId]);
-      if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
-        return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        const media = await client.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1 FOR SHARE', [mediaId]);
+        if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+        }
+        result = await client.query(
+          `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
+           VALUES($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
+           RETURNING id,media_id,title,artist,duration_ms,category,active`,
+          [mediaId, title, artist, durationMs, category, req.user.sub]
+        );
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_PUBLISHED", result.rows[0].id, result.rows[0].title, {
+          mediaId: String(result.rows[0].media_id),
+          category: result.rows[0].category,
+          durationMs: Number(result.rows[0].duration_ms || 0)
+        }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-      const result = await pool.query(
-        `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
-         VALUES($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
-         RETURNING id,media_id,title,artist,duration_ms,category,active`,
-        [mediaId, title, artist, durationMs, category, req.user.sub]
-      );
-      await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_PUBLISHED", result.rows[0].id, result.rows[0].title, {
-        mediaId: String(result.rows[0].media_id),
-        category: result.rows[0].category,
-        durationMs: Number(result.rows[0].duration_ms || 0)
-      });
       return res.status(201).json({
         track: {
           id: String(result.rows[0].id),
@@ -979,9 +987,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const id = Number(req.params.id);
       const active = req.body?.active === true;
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active,title', [id, active]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
-      await recordMusicAdminActivity(req.user.sub, role, active ? "MUSIC_TRACK_ACTIVATED" : "MUSIC_TRACK_HIDDEN", id, result.rows[0].title, { active });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        result = await client.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active,title', [id, active]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, active ? "MUSIC_TRACK_ACTIVATED" : "MUSIC_TRACK_HIDDEN", id, result.rows[0].title, { active }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true, active: Boolean(result.rows[0].active) });
     } catch (error) {
       console.error('admin music catalogue status', error);
@@ -996,9 +1018,22 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureSocialSchema();
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id,title', [id]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
-      await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_REMOVED", id, result.rows[0].title, {});
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id,title', [id]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_REMOVED", id, result.rows[0].title, {}, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true });
     } catch (error) {
       console.error('admin remove music', error);
