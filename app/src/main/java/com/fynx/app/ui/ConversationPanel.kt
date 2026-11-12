@@ -681,7 +681,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     val found = page.messages.mapNotNull { remote ->
                         runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull()
                     }
-                    remoteSearchMessages = if (append) (remoteSearchMessages + found).distinctBy { it.id } else found
+                    remoteSearchMessages = if (append) (found + remoteSearchMessages).distinctBy { it.id } else found
                     remoteSearchHasMore = page.hasMore
                     remoteSearchCursor = page.nextBeforeId
                 }
@@ -891,7 +891,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full conversation.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteSearchLoading -> Text("Searching message history…", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteSearchError != null -> Text(remoteSearchError!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp))
-                searchQuery.trim().length >= 2 -> Text("${remoteSearchMessages.size} matching messages in this conversation", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 -> Text("${remoteSearchMessages.size} matches loaded", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
             }
         }
         pinnedMessage?.let { pinned ->
