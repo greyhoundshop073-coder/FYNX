@@ -69,6 +69,14 @@ check('group pin and unpin controls are only available to admins and moderators'
 check('group delete controls are available only to the sender or an admin/moderator', 'if (message.fromMe || canManageGroup) {' in group_panel and 'FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)' in group_panel)
 
 check('private message delete action is shown only for messages owned by the current user', 'if (message.fromMe) {' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt') and 'FynxProductionMessaging.deleteMessage(context, message.id)' in read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt'))
+
+check('group invite preview has an authenticated no-store endpoint', "app.get('/api/groups/:groupId/invites/:token', auth" in membership and "Cache-Control', 'private, no-store'" in membership)
+check('approval-required invite requests are persisted idempotently', "app.post('/api/groups/:groupId/invites/:token/request', auth" in membership and "ON CONFLICT(group_id,user_id) DO NOTHING" in membership and "fynx_group_join_requests" in membership)
+check('admin join-request listing is implemented and role protected', "app.get('/api/groups/:groupId/join-requests', auth" in membership and "if (!isAdmin(actor?.role))" in membership)
+check('admin approval creates membership and removes the pending request transactionally', "app.post('/api/groups/:groupId/join-requests/:username/approve', auth" in membership and "DELETE FROM fynx_group_join_requests" in membership and "await client.query('COMMIT')" in membership)
+check('admin rejection removes only the selected pending request', "app.post('/api/groups/:groupId/join-requests/:username/reject', auth" in membership and "targetJoinRequest(groupId" in membership)
+check('direct invite join never reports phantom pending approval', "if (invite.approve_new_members) {" in membership and "INSERT INTO fynx_group_join_requests(group_id,user_id)" in membership)
+
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
     print(f"R5A_CHECK_{index}: {'PASS' if ok else 'FAIL'}: {name}")
