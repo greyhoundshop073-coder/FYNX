@@ -202,7 +202,7 @@ require("fynx-seasonal-promo:" in advertising and "starts_at < $3 AND ends_at > 
         "active seasonal campaigns with the same key must reject overlapping time windows")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
         "Music Library administration must initialize and write to admin activity history")
-require("metadata = {}, executor = pool" in advertising and advertising.count("recordMarketplaceAdminActivity(") >= 4 and
+require("metadata = {}, executor = pool" in advertising and advertising.count("recordMarketplaceAdminActivity(") >= 5 and
         advertising.count('await client.query("BEGIN")') >= 3 and advertising.count('await client.query("COMMIT")') >= 3 and
         "await executor.query(" in advertising,
         "Marketplace promotion mutations and their audit records must commit atomically")
