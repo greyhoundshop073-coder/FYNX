@@ -163,27 +163,44 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const announcementId=String(req.params.announcementId||'');
     const published=req.body?.published;
-    if(!/^[1-9]\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    if(!/^[1-9]\\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
     const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
+    const hasContent=['title','body','priority','mediaId','linkUrl'].some(key=>Object.prototype.hasOwnProperty.call(req.body||{},key));
     let scheduledAt;
     if(hasSchedule){
       const raw=typeof req.body.scheduledAt==='string'?req.body.scheduledAt.trim():'';
       scheduledAt=raw?new Date(raw):null;
-      if(raw&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
+      if(raw&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
     }
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
-      const existing=(await client.query('SELECT id,title,scheduled_at,published FROM fynx_announcements WHERE id=$1 FOR UPDATE',[announcementId])).rows[0];
+      const existing=(await client.query('SELECT id,title,body,priority,media_id,link_url,scheduled_at,published FROM fynx_announcements WHERE id=$1 FOR UPDATE',[announcementId])).rows[0];
       if(!existing){await client.query('ROLLBACK');return res.status(404).json({error:'announcement not found'});}
+      const title=Object.prototype.hasOwnProperty.call(req.body||{},'title')&&typeof req.body.title==='string'?req.body.title.trim().slice(0,120):existing.title;
+      const body=Object.prototype.hasOwnProperty.call(req.body||{},'body')&&typeof req.body.body==='string'?req.body.body.trim().slice(0,4000):existing.body;
+      const priority=Object.prototype.hasOwnProperty.call(req.body||{},'priority')&&typeof req.body.priority==='string'?req.body.priority.trim().toUpperCase():existing.priority;
+      if(title.length<2||body.length<2||!['NORMAL','IMPORTANT','URGENT'].includes(priority)){await client.query('ROLLBACK');return res.status(400).json({error:'valid announcement title, body and priority are required'});}
+      let mediaId=existing.media_id;
+      if(Object.prototype.hasOwnProperty.call(req.body||{},'mediaId')){
+        const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
+        if(raw&&!/^[1-9]\\d*$/.test(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
+        if(raw){
+          const owned=await client.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[raw,req.user.sub]);
+          if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/')){await client.query('ROLLBACK');return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});}
+          mediaId=raw;
+        }else mediaId=null;
+      }
+      const linkUrl=Object.prototype.hasOwnProperty.call(req.body||{},'linkUrl')&&typeof req.body.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):existing.link_url||'';
+      if(linkUrl){try{const parsed=new URL(linkUrl);if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password){await client.query('ROLLBACK');return res.status(400).json({error:'announcement link must be a valid HTTPS URL without embedded credentials'});}}catch{await client.query('ROLLBACK');return res.status(400).json({error:'announcement link is invalid'});}}
       const nextSchedule=hasSchedule?scheduledAt:existing.scheduled_at;
       const publishedAt=published&&!nextSchedule?new Date():null;
-      const result=await client.query(`UPDATE fynx_announcements SET published=$1,scheduled_at=$2,published_at=$3,updated_at=NOW() WHERE id=$4 RETURNING id,title,scheduled_at,published,published_at,updated_at`,[published,nextSchedule,publishedAt,announcementId]);
+      const result=await client.query(`UPDATE fynx_announcements SET title=$1,body=$2,priority=$3,media_id=$4,link_url=$5,published=$6,scheduled_at=$7,published_at=$8,updated_at=NOW() WHERE id=$9 RETURNING id,title,body,priority,media_id,link_url,scheduled_at,published,published_at,updated_at`,[title,body,priority,mediaId,linkUrl,published,nextSchedule,publishedAt,announcementId]);
       const row=result.rows[0];
-      const action=!published?'ANNOUNCEMENT_UNPUBLISHED':nextSchedule?'ANNOUNCEMENT_SCHEDULED':'ANNOUNCEMENT_PUBLISHED';
-      await recordAdminActivity(req,action,'announcement',row.id,row.title,{published,scheduledAt:nextSchedule,previousPublished:existing.published},client);
+      const action=hasContent?'ANNOUNCEMENT_UPDATED':!published?'ANNOUNCEMENT_UNPUBLISHED':nextSchedule?'ANNOUNCEMENT_SCHEDULED':'ANNOUNCEMENT_PUBLISHED';
+      await recordAdminActivity(req,action,'announcement',row.id,row.title,{published,scheduledAt:nextSchedule,previousPublished:existing.published,contentChanged:hasContent,hasImage:Boolean(mediaId),hasLink:Boolean(linkUrl)},client);
       await client.query('COMMIT');
-      return res.json({announcement:{id:String(row.id),title:row.title,scheduledAt:row.scheduled_at,published:Boolean(row.published),publishedAt:row.published_at,updatedAt:row.updated_at}});
+      return res.json({announcement:{id:String(row.id),title:row.title,body:row.body,priority:row.priority,mediaId:row.media_id==null?null:String(row.media_id),linkUrl:row.link_url||'',scheduledAt:row.scheduled_at,published:Boolean(row.published),publishedAt:row.published_at,updatedAt:row.updated_at}});
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }catch(error){console.error('admin announcement update',error);return res.status(500).json({error:'announcement update failed'});}});
 
