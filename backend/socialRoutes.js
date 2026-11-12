@@ -869,24 +869,33 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch(e) { console.error('social feed',e); res.status(500).json({error:'social feed failed'}); }
   });
   // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
+  let fynxMusicAdminSchemaPromise;
+  async function ensureFynxMusicAdminSchema() {
+    if (!fynxMusicAdminSchemaPromise) {
+      fynxMusicAdminSchemaPromise = (async () => {
+        await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+        await pool.query(`CREATE TABLE IF NOT EXISTS fynx_admin_activity (
+          id BIGSERIAL PRIMARY KEY,
+          actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          actor_role TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_type TEXT NOT NULL DEFAULT '',
+          target_id TEXT NOT NULL DEFAULT '',
+          summary TEXT NOT NULL DEFAULT '',
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_created_idx ON fynx_admin_activity(created_at DESC)");
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_action_idx ON fynx_admin_activity(action,created_at DESC)");
+      })().catch(error => { fynxMusicAdminSchemaPromise = null; throw error; });
+    }
+    return fynxMusicAdminSchemaPromise;
+  }
+
   async function fynxMusicAdminRole(userId) {
-    // Music routes must be safe on a fresh deployment even if no other /api/admin
-    // endpoint has been called yet. The existing adminRoutes module owns this schema,
-    // but this route is independently callable during the same cold start.
-    await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-    await pool.query(`CREATE TABLE IF NOT EXISTS fynx_admin_activity (
-      id BIGSERIAL PRIMARY KEY,
-      actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
-      actor_role TEXT NOT NULL,
-      action TEXT NOT NULL,
-      target_type TEXT NOT NULL DEFAULT '',
-      target_id TEXT NOT NULL DEFAULT '',
-      summary TEXT NOT NULL DEFAULT '',
-      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`);
-    await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_created_idx ON fynx_admin_activity(created_at DESC)");
-    await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_action_idx ON fynx_admin_activity(action,created_at DESC)");
+    // Keep direct Music Library calls safe on a cold deployment, but run DDL once
+    // per process rather than on every OWNER-only request.
+    await ensureFynxMusicAdminSchema();
     const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
     if (first && String(first.id) === String(userId)) return "OWNER";
     const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
@@ -909,9 +918,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const mediaId = Number(req.body?.mediaId);
       const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
       const artist = typeof req.body?.artist === 'string' ? req.body.artist.trim().slice(0, 120) : '';
-      const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
+      const durationMs = req.body?.durationMs;
       const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
-      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist) return res.status(400).json({ error: 'audio media, title and artist are required' });
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist ||
+          !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > 86400000) {
+        return res.status(400).json({ error: 'audio media, title, artist and a valid duration (1-86400000 ms) are required' });
+      }
       const client = await pool.connect();
       let result;
       try {
