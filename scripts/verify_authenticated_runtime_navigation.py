@@ -3562,11 +3562,34 @@ def wallet_balance_details_ready(xml_text: str) -> bool:
         find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
-        and find_control(xml_text, ["Recent activity"])
+    )
+
+
+def wallet_activity_ready(xml_text: str) -> bool:
+    """Confirm the actual recent-activity section and its transaction filters."""
+    return bool(
+        find_control(xml_text, ["Recent activity"])
         and find_control(xml_text, ["All"])
         and find_control(xml_text, ["Money in"])
         and find_control(xml_text, ["Money out"])
     )
+
+
+def capture_wallet_activity(prefix: str, wallet_xml: str) -> tuple[str, bool]:
+    """Scroll separately to Recent activity; it is below the balance-detail cards."""
+    latest = wallet_xml
+    if wallet_activity_ready(latest):
+        return latest, True
+    for attempt in range(8):
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-activity-scroll-" + str(attempt)
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+        if wallet_activity_ready(latest):
+            return latest, True
+    return latest, False
 
 
 def capture_wallet_balance_details(prefix: str, wallet_xml: str) -> tuple[str, bool]:
@@ -3733,11 +3756,17 @@ def capture_wallet_from_features(prefix:str):
                 details_xml + chr(10), encoding="utf-8"
             )
             screenshot("authenticated-wallet-balance-details.png")
-            # Keep the verified lower viewport: it contains Balance details and
-            # Recent activity. Do not scroll back to the top and then fail because
-            # UIAutomator did not publish the LazyColumn's restored top bounds.
-            wallet_xml = details_xml
-            wallet_opened = wallet_balance_details_ready(wallet_xml)
+            activity_xml, activity_ready = capture_wallet_activity(prefix, details_xml)
+            if activity_ready:
+                (ROOT/"authenticated-wallet-recent-activity.xml").write_text(
+                    activity_xml + chr(10), encoding="utf-8"
+                )
+                screenshot("authenticated-wallet-recent-activity.png")
+                wallet_xml = activity_xml
+                wallet_opened = True
+            else:
+                wallet_opened = False
+                result_message = "Wallet balance buckets were captured, but the separate Recent activity section and filters were not exposed after scrolling."
         else:
             wallet_opened = False
             result_message = "Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface."
