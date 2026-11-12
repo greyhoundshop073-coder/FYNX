@@ -55,6 +55,13 @@ fun FynxAdminControlCenterPanel() {
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var appeals by remember { mutableStateOf<List<FynxAdminClient.AppealReview>>(emptyList()) }
+    var contentReports by remember { mutableStateOf<List<FynxAdminClient.ContentReport>>(emptyList()) }
+    var contentReportsLoading by remember { mutableStateOf(false) }
+    var contentReportsError by remember { mutableStateOf<String?>(null) }
+    var refreshContentReports by remember { mutableIntStateOf(0) }
+    var auditReportId by remember { mutableStateOf<String?>(null) }
+    var moderationAudit by remember { mutableStateOf<List<FynxAdminClient.ModerationAudit>>(emptyList()) }
+    var auditLoading by remember { mutableStateOf(false) }
     var appealsLoading by remember { mutableStateOf(false) }
     var appealsError by remember { mutableStateOf<String?>(null) }
     var refreshAppeals by remember { mutableIntStateOf(0) }
@@ -81,6 +88,17 @@ fun FynxAdminControlCenterPanel() {
 
     LaunchedEffect(Unit) { FynxAdminClient.dashboard(context).onSuccess { dashboard = it; error = null }.onFailure { error = it.message ?: "Admin access required." }; loading = false }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshContentReports, dashboard?.role) {
+        if (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN") {
+            contentReportsLoading = true
+            contentReportsError = null
+            FynxAdminClient.contentReports(context, "OPEN")
+                .onSuccess { contentReports = it }
+                .onFailure { contentReportsError = it.message ?: "Content reports unavailable." }
+            contentReportsLoading = false
+        }
+    }
+
     LaunchedEffect(refreshAppeals, dashboard?.role) {
         if (dashboard != null) {
             appealsLoading = true; appealsError = null
@@ -205,7 +223,74 @@ fun FynxAdminControlCenterPanel() {
                 FynxMarketplaceSeasonalPromotionAdminPanel()
                 Spacer(Modifier.height(20.dp))
             }
-            Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.").onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not update appeal." } } }) { Text("Review") }; Button(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.").onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not restore account." } } }) { Text("Approve & restore") }; OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.").onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not reject appeal." } } }) { Text("Reject") } } } } } }; Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(20.dp))
+            Text("User Content Reports", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text("Review reports about Home Feed posts, comments and Marketplace listings. Decisions are recorded in the moderation audit.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(8.dp))
+            if (contentReportsLoading) CircularProgressIndicator()
+            else if (contentReportsError != null) {
+                Text(contentReportsError!!, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = { refreshContentReports++ }) { Text("Retry content reports") }
+            } else if (contentReports.isEmpty()) {
+                Text("No open content reports require review.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                contentReports.forEach { report ->
+                    Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("${report.targetType.replace('_', ' ')} • Report #${report.id}", style = MaterialTheme.typography.titleSmall)
+                            Text("Reported by @${report.reporterUsername} • Content owner @${report.ownerUsername}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Reason: ${report.reason}", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            if (report.details.isNotBlank()) Text(report.details, style = MaterialTheme.typography.bodySmall)
+                            if (report.contentPreview.isNotBlank()) Text(report.contentPreview.take(240), maxLines = 4, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Status: ${report.status}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedButton(enabled = !contentReportsLoading, onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewContentReport(context, report.id, "UNDER_REVIEW", "Moderator opened this report for review.")
+                                            .onSuccess { statusMessage = "Report moved to review."; refreshContentReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not update report." }
+                                    }
+                                }) { Text("Review") }
+                                Button(enabled = !contentReportsLoading, onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewContentReport(context, report.id, "RESOLVED", "Moderator resolved this report.")
+                                            .onSuccess { statusMessage = "Report resolved and audit recorded."; refreshContentReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not resolve report." }
+                                    }
+                                }) { Text("Resolve") }
+                                OutlinedButton(enabled = !contentReportsLoading, onClick = {
+                                    scope.launch {
+                                        FynxAdminClient.reviewContentReport(context, report.id, "DISMISSED", "Moderator dismissed this report.")
+                                            .onSuccess { statusMessage = "Report dismissed and audit recorded."; refreshContentReports++ }
+                                            .onFailure { statusMessage = it.message ?: "Could not dismiss report." }
+                                    }
+                                }) { Text("Dismiss") }
+                                TextButton(enabled = !auditLoading, onClick = {
+                                    auditReportId = report.id
+                                    auditLoading = true
+                                    scope.launch {
+                                        FynxAdminClient.contentReportAudit(context, report.id)
+                                            .onSuccess { moderationAudit = it }
+                                            .onFailure { statusMessage = it.message ?: "Moderation audit unavailable." }
+                                        auditLoading = false
+                                    }
+                                }) { Text("Audit") }
+                            }
+                            if (auditReportId == report.id) {
+                                if (auditLoading) CircularProgressIndicator(Modifier.size(18.dp))
+                                else if (moderationAudit.isEmpty()) Text("No moderation decisions recorded yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                else moderationAudit.forEach { entry ->
+                                    Text("${entry.previousStatus} → ${entry.newStatus} by @${entry.moderatorUsername}", style = MaterialTheme.typography.bodySmall)
+                                    if (entry.decisionNote.isNotBlank()) Text(entry.decisionNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            statusMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+                        Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); if (appealsLoading) CircularProgressIndicator() else if (appealsError != null) { Text(appealsError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshAppeals++ }) { Text("Retry") } } else if (appeals.isEmpty()) { Text("No open appeals require review.", color = MaterialTheme.colorScheme.onSurfaceVariant) } else { appeals.take(20).forEach { appeal -> Card(Modifier.fillMaxWidth().padding(top = 8.dp)) { Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("${appeal.displayName.ifBlank { "FYNX user" }}  @${appeal.username}", style = MaterialTheme.typography.titleMedium); Text("Appeal #${appeal.id} • ${appeal.status}", color = MaterialTheme.colorScheme.primary); Text(appeal.subject); if (appeal.details.isNotBlank()) Text(appeal.details, maxLines = 5); Text("Current account status: ${appeal.accountStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "UNDER_REVIEW", "Appeal moved to review.").onSuccess { statusMessage = "Appeal moved to review."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not update appeal." } } }) { Text("Review") }; Button(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "ACCEPTED", "Appeal accepted; account restored to ACTIVE.").onSuccess { statusMessage = "Appeal accepted and account restored."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not restore account." } } }) { Text("Approve & restore") }; OutlinedButton(onClick = { scope.launch { FynxAdminClient.reviewAppeal(context, appeal.id, "REJECTED", "Appeal rejected after review.").onSuccess { statusMessage = "Appeal rejected."; refreshAppeals++ }.onFailure { statusMessage = it.message ?: "Could not reject appeal." } } }) { Text("Reject") } } } } } }; Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(protectionError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshProtection++ }) { Text("Retry") } } }
