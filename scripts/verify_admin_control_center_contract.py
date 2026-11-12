@@ -129,6 +129,8 @@ require("scheduledAt.getTime()<=Date.now()" in backend and "ANNOUNCEMENT_SCHEDUL
         "announcement schedules must be future-dated and audited")
 require("scheduled_at IS NULL OR scheduled_at<=NOW()" in backend,
         "public announcements must not expose future scheduled items")
+require("effective_published_at" in backend and "CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END" in backend,
+        "a due announcement must transition to a published display state without a timer")
 require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_server and
         "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()" in media_server and
         "has_media_id" in media_server and "announcementMediaTable.rows[0]?.has_media_id" in media_server,
@@ -145,7 +147,7 @@ require('Text("YYYY-MM-DDTHH:mm:ss+01:00")' in source,
         "announcement schedule hint must remain timezone-aware without a stale fixed date")
 require("does not sign the user out or disable other FYNX features" in source,
         "account lock confirmation must accurately describe its enforced scope")
-require(re.search(r"^\\s*app\\.post\\('/api/social/posts'", social, re.MULTILINE) is not None,
+require(re.search(r"^\s*app\.post\('/api/social/posts'", social, re.MULTILINE) is not None,
         "social post route must remain registered outside the preceding comment")
 
 # Marketplace promotions and the OWNER-only Music Library must appear in the same searchable audit history.
