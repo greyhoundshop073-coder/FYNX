@@ -29,7 +29,11 @@ data class FynxLocalPostDraft(
     val createdAt: Long,
     /** Editable media source copies and text/style state, aligned with mediaPaths. */
     val mediaEditSourcePaths: List<String?> = emptyList(),
-    val mediaEditStates: List<String?> = emptyList()
+    val mediaEditStates: List<String?> = emptyList(),
+    val publishDestination: String = "FEED",
+    val feedPublished: Boolean = false,
+    val statusPublished: Boolean = false,
+    val statusPublishId: String? = null
 ) {
     val title: String
         get() = caption.trim().ifBlank {
@@ -114,7 +118,11 @@ object FynxLocalPostDraftStore {
                             musicTitle = item.optString("musicTitle").takeIf { it.isNotBlank() },
                             musicArtist = item.optString("musicArtist").takeIf { it.isNotBlank() },
                             musicDurationMs = item.optLong("musicDurationMs").coerceAtLeast(0L),
-                            createdAt = item.optLong("createdAt")
+                            createdAt = item.optLong("createdAt"),
+                            publishDestination = item.optString("publishDestination", "FEED"),
+                            feedPublished = item.optBoolean("feedPublished", false),
+                            statusPublished = item.optBoolean("statusPublished", false),
+                            statusPublishId = item.optString("statusPublishId").takeIf { it.isNotBlank() }
                         )
                     )
                 }
@@ -133,7 +141,11 @@ object FynxLocalPostDraftStore {
         textBackground: FynxPostTextBackground?,
         media: List<Pair<Uri, String>>,
         music: FynxMusicCatalogueTrack?,
-        mediaEdits: Map<String, FynxCameraMediaDraftEdit> = emptyMap()
+        mediaEdits: Map<String, FynxCameraMediaDraftEdit> = emptyMap(),
+        publishDestination: String = "FEED",
+        feedPublished: Boolean = false,
+        statusPublished: Boolean = false,
+        statusPublishId: String? = null
     ): Result<FynxLocalPostDraft> = runCatching {
         require(caption.isNotBlank() || media.isNotEmpty() || music != null) {
             "Add a caption, photo, video or music before saving a draft."
@@ -194,7 +206,11 @@ object FynxLocalPostDraftStore {
                 musicTitle = music?.title,
                 musicArtist = music?.artist,
                 musicDurationMs = music?.durationMs ?: 0L,
-                createdAt = System.currentTimeMillis()
+                createdAt = System.currentTimeMillis(),
+                publishDestination = publishDestination,
+                feedPublished = feedPublished,
+                statusPublished = statusPublished,
+                statusPublishId = statusPublishId
             )
             val current = list(context).filterNot { it.id == draftId }
             val retained = (listOf(draft) + current).take(MAX_DRAFTS)
@@ -222,6 +238,10 @@ object FynxLocalPostDraftStore {
                     put("musicArtist", item.musicArtist)
                     put("musicDurationMs", item.musicDurationMs)
                     put("createdAt", item.createdAt)
+                    put("publishDestination", item.publishDestination)
+                    put("feedPublished", item.feedPublished)
+                    put("statusPublished", item.statusPublished)
+                    put("statusPublishId", item.statusPublishId ?: "")
                 })
             }
             check(accountPrefs(context).edit().putString(KEY_DRAFTS, json.toString()).commit()) {
@@ -267,6 +287,10 @@ object FynxLocalPostDraftStore {
                 put("musicArtist", item.musicArtist)
                 put("musicDurationMs", item.musicDurationMs)
                 put("createdAt", item.createdAt)
+                    put("publishDestination", item.publishDestination)
+                    put("feedPublished", item.feedPublished)
+                    put("statusPublished", item.statusPublished)
+                    put("statusPublishId", item.statusPublishId ?: "")
             })
         }
         check(accountPrefs(context).edit().putString(KEY_DRAFTS, json.toString()).commit()) {

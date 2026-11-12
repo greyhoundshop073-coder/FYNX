@@ -74,7 +74,6 @@ fun FynxHomeSocialHubPanel(
     onOpenStories: () -> Unit = {},
     onOpenStatusOwner: (String) -> Unit = {},
     onCreateStatus: () -> Unit = {},
-    onOpenStatusWithMedia: (Uri, String) -> Unit = { _, _ -> },
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
@@ -129,6 +128,10 @@ fun FynxHomeSocialHubPanel(
     var audienceLoading by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var posting by remember { mutableStateOf(false) }
+    var publishDestination by remember { mutableStateOf("FEED") }
+    var feedPublished by remember { mutableStateOf(false) }
+    var statusPublished by remember { mutableStateOf(false) }
+    var statusPublishId by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
     var showComposerPreview by remember { mutableStateOf(false) }
     var aiCaptionBusy by remember { mutableStateOf(false) }
     var aiCaptionError by remember { mutableStateOf<String?>(null) }
@@ -145,6 +148,13 @@ fun FynxHomeSocialHubPanel(
     var showCoverInfo by remember { mutableStateOf(false) }
     var showMorePostOptions by remember { mutableStateOf(false) }
     var networkLevel by remember { mutableStateOf(FynxNetworkQuality.current(context)) }
+
+    val statusMediaCandidates = capturedUris.mapIndexedNotNull { index, uri ->
+        capturedTypes.getOrNull(index)?.takeIf { it == "image" || it == "video" }?.let { uri to it }
+    }
+    val statusTargetValid = statusMediaCandidates.size <= 1 &&
+        capturedTypes.none { it == "audio" } && text.length <= FYNX_STATUS_MAX_TEXT_LENGTH &&
+        (text.isNotBlank() || statusMediaCandidates.isNotEmpty() || selectedCatalogueMusic != null)
 
     DisposableEffect(Unit) {
         val handler: (Long, String, String, Long) -> Unit = { mediaId, title, artist, durationMs ->
@@ -227,13 +237,11 @@ fun FynxHomeSocialHubPanel(
                 notice = null
             }
             cameraOpenedFromComposer = false
-            // The Home header camera is the social creation entry point:
-            // open the full "Add description..." composer. The separate
-            // camera button in the Home content remains the intentional
-            // fast/direct camera path.
-            showCamera = false
+            // Every camera entry point opens this same CameraX surface. After
+            // capture/edit, Next returns here to choose Status, Feed or Both.
+            showComposer = false
             showFastCamera = false
-            showComposer = true
+            showCamera = true
             onCameraRequestConsumed()
         }
     }
@@ -469,6 +477,10 @@ fun FynxHomeSocialHubPanel(
             visibility = defaultPostVisibility
             notice = null
             editingDraftId = null
+            publishDestination = "FEED"
+            feedPublished = false
+            statusPublished = false
+            statusPublishId = java.util.UUID.randomUUID().toString()
         }
     }
 
@@ -496,6 +508,10 @@ fun FynxHomeSocialHubPanel(
         visibility = defaultPostVisibility
         notice = null
         editingDraftId = null
+        publishDestination = "FEED"
+        feedPublished = false
+        statusPublished = false
+        statusPublishId = java.util.UUID.randomUUID().toString()
     }
 
     fun restoreSavedPostDraft(draft: FynxLocalPostDraft) {
@@ -528,6 +544,10 @@ fun FynxHomeSocialHubPanel(
             )
         } else null
         selectedFeelingActivity = null
+        publishDestination = draft.publishDestination
+        feedPublished = draft.feedPublished
+        statusPublished = draft.statusPublished
+        statusPublishId = draft.statusPublishId ?: java.util.UUID.randomUUID().toString()
         editingDraftId = draft.id
         notice = null
         showComposer = true
@@ -554,7 +574,11 @@ fun FynxHomeSocialHubPanel(
                     textBackground = textBackground,
                     media = media,
                     music = selectedCatalogueMusic,
-                    mediaEdits = cameraMediaEdits
+                    mediaEdits = cameraMediaEdits,
+                    publishDestination = publishDestination,
+                    feedPublished = feedPublished,
+                    statusPublished = statusPublished,
+                    statusPublishId = statusPublishId
                 )
             }
             result.onSuccess { draft ->
@@ -975,6 +999,36 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF007FFF).copy(alpha = 0.24f))
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Publish to", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1C2434))
+                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilterChip(selected = publishDestination == "FEED", onClick = { publishDestination = "FEED" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Home Feed") })
+                                    FilterChip(selected = publishDestination == "STATUS", onClick = { publishDestination = "STATUS" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Status") })
+                                    FilterChip(selected = publishDestination == "BOTH", onClick = { publishDestination = "BOTH" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Both") })
+                                }
+                                Text(
+                                    when {
+                                        publishDestination != "FEED" && statusMediaCandidates.size > 1 -> "Status supports one photo or video at a time. Remove extra media to share to Status."
+                                        publishDestination != "FEED" && capturedTypes.any { it == "audio" } -> "Voice attachments are not available in this photo/video Status share."
+                                        publishDestination != "FEED" && text.length > FYNX_STATUS_MAX_TEXT_LENGTH -> "Status captions are limited to 700 characters. Shorten the caption to continue."
+                                        feedPublished && publishDestination == "BOTH" -> "Home Feed is published. Complete the Status share to finish this post."
+                                        statusPublished && publishDestination == "BOTH" -> "Status is published. Complete the Home Feed post to finish."
+                                        publishDestination == "BOTH" -> "The same edited media and caption will be shared to both destinations."
+                                        publishDestination == "STATUS" -> "Share this update to your 24-hour Status story."
+                                        else -> "Publish this update to your Home Feed."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (publishDestination != "FEED" && !statusTargetValid) MaterialTheme.colorScheme.error else Color(0xFF475569)
+                                )
+                            }
+                        }
+
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
 
                         Row(
@@ -1115,31 +1169,85 @@ fun FynxHomeSocialHubPanel(
                             )
                         ) { Text("▣  Drafts", style = MaterialTheme.typography.titleMedium) }
                         Button(
-                            enabled = !posting && postingAllowed && networkLevel != FynxNetworkQuality.Level.OFFLINE && (audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) && (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
+                            enabled = !posting && networkLevel != FynxNetworkQuality.Level.OFFLINE &&
+                                (((publishDestination == "STATUS" || publishDestination == "BOTH") && statusTargetValid) || (publishDestination == "FEED" && postingAllowed)) &&
+                                (publishDestination == "STATUS" || publishDestination == "BOTH" || audience != FynxPostAudience.SELECTED || selectedAudienceIds.isNotEmpty()) &&
+                                (text.isNotBlank() || capturedUris.isNotEmpty() || selectedCatalogueMusic != null),
                             onClick = {
                                 if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE) {
                                     notice = "You are offline. Reconnect before publishing this post."
                                     return@Button
                                 }
+                                val needsFeed = publishDestination == "FEED" || publishDestination == "BOTH"
+                                val needsStatus = publishDestination == "STATUS" || publishDestination == "BOTH"
                                 posting = true
                                 notice = null
                                 scope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity)
+                                    val failures = mutableListOf<String>()
+                                    if (needsFeed && !feedPublished) {
+                                        val feedResult = withContext(Dispatchers.IO) {
+                                            FynxMultiMediaPostClient.createPost(context, text, visibility, capturedUris, selectedAudienceIds.toList(), textBackground, postLocation, null, selectedCatalogueMusic, selectedFeelingActivity)
+                                        }
+                                        feedResult.onSuccess { feedPublished = true }
+                                            .onFailure { failures += "Home Feed: " + (it.message ?: "Post could not be published.") }
                                     }
-                                    result.onSuccess {
+                                    if (needsStatus && !statusPublished) {
+                                        val selectedStatusMedia = statusMediaCandidates.firstOrNull()
+                                        val statusAudience = when (audience.name) {
+                                            "EVERYONE" -> FynxStatusAudience.EVERYONE
+                                            "ONLY_ME" -> FynxStatusAudience.ONLY_ME
+                                            else -> FynxStatusAudience.FRIENDS
+                                        }
+                                        val statusResult = withContext(Dispatchers.IO) {
+                                            FynxSharedStatusPublisher.publish(
+                                                context = context,
+                                                username = currentUsername,
+                                                statusId = statusPublishId,
+                                                caption = text,
+                                                mediaUri = selectedStatusMedia?.first,
+                                                mediaType = selectedStatusMedia?.second,
+                                                audience = statusAudience,
+                                                music = selectedCatalogueMusic
+                                            )
+                                        }
+                                        statusResult.onSuccess { statusPublished = true }
+                                            .onFailure { failures += "Status: " + (it.message ?: "Status could not be published.") }
+                                    }
+                                    if (failures.isEmpty()) {
                                         editingDraftId?.let { savedId ->
                                             withContext(Dispatchers.IO) { runCatching { FynxLocalPostDraftStore.delete(context, savedId) } }
                                         }
                                         finishComposerAfterSuccess()
-                                    }.onFailure { notice = it.message ?: "Post could not be published." }
+                                    } else {
+                                        notice = when {
+                                            needsFeed && needsStatus && feedPublished && !statusPublished ->
+                                                "Home Feed published successfully. Status still needs attention. " + failures.joinToString(" ")
+                                            needsFeed && needsStatus && statusPublished && !feedPublished ->
+                                                "Status published successfully. Home Feed still needs attention. " + failures.joinToString(" ")
+                                            else -> failures.joinToString(" ")
+                                        }
+                                        posting = false
+                                        if (feedPublished || statusPublished) saveCurrentPostDraft()
+                                    }
                                     posting = false
                                 }
                             },
                             modifier = Modifier.weight(1f).heightIn(min = 54.dp),
                             shape = RoundedCornerShape(28.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
-                        ) { Text(if (posting) "Publishing…" else "Post", style = MaterialTheme.typography.titleMedium) }
+                        ) {
+                            Text(
+                                when {
+                                    posting -> "Publishing…"
+                                    publishDestination == "BOTH" && feedPublished -> "Finish Status"
+                                    publishDestination == "BOTH" && statusPublished -> "Finish Feed"
+                                    publishDestination == "STATUS" -> "Share to Status"
+                                    publishDestination == "BOTH" -> "Publish to both"
+                                    else -> "Post"
+                                },
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
                     }
                 }
             }
@@ -1529,17 +1637,8 @@ fun FynxHomeSocialHubPanel(
                         selectedMusic = selectedCatalogueMusic,
                         onChooseMusic = { showMusicPicker = true; notice = null },
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
-                        showYourStoryAction = cameraEditingMediaUri == null,
-                        onShareToStatus = { uri, type ->
-                            // Preserve the Camera editor so closing Status returns to this exact
-                            // captured-media preview. FynxApp opens Status in a separate full-screen
-                            // Dialog above this Camera Dialog, preventing window z-order from hiding it.
-                            // Publishing still requires the explicit Send action in the Status composer.
-                            showCamera = true
-                            showFastCamera = false
-                            cameraOpenedFromComposer = false
-                            onOpenStatusWithMedia(uri, type)
-                        },
+                        // Status is selected in the shared New post composer after editing.
+                        showYourStoryAction = false,
                         onCaptured = { uri, type ->
                             val editTarget = cameraEditingMediaUri
                             val nextUris = if (editTarget != null) {

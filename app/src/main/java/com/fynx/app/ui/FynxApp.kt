@@ -93,8 +93,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
     var statusCreatorRequested by remember { mutableStateOf(false) }
-    var statusInitialMediaUri by remember { mutableStateOf<Uri?>(null) }
-    var statusInitialMediaType by remember { mutableStateOf<FynxStatusType?>(null) }
     var statusComposerImmersive by remember { mutableStateOf(false) }
     var statusOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenId by remember { mutableStateOf<String?>(null) }
@@ -692,7 +690,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenStatusWithMedia = { uri, type -> statusInitialMediaUri = uri; statusInitialMediaType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO; statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
                 onOpenProfile = { username -> profileUser = username; selected = "Home" }
             )
@@ -749,6 +747,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
+                onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 },
                 initialText = marketplaceStatusDraft,
                 onInitialTextAccepted = { marketplaceStatusDraft = null },
                 openOwnerUsername = statusOpenOwner,
@@ -870,8 +869,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         onDismissRequest = {
                             statusCreatorRequested = false
                             statusComposerImmersive = false
-                            statusInitialMediaUri = null
-                            statusInitialMediaType = null
                         },
                         properties = DialogProperties(
                             usePlatformDefaultWidth = false,
@@ -882,10 +879,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     ) {
                         FynxStatusHubPanel(
                             startWithCreator = true,
-                            initialMediaUri = statusInitialMediaUri,
-                            initialMediaType = statusInitialMediaType,
-                            onInitialMediaAccepted = { statusInitialMediaUri = null; statusInitialMediaType = null },
-                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; statusInitialMediaUri = null; statusInitialMediaType = null },
+                            onOpenUnifiedCamera = { statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 },
+                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
                             onComposerVisibilityChange = { statusComposerImmersive = it }
                         )
                     }
