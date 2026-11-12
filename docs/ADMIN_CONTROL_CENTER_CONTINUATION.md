@@ -172,3 +172,11 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Commit `b2f5277dd4abd4027b04c8bbe8bc39e9b185abe6`: Large Badge #9 Trust & Safety verifier now requires the transaction, scoped advisory lock, commit and connection release.
 - This is source-level concurrency hardening. The CI verifier is not a live concurrent database test; credential-backed database concurrency and OWNER/ADMIN runtime verification remain outstanding.
 - Re-run all three PR workflows on the latest head before taking this grouped correction as accepted. Keep PR #527 open and do not merge without approval.
+
+
+## Appeal restoration concurrency hardening — 12 November 2026
+
+- Commit `4b8981de4a3fd3b5fb63116dec5f4c1559c10473`: an accepted appeal now locks the affected user's `users` row before restoring account status in the safety tables.
+- Root cause addressed: manual account-status changes already lock that user row, but appeal restoration did not. Concurrent manual restriction and appeal acceptance could therefore race and overwrite the latest account decision.
+- Commit `adb13297c28ccf124cb3d05c43e1d3842880e1ad`: the Admin contract verifier now requires the shared user-row lock and its concurrency rationale.
+- This is transaction-level serialization in source; credential-backed concurrent database testing and OWNER/ADMIN runtime verification remain outstanding. Re-run all three PR workflows on the newest head before accepting this group.
