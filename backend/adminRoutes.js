@@ -11,6 +11,22 @@ export function registerAdminRoutes({ app }) {
   let schemaPromise;
   const ensureSchema = async () => {
     if (!schemaPromise) schemaPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS safety_content_reports (
+        id BIGSERIAL PRIMARY KEY, reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        target_type TEXT NOT NULL CHECK(target_type IN ('SOCIAL_POST','SOCIAL_COMMENT','MARKETPLACE_LISTING')),
+        target_id BIGINT NOT NULL CHECK(target_id > 0), target_owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','RESOLVED','DISMISSED')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS safety_content_reports_queue_idx ON safety_content_reports(status,created_at ASC);
+      CREATE TABLE IF NOT EXISTS safety_content_moderation_audit (
+        id BIGSERIAL PRIMARY KEY, report_id BIGINT NOT NULL REFERENCES safety_content_reports(id) ON DELETE RESTRICT,
+        moderator_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+        previous_status TEXT NOT NULL, new_status TEXT NOT NULL CHECK(new_status IN ('UNDER_REVIEW','RESOLVED','DISMISSED')),
+        decision_note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS safety_content_moderation_audit_report_idx ON safety_content_moderation_audit(report_id,created_at DESC);
       CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE TABLE IF NOT EXISTS fynx_announcements (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL' CHECK(priority IN ('NORMAL','IMPORTANT','URGENT')), published BOOLEAN NOT NULL DEFAULT TRUE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE INDEX IF NOT EXISTS fynx_announcements_feed_idx ON fynx_announcements(published,created_at DESC);
@@ -72,6 +88,64 @@ export function registerAdminRoutes({ app }) {
     return Number(result.rows[0]?.count || 0);
   };
 
+  app.get('/api/admin/content-reports',auth,async(req,res)=>{
+    try {
+      await ensureSchema();
+      if(!(await requireAdmin(req,res)))return;
+      const status=typeof req.query?.status==='string'?req.query.status.trim().toUpperCase():'OPEN';
+      if(!['OPEN','UNDER_REVIEW','RESOLVED','DISMISSED','ALL'].includes(status))return res.status(400).json({error:'invalid report status'});
+      const result=await pool.query(`SELECT r.id,r.target_type,r.target_id,r.target_owner_id,r.reason,r.details,r.status,r.created_at,r.updated_at,
+        reporter.username AS reporter_username,owner.username AS owner_username,
+        CASE r.target_type
+          WHEN 'SOCIAL_POST' THEN (SELECT p.text FROM social_posts p WHERE p.id=r.target_id)
+          WHEN 'SOCIAL_COMMENT' THEN (SELECT c.text FROM social_post_comments c WHERE c.id=r.target_id)
+          WHEN 'MARKETPLACE_LISTING' THEN (SELECT l.title || E'\\n' || l.description FROM marketplace_listings l WHERE l.id=r.target_id)
+          ELSE NULL
+        END AS content_preview
+        FROM safety_content_reports r JOIN users reporter ON reporter.id=r.reporter_id
+        JOIN users owner ON owner.id=r.target_owner_id
+        WHERE ($1='ALL' OR r.status=$1)
+        ORDER BY CASE r.status WHEN 'OPEN' THEN 0 WHEN 'UNDER_REVIEW' THEN 1 ELSE 2 END,r.created_at ASC LIMIT 200`,[status]);
+      return res.json({reports:result.rows.map(row=>({id:String(row.id),targetType:row.target_type,targetId:String(row.target_id),targetOwnerId:String(row.target_owner_id),ownerUsername:row.owner_username||'',reporterUsername:row.reporter_username||'',reason:row.reason,details:row.details,contentPreview:row.content_preview||'',status:row.status,createdAt:row.created_at,updatedAt:row.updated_at}))});
+    } catch(error) { console.error('admin content reports',error); return res.status(500).json({error:'content reports unavailable'}); }
+  });
+  app.patch('/api/admin/content-reports/:reportId',auth,async(req,res)=>{
+    const client=await pool.connect();
+    try {
+      await ensureSchema();
+      if(!(await requireAdmin(req,res)))return;
+      const reportId=Number(req.params.reportId);
+      const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
+      const note=typeof req.body?.decisionNote==='string'?req.body.decisionNote.trim().slice(0,1000):'';
+      if(!Number.isSafeInteger(reportId)||reportId<1||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))
+        return res.status(400).json({error:'valid report id and moderation status are required'});
+      await client.query('BEGIN');
+      const current=(await client.query('SELECT id,status FROM safety_content_reports WHERE id=$1 FOR UPDATE',[reportId])).rows[0];
+      if(!current){await client.query('ROLLBACK');return res.status(404).json({error:'content report not found'});}
+      const updated=await client.query('UPDATE safety_content_reports SET status=$1,updated_at=NOW() WHERE id=$2 RETURNING id,status,updated_at',[status,reportId]);
+      await client.query(`INSERT INTO safety_content_moderation_audit(report_id,moderator_id,previous_status,new_status,decision_note)
+        VALUES($1,$2,$3,$4,$5)`,[reportId,req.user.sub,current.status,status,note]);
+      await client.query('COMMIT');
+      const row=updated.rows[0];
+      return res.json({report:{id:String(row.id),status:row.status,updatedAt:row.updated_at},auditRecorded:true});
+    } catch(error) {
+      try{await client.query('ROLLBACK')}catch{}
+      console.error('admin content report decision',error);
+      return res.status(500).json({error:'content report review failed'});
+    } finally { client.release(); }
+  });
+  app.get('/api/admin/content-reports/:reportId/audit',auth,async(req,res)=>{
+    try {
+      await ensureSchema();
+      if(!(await requireAdmin(req,res)))return;
+      const reportId=Number(req.params.reportId);
+      if(!Number.isSafeInteger(reportId)||reportId<1)return res.status(400).json({error:'valid report id is required'});
+      const result=await pool.query(`SELECT a.id,a.moderator_id,u.username,a.previous_status,a.new_status,a.decision_note,a.created_at
+        FROM safety_content_moderation_audit a JOIN users u ON u.id=a.moderator_id
+        WHERE a.report_id=$1 ORDER BY a.created_at ASC`,[reportId]);
+      return res.json({audit:result.rows.map(row=>({id:String(row.id),moderatorId:String(row.moderator_id),moderatorUsername:row.username||'',previousStatus:row.previous_status,newStatus:row.new_status,decisionNote:row.decision_note,createdAt:row.created_at}))});
+    } catch(error) { console.error('admin content report audit',error); return res.status(500).json({error:'moderation audit unavailable'}); }
+  });
   app.get('/api/announcements',auth,async(req,res)=>{try{await ensureSchema();const result=await pool.query(`SELECT id,title,body,priority,created_at,updated_at FROM fynx_announcements WHERE published=TRUE ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,created_at DESC LIMIT 50`);res.set('Cache-Control','no-store');return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,createdAt:a.created_at,updatedAt:a.updated_at}))});}catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
 
   app.get('/api/admin/dashboard',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const counts=await Promise.all([countRows('users'),countRows('fynx_user_reports',"status IN ('OPEN','IN_REVIEW')"),countRows('fynx_appeals',"status IN ('OPEN','IN_REVIEW')"),countRows('fynx_safety_events',"created_at >= NOW()-INTERVAL '24 hours'")]);return res.json({role:req.fynxAdminRole,counts:{users:counts[0],openReports:counts[1],openAppeals:counts[2],safetyEvents24h:counts[3]}});}catch(error){console.error('admin dashboard',error);return res.status(500).json({error:'admin dashboard unavailable'});}});
