@@ -27,6 +27,11 @@ for section in ("Safety", "Marketplace", "People", "Announcements"):
     require(f'activeSection == "{section}"' in source,
             f"{section} content is not isolated behind its section selection")
 
+require('if (activeSection == "Marketplace")' in source and
+        source.index('if (activeSection == "Marketplace")') < source.index("FynxMarketplaceSeasonalPromotionAdminPanel()") and
+        source.index("FynxMarketplaceSeasonalPromotionAdminPanel()") < source.index('if (activeSection == "Safety")'),
+        "seasonal campaign scheduler must be placed inside the Marketplace section, not Overview")
+
 sensitive_actions = {
     "appeal review": r"FynxAdminClient\.reviewAppeal\(context,",
     "Marketplace case resolution": r"FynxAdminClient\.resolveMarketplaceProtectionCase\(context,",
