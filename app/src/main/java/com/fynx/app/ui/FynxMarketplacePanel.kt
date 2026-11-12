@@ -1201,7 +1201,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
+                    modifier = Modifier.fillMaxWidth().fynxScrollRowWithFade().padding(horizontal = 16.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
