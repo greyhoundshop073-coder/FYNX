@@ -170,11 +170,13 @@ checks = [
      and 'onClick = { finishCameraMedia(toStatus = false) }' in camera
      and "onCaptured(finalUri, mediaType)" in camera),
     ("Status camera entry points route back to Home's shared CameraX panel",
-     "onCamera = onOpenUnifiedCamera" in status_hub
-     and "onRecordVideo = onOpenUnifiedCamera" in status_hub
-     and "onCameraClick = onOpenUnifiedCamera" in status_hub
+     "onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in status_hub
+     and "onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) }" in status_hub
+     and "onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in status_hub
      and "FynxCameraCapturePanel(" not in status_hub
-     and 'onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 }' in app_source),
+      and "cameraInitialMode = homeCameraInitialMode" in app_source
+      and "initialMode = cameraInitialMode" in home
+     and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app_source),
     ("Shared composer exposes all destinations and uses the existing Status publisher",
      all(f'Text("{label}")' in home for label in ["Home Feed", "Status", "Both"])
      and "FynxSharedStatusPublisher.publish(" in home
@@ -366,7 +368,7 @@ checks = [
      "FynxStatusClient.uploadMedia" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
      and "FynxStatusClient.create" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
      and "FynxStatusStore.save" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
-     and "onCamera = onOpenUnifiedCamera" in status_hub
+     and "onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in status_hub
      and "FynxCameraCapturePanel(" not in status_hub),
     ("Recorded video keeps the same Next and Home Feed/Status/Both destination choice as photo media",
      'onClick = { finishCameraMedia(toStatus = false) }' in camera
@@ -393,7 +395,7 @@ checks.extend([
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
     ("Unified camera routing preserves the supported rear lens and returns Status camera requests to Home",
      "-camera-front none" in workflow
-     and 'onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 }' in app_source
+     and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app_source
      and "camera-video-destination-options.png" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
     ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
