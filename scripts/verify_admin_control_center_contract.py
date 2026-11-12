@@ -87,7 +87,9 @@ require("FynxAdminClient.activity(context, activityQuery, activityOffset, activi
         "activity history is not connected to the backend with action filters")
 require('"/api/admin/activity?q=${encode(query)}&action=${encode(action)}&limit=50&offset=' in client and
         "const action=typeof req.query?.action==='string'?req.query.action.trim().slice(0,80):''" in backend and
-        "AND ($2='' OR a.action=$2)" in backend,
+        "AND ($2='' OR a.action=$2)" in backend and
+        "POSITION(LOWER($1) IN LOWER(COALESCE(a.summary,'')))" in backend and
+        "ILIKE '%'||$1||'%'" not in backend,
         "activity action filtering must be URL-encoded and parameterized on the server")
 require("activityHasMore" in source and "Text(\"Previous\")" in source and "Text(\"Next\")" in source,
         "activity history is missing bounded previous/next pagination")
