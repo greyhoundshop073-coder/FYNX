@@ -166,8 +166,13 @@ export function registerGroupMembershipRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!isManager(actor?.role)) return res.status(403).json({ error: 'group management permission required' });
-      await pool.query('UPDATE fynx_group_invites SET revoked_at=NOW() WHERE group_id=$1 AND token=$2 AND revoked_at IS NULL', [groupId,String(req.params?.token || '')]);
-      return res.json({ revoked: true });
+      const revoked = await pool.query('UPDATE fynx_group_invites SET revoked_at=NOW() WHERE group_id=$1 AND token=$2 AND revoked_at IS NULL RETURNING token', [groupId,String(req.params?.token || '')]);
+      if (!revoked.rowCount) {
+        const existing = (await pool.query('SELECT revoked_at FROM fynx_group_invites WHERE group_id=$1 AND token=$2 LIMIT 1', [groupId,String(req.params?.token || '')])).rows[0];
+        if (!existing) return res.status(404).json({ error: 'group invite not found' });
+        return res.json({ revoked: true, alreadyRevoked: true });
+      }
+      return res.json({ revoked: true, alreadyRevoked: false });
     } catch (error) {
       console.error('group invite revoke', error);
       return res.status(500).json({ error: 'group invite revoke failed' });
@@ -324,29 +329,41 @@ export function registerGroupMembershipRoutes({ app }) {
     try {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
-      const actor = await member(groupId, req.user.sub);
-      const targetUser = await target(groupId, req.body?.username);
-      const group = (await pool.query('SELECT owner_id FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
-      if (!group || !targetUser) return res.status(404).json({ error: 'group or target member not found' });
-      if (!isAdmin(actor?.role) || String(group.owner_id) !== String(req.user.sub)) return res.status(403).json({ error: 'group owner permission required' });
-      if (String(targetUser.user_id) === String(req.user.sub)) return res.status(400).json({ error: 'target must be another member' });
+      const username = cleanUsername(req.body?.username);
+      if (!username) return res.status(400).json({ error: 'target username is required' });
       client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        await client.query(`UPDATE fynx_groups SET owner_id=$1,updated_at=NOW() WHERE id=$2`, [targetUser.user_id,groupId]);
-        await client.query(`UPDATE fynx_group_members SET role='MODERATOR' WHERE group_id=$1 AND user_id=$2`, [groupId,req.user.sub]);
-        await client.query(`UPDATE fynx_group_members SET role='ADMIN' WHERE group_id=$1 AND user_id=$2`, [groupId,targetUser.user_id]);
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => {});
-        throw error;
-      } finally {
-        client.release();
-        client = undefined;
+      await client.query('BEGIN');
+      const group = (await client.query('SELECT owner_id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
+      if (!group) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'group not found' });
       }
+      const actor = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!isAdmin(actor?.role) || String(group.owner_id) !== String(req.user.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group owner permission required' });
+      }
+      const targetUser = (await client.query(`SELECT m.user_id,u.username FROM fynx_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1 FOR UPDATE OF m`, [groupId, username])).rows[0];
+      if (!targetUser) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'target group member not found' });
+      }
+      if (String(targetUser.user_id) === String(req.user.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'target must be another member' });
+      }
+      await client.query(`UPDATE fynx_groups SET owner_id=$1,updated_at=NOW() WHERE id=$2`, [targetUser.user_id,groupId]);
+      await client.query(`UPDATE fynx_group_members SET role='MODERATOR' WHERE group_id=$1 AND user_id=$2`, [groupId,req.user.sub]);
+      await client.query(`UPDATE fynx_group_members SET role='ADMIN' WHERE group_id=$1 AND user_id=$2`, [groupId,targetUser.user_id]);
+      await client.query('COMMIT');
+      client.release();
+      client = undefined;
       return res.json({ transferred: true, ownerUsername: targetUser.username });
     } catch (error) {
-      if (client) client.release();
+      if (client) {
+        await client.query('ROLLBACK').catch(() => {});
+        client.release();
+      }
       console.error('group ownership transfer', error);
       return res.status(500).json({ error: 'group ownership transfer failed' });
     }
@@ -359,7 +376,9 @@ export function registerGroupMembershipRoutes({ app }) {
       if (!(await member(groupId, req.user.sub))) return res.status(403).json({ error: 'group membership required' });
       const reason = String(req.body?.reason || '').trim().slice(0,500);
       if (!reason) return res.status(400).json({ error: 'report reason is required' });
-      const targetUser = req.body?.username ? await target(groupId, req.body.username) : null;
+      const hasTargetUsername = typeof req.body?.username === 'string' && req.body.username.trim().length > 0;
+      const targetUser = hasTargetUsername ? await target(groupId, req.body.username) : null;
+      if (hasTargetUsername && !targetUser) return res.status(404).json({ error: 'reported group member not found' });
       const id = randomUUID();
       await pool.query('INSERT INTO fynx_group_reports(id,group_id,reporter_id,target_user_id,reason) VALUES($1,$2,$3,$4,$5)', [id,groupId,req.user.sub,targetUser?.user_id||null,reason]);
       return res.status(201).json({ reportId:id, submitted:true });

@@ -81,6 +81,11 @@ check('member capacity is enforced by a shared conditional insert across direct 
 check('disabled invite links invalidate existing previews, requests and joins', membership.count('!invite.invite_links') >= 3 and (membership.count('g.invite_links') >= 3 and membership.count('!invite.invite_links') >= 3))
 check('approval locks the group row before enforcing the shared 500-member limit', "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership and "await insertMemberIfCapacity(client, groupId, requested.user_id)" in membership)
 check('member capacity insert serializes against the group row before counting', 'UPDATE fynx_groups SET updated_at=updated_at' in membership and 'WITH available_group AS' in membership and 'SELECT available_group.id,$2,\'MEMBER\' FROM available_group' in membership)
+check('new group creation enforces the same 500-member maximum before inserting members', "if (requested.size > 500)" in group and "GROUP_MEMBER_LIMIT_REACHED" in group)
+check('group message idempotency rejects message IDs owned by another sender or group', "ON CONFLICT(id) DO NOTHING RETURNING id" in group and "prior.group_id" in group and "prior.sender_id" in group and "MESSAGE_ID_CONFLICT" in group)
+check('invite revocation distinguishes missing tokens from already-revoked invites', "RETURNING token" in membership and "group invite not found" in membership and "alreadyRevoked" in membership)
+check('member reports reject stale or invalid target usernames instead of silently reporting the group', "hasTargetUsername && !targetUser" in membership and "reported group member not found" in membership)
+check('ownership transfer serializes on the group row and rechecks the owner and target membership in its transaction', "SELECT owner_id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership and "SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE" in membership and "FOR UPDATE OF m" in membership)
 check('successful direct invite join clears any stale pending join request', "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership and "await insertMemberIfCapacity(pool, groupId, req.user.sub)" in membership)
 
 failed = [name for name, ok in checks if not ok]
