@@ -107,8 +107,10 @@ require('"/api/admin/reports?limit=' in client and "FynxAdminClient.reports(cont
         "reported-account queue is not connected end to end")
 require("reports.forEach" in source and "FynxAdminClient.reviewReport(context, report.id" in source,
         "reported-account review actions are not rendered")
-require("FynxAdminClient.appeals(context, appealsOffset)" in source and "FynxAdminClient.reviewAppeal(context, appeal.id" in source,
-        "appeal review actions are not connected to the queue")
+require("FynxAdminClient.appeals(context, appealsOffset)" in source and "FynxAdminClient.reviewAppeal(context, appeal.id" in source and
+        "decision.restored" in source and "appeal.reportId == null" in source and
+        "optBoolean(\"restored\", false)" in client,
+        "appeal review actions must report actual restoration and warn when no report is linked")
 require("FynxAdminClient.reports(context, reportsOffset)" in source and "reportsHasMore" in source and
         "appealsHasMore" in source and "Text(\"Next\")" in source,
         "report and appeal review queues must provide Previous/Next pagination")
