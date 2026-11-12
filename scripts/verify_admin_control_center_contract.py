@@ -61,6 +61,14 @@ require('"/api/admin/accounts/${encode(userId)}/status"' in client,
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,
         "server account status route is missing")
 
+
+require('"/api/admin/activity?q=' in client, "searchable activity client is missing")
+require("app.get('/api/admin/activity'" in backend, "searchable activity endpoint is missing")
+require("CREATE TABLE IF NOT EXISTS fynx_admin_activity" in backend, "admin activity audit table is missing")
+require('activeSection == "Activity"' in source, "activity history section is missing")
+require("FynxAdminClient.activity(context, activityQuery)" in source, "activity history is not connected to the backend")
+require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
+
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
