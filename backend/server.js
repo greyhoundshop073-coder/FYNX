@@ -821,6 +821,14 @@ app.get("/api/messages/:username", auth, async (req, res) => {
     const beforeIdRaw = String(req.query?.beforeId || "").trim();
     if (beforeIdRaw && !/^\\d+$/.test(beforeIdRaw)) return res.status(400).json({ error: "invalid message cursor" });
     const beforeId = beforeIdRaw ? Number(beforeIdRaw) : null;
+    const searchQuery = String(req.query?.q || "").trim().slice(0, 100);
+    if (searchQuery.length === 1) return res.status(400).json({ error: "search query must contain at least two characters" });
+    if (searchQuery.length >= 2) {
+      const searched = await pool.query(`${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND m.deleted_at IS NULL AND strpos(lower(COALESCE(m.text, '')), lower($3)) > 0 AND ($4::bigint IS NULL OR m.id < $4) ORDER BY m.id DESC LIMIT $5`, [req.user.sub, other.id, searchQuery, beforeId, limit + 1]);
+      const hasMore = searched.rows.length > limit;
+      const page = searched.rows.slice(0, limit).reverse().map(rowToMessage);
+      return res.json({ messages: page, hasMore, nextBeforeId: page.length ? String(page[0].id) : null });
+    }
     const result = await pool.query(`${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND ($3::bigint IS NULL OR m.id < $3) ORDER BY m.id DESC LIMIT $4`, [req.user.sub, other.id, beforeId, limit + 1]);
     const hasMore = result.rows.length > limit;
     const page = result.rows.slice(0, limit).reverse().map(rowToMessage);
