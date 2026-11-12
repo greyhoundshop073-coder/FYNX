@@ -13,6 +13,7 @@ checks=[
 ("appeals are authenticated and persisted",'app.post("/api/safety/appeals",auth' in trust and "INSERT INTO safety_appeals" in trust),
 ("appeals can only reference a report against the appellant","SELECT id FROM safety_reports WHERE id=$1 AND target_user_id=$2" in trust and "report is not an account case against this user" in trust),
 ("appeal ownership is bound to the authenticated appellant","INSERT INTO safety_appeals(user_id,report_id,subject,details)" in trust and "req.user.sub,reportId,subject,details" in trust),
+("appeal report IDs reject malformed and unsafe integers","Number.isSafeInteger(reportId)" in trust and "report ID must be a positive integer" in trust),
 ("appeal history is account-scoped",'app.get("/api/safety/appeals",auth' in trust and "WHERE user_id=$1" in trust),
 ("server wires trust safety with real auth and database","registerTrustSafetyRoutes({ app, pool, auth });" in server and 'import { registerTrustSafetyRoutes } from "./trustSafety.js";' in server),
 ("block routes are authenticated",'app.post("/api/blocks/:username", auth' in social and 'app.delete("/api/blocks/:username", auth' in social),
