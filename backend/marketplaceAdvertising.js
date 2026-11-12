@@ -164,15 +164,10 @@ async function ensureAdvertisingSchema() {
     END $$;
     DO $$
     BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'marketplace_seasonal_promotions_destination_type_check'
-          AND conrelid = 'marketplace_seasonal_promotions'::regclass
-      ) THEN
-        ALTER TABLE marketplace_seasonal_promotions
-          ADD CONSTRAINT marketplace_seasonal_promotions_destination_type_check
-          CHECK (destination_type IN ('MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'));
-      END IF;
+      ALTER TABLE marketplace_seasonal_promotions DROP CONSTRAINT IF EXISTS marketplace_seasonal_promotions_destination_type_check;
+      ALTER TABLE marketplace_seasonal_promotions
+        ADD CONSTRAINT marketplace_seasonal_promotions_destination_type_check
+        CHECK (destination_type IN ('NONE', 'MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'));
     END $$;
   `);
 }
@@ -367,11 +362,11 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const endsAt = parseCampaignTimestamp(req.body?.endsAt);
       const active = req.body?.active !== false;
       if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
-      if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) {
-        return res.status(400).json({ error: "destination must be MARKETPLACE, CATEGORY, PRODUCT or SHOP" });
+      if (!["NONE", "MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) {
+        return res.status(400).json({ error: "destination must be NONE, MARKETPLACE, CATEGORY, PRODUCT or SHOP" });
       }
-      if ((destinationType === "MARKETPLACE" && destinationValue) ||
-          (destinationType !== "MARKETPLACE" && !destinationValue)) {
+      if (((destinationType === "MARKETPLACE" || destinationType === "NONE") && destinationValue) ||
+          (!["MARKETPLACE", "NONE"].includes(destinationType) && !destinationValue)) {
         return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
       }
       if (destinationType === "CATEGORY") {
