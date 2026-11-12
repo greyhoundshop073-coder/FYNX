@@ -110,6 +110,10 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var linkVideoPostIdDraft by remember(post.id) { mutableStateOf("") }
     var linkVideoError by remember(post.id) { mutableStateOf<String?>(null) }
     var mediaPreview by remember(post.id) { mutableStateOf<Triple<String, String?, String>?>(null) }
+    var reportingComment by remember(post.id) { mutableStateOf<FynxRemoteSocialClient.RemoteComment?>(null) }
+    var reportReason by remember(post.id) { mutableStateOf("Harassment or bullying") }
+    var reportBusy by remember(post.id) { mutableStateOf(false) }
+    var reportNotice by remember(post.id) { mutableStateOf<String?>(null) }
     var linkedVideoLoadingId by remember(post.id) { mutableStateOf<String?>(null) }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedMediaUri = uri
@@ -497,6 +501,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(relative(comment.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                 TextButton(onClick = { if (!sending) replyingToId = comment.id }) { Text("Reply") }
+                                                if (!isLocalPreview) TextButton(onClick = { reportingComment = comment; reportReason = "Harassment or bullying"; reportNotice = null }) { Text("Report") }
                                             }
                                             if (!isLocalPreview) LaunchedEffect(comment.id) { recordCommentView(comment) }
                                         }
@@ -547,6 +552,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                                                         Text(relative(reply.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                                         if (visible.depth < MAX_COMMENT_REPLY_DEPTH) {
                                                             TextButton(onClick = { if (!sending) replyingToId = reply.id }) { Text("Reply") }
+                                                            if (!isLocalPreview) TextButton(onClick = { reportingComment = reply; reportReason = "Harassment or bullying"; reportNotice = null }) { Text("Report") }
                                                         }
                                                     }
                                                     if (!isLocalPreview) LaunchedEffect(reply.id) { recordCommentView(reply) }
@@ -704,6 +710,35 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
                 }) { Text("Attach video") }
             },
             dismissButton = { TextButton(onClick = { linkVideoDialogOpen = false }) { Text("Cancel") } }
+        )
+    }
+    reportingComment?.let { comment ->
+        val reasons = listOf("Harassment or bullying", "Scam or fraud", "Hate or abusive content", "Violence or dangerous content", "Spam or misleading content", "Other")
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportingComment = null; reportNotice = null } },
+            title = { Text("Report comment") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(reportNotice ?: "Choose why this comment should be reviewed.")
+                    if (reportNotice?.startsWith("Report submitted") != true) reasons.forEach { reason ->
+                        Row(Modifier.fillMaxWidth().clickable(enabled = !reportBusy) { reportReason = reason }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = reportReason == reason, onClick = { reportReason = reason }, enabled = !reportBusy)
+                            Text(reason, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportBusy && reportNotice?.startsWith("Report submitted") != true, onClick = {
+                    reportBusy = true; reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitContentReport(context, "SOCIAL_COMMENT", comment.id, reportReason)
+                            .onSuccess { reportNotice = "Report submitted for review."; reportBusy = false }
+                            .onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportingComment = null; reportNotice = null }) { Text("Close") } }
         )
     }
     mediaPreview?.let { (path, type, title) ->
