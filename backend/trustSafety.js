@@ -41,6 +41,33 @@ export function inspectTrustSafetyText(value) {
 let safetySchemaPromise;
 async function ensureSafetySchema(pool) {
   if (!safetySchemaPromise) safetySchemaPromise = pool.query(`
+    CREATE TABLE IF NOT EXISTS safety_content_reports (
+      id BIGSERIAL PRIMARY KEY,
+      reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK(target_type IN ('SOCIAL_POST','SOCIAL_COMMENT','MARKETPLACE_LISTING')),
+      target_id BIGINT NOT NULL CHECK(target_id > 0),
+      target_owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','RESOLVED','DISMISSED')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS safety_content_reports_queue_idx ON safety_content_reports(status,created_at ASC);
+    CREATE INDEX IF NOT EXISTS safety_content_reports_reporter_idx ON safety_content_reports(reporter_id,created_at DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS safety_content_reports_open_duplicate_idx
+      ON safety_content_reports(reporter_id,target_type,target_id)
+      WHERE status IN ('OPEN','UNDER_REVIEW');
+    CREATE TABLE IF NOT EXISTS safety_content_moderation_audit (
+      id BIGSERIAL PRIMARY KEY,
+      report_id BIGINT NOT NULL REFERENCES safety_content_reports(id) ON DELETE RESTRICT,
+      moderator_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      previous_status TEXT NOT NULL,
+      new_status TEXT NOT NULL CHECK(new_status IN ('UNDER_REVIEW','RESOLVED','DISMISSED')),
+      decision_note TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS safety_content_moderation_audit_report_idx ON safety_content_moderation_audit(report_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS safety_settings (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE, login_alerts BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE', status_note TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS safety_reports (id BIGSERIAL PRIMARY KEY, reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, target_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL, target_username TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','RESOLVED','DISMISSED')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE INDEX IF NOT EXISTS safety_reports_reporter_idx ON safety_reports(reporter_id,created_at DESC);
@@ -52,6 +79,48 @@ async function ensureSafetySchema(pool) {
 }
 export function registerTrustSafetyRoutes({ app, pool, auth }) {
   if (!pool) return;
+  app.post("/api/social/content-reports", auth, async (req,res) => {
+    try {
+      await ensureSafetySchema(pool);
+      const targetType=typeof req.body?.targetType==="string"?req.body.targetType.trim().toUpperCase():"";
+      const targetId=Number(req.body?.targetId);
+      const reason=typeof req.body?.reason==="string"?req.body.reason.trim().slice(0,80):"";
+      const details=typeof req.body?.details==="string"?req.body.details.trim().slice(0,2000):"";
+      if(!["SOCIAL_POST","SOCIAL_COMMENT","MARKETPLACE_LISTING"].includes(targetType)||!Number.isSafeInteger(targetId)||targetId<1||reason.length<3)
+        return res.status(400).json({error:"valid content type, content id and report reason are required"});
+      let target;
+      if(targetType==="SOCIAL_POST") {
+        target=(await pool.query("SELECT id,author_id AS owner_id FROM social_posts WHERE id=$1 AND (visibility='PUBLIC' OR author_id=$2) LIMIT 1",[targetId,req.user.sub])).rows[0];
+      } else if(targetType==="SOCIAL_COMMENT") {
+        target=(await pool.query(`SELECT c.id,c.author_id AS owner_id FROM social_post_comments c JOIN social_posts p ON p.id=c.post_id
+          WHERE c.id=$1 AND (p.visibility='PUBLIC' OR p.author_id=$2 OR c.author_id=$2
+            OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
+            OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience x WHERE x.post_id=p.id AND x.user_id=$2)))
+          LIMIT 1`,[targetId,req.user.sub])).rows[0];
+      } else {
+        target=(await pool.query("SELECT id,seller_id AS owner_id FROM marketplace_listings WHERE id=$1 AND active=TRUE LIMIT 1",[targetId])).rows[0];
+      }
+      if(!target)return res.status(404).json({error:"content not found"});
+      if(String(target.owner_id)===String(req.user.sub))return res.status(400).json({error:"you cannot report your own content"});
+      const result=await pool.query(`INSERT INTO safety_content_reports(reporter_id,target_type,target_id,target_owner_id,reason,details)
+        VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (reporter_id,target_type,target_id) WHERE status IN ('OPEN','UNDER_REVIEW') DO NOTHING
+        RETURNING id,target_type,target_id,reason,status,created_at`,[req.user.sub,targetType,targetId,target.owner_id,reason,details]);
+      if(!result.rowCount)return res.status(409).json({error:"you already have an open report for this content"});
+      const row=result.rows[0];
+      return res.status(201).json({report:{id:String(row.id),targetType:row.target_type,targetId:String(row.target_id),reason:row.reason,status:row.status,createdAt:row.created_at}});
+    } catch(error) {
+      console.error("content report submit",error);
+      return res.status(500).json({error:"content report submission failed"});
+    }
+  });
+  app.get("/api/social/content-reports/mine",auth,async(req,res)=>{
+    try {
+      await ensureSafetySchema(pool);
+      const result=await pool.query("SELECT id,target_type,target_id,reason,status,created_at,updated_at FROM safety_content_reports WHERE reporter_id=$1 ORDER BY created_at DESC LIMIT 100",[req.user.sub]);
+      return res.json({reports:result.rows.map(row=>({id:String(row.id),targetType:row.target_type,targetId:String(row.target_id),reason:row.reason,status:row.status,createdAt:row.created_at,updatedAt:row.updated_at}))});
+    } catch(error) { console.error("content report history",error); return res.status(500).json({error:"content report history unavailable"}); }
+  });
   app.get("/api/safety", auth, async (req,res)=>{try{await ensureSafetySchema(pool);const r=await pool.query("SELECT message_safety,marketplace_safety,login_alerts,account_status,status_note FROM safety_settings WHERE user_id=$1",[req.user.sub]);const x=r.rows[0]||{message_safety:true,marketplace_safety:true,login_alerts:true,account_status:"ACTIVE",status_note:""};return res.json({safety:{messageSafety:Boolean(x.message_safety),marketplaceSafety:Boolean(x.marketplace_safety),loginAlerts:Boolean(x.login_alerts),accountStatus:x.account_status,statusNote:x.status_note}})}catch(e){console.error("safety settings",e);return res.status(500).json({error:"safety settings failed"})}});
   app.patch("/api/safety", auth, async (req,res)=>{try{await ensureSafetySchema(pool);const keys=["messageSafety","marketplaceSafety","loginAlerts"];const provided=keys.filter(k=>typeof req.body?.[k]==="boolean");if(provided.length!==1)return res.status(400).json({error:"provide exactly one safety setting"});const key=provided[0],column=key==="messageSafety"?"message_safety":key==="marketplaceSafety"?"marketplace_safety":"login_alerts";await pool.query(`INSERT INTO safety_settings(user_id,${column}) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET ${column}=EXCLUDED.${column},updated_at=NOW()`,[req.user.sub,req.body[key]]);const x=(await pool.query("SELECT message_safety,marketplace_safety,login_alerts,account_status,status_note FROM safety_settings WHERE user_id=$1",[req.user.sub])).rows[0];return res.json({safety:{messageSafety:Boolean(x.message_safety),marketplaceSafety:Boolean(x.marketplace_safety),loginAlerts:Boolean(x.login_alerts),accountStatus:x.account_status,statusNote:x.status_note}})}catch(e){console.error("safety update",e);return res.status(500).json({error:"safety setting update failed"})}});
   app.get("/api/social/reports/mine",auth,async(req,res)=>{try{await ensureSafetySchema(pool);const r=await pool.query("SELECT id,target_username,reason,status,created_at FROM safety_reports WHERE reporter_id=$1 ORDER BY created_at DESC LIMIT 100",[req.user.sub]);return res.json({reports:r.rows.map(x=>({id:String(x.id),targetUsername:x.target_username,reason:x.reason,status:x.status,createdAt:x.created_at}))})}catch(e){return res.status(500).json({error:"report history failed"})}});
