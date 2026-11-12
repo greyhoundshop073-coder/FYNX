@@ -142,7 +142,7 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                             TextButton(onClick = { runCatching { uriHandler.openUri(link) } }) {
                                 Icon(androidx.compose.material.icons.Icons.Default.OpenInNew, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Open FYNX link")
+                                Text("Open link")
                             }
                         }
                         if (announcement.publishedAt.isNotBlank()) {
@@ -662,13 +662,13 @@ fun FynxAdminControlCenterPanel() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = {
                                 requestAdminConfirmation(
-                                    "Lock this account?",
-                                    "@${user.username} will lose access until an authorised admin restores the account. Continue only after reviewing the account.",
-                                    "Lock account"
+                                    "Block Marketplace and group messaging?",
+                                    "@${user.username} will be blocked from Marketplace purchases and sending group messages. This does not sign the user out or disable other FYNX features. Continue only after reviewing the account.",
+                                    "Block Marketplace + messaging"
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
-                                            .onSuccess { statusMessage = "@${user.username} locked." }
+                                            .onSuccess { statusMessage = "@${user.username} blocked from Marketplace purchases and group messaging." }
                                             .onFailure { statusMessage = it.message ?: "Action failed." }
                                     }
                                 }
@@ -823,7 +823,7 @@ fun FynxAdminControlCenterPanel() {
                             onValueChange = { announcementScheduleAt = it },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Schedule time (optional)") },
-                            placeholder = { Text("2026-11-12T16:30:00+01:00") },
+                            placeholder = { Text("YYYY-MM-DDTHH:mm:ss+01:00") },
                             supportingText = { Text("Leave blank to publish now. For scheduling, use ISO 8601 with a timezone offset.") },
                             singleLine = true
                         )
