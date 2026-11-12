@@ -165,6 +165,8 @@ fun FynxAdminControlCenterPanel() {
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
     var activityQuery by remember { mutableStateOf("") }
+    var activityOffset by remember { mutableIntStateOf(0) }
+    var activityHasMore by remember { mutableStateOf(false) }
     var activityLoading by remember { mutableStateOf(false) }
     var activityError by remember { mutableStateOf<String?>(null) }
     var refreshActivity by remember { mutableIntStateOf(0) }
@@ -249,12 +251,15 @@ fun FynxAdminControlCenterPanel() {
         loading = false
     }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
-    LaunchedEffect(refreshActivity, dashboard?.role, activeSection) {
+    LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset) {
         if (dashboard != null && activeSection == "Activity") {
             activityLoading = true
             activityError = null
-            FynxAdminClient.activity(context, activityQuery)
-                .onSuccess { activity = it }
+            FynxAdminClient.activity(context, activityQuery, activityOffset)
+                .onSuccess {
+                    activity = it.items
+                    activityHasMore = it.hasMore
+                }
                 .onFailure { activityError = it.message ?: "Activity history unavailable." }
             activityLoading = false
         }
@@ -748,7 +753,7 @@ fun FynxAdminControlCenterPanel() {
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Search actions, users or record IDs") },
                     singleLine = true,
-                    trailingIcon = { IconButton(onClick = { refreshActivity++ }) { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Search activity") } }
+                    trailingIcon = { IconButton(onClick = { activityOffset = 0; refreshActivity++ }) { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Search activity") } }
                 )
                 Spacer(Modifier.height(8.dp))
                 if (activityLoading) CircularProgressIndicator()
@@ -764,6 +769,29 @@ fun FynxAdminControlCenterPanel() {
                             Text(entry.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("${entry.actorDisplayName.ifBlank { entry.actorUsername.ifBlank { entry.actorRole } }} • ${entry.actorRole} • ${entry.createdAt}", style = MaterialTheme.typography.labelSmall)
                             if (entry.targetId.isNotBlank()) Text("${entry.targetType} #${entry.targetId}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.AzureBlue)
+                        }
+                    }
+                }
+                if (!activityLoading && activityError == null) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (activity.isEmpty()) "No records" else "Showing ${activityOffset + 1}–${activityOffset + activity.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TextButton(
+                                enabled = activityOffset > 0,
+                                onClick = { activityOffset = (activityOffset - 50).coerceAtLeast(0) }
+                            ) { Text("Previous") }
+                            TextButton(
+                                enabled = activityHasMore && activityOffset < 10000,
+                                onClick = { activityOffset = (activityOffset + 50).coerceAtMost(10000) }
+                            ) { Text("Next") }
                         }
                     }
                 }
