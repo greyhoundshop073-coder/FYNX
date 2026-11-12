@@ -535,7 +535,7 @@ fun FynxAdminControlCenterPanel() {
                 Spacer(Modifier.height(20.dp))
                 Text("Applications & Appeals", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
-                Text("Review account appeals and restore an account when an appeal is accepted.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Review account appeals. Accepting an eligible appeal linked to the reported account can restore access; unlinked appeals record the decision without changing account status.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 when {
                     appealsLoading -> CircularProgressIndicator()
