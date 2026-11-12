@@ -121,4 +121,28 @@ At final handoff, provide only the essential result: grouped work completed, mea
 
 ## 6. Next action
 
-Immediately resume at **Group 1 — Safety and People** after rechecking PR #527 and current CI. Investigate the current report schema, report submission callers, admin middleware/role resolution, appeal transaction behavior, and the audit helper before making the next grouped code change. Continue through Groups 2 and 3 without waiting for another task prompt.
+Continue the remaining runtime/authorization verification for Group 1, then finish Group 2 and Group 3 in order. The account-only report submission path, target-owned appeal rule, and OWNER/ADMIN role resolution have now been inspected. Do not treat static contract checks as runtime proof. Keep PR #527 open and do not merge without the user's approval.
+
+## 8. Current continuation update — 12 November 2026
+
+### Confirmed CI root causes and corrections
+- 9c853bf3001dd2f802602e3a65c954d1d1b4e46b: changed Admin contract verifier file resolution to repository-root-relative paths. On the subsequent Android run, the Admin contract step printed ADMIN_CONTROL_CENTER_CONTRACT=GREEN.
+- 11a694cd1e752907c7f56bfc8fead918afb600be: corrected the Large Badge #9 regression assertion. The stale test expected reporter_id=$2, but the intended rule is that an appeal may reference a report only when the appellant is the report's target (target_user_id=$2). The new assertion also checks the appeal is saved under the authenticated appellant.
+- The previous Android run's Large Badge and Admin contract steps completed successfully. Its APK build stage was cancelled when later commits updated the PR; this is not a green Android build.
+
+### Safety and People investigation
+- The current user-facing report submission endpoint is specifically an account-report endpoint (/api/social/reports) with targetUsername, reason and details. The current UI labels this as “Report an account”; the queue does not claim to support post/comment/listing reports.
+- Appeal submissions now validate that a linked report is against the authenticated appellant. Report IDs are being hardened to reject malformed, fractional, unsafe, boolean and non-positive values with HTTP 400 rather than allowing a database conversion error.
+- Admin grant/revoke and report/appeal review actions already use transaction-scoped audit writes. Added protection against granting the first-user OWNER a duplicate ADMIN role and removed any legacy OWNER row from the displayed ADMIN roster.
+- Still required: live OWNER/ADMIN/non-admin endpoint tests; check real database counts/nullable-user behavior; exercise account state changes and appeal outcomes; runtime UI testing. No production credential-backed test has been claimed.
+
+### Administration and Publishing / final certification hardening
+- Announcement image upload, link validation, persisted scheduling and public schedule filtering are present in the current PR; they still require runtime proof against the deployed media route and public feed.
+- 0afbca66dcd372f2073367dc7b08df4574912e06 and 7ba6d11390e783b7c8cc41ba3e8500e5531d1c01: Marketplace seasonal-promotion and Music Library mutation paths were changed so the mutation and its activity audit row use the same database transaction. Audit failures now roll back the management change instead of being silently logged after the mutation has committed.
+- d3d25eb20d979f663c9cf28b6016dc799691459b, 9a07f8b7a3d813998a18166df39b9548f3c6e512, 9c5c9054df67a7ee0f7179552939117356c175c5, 7835d1cf6454bf4a9a62cdb8fe8fe4dbe05ce3b7: added OWNER roster/grant protections, verifier coverage for transactional Marketplace/Music audits, strict appeal report-ID validation, and a regression assertion for that validation.
+
+### Current verification caution
+- The newest PR head at this update is 7835d1cf6454bf4a9a62cdb8fe8fe4dbe05ce3b7 (re-check before relying on it).
+- Backend CI succeeded on an earlier intermediate commit. Newer commits were added before the full Android and Chat/Group build stages had completed, cancelling those earlier runs.
+- Re-query workflows for the newest PR head. The static source checks performed while editing are not a substitute for green CI.
+- Emulator screenshots, the live backend probe and credential-backed role tests remain unverified unless a later run explicitly records them.
