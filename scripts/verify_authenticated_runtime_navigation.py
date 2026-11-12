@@ -3547,13 +3547,54 @@ def find_wallet_feature_entry(xml_text:str):
 
 
 def wallet_destination_ready(xml_text: str) -> bool:
-    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
+    """Confirm the Wallet's top-level screen and usable funding actions in the current viewport."""
     return bool(
         find_control(xml_text, ["FYNX Wallet"])
-        and find_control(xml_text, ["Balance details"])
+        and find_control(xml_text, ["AVAILABLE BALANCE"])
+        and find_control(xml_text, ["Add money"])
+        and find_control(xml_text, ["Withdraw"])
+    )
+
+
+def wallet_balance_details_ready(xml_text: str) -> bool:
+    """Confirm the real, below-fold balance buckets after scrolling the Wallet LazyColumn."""
+    return bool(
+        find_control(xml_text, ["Balance details"])
         and find_control(xml_text, ["Reserved"])
         and find_control(xml_text, ["Withdrawal pending"])
     )
+
+
+def capture_wallet_balance_details(prefix: str, wallet_xml: str) -> tuple[str, bool]:
+    """Scroll the real Wallet viewport to its balance metrics; never infer off-screen content."""
+    latest = wallet_xml
+    if wallet_balance_details_ready(latest):
+        return latest, True
+    for attempt in range(8):
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-balance-details-scroll-" + str(attempt)
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+        if wallet_balance_details_ready(latest):
+            return latest, True
+    return latest, False
+
+
+def restore_wallet_top(prefix: str, wallet_xml: str) -> str:
+    """Return to the actual funding controls after the below-fold metrics have been checked."""
+    latest = wallet_xml
+    for attempt in range(8):
+        if find_control(latest, ["Add money"]) and find_control(latest, ["Withdraw"]):
+            return latest
+        scrolled = swipe_vertical_scroll_container(
+            latest, prefix + "-return-top-" + str(attempt), reverse=True
+        )
+        if not scrolled:
+            break
+        latest = scrolled
+    return latest
 
 
 def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
@@ -3570,6 +3611,16 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     while time.monotonic()<deadline:
         latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
         if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+            details_xml, details_ready = capture_wallet_balance_details(prefix + "-marketplace", latest)
+            if not details_ready:
+                break
+            (ROOT/"authenticated-wallet-marketplace-balance-details.xml").write_text(
+                details_xml + chr(10), encoding="utf-8"
+            )
+            screenshot("authenticated-wallet-marketplace-balance-details.png")
+            latest = restore_wallet_top(prefix + "-marketplace", details_xml)
+            if not wallet_destination_ready(latest):
+                break
             screenshot("authenticated-wallet-marketplace-shortcut.png")
             (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
                 latest+chr(10), encoding="utf-8"
@@ -3592,7 +3643,7 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     run("adb","shell","input","keyevent","KEYCODE_BACK")
     time.sleep(0.7)
     back_xml=dump_ui(prefix+"-marketplace-return-after-timeout.xml")
-    return False, "Marketplace Wallet shortcut opened, but Wallet summary sections did not settle within 20 seconds.", back_xml or marketplace_xml
+    return False, "Marketplace Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface.", back_xml or marketplace_xml
 
 
 def capture_wallet_from_features(prefix:str):
@@ -3659,6 +3710,18 @@ def capture_wallet_from_features(prefix:str):
             break
 
     wallet_opened=wallet_shell_opened and wallet_settled
+    if wallet_opened:
+        details_xml, details_ready = capture_wallet_balance_details(prefix, wallet_xml)
+        if details_ready:
+            (ROOT/"authenticated-wallet-balance-details.xml").write_text(
+                details_xml + chr(10), encoding="utf-8"
+            )
+            screenshot("authenticated-wallet-balance-details.png")
+            wallet_xml = restore_wallet_top(prefix, details_xml)
+            wallet_opened = wallet_destination_ready(wallet_xml)
+        else:
+            wallet_opened = False
+            result_message = "Wallet opened, but Balance details, Reserved and Withdrawal pending were not exposed by the real Wallet scroll surface."
     authenticated_wallet_errors=[]
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         authenticated_wallet_error_markers=(
@@ -4078,56 +4141,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             FAILURES.append("Marketplace Local businesses shortcut could not be opened")
 
-        # Product details are only captured when an actual visible listing card exposes a price.
-        # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
-        product_target = marketplace_product_card_target(marketplace_xml)
-        if product_target:
-            px, py = product_target
-            run("adb", "logcat", "-c")
-            run("adb", "shell", "input", "tap", str(px), str(py))
-            time.sleep(1.2)
-            detail_xml = dump_ui("marketplace-product-detail-probe.xml")
-            detail_markers = ["Add to cart", "Buy now", "Message seller", "Your listing"]
-            if detail_xml and any(find_control(detail_xml, [label]) for label in detail_markers):
-                screenshot("authenticated-marketplace-product-detail.png")
-                (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
-                report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
-            else:
-                report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
-            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(0.8)
-            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
-        else:
-            report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
-
-        # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
-        # exactly: substring matching would also match "sellers" in the search field.
-        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
-        for attempt in range(6):
-            if find_control(marketplace_xml, sell_labels, exact_only=True):
-                break
-            scrolled_xml = swipe_vertical_scroll_container(
-                marketplace_xml, "marketplace-publish-cta-scroll-"+str(attempt)+".xml"
-            )
-            if not scrolled_xml:
-                break
-            marketplace_xml = scrolled_xml
-        if find_control(marketplace_xml, sell_labels, exact_only=True):
-            publish_xml = tap_control(
-                marketplace_xml, sell_labels, "marketplace-publishing-flow",
-                ["Product name", "Choose media", "Product media"], exact_only=True
-            )
-            if publish_xml:
-                report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
-                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(0.7)
-                marketplace_xml = dump_ui("marketplace-after-publishing.xml") or marketplace_xml
-            else:
-                report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
-        else:
-            report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
-
-        # Return the actual Marketplace content to its top before opening My Shop.
+        # Certify My Shop while its real shortcut is still visible, before any feed gestures.
         for attempt in range(5):
             if find_control(marketplace_xml, ["My Shop"]):
                 break
@@ -4273,6 +4287,71 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     current_shop_xml = dump_ui("marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
         else:
             report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
+
+        # Return to Marketplace after seller-center certification so the remaining buyer checks
+        # start from the actual Marketplace route rather than stale coordinates or hidden chrome.
+        if shop_xml:
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            marketplace_return_deadline = time.monotonic() + 10.0
+            marketplace_return_xml = ""
+            while time.monotonic() < marketplace_return_deadline:
+                marketplace_return_xml = dump_ui("marketplace-after-my-shop-certification.xml") or marketplace_return_xml
+                if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                    marketplace_xml = marketplace_return_xml
+                    break
+                time.sleep(0.4)
+            else:
+                FAILURES.append("My Shop Back did not return to the Marketplace surface")
+
+        # Product details are only captured when an actual visible listing card exposes a price.
+        # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
+        product_target = marketplace_product_card_target(marketplace_xml)
+        if product_target:
+            px, py = product_target
+            run("adb", "logcat", "-c")
+            run("adb", "shell", "input", "tap", str(px), str(py))
+            time.sleep(1.2)
+            detail_xml = dump_ui("marketplace-product-detail-probe.xml")
+            detail_markers = ["Add to cart", "Buy now", "Message seller", "Your listing"]
+            if detail_xml and any(find_control(detail_xml, [label]) for label in detail_markers):
+                screenshot("authenticated-marketplace-product-detail.png")
+                (ROOT/"authenticated-marketplace-product-detail.xml").write_text(detail_xml+"\n", encoding="utf-8")
+                report.append("- PASS: opened a real visible Marketplace listing and captured Product Details.")
+            else:
+                report.append("- BLOCKED: a visible priced card was present, but Product Details markers were not confirmed; no detail screenshot is claimed.")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.8)
+            marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
+        else:
+            report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+
+        # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
+        # exactly: substring matching would also match "sellers" in the search field.
+        sell_labels = ["Sell", "Sell something", "Start selling", "Sell your first product"]
+        for attempt in range(6):
+            if find_control(marketplace_xml, sell_labels, exact_only=True):
+                break
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "marketplace-publish-cta-scroll-"+str(attempt)+".xml"
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
+        if find_control(marketplace_xml, sell_labels, exact_only=True):
+            publish_xml = tap_control(
+                marketplace_xml, sell_labels, "marketplace-publishing-flow",
+                ["Product name", "Choose media", "Product media"], exact_only=True
+            )
+            if publish_xml:
+                report.append("- PASS: captured the real product-publishing form without submitting or creating a listing.")
+                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+                time.sleep(0.7)
+                marketplace_xml = dump_ui("marketplace-after-publishing.xml") or marketplace_xml
+            else:
+                report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
+        else:
+            report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
+
     else:
         report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
 
