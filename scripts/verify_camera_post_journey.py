@@ -288,8 +288,12 @@ checks = [
      all(label in home for label in ["Add description...", "# Hashtags", "@ Mention", "Content disclosure and ads", "Location", "Add link", "More options", "Share to", "Edit cover", "Drafts"])
      and 'Text(\n                                            "Add description...",' in home
      and home.index('Text(\n                                            "Add description...",') < home.index('label = { Text("# Hashtags") }') < home.index('Text("Content disclosure and ads", style')
-     and home.index('Text("Content disclosure and ads", style') < home.index('Text("Location", style') < home.index('Text("Add link", style')
-     and home.index('Text("Add link", style') < home.index('"Who can view this post"') < home.index('Text("More options", style') < home.index('Text("Share to", style')
+     and home.index('Text("Content disclosure and ads", style') < home.index('Text("Location", style') < home.index('"Who can view this post"') < home.index('Text("Share to", style')
+     and "Keep the two frequently needed composer actions fixed above the publish bar." in home
+     and home.index('Text("Add link")') < home.index('Text("More options")') < home.index('Text("Drafts"')
+     and 'onClick = { postLinkInput = ""; showPostLinkDialog = true }' in home
+     and 'onClick = { showMorePostOptions = true }' in home
+     and "camera-post-more-options-row" in home
      and 'publishDestination == "BOTH" -> "Publish to both"' in home
      and ".imePadding()" in home),
     ("Drafts are private per account and durable media is copied out of the transient cache",
