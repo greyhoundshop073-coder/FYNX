@@ -458,6 +458,21 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
     return next_xml
 
 
+def wait_for_controls(xml_text: str, labels: list[str], name: str, *, timeout: float = 12.0) -> str:
+    """Wait for all visible accessibility controls, not merely the first page marker."""
+    current = xml_text or dump_ui(name)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        missing = [label for label in labels if not find_control(current, [label])]
+        if not missing:
+            return current
+        time.sleep(0.4)
+        refreshed = dump_ui(name)
+        if refreshed:
+            current = refreshed
+    return current
+
+
 def swipe_horizontal_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
     """Swipe inside the widest visible horizontal scroll rail using its real accessibility bounds."""
     if not xml_text:
@@ -1425,7 +1440,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         if second_editor:
             screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
             verify_camera_controls_fit_safe_area(
-                second_editor, ["Retake", "Rotate", "Status", "Next"],
+                second_editor, ["Retake", "Rotate", "Next"],
                 prefix + " photo editor before post handoff"
             )
 
@@ -1450,7 +1465,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     if "FYNXoverlaytest" in typed_xml:
                         report.append("- PASS photo text is typed directly over the media without a caption input box")
                         remaining_rail = [
-                            label for label in ["Looks", "Face FX", "Background", "AI Studio", "Rotate"]
+                            label for label in ["Looks", "Face FX", "Background", "AI Studio"]
                             if find_control(typed_xml, [label])
                         ]
                         if remaining_rail:
@@ -1531,6 +1546,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             if draft_xml:
                 verify_post_details_footer_safe_area(draft_xml, prefix + " post details first viewport")
                 destination_labels = ["Home Feed", "Status", "Both"]
+                draft_xml = wait_for_controls(
+                    draft_xml, destination_labels, f"{prefix}-camera-publish-destinations"
+                )
                 missing_destinations = [label for label in destination_labels if not find_control(draft_xml, [label])]
                 if missing_destinations:
                     FAILURES.append(prefix + ": shared composer is missing destination options " + ", ".join(missing_destinations))
@@ -1904,26 +1922,15 @@ def probe_media_stream_types(path: Path) -> set[str] | None:
     }
 
 def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
-    """Record a short real clip, run a video look, inspect the output and never tap Next."""
+    """Record a short real clip from the current Home camera shortcut and inspect it without publishing."""
     video_files_before = list_app_cache_videos()
-    composer = tap_control(
-        home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["Add description..."]
-    )
-    if not composer:
-        return camera_return_to_home(home_xml, prefix + "-video-composer-missing")
-    # More options is below the initial viewport. Scroll the real composer content
-    # until its row has visible bounds before trying to activate it.
-    composer = camera_scroll_until_control(
-        composer, ["More options"], f"{prefix}-video-composer-more-options", max_swipes=8
-    )
-    options = tap_control(
-        composer, ["More options"], f"{prefix}-video-composer-more-options", ["Take photo or video", "Add photo or video"]
-    )
+    # The current Home header shortcut opens CameraX directly. Do not wait for the old
+    # intermediate New post composer or try to open CameraX a second time from More options.
     camera = tap_control(
-        options, ["Take photo or video"], f"{prefix}-video-composer-camera", ["Switch front/back camera"]
-    ) if options else ""
+        home_xml, ["Open FYNX camera"], f"{prefix}-video-home-camera", ["Switch front/back camera"]
+    )
     if not camera:
-        return camera_return_to_home(composer, prefix + "-video-camera-missing")
+        return camera_return_to_home(home_xml, prefix + "-video-camera-missing")
 
     # Camera screens reopen on the normal front-facing default. Switch explicitly to the rear
     # virtual-scene fixture for real video preview/recording pixels in the emulator.
@@ -2026,18 +2033,18 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
     verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (180, 650, 1260, 1900), prefix + " video editor preview")
-    verify_camera_controls_fit_safe_area(editor, ["Retake", "Status", "Next"], prefix + " video editor")
+    verify_camera_controls_fit_safe_area(editor, ["Retake", "Next"], prefix + " video editor")
     # The style carousel is below the initially visible caption field in the
     # bottom-anchored editor viewport; verify the fixed action row first, then scroll
     # the real editor viewport to prove the style choices separately.
     missing = [
-        label for label in ["Retake", "Status", "Next"]
+        label for label in ["Retake", "Next"]
         if not find_control(editor, [label])
     ]
     if missing:
         FAILURES.append(prefix + ": recorded-video editor missing controls: " + ", ".join(missing))
     else:
-        report.append("- PASS emulator recorded a real short video and exposed the Retake/Status/Next action row")
+        report.append("- PASS emulator recorded a real short video and exposed the Retake/Next action row; Status is selected in the shared publish composer")
 
     # Test automatic captions when available, but always verify the manual caption field.
     # The emulator may not ship the speech model; that capability limitation must not block
