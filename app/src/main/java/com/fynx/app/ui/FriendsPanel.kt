@@ -54,6 +54,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     var requestsLoadFailed by remember { mutableStateOf(false) }
     var blockedLoadFailed by remember { mutableStateOf(false) }
     var menuUser by remember { mutableStateOf<String?>(null) }
+    var pendingRelationshipAction by remember { mutableStateOf<Pair<String, String>?>(null) }
     val listState = rememberLazyListState()
 
     suspend fun refresh() {
@@ -160,7 +161,7 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                 if (loading) item { Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 else if (friends.isEmpty() && friendsLoadFailed) emptyState("Couldn't load friends", "Check your connection and retry.")
                 else if (friends.isEmpty()) emptyState("No friends yet", "Accepted FYNX connections will appear here.")
-                else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat, onRemove = { act(person.username) { FynxSocialClient.removeFriend(context, person.username) } }, onBlock = { act(person.username) { FynxSocialClient.block(context, person.username) } }) }
+                else items(friends, key = { "friend_${it.username}" }) { person -> FriendRow(person, busy == person.username, menuUser == person.username, { open -> menuUser = if (open) person.username else null }, onOpenProfile, onOpenChat, onRemove = { pendingRelationshipAction = person.username to "remove" }, onBlock = { pendingRelationshipAction = person.username to "block" }) }
             } else {
                 when (section) {
                     "Requests" -> if (incoming.isEmpty() && requestsLoadFailed) emptyState("Couldn’t load requests", "Check your connection and retry.") else if (incoming.isEmpty()) emptyState("No incoming requests", "Friend requests from other FYNX accounts will appear here.") else items(incoming, key = { "in_${it.id}" }) { request -> RequestRow(FynxSocialClient.User(request.username, request.displayName, "", profilePhotoMediaId = request.profilePhotoMediaId), "Confirm", "Delete", busy == request.username, onOpenProfile, onOpenChat, onPrimary = { act(request.username) { FynxSocialClient.acceptRequest(context, request.id) } }, onSecondary = { act(request.username) { FynxSocialClient.rejectRequest(context, request.id) } }) }
@@ -172,10 +173,28 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
                         else if (searchLoading) item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                         else if (searchError != null) item { Text(searchError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         else if (discover.isEmpty()) emptyState("No matching people", "No available FYNX account matched that search.")
-                        else items(discover, key = { "discover_${it.username}" }) { person -> RequestRow(person, "Add", "Block", busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } }, onSecondary = { act(person.username) { FynxSocialClient.block(context, person.username) } }) }
+                        else items(discover, key = { "discover_${it.username}" }) { person -> RequestRow(person, "Add", "Block", busy == person.username, onOpenProfile, onOpenChat, onPrimary = { act(person.username) { FynxSocialClient.sendRequest(context, person.username) } }, onSecondary = { pendingRelationshipAction = person.username to "block" }) }
                     }
                 }
             }
+        }
+        pendingRelationshipAction?.let { (username, action) ->
+            val isBlock = action == "block"
+            AlertDialog(
+                onDismissRequest = { pendingRelationshipAction = null },
+                title = { Text(if (isBlock) "Block @$username?" else "Remove @$username?") },
+                text = { Text(if (isBlock) "This account will no longer be able to contact you or appear in your people search. Your friendship will also be removed." else "This will end your FYNX friendship. You can send a new request later.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingRelationshipAction = null
+                        act(username) {
+                            if (isBlock) FynxSocialClient.block(context, username)
+                            else FynxSocialClient.removeFriend(context, username)
+                        }
+                    }) { Text(if (isBlock) "Block account" else "Remove friend", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = { pendingRelationshipAction = null }) { Text("Cancel") } }
+            )
         }
     }
 }
