@@ -133,6 +133,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
+    var remoteSearchMessages by remember(chat.username) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var remoteSearchHasMore by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchCursor by remember(chat.username) { mutableStateOf<String?>(null) }
+    var remoteSearchLoading by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchError by remember(chat.username) { mutableStateOf<String?>(null) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
     var selectedMessageIds by remember(chat.username) { mutableStateOf<Set<String>>(emptySet()) }
     var hasOlderMessages by remember(chat.username) { mutableStateOf(false) }
@@ -662,7 +667,45 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    suspend fun loadPrivateSearchPage(query: String, beforeId: String? = null, append: Boolean = false) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.length < 2) return
+        remoteSearchLoading = true
+        remoteSearchError = null
+        FynxProductionMessaging.searchHistoryPage(context, chat.username.removePrefix("@"), cleanQuery, beforeId)
+            .onSuccess { page ->
+                val myId = currentUserId ?: FynxBackendClient.currentUserId(context).getOrNull()
+                if (myId.isNullOrBlank()) {
+                    remoteSearchError = "Your account could not be verified for message search."
+                } else {
+                    val found = page.messages.mapNotNull { remote ->
+                        runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull()
+                    }
+                    remoteSearchMessages = if (append) (remoteSearchMessages + found).distinctBy { it.id } else found
+                    remoteSearchHasMore = page.hasMore
+                    remoteSearchCursor = page.nextBeforeId
+                }
+            }
+            .onFailure { remoteSearchError = "Message history search is unavailable. Check your connection and retry." }
+        remoteSearchLoading = false
+    }
+
+    LaunchedEffect(chat.username, searchOpen, searchQuery, currentUserId) {
+        val query = searchQuery.trim()
+        if (!searchOpen || query.length < 2) {
+            remoteSearchMessages = emptyList()
+            remoteSearchHasMore = false
+            remoteSearchCursor = null
+            remoteSearchError = null
+            return@LaunchedEffect
+        }
+        delay(350)
+        loadPrivateSearchPage(query)
+    }
+
+    val visibleMessages = if (searchQuery.isBlank()) messages
+        else if (searchQuery.trim().length >= 2) remoteSearchMessages
+        else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
     fun toggleMessageSelection(messageId:String) { selectedMessageIds = if (messageId in selectedMessageIds) selectedMessageIds - messageId else selectedMessageIds + messageId }
     val pinnedMessage = messages.lastOrNull { it.pinned }
     val messageListState = rememberLazyListState()
@@ -837,7 +880,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
 
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) {
+            OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all messages…") })
+            when {
+                searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full conversation.", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteSearchLoading -> Text("Searching message history…", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteSearchError != null -> Text(remoteSearchError!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 -> Text("${remoteSearchMessages.size} matching messages in this conversation", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) conversationScope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -879,12 +930,38 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     ) { Text(if (loadingOlderMessages) "Loading older messages…" else "Load older messages") }
                 }
             }
+            if (searchQuery.trim().length >= 2 && remoteSearchHasMore) {
+                item(key = "load_more_private_search_results") {
+                    TextButton(
+                        enabled = !remoteSearchLoading,
+                        onClick = {
+                            val cursor = remoteSearchCursor ?: return@TextButton
+                            val query = searchQuery.trim()
+                            conversationScope.launch { loadPrivateSearchPage(query, cursor, append = true) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (remoteSearchLoading) "Loading matches…" else "Load more matches") }
+                }
+            }
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
                 }
             }
-            if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
+            if (visibleMessages.isEmpty() && searchQuery.isNotBlank()) {
+                item(key = "fynx-private-search-empty") {
+                    Text(
+                        when {
+                            remoteSearchLoading -> "Searching all messages…"
+                            remoteSearchError != null -> "Search could not be completed. Please retry."
+                            else -> "No matching messages found in this conversation."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glassPalette.messageMuted,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp)
+                    )
+                }
+            } else if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-chat") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f), contentColor = MaterialTheme.colorScheme.onSurfaceVariant, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
