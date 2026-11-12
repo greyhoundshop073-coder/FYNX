@@ -133,6 +133,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    var editingCampaignId by remember { mutableStateOf<String?>(null) }
+    var editingCampaignActive by remember { mutableStateOf(true) }
 
     fun refresh() {
         scope.launch {
@@ -381,11 +383,17 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         savedArtworkId = mediaId
                         artworkMediaId = mediaId
                     }
-                    FynxMarketplaceSeasonalPromotionClient.create(
+                    val saved = editingCampaignId?.let { campaignId ->
+                        FynxMarketplaceSeasonalPromotionClient.update(
+                            context, campaignId, promotionType, occasionKey, headline, body, actionLabel,
+                            destinationType, destinationValue, savedArtworkId, startsAt, endsAt, editingCampaignActive
+                        )
+                    } ?: FynxMarketplaceSeasonalPromotionClient.create(
                         context, promotionType, occasionKey, headline, body, actionLabel,
                         destinationType, destinationValue, savedArtworkId, startsAt, endsAt
-                    ).onSuccess {
-                        message = "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window."
+                    )
+                    saved.onSuccess {
+                        message = if (editingCampaignId == null) "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window." else "Campaign changes saved."
                         occasionKey = ""
                         headline = ""
                         body = ""
@@ -394,6 +402,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         destinationValue = ""
                         artworkUri = null
                         artworkMediaId = ""
+                        editingCampaignId = null
+                        editingCampaignActive = true
                         startsAt = ""
                         endsAt = ""
                         refresh()
@@ -408,7 +418,29 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (saving) CircularProgressIndicator() else Text("Schedule campaign")
+            if (saving) CircularProgressIndicator() else Text(if (editingCampaignId == null) "Schedule campaign" else "Save campaign changes")
+        }
+        if (editingCampaignId != null) {
+            TextButton(
+                onClick = {
+                    editingCampaignId = null
+                    editingCampaignActive = true
+                    promotionType = "SEASONAL"
+                    occasionKey = ""
+                    headline = ""
+                    body = ""
+                    actionLabel = "Explore Marketplace"
+                    destinationType = "MARKETPLACE"
+                    destinationValue = ""
+                    artworkUri = null
+                    artworkMediaId = ""
+                    startsAt = ""
+                    endsAt = ""
+                    message = "Campaign editing cancelled."
+                    error = null
+                },
+                enabled = !saving
+            ) { Text("Cancel editing") }
         }
         message?.let { Text(it, color = FynxDesign.ClassicGreen, style = MaterialTheme.typography.bodySmall) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -471,6 +503,26 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    editingCampaignId = campaign.id
+                                    editingCampaignActive = campaign.active
+                                    promotionType = campaign.promotionType
+                                    occasionKey = campaign.occasionKey
+                                    headline = campaign.headline
+                                    body = campaign.body
+                                    actionLabel = campaign.actionLabel
+                                    destinationType = campaign.destinationType
+                                    destinationValue = campaign.destinationValue
+                                    artworkUri = null
+                                    artworkMediaId = campaign.artworkMediaId
+                                    startsAt = campaign.startsAt
+                                    endsAt = campaign.endsAt
+                                    message = "Editing campaign. Update the fields above and save your changes."
+                                    error = null
+                                },
+                                enabled = !saving && !loading
+                            ) { Text("Edit") }
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {
