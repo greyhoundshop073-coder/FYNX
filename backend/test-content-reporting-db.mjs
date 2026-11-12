@@ -6,6 +6,7 @@ const { Client } = pg;
 assert.ok(process.env.PGDATABASE, "CI PostgreSQL connection environment is required");
 const db = new Client();
 await db.connect();
+const testSchema = `content_reporting_${process.pid}`;
 
 const routes = new Map();
 const app = {
@@ -32,13 +33,14 @@ async function call(method, path, userId, body = {}) {
 }
 
 try {
+  await db.query(`CREATE SCHEMA "${testSchema}"; SET search_path TO "${testSchema}";`);
   await db.query(`
-    CREATE TEMP TABLE users (id BIGINT PRIMARY KEY, username TEXT);
-    CREATE TEMP TABLE social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL, visibility TEXT NOT NULL);
-    CREATE TEMP TABLE social_post_audience (post_id BIGINT NOT NULL, user_id BIGINT NOT NULL);
-    CREATE TEMP TABLE friendships (user_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, status TEXT NOT NULL);
-    CREATE TEMP TABLE social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL, author_id BIGINT NOT NULL);
-    CREATE TEMP TABLE marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL, active BOOLEAN NOT NULL);
+    CREATE TABLE users (id BIGINT PRIMARY KEY, username TEXT);
+    CREATE TABLE social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL, visibility TEXT NOT NULL);
+    CREATE TABLE social_post_audience (post_id BIGINT NOT NULL, user_id BIGINT NOT NULL);
+    CREATE TABLE friendships (user_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, status TEXT NOT NULL);
+    CREATE TABLE social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL, author_id BIGINT NOT NULL);
+    CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL, active BOOLEAN NOT NULL);
     INSERT INTO users(id,username) VALUES (1,'owner'),(2,'reporter'),(3,'outsider'),(4,'admin');
     INSERT INTO social_posts(id,author_id,visibility) VALUES
       (10,1,'PUBLIC'),(11,1,'PRIVATE'),(12,1,'SELECTED_PEOPLE');
@@ -98,5 +100,6 @@ try {
 
   console.log("Content reporting PostgreSQL integration tests passed (10 route and persistence assertions).");
 } finally {
+  await db.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);
   await db.end();
 }
