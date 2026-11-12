@@ -104,9 +104,13 @@ object FynxGroupRemoteClient {
     suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> =
         loadMessagesPage(context,groupId).map { it.messages }
 
-    suspend fun loadMessagesPage(context:Context,groupId:String,before:String?=null,limit:Int=50):Result<RemoteMessagePage> = runCatching {
-        val query = "?limit=${limit.coerceIn(1,100)}" + (before?.takeIf { it.isNotBlank() }?.let { "&before=${Uri.encode(it)}" } ?: "")
-        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages$query").getOrThrow())
+    suspend fun loadMessagesPage(context:Context,groupId:String,before:String?=null,limit:Int=50,query:String?=null):Result<RemoteMessagePage> = runCatching {
+        val cleanSearch = query?.trim()?.take(100)
+        require(cleanSearch == null || cleanSearch.length >= 2) { "Enter at least two characters to search group history." }
+        val queryString = "?limit=${limit.coerceIn(1,100)}" +
+            (before?.takeIf { it.isNotBlank() }?.let { "&before=${Uri.encode(it)}" } ?: "") +
+            (cleanSearch?.let { "&q=${Uri.encode(it)}" } ?: "")
+        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages$queryString").getOrThrow())
         val a=root.optJSONArray("messages")?:JSONArray()
         val messages=buildList {
             for(i in 0 until a.length()) {
