@@ -107,6 +107,9 @@ require("private Chat search queries server history instead of only the loaded l
 require("private Chat search supports paginated matches", "load_more_private_search_results" in PRIVATE and "remoteSearchCursor" in PRIVATE)
 require("active Group search queries server history with group pagination", "loadGroupSearchPage(" in ACTIVE_GROUP and "FynxGroupRemoteClient.loadMessagesPage(context, groupId, before = before, limit = 40, query = cleanQuery)" in ACTIVE_GROUP)
 require("active Group search uses server-returned matches, not only cached messages", "remoteGroupSearchMessages" in ACTIVE_GROUP and "remoteGroupSearchHasMore" in ACTIVE_GROUP)
+require("group pin controls respect manager roles before calling the server", "if (canManageGroup) {" in ACTIVE_GROUP and "FynxGroupRemoteClient.setPinned(context, groupId, message.id, !message.pinned)" in ACTIVE_GROUP)
+require("group delete controls respect sender or manager permissions", "if (message.fromMe || canManageGroup) {" in ACTIVE_GROUP and "FynxGroupRemoteClient.deleteMessage(context, groupId, message.id)" in ACTIVE_GROUP)
+
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
