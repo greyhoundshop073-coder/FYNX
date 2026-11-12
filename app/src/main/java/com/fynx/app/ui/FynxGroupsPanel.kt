@@ -601,6 +601,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             remoteGroupSearchError = null
             return@LaunchedEffect
         }
+        remoteGroupSearchMessages = emptyList()
+        remoteGroupSearchHasMore = false
+        remoteGroupSearchCursor = null
+        remoteGroupSearchError = null
         delay(350)
         loadGroupSearchPage(query)
     }
