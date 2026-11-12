@@ -609,9 +609,9 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     const announcementMediaTable = await pool.query(
-      "SELECT to_regclass('public.fynx_announcements') AS relation, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='scheduled_at') AS has_schedule"
+      "SELECT to_regclass('public.fynx_announcements') AS relation, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='scheduled_at') AS has_schedule, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='media_id') AS has_media_id"
     );
-    const announcementMediaAuthorization = announcementMediaTable.rows[0]?.relation && announcementMediaTable.rows[0]?.has_schedule
+    const announcementMediaAuthorization = announcementMediaTable.rows[0]?.relation && announcementMediaTable.rows[0]?.has_schedule && announcementMediaTable.rows[0]?.has_media_id
       ? `OR EXISTS (
           SELECT 1
           FROM fynx_announcements a
