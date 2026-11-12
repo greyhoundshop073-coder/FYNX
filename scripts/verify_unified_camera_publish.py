@@ -16,7 +16,7 @@ checks = [
     ("Status hub Add Status camera opens the shared Home camera", "onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in hub and "onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) }" in hub),
     ("Status timeline camera opens the shared Home camera", "onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in hub),
     ("Status hub no longer creates a second CameraX panel", "FynxCameraCapturePanel(" not in hub),
-    ("Home receives the shared camera request from Stories", 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app and 'cameraInitialMode = homeCameraInitialMode' in app and 'initialMode = activeCameraInitialMode' in home),
+    ("Home receives the shared camera request from Stories", 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app and 'cameraInitialMode = homeCameraInitialMode' in app and 'initialMode = activeCameraInitialMode' in home and 'activeCameraInitialMode = cameraInitialMode' in home and 'activeCameraInitialMode = CameraMode.PHOTO' in home),
     ("composer presents Home Feed, Status and Both targets", all(f'Text("{label}")' in home for label in ("Home Feed", "Status", "Both"))),
     ("Status publication uses the existing authenticated media and status APIs", all(x in publisher for x in ("FynxStatusClient.uploadMedia", "FynxStatusClient.create", "FynxStatusStore.save"))),
     ("same edited media URI is sent to Status", "mediaUri = selectedStatusMedia?.first" in home),
