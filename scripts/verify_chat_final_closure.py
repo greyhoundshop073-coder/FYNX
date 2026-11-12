@@ -37,6 +37,14 @@ checks = [
     ("persistent chat state", "FynxChatStore.kt", "unreadCount"),
 ]
 
+checks.extend([
+    ("private full-history search", "ConversationPanel.kt", "FynxProductionMessaging.searchHistoryPage("),
+    ("private search pagination", "ConversationPanel.kt", "load_more_private_search_results"),
+    ("group full-history search", "FynxGroupsPanel.kt", "loadGroupSearchPage("),
+    ("group search pagination", "FynxGroupsPanel.kt", "load_more_group_search_results"),
+    ("group search preserves server cursor", "FynxGroupRemoteClient.kt", "query:String?=null"),
+])
+
 for label, filename, needle in checks:
     text = (APP / filename).read_text(encoding="utf-8")
     if needle not in text:
