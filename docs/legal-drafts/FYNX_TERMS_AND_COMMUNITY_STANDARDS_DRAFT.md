@@ -41,6 +41,12 @@ You must not use FYNX to:
 
 FYNX may maintain additional category-specific restrictions to comply with local law, app-store rules and payment-provider acceptable-use requirements.
 
+## 4A. Child safety standards
+
+FYNX prohibits child sexual abuse and exploitation (CSAE), grooming, sextortion, trafficking, sexualisation or exploitation of minors, and any content or conduct that facilitates harm to a child. Users must not upload, request, share, promote, trade or link to child sexual abuse material or use FYNX to contact or target children for exploitation. FYNX may remove content, restrict or terminate accounts, preserve relevant evidence where lawful and report confirmed or suspected child-safety violations to the appropriate regional authority as required by law.
+
+Before launch, FYNX must publish an operational child-safety standard, provide an in-app mechanism for users to submit concerns/reports, establish a child-safety point of contact monitored by a person authorised to act, and implement a documented escalation and lawful reporting process for confirmed CSAM. The contact must be able to explain FYNX's enforcement and review procedures. A policy statement alone does not satisfy these operational requirements.
+
 ## 5. Social, messaging, groups and calls
 
 Users are responsible for the content and recipients they choose. Do not send spam, threats, unwanted sexual content, malicious links or abusive messages. Respect group rules, privacy settings and block decisions. Do not record or redistribute calls or private communications without the required consent and legal authority. Call availability, recording behavior and retention must be described accurately in the final product disclosures.
@@ -106,6 +112,7 @@ Governing law, dispute forum, liability limitations, warranties, indemnities, co
 
 - Confirm legal entity, address, support and privacy contacts.
 - Set minimum age and target audience consistently with app/store declarations.
+- Establish the designated Child Safety Point of Contact, in-app feedback/reporting route, CSAE response procedure and regional-authority reporting process; publish the child-safety standards.
 - Obtain legal review for Nigeria and every launch jurisdiction.
 - Implement versioned Terms acceptance before UGC creation/upload and store acceptance evidence.
 - Implement/test reporting and moderation operations across all UGC surfaces, not just Home posts.
