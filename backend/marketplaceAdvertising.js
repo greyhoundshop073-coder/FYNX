@@ -410,6 +410,15 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       let result;
       try {
         await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`fynx-seasonal-promo:${occasionKey}`]);
+        const overlap = await client.query(
+          "SELECT id FROM marketplace_seasonal_promotions WHERE occasion_key=$1 AND active=TRUE AND starts_at < $3 AND ends_at > $2 LIMIT 1",
+          [occasionKey, startsAt.toISOString(), endsAt.toISOString()]
+        );
+        if (overlap.rowCount) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: "an active campaign with this key already overlaps the selected time window" });
+        }
         result = await client.query(
           "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
           [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, auth.userId]
@@ -426,6 +435,94 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     } catch (error) {
       console.error("[fynx-ads] seasonal promotion create failed", error);
       return res.status(500).json({ error: "seasonal promotion creation failed" });
+    }
+  });
+
+  app.patch("/api/admin/marketplace/seasonal-promotions/:id/edit", async (req, res) => {
+    const auth = authenticate(req, res);
+    if (!auth) return;
+    try {
+      const role = await requireMarketplaceAdmin(req, res, auth);
+      if (!role) return;
+      const id = positiveInt(req.params.id);
+      const promotionType = typeof req.body?.promotionType === "string" ? req.body.promotionType.trim().toUpperCase() : "";
+      const occasionKey = typeof req.body?.occasionKey === "string" ? req.body.occasionKey.trim().toLowerCase() : "";
+      const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
+      const body = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+      const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
+      const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
+      let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
+      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
+      const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
+      const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
+      const active = req.body?.active === true;
+      if (!id) return res.status(400).json({ error: "valid promotion id is required" });
+      if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
+      if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) return res.status(400).json({ error: "invalid campaign destination" });
+      if ((destinationType === "MARKETPLACE" && destinationValue) || (destinationType !== "MARKETPLACE" && !destinationValue)) {
+        return res.status(400).json({ error: "the selected campaign destination requires a matching destination value" });
+      }
+      if (destinationType === "CATEGORY") {
+        const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase());
+        if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
+        destinationValue = canonicalCategory;
+      }
+      if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
+      if (destinationType === "SHOP" && !/^[a-z0-9_]{3,32}$/i.test(destinationValue)) return res.status(400).json({ error: "shop destination must be a valid FYNX username" });
+      if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "campaign key must use 2-60 letters, numbers, dashes or underscores" });
+      if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });
+      if ((promotionType === "ANNOUNCEMENT" || promotionType === "OFFER") && body.length < 10) return res.status(400).json({ error: "announcements and special offers require at least 10 characters of supporting details" });
+      if (!(startsAt instanceof Date) || !Number.isFinite(startsAt.getTime()) || !(endsAt instanceof Date) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) return res.status(400).json({ error: "valid start and end dates are required; end must be after start" });
+      if (endsAt.getTime() - startsAt.getTime() > 45 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: "seasonal promotion windows cannot exceed 45 days" });
+      if (req.body?.artworkMediaId != null && req.body.artworkMediaId !== "" && artworkMediaId === null) return res.status(400).json({ error: "artwork must be an uploaded FYNX image media ID" });
+      if (destinationType === "PRODUCT") {
+        const target = await pool.query("SELECT id FROM marketplace_listings WHERE id=$1 AND COALESCE(active,TRUE)=TRUE AND GREATEST(0, quantity-COALESCE(reserved_quantity,0)) > 0 LIMIT 1", [destinationValue]);
+        if (!target.rowCount) return res.status(404).json({ error: "campaign product must be an active Marketplace listing with available stock" });
+      }
+      if (destinationType === "SHOP") {
+        const target = await pool.query("SELECT id FROM users WHERE LOWER(username)=LOWER($1) LIMIT 1", [destinationValue]);
+        if (!target.rowCount) return res.status(404).json({ error: "campaign shop username was not found" });
+      }
+      if (artworkMediaId !== null) {
+        const ownedMedia = await pool.query("SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1", [artworkMediaId, auth.userId]);
+        if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
+      }
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query("BEGIN");
+        const existing = (await client.query("SELECT id FROM marketplace_seasonal_promotions WHERE id=$1 FOR UPDATE", [id])).rows[0];
+        if (!existing) {
+          await client.query("ROLLBACK");
+          return res.status(404).json({ error: "seasonal promotion not found" });
+        }
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`fynx-seasonal-promo:${occasionKey}`]);
+        if (active) {
+          const overlap = await client.query(
+            "SELECT id FROM marketplace_seasonal_promotions WHERE occasion_key=$1 AND id<>$2 AND active=TRUE AND starts_at < $4 AND ends_at > $3 LIMIT 1",
+            [occasionKey, id, startsAt.toISOString(), endsAt.toISOString()]
+          );
+          if (overlap.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "an active campaign with this key already overlaps the selected time window" });
+          }
+        }
+        result = await client.query(
+          "UPDATE marketplace_seasonal_promotions SET promotion_type=$1,occasion_key=$2,headline=$3,body=$4,action_label=$5,artwork_media_id=$6,destination_type=$7,destination_value=$8,starts_at=$9,ends_at=$10,active=$11,updated_at=NOW() WHERE id=$12 RETURNING *",
+          [promotionType, occasionKey, headline, body, actionLabel, artworkMediaId, destinationType, destinationValue || null, startsAt.toISOString(), endsAt.toISOString(), active, id]
+        );
+        await recordMarketplaceAdminActivity(auth.userId, role, "SEASONAL_PROMOTION_UPDATED", id, headline, { promotionType, occasionKey, active, startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), destinationType }, client);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+      return res.json({ promotion: seasonalPromotionPayload(result.rows[0]) });
+    } catch (error) {
+      console.error("[fynx-ads] seasonal promotion edit failed", error);
+      return res.status(500).json({ error: "seasonal promotion update failed" });
     }
   });
 
