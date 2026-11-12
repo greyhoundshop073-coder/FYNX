@@ -144,6 +144,11 @@ fun FynxAdminControlCenterPanel() {
     var dashboard by remember { mutableStateOf<FynxAdminClient.Dashboard?>(null) }
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
+    var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
+    var activityQuery by remember { mutableStateOf("") }
+    var activityLoading by remember { mutableStateOf(false) }
+    var activityError by remember { mutableStateOf<String?>(null) }
+    var refreshActivity by remember { mutableIntStateOf(0) }
     var reports by remember { mutableStateOf<List<FynxAdminClient.AdminReport>>(emptyList()) }
     var reportsLoading by remember { mutableStateOf(false) }
     var reportsError by remember { mutableStateOf<String?>(null) }
@@ -194,6 +199,17 @@ fun FynxAdminControlCenterPanel() {
         loading = false
     }
     LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshActivity, dashboard?.role, activeSection) {
+        if (dashboard != null && activeSection == "Activity") {
+            activityLoading = true
+            activityError = null
+            FynxAdminClient.activity(context, activityQuery)
+                .onSuccess { activity = it }
+                .onFailure { activityError = it.message ?: "Activity history unavailable." }
+            activityLoading = false
+        }
+    }
+
     LaunchedEffect(refreshReports, dashboard?.role) {
         if (dashboard != null) {
             reportsLoading = true
@@ -293,7 +309,7 @@ fun FynxAdminControlCenterPanel() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Open appeals", d.openAppeals); StatCard("Safety · 24h", d.safetyEvents24h) }
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Overview", "Safety", "Marketplace", "People", "Announcements").forEach { section ->
+                listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity").forEach { section ->
                     FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
                 }
             }
@@ -639,6 +655,36 @@ fun FynxAdminControlCenterPanel() {
                     }
                 }
             }
+            }
+            if (activeSection == "Activity") {
+                Text("Administrative activity", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Search a traceable history of administrative changes and decisions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = activityQuery,
+                    onValueChange = { activityQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search actions, users or record IDs") },
+                    singleLine = true,
+                    trailingIcon = { IconButton(onClick = { refreshActivity++ }) { Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = "Search activity") } }
+                )
+                Spacer(Modifier.height(8.dp))
+                if (activityLoading) CircularProgressIndicator()
+                else if (activityError != null) {
+                    Text(activityError!!, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { refreshActivity++ }) { Text("Retry") }
+                } else if (activity.isEmpty()) {
+                    Text("No matching administrative activity has been recorded yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else activity.forEach { entry ->
+                    Card(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(entry.action.replace('_', ' '), style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Text(entry.summary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${entry.actorDisplayName.ifBlank { entry.actorUsername.ifBlank { entry.actorRole } }} • ${entry.actorRole} • ${entry.createdAt}", style = MaterialTheme.typography.labelSmall)
+                            if (entry.targetId.isNotBlank()) Text("${entry.targetType} #${entry.targetId}", style = MaterialTheme.typography.labelSmall, color = FynxDesign.AzureBlue)
+                        }
+                    }
+                }
             }
             if (activeSection == "Announcements") {
                 Spacer(Modifier.height(16.dp))
