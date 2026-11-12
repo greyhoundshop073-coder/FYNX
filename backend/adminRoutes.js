@@ -276,7 +276,41 @@ export function registerAdminRoutes({ app }) {
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }catch(error){console.error('admin appeal decision',error);return res.status(500).json({error:'appeal decision failed'});}});
 
-  app.post('/api/admin/admins',auth,async(req,res)=>{try{await ensureSchema();if((await role(req.user.sub))!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});const userId=Number(req.body?.userId);if(!Number.isInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});const exists=(await pool.query('SELECT id FROM users WHERE id=$1',[userId])).rows[0];if(!exists)return res.status(404).json({error:'user not found'});await pool.query(`INSERT INTO fynx_admin_roles(user_id,role) VALUES($1,'ADMIN') ON CONFLICT(user_id) DO NOTHING`,[userId]);await recordAdminActivity(req,'ADMIN_GRANTED','user',userId,'Administrator access granted');return res.status(201).json({ok:true,userId:String(userId),role:'ADMIN'});}catch(error){console.error('admin grant',error);return res.status(500).json({error:'admin grant failed'});}});
+  app.post('/api/admin/admins',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const actorRole=await role(req.user.sub);
+    if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
+    req.fynxAdminRole=actorRole;
+    const userId=Number(req.body?.userId);
+    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      const exists=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId])).rows[0];
+      if(!exists){await client.query('ROLLBACK');return res.status(404).json({error:'user not found'});}
+      const result=await client.query(`INSERT INTO fynx_admin_roles(user_id,role) VALUES($1,'ADMIN') ON CONFLICT(user_id) DO NOTHING RETURNING user_id`,[userId]);
+      if(result.rowCount)await recordAdminActivity(req,'ADMIN_GRANTED','user',userId,'Administrator access granted',{},client);
+      await client.query('COMMIT');
+      return res.status(result.rowCount?201:200).json({ok:true,granted:result.rowCount===1,userId:String(userId),role:'ADMIN'});
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }catch(error){console.error('admin grant',error);return res.status(500).json({error:'admin grant failed'});}});
 
-  app.delete('/api/admin/admins/:userId',auth,async(req,res)=>{try{await ensureSchema();if((await role(req.user.sub))!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});const userId=Number(req.params.userId);if(!Number.isInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});if(String(userId)===String(req.user.sub))return res.status(400).json({error:'owner role cannot be removed'});const result=await pool.query('DELETE FROM fynx_admin_roles WHERE user_id=$1',[userId]);if(result.rowCount) await recordAdminActivity(req,'ADMIN_REVOKED','user',userId,'Administrator access revoked');return res.json({ok:true,removed:result.rowCount>0,userId:String(userId)});}catch(error){console.error('admin revoke',error);return res.status(500).json({error:'admin revoke failed'});}});
+  app.delete('/api/admin/admins/:userId',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const actorRole=await role(req.user.sub);
+    if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
+    req.fynxAdminRole=actorRole;
+    const userId=Number(req.params.userId);
+    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
+    if(String(userId)===String(req.user.sub))return res.status(400).json({error:'owner role cannot be removed'});
+    if(await role(userId)==='OWNER')return res.status(403).json({error:'owner role cannot be removed'});
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      const result=await client.query('DELETE FROM fynx_admin_roles WHERE user_id=$1 RETURNING user_id',[userId]);
+      if(result.rowCount)await recordAdminActivity(req,'ADMIN_REVOKED','user',userId,'Administrator access revoked',{},client);
+      await client.query('COMMIT');
+      return res.json({ok:true,removed:result.rowCount>0,userId:String(userId)});
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  }catch(error){console.error('admin revoke',error);return res.status(500).json({error:'admin revoke failed'});}});
 }
