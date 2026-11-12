@@ -275,6 +275,22 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null;
 }
 
+// Campaign timestamps must carry an explicit offset so deployment timezone
+// settings cannot silently shift the campaign window.
+function parseCampaignTimestamp(value) {
+  if (typeof value !== "string") return null;
+  const match = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2})(?:\\.(\\d{1,3}))?)?(Z|([+-])(\\d{2}):(\\d{2}))$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const hour = Number(match[4]), minute = Number(match[5]), second = Number(match[6] || 0);
+  const offsetHour = Number(match[10] || 0), offsetMinute = Number(match[11] || 0);
+  const daysInMonth = month >= 1 && month <= 12 ? new Date(Date.UTC(year, month, 0)).getUTCDate() : 0;
+  if (!daysInMonth || day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59 ||
+      offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return null;
+  const parsed = new Date(value.trim());
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
 async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
   if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
   const referenceId = positiveInt(creativeRef);
@@ -347,8 +363,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
       let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
       const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
-      const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
-      const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
+      const startsAt = parseCampaignTimestamp(req.body?.startsAt);
+      const endsAt = parseCampaignTimestamp(req.body?.endsAt);
       const active = req.body?.active !== false;
       if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
       if (!["MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)) {
@@ -455,8 +471,8 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
       let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
       const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
-      const startsAt = typeof req.body?.startsAt === "string" ? new Date(req.body.startsAt) : null;
-      const endsAt = typeof req.body?.endsAt === "string" ? new Date(req.body.endsAt) : null;
+      const startsAt = parseCampaignTimestamp(req.body?.startsAt);
+      const endsAt = parseCampaignTimestamp(req.body?.endsAt);
       const active = req.body?.active === true;
       if (!id) return res.status(400).json({ error: "valid promotion id is required" });
       if (!SEASONAL_PROMOTION_TYPES.has(promotionType)) return res.status(400).json({ error: "promotion type must be SEASONAL, ANNOUNCEMENT or OFFER" });
