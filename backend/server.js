@@ -595,7 +595,24 @@ app.get("/api/media/:id", auth, async (req, res) => {
   try {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
-    let privateEvidenceMedia = false;
+    let privateNoStoreMedia = false;
+    let groupMessageAuthorization = "";
+    let groupMessageMediaFlag = "FALSE AS group_message_media";
+    const groupMediaSchema = await pool.query("SELECT to_regclass('public.fynx_group_messages') AS messages, to_regclass('public.fynx_group_members') AS members, to_regclass('public.fynx_groups') AS groups");
+    if (groupMediaSchema.rows[0]?.messages && groupMediaSchema.rows[0]?.members && groupMediaSchema.rows[0]?.groups) {
+      const groupMessageAccess = `EXISTS (
+        SELECT 1
+        FROM fynx_group_messages gm
+        JOIN fynx_group_members gmem ON gmem.group_id = gm.group_id
+        JOIN fynx_groups fg ON fg.id = gm.group_id
+        WHERE gm.attachment_media_id = mm.id
+          AND gm.deleted_at IS NULL
+          AND gmem.user_id = $2
+          AND (fg.show_history_to_new_members = TRUE OR gm.created_at >= gmem.created_at)
+      )`;
+      groupMessageAuthorization = `OR ${groupMessageAccess}`;
+      groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`;
+    }
     // Seasonal campaigns are provisioned by the advertising module. Check the
     // table before referencing it so an early media request remains safe while
     // optional campaign schema setup is still in progress.
@@ -613,7 +630,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.storage_provider, mm.object_key
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key, ${groupMessageMediaFlag}
       FROM message_media mm
       WHERE mm.id = $1
         AND (
@@ -623,6 +640,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
             WHERE m.media_id = mm.id
               AND (m.sender_id = $2 OR m.recipient_id = $2)
           )
+          ${groupMessageAuthorization}
           OR EXISTS (
             SELECT 1
             FROM marketplace_listings ml
@@ -709,7 +727,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
           JOIN marketplace_orders o ON o.id = e.order_id
           WHERE mm.id = $1 AND (o.buyer_id = $2 OR o.seller_id = $2)
           LIMIT 1`, [mediaId, req.user.sub]);
-        privateEvidenceMedia = Boolean(result.rows[0]);
+        privateNoStoreMedia = Boolean(result.rows[0]);
       } catch (marketplaceEvidenceError) {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
@@ -732,19 +750,20 @@ app.get("/api/media/:id", auth, async (req, res) => {
                   AND (o.buyer_id = $2 OR o.seller_id = $2)
               )
             LIMIT 1`, [mediaId, req.user.sub]);
-          privateEvidenceMedia = Boolean(result.rows[0]);
+          privateNoStoreMedia = Boolean(result.rows[0]);
         }
       } catch (marketplaceEvidenceError) {
         if (marketplaceEvidenceError.code !== "42P01") throw marketplaceEvidenceError;
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    if (result.rows[0].group_message_media) privateNoStoreMedia = true;
     // Publicly shareable media stored in Neon/R2 is served through a short-lived
     // signed URL. Order evidence remains proxied so its response can enforce no-store.
-    if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
+    if (!privateNoStoreMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
     const payload = await getCachedMediaPayload(pool, mediaId);
     if (!payload) return res.status(404).json({ error: "media not found" });
-    res.set("Cache-Control", privateEvidenceMedia ? "private, no-store" : "private, max-age=300");
+    res.set("Cache-Control", privateNoStoreMedia ? "private, no-store" : "private, max-age=300");
     res.type(payload.mimeType);
     return res.send(payload.data);
   } catch (error) { console.error("media fetch", error); return res.status(500).json({ error: "media fetch failed" }); }
