@@ -61,7 +61,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 if (serverPreview == null) pending else serverPreview.copy(
                     lastMessage = pending.lastMessage,
                     time = pending.time,
-                    avatarUri = serverPreview.avatarUri ?: pending.avatarUri
+                    avatarUri = serverPreview.avatarUri
                 )
             }
             val pendingUsernames = pendingLocal.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
