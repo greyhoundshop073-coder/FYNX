@@ -381,6 +381,32 @@ object FynxAdminClient {
         return FynxBackendClient.postJson(context, "/api/admin/announcements", payload.toString()).map { Unit }
     }
 
+    suspend fun updateAnnouncement(
+        context: Context,
+        announcementId: String,
+        title: String,
+        body: String,
+        priority: String,
+        mediaId: String?,
+        linkUrl: String,
+        scheduledAt: String?,
+        published: Boolean
+    ): Result<Unit> {
+        val payload = JSONObject()
+            .put("title", title.trim())
+            .put("body", body.trim())
+            .put("priority", priority)
+            .put("mediaId", mediaId ?: JSONObject.NULL)
+            .put("linkUrl", linkUrl.trim())
+            .put("scheduledAt", scheduledAt ?: JSONObject.NULL)
+            .put("published", published)
+        return FynxBackendClient.patchJson(
+            context,
+            "/api/admin/announcements/${encode(announcementId)}",
+            payload.toString()
+        ).map { Unit }
+    }
+
     suspend fun setAnnouncementPublishing(
         context: Context,
         announcementId: String,
