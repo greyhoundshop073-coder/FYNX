@@ -1022,10 +1022,10 @@ fun FynxAdminControlCenterPanel() {
                                                 announcementMediaId = null
                                                 announcementLinkUrl = ""
                                                 announcementScheduleAt = ""
+                                                statusMessage = if (editingAnnouncementId != null) "Announcement updated." else if (isScheduled) "Announcement scheduled." else "Announcement published."
                                                 announcementPriority = "NORMAL"
                                                 editingAnnouncementId = null
                                                 editingAnnouncementPublished = true
-                                                statusMessage = if (editingAnnouncementId != null) "Announcement updated." else if (isScheduled) "Announcement scheduled." else "Announcement published."
                                                 refreshAdminAnnouncements++
                                             }
                                             .onFailure { statusMessage = it.message ?: "Announcement could not be saved." }
