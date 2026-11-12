@@ -5,7 +5,17 @@ import org.json.JSONObject
 
 /** Server-authoritative client for public announcements and owner/admin controls. */
 object FynxAdminClient {
-    data class Announcement(val id: String, val title: String, val body: String, val priority: String, val publishedAt: String)
+    data class Announcement(
+        val id: String,
+        val title: String,
+        val body: String,
+        val priority: String,
+        val publishedAt: String,
+        val mediaId: String? = null,
+        val linkUrl: String = "",
+        val scheduledAt: String? = null,
+        val published: Boolean = true
+    )
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyEvents24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
     data class MusicTrack(
@@ -87,16 +97,35 @@ object FynxAdminClient {
         val breakdown: List<RevenueBreakdown>
     )
 
-    suspend fun announcements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/announcements").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("announcements") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    add(Announcement(item.optString("id"), item.optString("title"), item.optString("body"), item.optString("priority", "NORMAL"), item.optString("createdAt")))
-                }
+    private fun parseAnnouncements(raw: String): List<Announcement> {
+        val array = JSONObject(raw).optJSONArray("announcements") ?: return emptyList()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val mediaId = item.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }
+                val scheduledAt = item.optString("scheduledAt").takeIf { it.isNotBlank() && it != "null" }
+                add(
+                    Announcement(
+                        id = item.optString("id"),
+                        title = item.optString("title"),
+                        body = item.optString("body"),
+                        priority = item.optString("priority", "NORMAL"),
+                        publishedAt = item.optString("publishedAt", item.optString("createdAt")),
+                        mediaId = mediaId,
+                        linkUrl = item.optString("linkUrl"),
+                        scheduledAt = scheduledAt,
+                        published = item.optBoolean("published", true)
+                    )
+                )
             }
         }
+    }
+
+    suspend fun announcements(context: Context): Result<List<Announcement>> =
+        FynxBackendClient.get(context, "/api/announcements").mapCatching(::parseAnnouncements)
+
+    suspend fun adminAnnouncements(context: Context): Result<List<Announcement>> =
+        FynxBackendClient.get(context, "/api/admin/announcements").mapCatching(::parseAnnouncements)
 
     suspend fun dashboard(context: Context): Result<Dashboard> =
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->
@@ -308,8 +337,35 @@ object FynxAdminClient {
             value.optString("status").ifBlank { value.optString("error", "Request accepted") }
         }
 
-    suspend fun publishAnnouncement(context: Context, title: String, body: String, priority: String): Result<Unit> =
-        FynxBackendClient.postJson(context, "/api/admin/announcements", JSONObject().put("title", title.trim()).put("body", body.trim()).put("priority", priority).toString()).map { Unit }
+    suspend fun publishAnnouncement(
+        context: Context,
+        title: String,
+        body: String,
+        priority: String,
+        mediaId: String? = null,
+        linkUrl: String = "",
+        scheduledAt: String? = null
+    ): Result<Unit> {
+        val payload = JSONObject()
+            .put("title", title.trim())
+            .put("body", body.trim())
+            .put("priority", priority)
+            .put("mediaId", mediaId ?: JSONObject.NULL)
+            .put("linkUrl", linkUrl.trim())
+            .put("scheduledAt", scheduledAt ?: JSONObject.NULL)
+        return FynxBackendClient.postJson(context, "/api/admin/announcements", payload.toString()).map { Unit }
+    }
+
+    suspend fun setAnnouncementPublishing(
+        context: Context,
+        announcementId: String,
+        published: Boolean,
+        scheduledAt: String? = null
+    ): Result<Unit> = FynxBackendClient.patchJson(
+        context,
+        "/api/admin/announcements/${encode(announcementId)}",
+        JSONObject().put("published", published).put("scheduledAt", scheduledAt ?: JSONObject.NULL).toString()
+    ).map { Unit }
 
     suspend fun setAccountStatus(context: Context, userId: String, status: String): Result<Unit> =
         FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}/status", JSONObject().put("status", status).toString()).map { Unit }
