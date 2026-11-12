@@ -228,6 +228,12 @@ require(advertising.count("pg_advisory_xact_lock(hashtext($1))") >= 3 and
         "SELECT id,occasion_key,starts_at,ends_at,headline FROM marketplace_seasonal_promotions WHERE id=$1 FOR UPDATE" in advertising and
         "another active campaign with this key already overlaps the schedule" in advertising,
         "resuming a paused campaign must also enforce active campaign schedule overlap protection")
+panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8")
+banner = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt").read_text(encoding="utf-8")
+require('Switch(checked = destinationLinkEnabled' in panel and 'destinationType = "NONE"' in panel and
+        'destination_type IN (\'NONE\', \'MARKETPLACE\', \'CATEGORY\', \'PRODUCT\', \'SHOP\')' in advertising and
+        'slide.destinationType == "NONE" -> Unit' in banner and 'if (slide.destinationType != "NONE") Button(' in banner,
+        "campaign destination switch must hide the CTA and suppress navigation when disabled, while preserving enabled destinations")
 require("OffsetDateTime.parse(value.trim()).toInstant()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8"),
         "campaign editing must parse fractional-second UTC timestamps and WAT offsets without shifting their time")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
