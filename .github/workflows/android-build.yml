@@ -54,7 +54,7 @@ concurrency:
   # Include the exact SHA so an Actions run stuck in GitHub's finalizing state
   # cannot hold the concurrency lock for the next commit. The same-commit push/PR
   # workflows still supersede one another within their own event groups.
-  group: fynx-android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+  group: fynx-android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 env:
