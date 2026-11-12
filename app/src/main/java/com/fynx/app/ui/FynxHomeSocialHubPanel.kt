@@ -1081,19 +1081,6 @@ fun FynxHomeSocialHubPanel(
                         }
 
                         Row(
-                            Modifier.fillMaxWidth().clickable(enabled = !posting) { postLinkInput = ""; showPostLinkDialog = true }.padding(vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(25.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("Add link", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                                Text("Include a URL in your caption", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        Row(
                             Modifier.fillMaxWidth().clickable(enabled = !posting) { showPeoplePicker = true }.padding(vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1112,23 +1099,6 @@ fun FynxHomeSocialHubPanel(
 
 
                         Row(
-                            Modifier.fillMaxWidth()
-                                .clickable(enabled = !posting) { showMorePostOptions = true }
-                                .semantics(mergeDescendants = true) { contentDescription = "More options" }
-                                .testTag("camera-post-more-options-row")
-                                .padding(vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.MoreHoriz, contentDescription = null, modifier = Modifier.size(25.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("More options", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
-                                Text("Music, people, media and post styling", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-
-                        Row(
                             Modifier.fillMaxWidth().clickable(enabled = !posting) { sharePostCaption() }.padding(vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1143,6 +1113,38 @@ fun FynxHomeSocialHubPanel(
                         
                         if (networkLevel == FynxNetworkQuality.Level.OFFLINE) Text("You are offline. Reconnect before publishing this post.", color = MaterialTheme.colorScheme.error)
                         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                    // Keep the two frequently needed composer actions fixed above the publish bar.
+                    // A long media/caption form must never hide Add link or More options below the fold.
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = { postLinkInput = ""; showPostLinkDialog = true },
+                            enabled = !posting,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Add link")
+                        }
+                        OutlinedButton(
+                            onClick = { showMorePostOptions = true },
+                            enabled = !posting,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .semantics(mergeDescendants = true) { contentDescription = "More options" }
+                                .testTag("camera-post-more-options-row"),
+                            shape = RoundedCornerShape(24.dp)
+                        ) {
+                            Icon(Icons.Default.MoreHoriz, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("More options")
+                        }
                     }
                     Row(
                         Modifier.fillMaxWidth()
