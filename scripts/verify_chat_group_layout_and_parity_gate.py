@@ -98,7 +98,9 @@ require("group media auto-save writes downloaded photos and videos to the Androi
 
 require("group remote messages do not claim a per-member read receipt that the backend does not provide", "read=false" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and 'if (message.read) "✓✓" else if (message.delivered) "✓" else "…"' in ACTIVE_GROUP)
 require("group optimistic text messages remain pending until server acknowledgement", "delivered = false, read = false, replyToId = replyToId" in ACTIVE_GROUP)
-require("private chat history returns the newest 200 messages rather than the oldest 200", "ORDER BY m.created_at DESC, m.id DESC LIMIT 200" in (ROOT / "backend/server.js").read_text(encoding="utf-8") and "result.rows.reverse().map(rowToMessage)" in (ROOT / "backend/server.js").read_text(encoding="utf-8"))
+require("private and group history use bounded cursor pagination", "m.id < $3" in (ROOT / "backend/server.js").read_text(encoding="utf-8") and "LIMIT $4" in (ROOT / "backend/server.js").read_text(encoding="utf-8") and "nextBeforeId" in (ROOT / "backend/server.js").read_text(encoding="utf-8") and "nextBefore" in (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8"))
+require("private and group conversation screens expose older-history loading", "historyPage(context" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "load_older_private_messages" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "loadMessagesPage(context" in ACTIVE_GROUP and "load_older_group_messages" in ACTIVE_GROUP)
+require("private chat supports multi-message selection and copy", "selectedMessageIds" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "toggleMessageSelection(message.id)" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "clipboardManager.setText" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8"))
 
 
 failed = [label for label, ok in checks if not ok]
