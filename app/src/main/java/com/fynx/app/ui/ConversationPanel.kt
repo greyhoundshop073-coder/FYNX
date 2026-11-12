@@ -1286,27 +1286,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Forward") }
-                    TextButton(
-                        onClick = {
-                            conversationScope.launch {
-                                FynxProductionMessaging.deleteMessage(context, message.id)
-                                    .onSuccess {
-                                        messages = messages.map { existing ->
-                                            if (existing.id == message.id) existing.copy(
-                                                text = "Message deleted",
-                                                attachmentUri = null,
-                                                attachmentType = null,
-                                                voiceUri = null,
-                                                mediaId = null
-                                            ) else existing
+                    if (message.fromMe) {
+                        TextButton(
+                            onClick = {
+                                conversationScope.launch {
+                                    FynxProductionMessaging.deleteMessage(context, message.id)
+                                        .onSuccess {
+                                            messages = messages.map { existing ->
+                                                if (existing.id == message.id) existing.copy(
+                                                    text = "Message deleted",
+                                                    attachmentUri = null,
+                                                    attachmentType = null,
+                                                    voiceUri = null,
+                                                    mediaId = null
+                                                ) else existing
+                                            }
+                                            menuMessageId = null
                                         }
-                                        menuMessageId = null
-                                    }
-                                    .onFailure { networkError = "Message could not be deleted yet. Please try again." }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Delete") }
+                                        .onFailure { networkError = "Message could not be deleted yet. Please try again." }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Delete") }
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
             }
