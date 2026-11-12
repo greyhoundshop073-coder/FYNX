@@ -24,8 +24,11 @@ require('if (d.role == "OWNER")' in source, "owner-only admin management gate is
 require("fun requestAdminConfirmation(" in source, "shared confirmation helper is missing")
 require("if (confirmationAction != null)" in source and "AlertDialog(" in source,
         "confirmation dialog is not rendered")
-require('listOf("Overview", "Safety", "Marketplace", "People", "Announcements")' in source,
-        "expected Admin sections are missing")
+required_sections = ("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity")
+require(all(f'"{section}"' in source for section in required_sections),
+        "one or more required Admin sections are missing")
+require("listOf(" in source and "FilterChip(" in source,
+        "Admin sections are not exposed through the section selector")
 
 for section in ("Safety", "Marketplace", "People", "Announcements"):
     require(f'activeSection == "{section}"' in source,
