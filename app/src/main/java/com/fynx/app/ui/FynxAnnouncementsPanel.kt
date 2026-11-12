@@ -92,8 +92,8 @@ fun FynxAdminControlCenterPanel() {
         if (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN") {
             contentReportsLoading = true
             contentReportsError = null
-            FynxAdminClient.contentReports(context, "OPEN")
-                .onSuccess { contentReports = it }
+            FynxAdminClient.contentReports(context, "ALL")
+                .onSuccess { reports -> contentReports = reports.filter { it.status == "OPEN" || it.status == "UNDER_REVIEW" } }
                 .onFailure { contentReportsError = it.message ?: "Content reports unavailable." }
             contentReportsLoading = false
         }
