@@ -584,7 +584,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     runCatching { FynxGroupRemoteClient.toChatMessage(item, currentUsername, FynxBackendClient.baseUrl(context)) }.getOrNull()
                 }
                 if (searchOpen && searchQuery.trim() == cleanQuery) {
-                    remoteGroupSearchMessages = if (append) (remoteGroupSearchMessages + found).distinctBy { it.id } else found
+                    remoteGroupSearchMessages = if (append) (found + remoteGroupSearchMessages).distinctBy { it.id } else found
                     remoteGroupSearchHasMore = page.hasMore
                     remoteGroupSearchCursor = page.nextBefore
                 }
@@ -865,7 +865,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full group history.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteGroupSearchLoading -> Text("Searching group history…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteGroupSearchError != null -> Text(remoteGroupSearchError!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp))
-                searchQuery.trim().length >= 2 -> Text("${remoteGroupSearchMessages.size} matching messages in this group", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 -> Text("${remoteGroupSearchMessages.size} matches loaded", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
             }
         }
         pinnedMessage?.let { pinned ->
