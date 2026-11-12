@@ -1234,7 +1234,7 @@ fun FynxHomeSocialHubPanel(
                             },
                             modifier = Modifier.weight(1f).heightIn(min = 54.dp),
                             shape = RoundedCornerShape(28.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF), contentColor = Color.White)
                         ) {
                             Text(
                                 when {

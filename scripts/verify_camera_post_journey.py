@@ -163,43 +163,31 @@ checks = [
     ("Immersive Status media composer hides the app bottom navigation so caption and Send controls remain reachable",
      'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)' in app_source
      and "onComposerVisibilityChange = { statusComposerImmersive = it }" in app_source),
-    ("Your Story and Next are separate real destinations from one captured preview",
-     "showYourStoryAction: Boolean = false" in camera
-     and 'Text("Your Story",' in camera
-     and "onShareToStatus(finalUri" in camera
-     and "onCaptured(finalUri, mediaType)" in camera
-     and "showYourStoryAction = cameraEditingMediaUri == null" in home
-     and "onShareToStatus = {" in home
-     and "onOpenStatusWithMedia(uri, type)" in home),
-    ("Your Story reuses the existing Status composer media hand-off without changing Status publishing",
-     "statusInitialMediaUri" in app_source and "statusInitialMediaType" in app_source
-     and "initialMediaUri = statusInitialMediaUri" in app_source
-     and "initialMediaType = statusInitialMediaType" in app_source
-     and "initialMediaUri: Uri? = null" in status_hub
-     and "LaunchedEffect(initialMediaUri, initialMediaType)" in status_hub
-     and "FynxMatureStatusComposerPanel(" in status_hub
-     and "initialMediaUri = selectedInitialMedia?.uri" in status_hub),
-    ("Your Story opens Status above Camera and Back restores the same captured-media editor",
-     'onShareToStatus = { uri, type ->' in home
-     and "showCamera = true" in home
-     and 'onOpenStatusWithMedia(uri, type)' in home
-     and "DialogProperties(" in app_source
-     and "FynxStatusHubPanel(" in app_source
-     and '["Your Story"]' in runtime
-     and '["Send"]' in runtime
-     and '["Back from Status composer"]' in runtime
-     and "camera-status-composer.png" in runtime
-     and "Your Story opened the existing Status composer with the captured media; Send was not tapped" in runtime
-     and "camera-status-return-camera.xml" in runtime
-     and "closing Status restored the same captured-media Camera editor" in runtime
-     and '"KEYCODE_BACK"' in runtime),
+    ("One shared CameraX editor proceeds through its single Next action to New post",
+     "showYourStoryAction = false" in home
+     and "onShareToStatus =" not in home
+     and 'Text("Next")' in camera
+     and 'onClick = { finishCameraMedia(toStatus = false) }' in camera
+     and "onCaptured(finalUri, mediaType)" in camera),
+    ("Status camera entry points route back to Home's shared CameraX panel",
+     "onCamera = onOpenUnifiedCamera" in status_hub
+     and "onRecordVideo = onOpenUnifiedCamera" in status_hub
+     and "onCameraClick = onOpenUnifiedCamera" in status_hub
+     and "FynxCameraCapturePanel(" not in status_hub
+     and 'onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 }' in app_source),
+    ("Shared composer exposes all destinations and uses the existing Status publisher",
+     all(f'Text("{label}")' in home for label in ["Home Feed", "Status", "Both"])
+     and "FynxSharedStatusPublisher.publish(" in home
+     and "FynxStatusClient.create" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
+     and "statusMediaCandidates.size <= 1" in home),
     ("Camera editor exposes Next and preserves the existing captured-media callback",
      'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
-    ("Next details composer shows media preview, description, tag helpers and privacy entry",
+    ("Next details composer shows media preview, description, tag helpers, privacy and publish destinations",
      "selectedComposerVisual" in home and "Add description..." in home
      and "# Hashtags" in home and "@ Mention" in home
      and "Who can view this post" in home
-     and 'Text(if (posting) "Publishing…" else "Post",' in home),
+     and all(f'Text("{label}")' in home for label in ["Home Feed", "Status", "Both"])
+     and 'publishDestination == "BOTH" -> "Publish to both"' in home),
     ("New post composer reserves navigation safe area at the root and keeps Drafts/Post above it",
      "Column(Modifier.fillMaxSize().statusBarsPadding().padding(bottom = 64.dp))" in home
      and ".background(MaterialTheme.colorScheme.surface)\n                            .imePadding()\n                            // Keep both button hit targets clear of Android gesture navigation.\n                            .padding(bottom = 32.dp)" in home
@@ -302,7 +290,7 @@ checks = [
      and home.index('Text(\n                                            "Add description...",') < home.index('label = { Text("# Hashtags") }') < home.index('Text("Content disclosure and ads", style')
      and home.index('Text("Content disclosure and ads", style') < home.index('Text("Location", style') < home.index('Text("Add link", style')
      and home.index('Text("Add link", style') < home.index('"Who can view this post"') < home.index('Text("More options", style') < home.index('Text("Share to", style')
-     and 'Text(if (posting) "Publishing…" else "Post",' in home
+     and 'publishDestination == "BOTH" -> "Publish to both"' in home
      and ".imePadding()" in home),
     ("Drafts are private per account and durable media is copied out of the transient cache",
      "FynxAuthStore.accountStorageKey(context)" in draft_store
@@ -355,35 +343,30 @@ checks = [
     ("Selected-audience media remains visible to selected friends", "p.visibility = 'SELECTED_PEOPLE'" in backend and "social_post_audience" in backend and "a.user_id = $2" in backend),
     ("Only-me media remains restricted to the author", "p.visibility = 'ONLY_ME' AND p.author_id = $2" in backend),
     ("Normalized media authorization excludes blocked relationships", "NOT EXISTS" in backend and "blocked_id = p.author_id" in backend),
-    ("Camera media preview labels the Status destination clearly and keeps the familiar story wording",
-     'Text("Status", style = MaterialTheme.typography.titleMedium' in camera
-     and 'Text("Your Story", style = MaterialTheme.typography.labelSmall' in camera
-     and 'contentDescription = "Share to Status"' in camera),
-    ("Gallery photo and video selections enter the same preview that offers Status and Next",
+    ("Gallery photo/video enters the shared CameraX editor and Next handoff",
      "ActivityResultContracts.OpenDocument()" in camera
      and 'galleryPicker.launch(arrayOf("image/*", "video/*"))' in camera
      and "pendingUri = Uri.fromFile(working)" in camera
      and 'pendingType = if (selectedType == "video" && videoNoteMode) "video_note" else selectedType' in camera
      and "showCaptureControls = true" in camera
      and "if(previewUri!=null && previewType!=null)" in camera
-     and "if (showYourStoryAction && !statusCapture && !liveProofMode)" in camera
-     and "showYourStoryAction = cameraEditingMediaUri == null" in home
-     and "onClick = { finishCameraMedia(toStatus = true) }" in camera
-     and "onShareToStatus(finalUri" in camera),
-    ("Status CTA checks the existing upload and video limits before opening the Status composer",
-     "validateCameraStatusMedia(finalUri, if (mediaType == \"video_note\") \"video\" else mediaType)" in camera
-     and "MAX_STATUS_PHOTO_UPLOAD_BYTES = 12L * 1024L * 1024L" in camera
-     and "FYNX_STATUS_MAX_VIDEO_BYTES" in camera
-     and "FYNX_STATUS_MAX_VIDEO_DURATION_MS" in camera
-     and "MediaMetadataRetriever.METADATA_KEY_DURATION" in camera
-     and "if (total > 12 * 1024 * 1024)" in status_client
-     and "onShareToStatus(finalUri" in camera),
-    ("Recorded video opens the existing Status composer and is never sent by the runtime test",
-     '["Status"]' in runtime
-     and "camera-video-status-composer.png" in runtime
-     and "recorded video opened the existing Status composer with Send available; Send was not tapped" in runtime
-     and "Status close did not restore the recorded-video Camera editor" in runtime
-     and "camera-video-status-close" in runtime),
+     and 'onClick = { finishCameraMedia(toStatus = false) }' in camera
+     and "onCaptured(finalUri, mediaType)" in camera),
+    ("Local image/video draft editor restores semantic type for file-based media",
+     "copyCameraGalleryMediaToCache(context, source, initialMediaType)" in camera
+     and "normalizedDeclaredType" in camera
+     and '"image" -> "image/jpeg"' in camera
+     and '"video" -> "video/mp4"' in camera),
+    ("Unified Status publication retains the existing Status API and local cache while reusing the one camera",
+     "FynxStatusClient.uploadMedia" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
+     and "FynxStatusClient.create" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
+     and "FynxStatusStore.save" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt").read_text(encoding="utf-8")
+     and "onCamera = onOpenUnifiedCamera" in status_hub
+     and "FynxCameraCapturePanel(" not in status_hub),
+    ("Recorded video keeps the same Next and Home Feed/Status/Both destination choice as photo media",
+     'onClick = { finishCameraMedia(toStatus = false) }' in camera
+     and 'Text("Next")' in camera
+     and all(f'Text("{label}")' in home for label in ["Home Feed", "Status", "Both"])),
 ]
 
 checks.extend([
@@ -403,13 +386,10 @@ checks.extend([
      and 'label = { Text("Highlight") }' in overlay
      and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
-    ("Status-to-post runtime keeps the supported rear camera and waits for the same editor to return without stale hierarchy reuse",
+    ("Unified camera routing preserves the supported rear lens and returns Status camera requests to Home",
      "-camera-front none" in workflow
-     and "camera_wait_for_control(" in runtime
-     and 'enabled=True, timeout=20.0' in runtime
-     and 'prefix=f"{prefix}-camera-status-return-camera-ready"' in runtime
-     and "camera-status-return-camera.xml" in runtime
-     and "closing Status restored the same captured-media Camera editor" in runtime
+     and 'onOpenUnifiedCamera = { selected = "Home"; homeCameraRequest += 1 }' in app_source
+     and "camera destination options" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
     ("Reopening the camera Text tool edits the selected overlay instead of stacking a duplicate",
      "fun openCameraTextEditor()" in camera
@@ -439,6 +419,19 @@ checks.extend([
      'for field in line.split(",")' in runtime
      and 'if field.strip()' in runtime
      and "return {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}" not in runtime),
+    ("Photo editor tools remain above the bottom dock in a bounded scrollable rail",
+     "Modifier.align(Alignment.TopEnd)" in camera
+     and "heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)" in camera
+     and ".verticalScroll(rememberScrollState())" in camera
+     and 'CameraEditorRailAction("Rotate"' in camera
+     and "modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp)" in camera),
+    ("Saved image/video draft media type falls back to persisted type if file MIME is unavailable",
+     "copyCameraGalleryMediaToCache(context, source, initialMediaType)" in camera
+     and "The saved media type does not match the selected file." in camera),
+    ("Camera and post primary actions follow FYNX Azure Blue",
+     "primary = Color(0xFF007FFF)" in camera
+     and "containerColor = Color(0xFF007FFF)" in camera
+     and "containerColor = Color(0xFF007FFF)" in home),
     ("Video duration metadata is recomputed when CameraX finalizes the recorded-duration fallback",
      "LaunchedEffect(pendingUri, pendingType, recordedVideoDurationFallbackMs)" in camera
      and "recordedVideoDurationFallbackMs =" in camera

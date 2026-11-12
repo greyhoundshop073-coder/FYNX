@@ -189,15 +189,15 @@ private fun CameraEditorRailAction(
         enabled = enabled,
         modifier = Modifier.width(58.dp),
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) Color(0xFF7869A6).copy(alpha = 0.78f) else Color(0xFF25364A).copy(alpha = 0.38f),
+        color = if (selected) Color(0xFF007FFF).copy(alpha = 0.82f) else Color(0xFF25364A).copy(alpha = 0.38f),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             Text(
                 label,
                 color = Color.White,
@@ -255,14 +255,31 @@ private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
  * uploaded automatically; the existing composer callback runs only after the user taps Send.
  * Returns (working file, untouched original, semantic media type).
  */
-private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<File, File, String> {
+private fun copyCameraGalleryMediaToCache(
+    context: Context,
+    uri: Uri,
+    declaredType: String? = null
+): Triple<File, File, String> {
     val resolver = context.contentResolver
+    val normalizedDeclaredType = declaredType
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it == "image" || it == "video" || it == "video_note" }
+        ?.let { if (it == "video_note") "video" else it }
     val mime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+        ?: when (normalizedDeclaredType) {
+            "image" -> "image/jpeg"
+            "video" -> "video/mp4"
+            else -> null
+        }
         ?: error("The selected media type could not be determined.")
     val type = when {
         mime.startsWith("image/") -> "image"
         mime.startsWith("video/") -> "video"
         else -> error("Choose an image or video from Gallery.")
+    }
+    require(normalizedDeclaredType == null || normalizedDeclaredType == type) {
+        "The saved media type does not match the selected file."
     }
     val extension = if (type == "image") {
         // Normalization writes JPEG pixels, so keep the cache extension and actual MIME aligned.
@@ -642,7 +659,7 @@ fun FynxCameraCapturePanel(
         initialMediaLoadFailed = false
         recordedVideoDurationFallbackMs = 0L
         val result = withContext(Dispatchers.IO) {
-            runCatching { copyCameraGalleryMediaToCache(context, source) }
+            runCatching { copyCameraGalleryMediaToCache(context, source, initialMediaType) }
         }
         result.onSuccess { copied ->
             pendingUri = Uri.fromFile(copied.first)
@@ -1221,8 +1238,8 @@ fun FynxCameraCapturePanel(
     if(previewUri!=null && previewType!=null){
         MaterialTheme(
             colorScheme = darkColorScheme(
-                primary = Color(0xFFB8A7FF),
-                secondary = Color(0xFF72D8C9),
+                primary = Color(0xFF007FFF),
+                secondary = Color(0xFF008000),
                 background = Color(0xFF080A10),
                 surface = Color(0xFF171A22),
                 surfaceVariant = Color(0xFF292D38)
@@ -1271,12 +1288,14 @@ fun FynxCameraCapturePanel(
             }
             if (editingTextOverlayId == null && previewType == "image") {
                 Column(
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                        .offset(y = (-124).dp)
-                        .padding(end = 8.dp)
-                        .background(Color(0xFF172438).copy(alpha = 0.42f), RoundedCornerShape(24.dp))
+                    modifier = Modifier.align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 56.dp, end = 8.dp)
+                        .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.40f)
+                        .verticalScroll(rememberScrollState())
+                        .background(Color(0xFF172438).copy(alpha = 0.48f), RoundedCornerShape(24.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(24.dp))
-                        .padding(5.dp),
+                        .padding(4.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     CameraEditorRailAction("Looks", Icons.Default.Tune, showEditorToolOptions && selectedCameraTool == "Looks") {
@@ -1634,7 +1653,7 @@ fun FynxCameraCapturePanel(
                         enabled = !enhancing && !applyingFilter && !applyingVideoEffects && !generatingCaptions && !statusShareChecking,
                         modifier = Modifier.weight(if (showYourStoryAction && !statusCapture && !liveProofMode) 1f else 1.2f).heightIn(min = 56.dp),
                         shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2457), contentColor = Color.White)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007FFF), contentColor = Color.White)
                     ) {
                         Icon(Icons.Default.ArrowForward, null)
                         Spacer(Modifier.width(4.dp))
@@ -1697,8 +1716,8 @@ fun FynxCameraCapturePanel(
     // camera feeds, and so Material chips use high-contrast labels over the preview.
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = Color(0xFFB8A7FF),
-            secondary = Color(0xFF72D8C9),
+            primary = Color(0xFF007FFF),
+            secondary = Color(0xFF008000),
             background = Color(0xFF080A10),
             surface = Color(0xFF171A22),
             surfaceVariant = Color(0xFF292D38)
@@ -2006,7 +2025,7 @@ fun FynxCameraCapturePanel(
                                     color = if (selected) Color(0xFF7869A6).copy(alpha = 0.76f) else Color(0xFF25364A).copy(alpha = 0.48f),
                                     border = androidx.compose.foundation.BorderStroke(
                                         if (selected) 1.5.dp else 1.dp,
-                                        if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.10f)
+                                        if (selected) Color(0xFF007FFF) else Color.White.copy(alpha = 0.10f)
                                     )
                                 ) {
                                     Text(
@@ -2090,7 +2109,7 @@ fun FynxCameraCapturePanel(
                     color = if (showEffectTray) Color(0xFF7869A6).copy(alpha = 0.70f) else Color(0xFF25364A).copy(alpha = 0.38f),
                     border = androidx.compose.foundation.BorderStroke(
                         if (showEffectTray) 1.5.dp else 1.dp,
-                        if (showEffectTray) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.24f)
+                        if (showEffectTray) Color(0xFF007FFF) else Color.White.copy(alpha = 0.24f)
                     )
                 ) {
                     Column(Modifier.fillMaxSize().padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -2267,7 +2286,7 @@ private fun CameraEffectTile(
                     .clip(shape)
                     .border(
                         if (selected) 2.dp else 1.dp,
-                        if (selected) Color(0xFFB8A7FF) else Color.White.copy(alpha = 0.18f),
+                        if (selected) Color(0xFF007FFF) else Color.White.copy(alpha = 0.18f),
                         shape
                     ),
                 contentAlignment = Alignment.Center
@@ -2301,7 +2320,7 @@ private fun CameraEffectTile(
                     Box(
                         modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp)
                             .size(17.dp)
-                            .background(Color(0xFFB8A7FF), androidx.compose.foundation.shape.CircleShape),
+                            .background(Color(0xFF007FFF), androidx.compose.foundation.shape.CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("✓", color = Color(0xFF17131F), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)

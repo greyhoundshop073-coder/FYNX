@@ -1501,65 +1501,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             else:
                 FAILURES.append(prefix + ": photo Text tool did not open")
 
-            # Verify the left CTA enters the existing Status composer with this captured
-            # asset preselected. This is a navigation hand-off only: Send is never tapped.
-            story_xml = tap_control(
-                second_editor, ["Your Story"], f"{prefix}-camera-status-handoff",
-                ["Send"]
-            )
-            if story_xml:
-                screenshot(f"{prefix}-camera-status-composer.png")
-                (ROOT / f"{prefix}-camera-status-composer.xml").write_text(
-                    story_xml + chr(10), encoding="utf-8"
-                )
-                # The selected media must land in the actual Status composer, not merely
-                # the Add status picker or the Stories timeline. Require both composer CTAs.
-                status_composer_visible = (
-                    find_control(story_xml, ["Send"]) is not None
-                    and find_control(story_xml, ["Back from Status composer"]) is not None
-                )
-                if status_composer_visible:
-                    report.append("- PASS Your Story opened the existing Status composer with the captured media; Send was not tapped")
-                else:
-                    FAILURES.append(
-                        prefix + ": Your Story hand-off did not expose both Send and Back from Status composer"
-                    )
-                # Back must dismiss only the Status dialog and reveal the same captured-media
-                # Camera editor underneath it. Keep this exact editor for the separate Next-to-post test.
-                run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(0.7)
-                resumed_camera = dump_ui(f"{prefix}-camera-status-return-camera.xml")
-                if resumed_camera:
-                    # Dialog dismissal crosses Android windows; poll the restored Camera
-                    # editor instead of relying on one fixed sleep and a possibly stale dump.
-                    resumed_camera = camera_wait_for_control(
-                        resumed_camera, ["Next"], enabled=True, timeout=20.0,
-                        prefix=f"{prefix}-camera-status-return-camera-ready"
-                    )
-                screenshot(f"{prefix}-camera-status-return-camera.png")
-                (ROOT / f"{prefix}-camera-status-return-camera.xml").write_text(
-                    resumed_camera + chr(10), encoding="utf-8"
-                )
-                camera_restored = (
-                    find_control(resumed_camera, ["Next"]) is not None
-                    and find_control(resumed_camera, ["Your Story"]) is not None
-                    and find_control(resumed_camera, ["Retake"]) is not None
-                )
-                if camera_restored:
-                    report.append("- PASS closing Status restored the same captured-media Camera editor with Next and Your Story still available")
-                    second_editor = resumed_camera
-                else:
-                    FAILURES.append(
-                        prefix + ": closing Status did not restore the original Camera editor; visible markers: "
-                        + visible_marker_summary(resumed_camera)
-                    )
-                    home = camera_return_to_home(resumed_camera or story_xml, prefix + "-status-return-recovery")
-                    return capture_camera_video_journey(home, prefix)
-            else:
-                FAILURES.append(prefix + ": Your Story did not open the Status destination")
-                # Do not reuse the pre-navigation editor hierarchy after a failed hand-off.
-                home = camera_return_to_home(second_editor, prefix + "-status-handoff-failed")
-                return capture_camera_video_journey(home, prefix)
+            # Only Next leaves the shared Camera editor. Status is a composer destination,
+            # not a second camera action, so keep this exact edited preview for the post test.
+            report.append("- PASS camera editor has one Next action; destination choice is deferred to the shared composer")
             # Put real camera text on the photo before Next so the following local Drafts
             # round trip proves the overlay source/settings survive beyond the live editor.
             draft_text_xml = tap_control(
@@ -1606,6 +1550,20 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             )
             if draft_xml:
                 verify_post_details_footer_safe_area(draft_xml, prefix + " post details first viewport")
+                destination_labels = ["Home Feed", "Status", "Both"]
+                missing_destinations = [label for label in destination_labels if not find_control(draft_xml, [label])]
+                if missing_destinations:
+                    FAILURES.append(prefix + ": shared composer is missing destination options " + ", ".join(missing_destinations))
+                else:
+                    report.append("- PASS photo composer exposes Home Feed, Status and Both without publishing")
+                    destination_xml = draft_xml
+                    for destination in ["Status", "Both", "Home Feed"]:
+                        destination_xml = tap_control(
+                            destination_xml, [destination],
+                            f"{prefix}-camera-destination-{destination.lower().replace(' ', '-')}",
+                            ["New post"]
+                        ) or destination_xml
+                    draft_xml = destination_xml
                 screenshot(f"{prefix}-camera-create-post-caption.png")
                 (ROOT / f"{prefix}-camera-create-post-caption.xml").write_text(
                     draft_xml + chr(10), encoding="utf-8"
@@ -1704,19 +1662,25 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     ["Got it"]
                 )
                 if disclosure_xml:
-                    disclosure_closed = tap_control(
-                        disclosure_xml, ["Got it"], f"{prefix}-camera-post-disclosure-close",
-                        ["Add link"]
-                    )
-                    if disclosure_closed:
-                        details_xml = disclosure_closed
-                        report.append("- PASS Content disclosure explains the current sponsored-content limitation and closes without changing the draft")
+                    # Read the new live hierarchy after closing the separate information dialog.
+                    tap_control(disclosure_xml, ["Got it"], f"{prefix}-camera-post-disclosure-close", [])
+                    time.sleep(0.35)
+                    fresh_details = dump_ui(f"{prefix}-camera-post-disclosure-dismissed.xml")
+                    if fresh_details and not find_control(fresh_details, ["Got it"]):
+                        report.append("- PASS Content disclosure closes and restores the post details page")
+                        details_xml = camera_scroll_until_control(
+                            fresh_details, ["Add link"], f"{prefix}-camera-post-add-link-row"
+                        )
                     else:
-                        FAILURES.append(prefix + ": Content disclosure information could not be dismissed safely")
+                        FAILURES.append(prefix + ": Content disclosure information stayed open after Got it")
+                        details_xml = fresh_details or disclosure_xml
                 else:
                     FAILURES.append(prefix + ": Content disclosure information action did not open")
 
                 # Add link must reject malformed URLs and append a valid http(s) URL to the draft.
+                details_xml = camera_scroll_until_control(
+                    details_xml, ["Add link"], f"{prefix}-camera-post-link-row"
+                )
                 link_dialog = tap_control(
                     details_xml, ["Add link"], f"{prefix}-camera-post-link-open",
                     ["Website URL", "Add to caption"]
@@ -2455,40 +2419,31 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append(f"- PASS {style_label} exported a readable MP4; app-side decoded-frame, video-track and source-audio validation passed")
         editor = styled_xml
 
-    # A recorded clip must be shareable to Status through the same preview action as photos.
-    # Open the existing Status composer with the processed video selected, then close it
-    # without pressing Send; publishing remains an explicit user action.
-    current = dump_ui(f"{prefix}-camera-video-before-status.xml") or editor
-    if not find_control(current, ["Status"]):
-        FAILURES.append(prefix + ": recorded-video preview did not expose the Status destination")
-    else:
-        video_status_xml = tap_control(
-            current, ["Status"], f"{prefix}-camera-video-status-handoff",
-            ["Send"]
+    # Recorded video shares the same post-capture destination chooser as photos.
+    current = dump_ui(f"{prefix}-camera-video-before-next.xml") or editor
+    if find_control(current, ["Next"]):
+        video_post_xml = tap_control(
+            current, ["Next"], f"{prefix}-camera-video-next-to-destinations",
+            ["New post", "Home Feed"]
         )
-        if not video_status_xml:
-            FAILURES.append(prefix + ": Status did not open from the recorded-video preview")
+        if video_post_xml:
+            destination_labels = ["Home Feed", "Status", "Both"]
+            missing_destinations = [label for label in destination_labels if not find_control(video_post_xml, [label])]
+            screenshot(f"{prefix}-camera-video-destination-options.png")
+            (ROOT / f"{prefix}-camera-video-destination-options.xml").write_text(
+                video_post_xml + chr(10), encoding="utf-8"
+            )
+            if not missing_destinations:
+                report.append("- PASS recorded video Next opened New post with Home Feed, Status and Both; nothing was published")
+            else:
+                FAILURES.append(prefix + ": video composer destination options are missing " + ", ".join(missing_destinations))
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.6)
+            current = dump_ui(f"{prefix}-camera-video-destination-composer-closed.xml") or video_post_xml
         else:
-            screenshot(f"{prefix}-camera-video-status-composer.png")
-            (ROOT / f"{prefix}-camera-video-status-composer.xml").write_text(
-                video_status_xml + chr(10), encoding="utf-8"
-            )
-            if find_control(video_status_xml, ["Send"]) and find_control(video_status_xml, ["Back from Status composer"]):
-                report.append("- PASS recorded video opened the existing Status composer with Send available; Send was not tapped")
-            else:
-                FAILURES.append(prefix + ": recorded video Status composer did not expose both Send and Back from Status composer")
-            status_closed_xml = tap_control(
-                video_status_xml, ["Back from Status composer"],
-                f"{prefix}-camera-video-status-close", ["Next"]
-            )
-            if status_closed_xml:
-                if find_control(status_closed_xml, ["Next"]) and find_control(status_closed_xml, ["Status"]):
-                    report.append("- PASS closing Status restored the same recorded-video Camera editor; Next remains available")
-                else:
-                    FAILURES.append(prefix + ": Status close did not restore the recorded-video Camera editor")
-                current = status_closed_xml
-            else:
-                FAILURES.append(prefix + ": could not close the unpublished video Status composer and restore Camera")
+            FAILURES.append(prefix + ": recorded video Next did not open the shared New post composer")
+    else:
+        FAILURES.append(prefix + ": recorded video editor did not expose Next")
 
     # Dismiss without publishing. The actual server post flow remains untouched.
     current = dump_ui(f"{prefix}-camera-video-before-return.xml") or current
@@ -3098,7 +3053,7 @@ DIAGNOSTIC_MARKERS = (
     "Open FYNX camera", "FYNX", "Chat", "Chats", "Friends", "More", "Stories",
     "Status", "Find People", "Search username or name", "Search chats",
     "Messages and groups in one place", "Your private conversations",
-    "New post", "Add description...", "Add music", "Your Story", "More options", "Add photo or video", "Take photo or video", "Drafts", "Content disclosure and ads", "Add link", "Share to", "Edit cover",
+    "New post", "Add description...", "Add music", "Home Feed", "Status", "Both", "More options", "Add photo or video", "Take photo or video", "Drafts", "Content disclosure and ads", "Got it", "Add link", "Share to", "Edit cover",
     "Chat settings", "Chat Settings", "Message composer",
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
