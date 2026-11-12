@@ -94,6 +94,7 @@ fun FynxHomeSocialHubPanel(
     var showComposer by remember { mutableStateOf(false) }
     var showCamera by remember { mutableStateOf(false) }
     var showFastCamera by remember { mutableStateOf(false) }
+    var activeCameraInitialMode by remember { mutableStateOf(cameraInitialMode) }
     // Tracks whether the camera was opened from an existing composer.
     // Home's header camera starts a fresh camera session; the composer camera
     // returns to the existing draft when dismissed without capturing media.
@@ -215,6 +216,7 @@ fun FynxHomeSocialHubPanel(
 
     LaunchedEffect(cameraRequest) {
         if (cameraRequest > 0) {
+            activeCameraInitialMode = cameraInitialMode
             // Home camera is a fresh "Add description..." entry point.
             // Clear any abandoned composer state before opening it so a previous
             // draft/media selection can never leak into a new camera session.
@@ -643,6 +645,7 @@ fun FynxHomeSocialHubPanel(
             onOpenFindPeople = onOpenFindPeople,
             onOpenAi = onOpenAi,
             onOpenCamera = {
+                activeCameraInitialMode = CameraMode.PHOTO
                 if (!posting) {
                     cleanupTransientCameraEditSources()
                     capturedUris = emptyList()
@@ -670,6 +673,7 @@ fun FynxHomeSocialHubPanel(
             },
             onCreatePost = { showComposer = true; notice = null },
             onOpenFastCamera = {
+                activeCameraInitialMode = CameraMode.PHOTO
                 if (!posting) {
                     cleanupTransientCameraEditSources()
                     capturedUris = emptyList()
@@ -1360,6 +1364,7 @@ fun FynxHomeSocialHubPanel(
                         onClick = {
                             showMorePostOptions = false
                             if (!posting && postingAllowed) {
+                                activeCameraInitialMode = CameraMode.PHOTO
                                 cameraOpenedFromComposer = true
                                 showComposer = false
                                 showCamera = true
@@ -1632,7 +1637,7 @@ fun FynxHomeSocialHubPanel(
                 Box(Modifier.fillMaxSize().background(Color(0xFF000000))) {
                     FynxCameraCapturePanel(
                         fastCapture = showFastCamera,
-                        initialMode = cameraInitialMode,
+                        initialMode = activeCameraInitialMode,
                         initialMediaUri = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.sourceUri ?: it },
                         initialMediaType = cameraEditingMediaUri?.let { uri -> capturedTypes.getOrNull(capturedUris.indexOf(uri)) },
                         initialTextOverlays = cameraEditingMediaUri?.let { cameraMediaEdits[it.toString()]?.overlays }.orEmpty(),
