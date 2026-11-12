@@ -172,6 +172,7 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         notice?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp)) }
         LazyColumn(contentPadding = PaddingValues(top = 14.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item { FynxSupportHubPanel() }
             item { Text("SAFETY CENTER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)) }
             item {
                 Card(modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f))) {
