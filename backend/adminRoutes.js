@@ -116,7 +116,7 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await requireAdmin(req,res);
     if(actorRole===null)return;
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
-    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id ORDER BY r.created_at ASC LIMIT 100`);
+    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1) ORDER BY r.created_at ASC LIMIT 100`);
     return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});
   }catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
@@ -300,6 +300,7 @@ export function registerAdminRoutes({ app }) {
       await client.query('BEGIN');
       const exists=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId])).rows[0];
       if(!exists){await client.query('ROLLBACK');return res.status(404).json({error:'user not found'});}
+      if(await role(userId)==='OWNER'){await client.query('ROLLBACK');return res.status(400).json({error:'owner already has owner access'});}
       const result=await client.query(`INSERT INTO fynx_admin_roles(user_id,role) VALUES($1,'ADMIN') ON CONFLICT(user_id) DO NOTHING RETURNING user_id`,[userId]);
       if(result.rowCount)await recordAdminActivity(req,'ADMIN_GRANTED','user',userId,'Administrator access granted',{},client);
       await client.query('COMMIT');
