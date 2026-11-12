@@ -46,6 +46,7 @@ async function ensureSafetySchema(pool) {
     CREATE INDEX IF NOT EXISTS safety_reports_reporter_idx ON safety_reports(reporter_id,created_at DESC);
     CREATE INDEX IF NOT EXISTS safety_reports_target_idx ON safety_reports(target_user_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS safety_appeals (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, report_id BIGINT REFERENCES safety_reports(id) ON DELETE SET NULL, subject TEXT NOT NULL, details TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','ACCEPTED','REJECTED')), decision_note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+    DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='safety_appeals_report_id_fkey' AND conrelid='public.safety_appeals'::regclass) THEN UPDATE safety_appeals a SET report_id=NULL WHERE a.report_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM safety_reports r WHERE r.id=a.report_id); ALTER TABLE safety_appeals ADD CONSTRAINT safety_appeals_report_id_fkey FOREIGN KEY(report_id) REFERENCES safety_reports(id) ON DELETE SET NULL; END IF; END $;
     CREATE INDEX IF NOT EXISTS safety_appeals_user_idx ON safety_appeals(user_id,created_at DESC);
   `).catch(e=>{safetySchemaPromise=undefined;throw e;});
   return safetySchemaPromise;
