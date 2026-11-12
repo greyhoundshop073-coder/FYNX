@@ -120,6 +120,8 @@ require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminA
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
         "account status changes must be audited")
+require("SELECT id FROM users WHERE id=$1 FOR UPDATE" in backend and "if(!target){await client.query('ROLLBACK');return res.status(404)" in backend,
+        "account status changes must lock and validate the target user before writing safety state")
 require('FynxAdminClient.setAccountStatus(context, user.id, "LIMITED")' in source and
         "'LIMITED'" in backend,
         "People section must expose a server-supported limited-account action")
