@@ -18,7 +18,9 @@ object FynxSafetyRemoteClient {
         val id: String,
         val targetUsername: String,
         val reason: String,
-        val status: String
+        val status: String,
+        val contentType: String = "ACCOUNT",
+        val contentId: String = ""
     )
 
     data class Appeal(
@@ -60,15 +62,15 @@ object FynxSafetyRemoteClient {
             buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
-                    add(Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status")))
+                    add(Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status"), item.optString("contentType", "ACCOUNT"), item.optString("contentId", "")))
                 }
             }
         }
 
-    suspend fun submitReport(context: Context, targetUsername: String, reason: String, details: String): Result<Report> =
-        FynxBackendClient.postJson(context, "/api/social/reports", JSONObject().put("targetUsername", targetUsername.trim().removePrefix("@")).put("reason", reason.trim()).put("details", details.trim()).toString()).mapCatching { raw ->
+    suspend fun submitReport(context: Context, targetUsername: String, reason: String, details: String, contentType: String = "ACCOUNT", contentId: String = ""): Result<Report> =
+        FynxBackendClient.postJson(context, "/api/social/reports", JSONObject().put("targetUsername", targetUsername.trim().removePrefix("@")).put("reason", reason.trim()).put("details", details.trim()).put("contentType", contentType.trim().uppercase()).put("contentId", contentId.trim()).toString()).mapCatching { raw ->
             val item = JSONObject(raw).optJSONObject("report") ?: JSONObject()
-            Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status"))
+            Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status"), item.optString("contentType", "ACCOUNT"), item.optString("contentId", ""))
         }
 
     suspend fun appeals(context: Context): Result<List<Appeal>> =

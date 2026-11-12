@@ -146,6 +146,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var showLocationDialog by remember { mutableStateOf(false) }
+    var showLocationPermissionRationale by remember { mutableStateOf(false) }
+    var showMicrophonePermissionRationale by remember { mutableStateOf(false) }
     var showContactPreview by remember { mutableStateOf(false) }
     var pendingContactName by remember { mutableStateOf("") }
     var pendingContactPhone by remember { mutableStateOf("") }
@@ -455,7 +457,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
 
 
-    fun startRecording() = microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    fun requestLocationShare() {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineGranted || coarseGranted) showLocationDialog = true else showLocationPermissionRationale = true
+    }
+
+    fun startRecording() { showMicrophonePermissionRationale = true }
     fun cancelRecording() {
         recorder?.release()
         recorder = null
@@ -1345,6 +1353,42 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
 
     }
 
+    if (showMicrophonePermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showMicrophonePermissionRationale = false },
+            title = { Text("Allow microphone access?") },
+            text = { Text("FYNX uses your microphone to record a voice message in this chat. Recording starts only after you continue, and the message is sent only when you choose to send it.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMicrophonePermissionRationale = false
+                    microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMicrophonePermissionRationale = false }) { Text("Not now") }
+            }
+        )
+    }
+
+    if (showLocationPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showLocationPermissionRationale = false },
+            title = { Text("Allow location sharing?") },
+            text = {
+                Text("FYNX needs your current location to prepare a location message for this chat. Your coordinates are sent only after you confirm Share in the next step. You can cancel before anything is sent.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLocationPermissionRationale = false
+                    locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLocationPermissionRationale = false }) { Text("Not now") }
+            }
+        )
+    }
+
     if (showLocationDialog) {
         AlertDialog(onDismissRequest = { showLocationDialog = false }, title = { Text("Share location") },
             text = { Text("Share your current location with this chat?") },
@@ -1449,7 +1493,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 Triple("Camera", Icons.Default.CameraAlt) { showAttachmentSheet = false; cameraInitialMode = CameraMode.PHOTO; showCamera = true },
                 Triple("Gallery", Icons.Default.PhotoLibrary) { showAttachmentSheet = false; galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                 Triple("Files", Icons.Default.Description) { showAttachmentSheet = false; mediaPicker.launch(arrayOf("application/pdf", "text/plain", "application/zip", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation")) },
-                Triple("Location", Icons.Default.LocationOn) { showAttachmentSheet = false; locationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                Triple("Location", Icons.Default.LocationOn) { showAttachmentSheet = false; requestLocationShare() },
                 Triple("Contact", Icons.Default.ContactPage) { showAttachmentSheet = false; contactPicker.launch(null) },
                 Triple("Poll", Icons.Default.Poll) { showAttachmentSheet = false; showPollDialog = true },
                 Triple("Video note", Icons.Default.Videocam) { showAttachmentSheet = false; videoNoteMode = true; cameraInitialMode = CameraMode.VIDEO; showCamera = true }

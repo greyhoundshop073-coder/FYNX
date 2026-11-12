@@ -195,15 +195,13 @@ fun FynxCameraCapturePanel(
     }
     var hasCamera by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) }
     var hasAudio by remember { mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        hasCamera = result[Manifest.permission.CAMERA] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        hasAudio = result[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    var showAudioPermissionDisclosure by remember { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasCamera = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     }
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasAudio = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
-    LaunchedEffect(Unit) { if (!hasCamera) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
-
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -526,7 +524,23 @@ fun FynxCameraCapturePanel(
         })
     }
 
-    if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
+    if (showAudioPermissionDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showAudioPermissionDisclosure = false },
+            title = { Text("Allow microphone for video?") },
+            text = { Text("FYNX uses your microphone to capture sound with the video you record. Recording starts only after you continue and press the video record control.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAudioPermissionDisclosure = false
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAudioPermissionDisclosure = false }) { Text("Not now") }
+            }
+        )
+    }
+    if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(Manifest.permission.CAMERA)}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
     val previewUri=pendingUri; val previewType=pendingType
     if(previewUri!=null && previewType!=null){
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)){
@@ -1069,7 +1083,7 @@ fun FynxCameraCapturePanel(
                         val active = recording
                         if (active != null) active.stop() else {
                             if (!hasAudio) {
-                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                showAudioPermissionDisclosure = true
                                 return@FilledIconButton
                             }
                             val capture = videoCapture ?: run {

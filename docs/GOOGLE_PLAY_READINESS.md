@@ -1,9 +1,30 @@
 # FYNX — Google Play Readiness Plan
 
 **Status:** Preparation document; not a declaration of compliance or a final privacy policy.  
-**Reviewed:** 2026-11-09  
+**Reviewed:** 2026-11-10  
 **Canonical Android source reviewed:** `integration/fynx-single-apk-20261013`  
 **Package/application ID observed:** `com.fynx.app`
+
+
+
+## Stage 1 privacy source baseline — 2026-11-10
+
+The source-backed data-flow inventory is maintained in [`docs/PRIVACY_DATA_INVENTORY.md`](PRIVACY_DATA_INVENTORY.md). It records verified source behavior, unverified provider/runtime facts, account-deletion dependencies, and the legal details that must be supplied before public disclosures can be finalized.
+
+This Stage 1 work adds a versioned, account-scoped Contacts disclosure; defers Android 13+ notification permission until the user opts in from Notification Preferences; and adds pre-permission context for camera capture and chat location sharing. Camera access is requested only after the user chooses Allow camera, and chat coordinates require a separate Share confirmation after permission. These are source-level changes and require Android CI plus runtime verification before being marked complete.
+
+Account deletion, a public deletion web resource, a publishable privacy policy, and final Terms of Use remain launch blockers. Do not publish or link placeholder legal pages, and do not claim that this source inventory completes Play Console Data safety declarations.
+
+## Work staging — what we can do during development vs. what must wait
+
+| Timing | Work | Current handling |
+|---|---|---|
+| **Do now** | Source-backed data/SDK/permission inventory; contextual permission explanations; request sensitive access only when the related feature is used; minimise media access where behavior can be preserved; secure session/token handling; tests for denial/revocation and data boundaries. | In progress. Contacts, notification opt-in, camera entry and chat location disclosure have source changes on PR #503. Home/Marketplace location and remaining microphone/media paths still need review and runtime tests. |
+| **Do now** | Build real UGC safety capability: terms acceptance before posting where required, user/content reporting, blocking, moderation queue and response operations. | Home post reporting, typed content targets and an owner/admin review queue are now implemented in source. Live database/admin verification, moderation staffing and Terms acceptance remain open. |
+| **Before production / launch** | Complete account deletion in-app and public web flow; resolve order/wallet/dispute retention and media/processor deletion; publish final Privacy Policy, Terms/Community Guidelines and deletion page; complete accurate Data Safety and other Play Console declarations. | Preserved as explicit blockers. Must use verified developer identity, monitored contact, provider configuration, contracts and approved retention decisions—not placeholders. |
+| **Before production / launch** | Finalise payment/financial policy review, backend/provider availability, support operations, age/content rating, store listing, signed AAB, reviewer access, and the required testing track for the actual developer account type. | Preserved in Sections 3D–3G and 4; confirm the current Play Console requirements immediately before submission. |
+
+A deferred item is not a waived requirement. Keep it open until it is implemented, published/configured where required, and verified against the final release candidate. Do not start production access or the qualifying closed-test period with known core service or compliance blockers.
 
 ## 1. Purpose and release rule
 
@@ -46,16 +67,19 @@ These are source-level observations only. They do not prove which permissions ar
 - [ ] Do not publish a guessed or generic privacy policy. Complete it only after the data-flow and processor inventory is verified.
 
 ### B. Permissions and sensitive data
-- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity.
+- [ ] For location, contacts, microphone, camera, photos/videos, notifications, exact alarms, and boot receiver behavior, document the user-facing feature and necessity. Contacts, Home post location, chat location, camera capture, Android 13+ notification opt-in, chat voice messages, voice posts, FYNX Assistant voice, camera-video microphone access, and the Status custom-media permission now have source-level pre-permission/context explanations. Voice/video call permission timing and Marketplace Nearby/seller-location entry points remain to be addressed without colliding with the active integration PRs. Runtime tests remain required.
 - [ ] Request sensitive permissions only at the point the related feature is used; explain why before the system prompt where required.
 - [ ] Prefer Android Photo Picker or other scoped access where it can replace broad media permissions.
 - [ ] Confirm contacts are not uploaded or synced without a clear disclosure and user action.
 - [ ] Confirm location is not collected in the background unless a compliant, core use case requires it.
 - [ ] Verify audio/video call and recording behavior; do not imply recording when none occurs.
 - [ ] Test permission denial, one-time grants, revocation, and Android-version differences.
+- [ ] Review `SCHEDULE_EXACT_ALARM` against the exact-alarm policy: FYNX uses it only conditionally for Calendar reminders and has an inexact fallback; do not declare restricted `USE_EXACT_ALARM` unless the app's core functionality genuinely qualifies. Test reminders with access denied and after device reboot.
 
 ### C. User-generated content and social safety
-- [ ] Verify in-app reporting for users and user-generated content, with a functioning review/moderation process.
+
+**Source-audit warning (not complete):** The Home feed `Report post` action now submits an authenticated report through `POST /api/social/reports`; the backend stores a typed `POST` content target and the post ID as structured fields, not only free-text details. The Admin Control Center provides an authenticated owner/admin queue with assignment, resolve/dismiss decisions and reviewer audit fields. The human moderation rota, notification/escalation, response-time targets and live backend verification remain open. Do not treat source implementation alone as proof of operational moderation. The source search also did not find an explicit Terms/Community Guidelines acceptance record in account onboarding. Both the enforceable rules/acceptance and a monitored moderation process remain production blockers.
+- [ ] Verify typed reports and the Admin Control Center queue against the live database; test admin authorization, assignment, resolution, dismissal, duplicate reports, and report-history visibility. Establish a monitored moderation rota, notification/escalation and response-time targets before launch.
 - [ ] Verify user blocking and that blocked users cannot continue the prohibited interactions.
 - [ ] Provide and enforce terms/community standards that prohibit objectionable content and abusive behavior.
 - [ ] Provide moderation escalation, response handling, and repeat-offender controls.
@@ -139,6 +163,7 @@ Ask testers to exercise and report on:
 - Set up internal, closed, or open testing: https://support.google.com/googleplay/android-developer/answer/9845334
 - Developer Program Policy (privacy, Data safety, account deletion, and other policies): https://support.google.com/googleplay/android-developer/answer/18265346
 - User Data / Data safety: https://support.google.com/googleplay/android-developer/answer/10144311
+- Sensitive permissions and exact alarm policy: https://support.google.com/googleplay/android-developer/answer/16558241
 - Upload an app bundle: https://developer.android.com/studio/publish/upload-bundle
 
 ---
