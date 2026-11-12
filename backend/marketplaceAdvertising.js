@@ -401,7 +401,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       }
       if (artworkMediaId !== null) {
         const ownedMedia = await pool.query(
-          "SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",
+          "SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 AND LOWER(COALESCE(mime_type,'')) LIKE 'image/%' LIMIT 1",
           [artworkMediaId, auth.userId]
         );
         if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
@@ -486,7 +486,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         if (!target.rowCount) return res.status(404).json({ error: "campaign shop username was not found" });
       }
       if (artworkMediaId !== null) {
-        const ownedMedia = await pool.query("SELECT 1 FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1", [artworkMediaId, auth.userId]);
+        const ownedMedia = await pool.query("SELECT 1 FROM message_media m WHERE m.id=$1 AND LOWER(COALESCE(m.mime_type,'')) LIKE 'image/%' AND (m.owner_id=$2 OR EXISTS(SELECT 1 FROM marketplace_seasonal_promotions p WHERE p.id=$3 AND p.artwork_media_id=m.id)) LIMIT 1", [artworkMediaId, auth.userId, id]);
         if (!ownedMedia.rowCount) return res.status(403).json({ error: "seasonal artwork must be uploaded by the current Owner/Admin account" });
       }
       const client = await pool.connect();
