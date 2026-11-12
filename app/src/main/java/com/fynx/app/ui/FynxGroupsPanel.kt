@@ -367,6 +367,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var voiceRecording by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var remoteGroupSearchMessages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var remoteGroupSearchHasMore by remember(groupId) { mutableStateOf(false) }
+    var remoteGroupSearchCursor by remember(groupId) { mutableStateOf<String?>(null) }
+    var remoteGroupSearchLoading by remember(groupId) { mutableStateOf(false) }
+    var remoteGroupSearchError by remember(groupId) { mutableStateOf<String?>(null) }
     val selectedGroup = currentGroup
     val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
     val isAdmin = myRole == FynxGroupRole.ADMIN
@@ -567,7 +572,38 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
     val messageListState = rememberLazyListState()
-    val senderUsernames = remember(messages) { messages.mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct() }
+    val senderUsernames = remember(messages, remoteGroupSearchMessages) { (messages + remoteGroupSearchMessages).mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct() }
+    suspend fun loadGroupSearchPage(query: String, before: String? = null, append: Boolean = false) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.length < 2) return
+        remoteGroupSearchLoading = true
+        remoteGroupSearchError = null
+        FynxGroupRemoteClient.loadMessagesPage(context, groupId, before = before, limit = 40, query = cleanQuery)
+            .onSuccess { page ->
+                val found = page.messages.mapNotNull { item ->
+                    runCatching { FynxGroupRemoteClient.toChatMessage(item, currentUsername, FynxBackendClient.baseUrl(context)) }.getOrNull()
+                }
+                if (searchOpen && searchQuery.trim() == cleanQuery) {
+                    remoteGroupSearchMessages = if (append) (remoteGroupSearchMessages + found).distinctBy { it.id } else found
+                    remoteGroupSearchHasMore = page.hasMore
+                    remoteGroupSearchCursor = page.nextBefore
+                }
+            }
+            .onFailure { remoteGroupSearchError = "Group message search is unavailable. Check your connection and retry." }
+        remoteGroupSearchLoading = false
+    }
+    LaunchedEffect(groupId, searchOpen, searchQuery, currentUsername) {
+        val query = searchQuery.trim()
+        if (!searchOpen || query.length < 2) {
+            remoteGroupSearchMessages = emptyList()
+            remoteGroupSearchHasMore = false
+            remoteGroupSearchCursor = null
+            remoteGroupSearchError = null
+            return@LaunchedEffect
+        }
+        delay(350)
+        loadGroupSearchPage(query)
+    }
     LaunchedEffect(groupId, senderUsernames) {
         senderUsernames.forEach { username ->
             if (!senderAvatarUris.containsKey(username)) {
@@ -814,9 +850,19 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }
-        val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
+        val visibleMessages = if (searchQuery.isBlank()) messages
+            else if (searchQuery.trim().length >= 2) remoteGroupSearchMessages
+            else messages.filter { it.text.contains(searchQuery, true) }
         val pinnedMessage = messages.lastOrNull { it.pinned }
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) {
+            OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all group messages…") })
+            when {
+                searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full group history.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteGroupSearchLoading -> Text("Searching group history…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 && remoteGroupSearchError != null -> Text(remoteGroupSearchError!!, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 18.dp))
+                searchQuery.trim().length >= 2 -> Text("${remoteGroupSearchMessages.size} matching messages in this group", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
+            }
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -892,7 +938,33 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     ) { Text(if (loadingOlderGroupMessages) "Loading older messages…" else "Load older messages") }
                 }
             }
-            if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
+            if (searchQuery.trim().length >= 2 && remoteGroupSearchHasMore) {
+                item(key = "load_more_group_search_results") {
+                    TextButton(
+                        enabled = !remoteGroupSearchLoading,
+                        onClick = {
+                            val cursor = remoteGroupSearchCursor ?: return@TextButton
+                            val query = searchQuery.trim()
+                            scope.launch { loadGroupSearchPage(query, cursor, append = true) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (remoteGroupSearchLoading) "Loading matches…" else "Load more matches") }
+                }
+            }
+            if (visibleMessages.isEmpty() && searchQuery.isNotBlank()) {
+                item(key = "fynx-group-search-empty") {
+                    Text(
+                        when {
+                            remoteGroupSearchLoading -> "Searching all group messages…"
+                            remoteGroupSearchError != null -> "Search could not be completed. Please retry."
+                            else -> "No matching messages found in this group."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp)
+                    )
+                }
+            } else if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f), contentColor = MaterialTheme.colorScheme.onSurface, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth().widthIn(max = 340.dp)) {
