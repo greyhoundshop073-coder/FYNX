@@ -606,7 +606,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         remoteGroupSearchHasMore = false
         remoteGroupSearchCursor = null
         remoteGroupSearchError = null
-        delay(350)
+        kotlinx.coroutines.delay(350)
         loadGroupSearchPage(query)
     }
     LaunchedEffect(groupId, senderUsernames) {
@@ -860,7 +860,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             else messages.filter { it.text.contains(searchQuery, true) }
         val pinnedMessage = messages.lastOrNull { it.pinned }
         if (searchOpen) {
-            OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all group messages…") })
+            OutlinedTextField(searchQuery, { searchQuery = it.take(100) }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search all group messages…") })
             when {
                 searchQuery.trim().length == 1 -> Text("Enter at least 2 characters to search the full group history.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
                 searchQuery.trim().length >= 2 && remoteGroupSearchLoading -> Text("Searching group history…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 18.dp))
