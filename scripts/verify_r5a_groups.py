@@ -46,6 +46,10 @@ check('realtime client accepts group message events', '"group_message" in realti
 check('active group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
 check('active group history privacy is stored as a server permission', 'show_history_to_new_members' in membership and 'showHistoryToNewMembers' in client and 'chatHistory=remote.showHistoryToNewMembers' in settings)
 check('new members only receive history from their join time when history sharing is disabled', 'm.created_at >= $4' in group and 'access.show_history_to_new_members' in group)
+check('group history cursor preserves PostgreSQL microsecond timestamp precision', 'cursor_created_at' in group and 'SS.US' in group)
+check('group history pagination uses a stable timestamp plus message-id keyset cursor', '(m.created_at,m.id) < ($5::timestamptz,$6::text)' in group and 'beforeId=beforeRaw.slice(separator+1)' in group)
+check('group history cursor uses the same descending timestamp and id order as the page query', 'ORDER BY m.created_at DESC,m.id DESC' in group and 'page[0].cursor_created_at' in group and 'page[0].id' in group)
+check('group history cursor is passed through by the Android client without millisecond truncation', 'before=${Uri.encode(it)}' in client and 'nextBefore' in client)
 check('active Group Chat exposes its server-backed message edit operation', 'FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)' in group_panel and 'Text("Edit")' in group_panel)
 check('active Group Chat offers member mention suggestions', 'val mentionSuggestions' in group_panel and 'Mention a member' in group_panel)
 
