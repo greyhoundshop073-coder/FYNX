@@ -411,13 +411,15 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       try {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`fynx-seasonal-promo:${occasionKey}`]);
-        const overlap = await client.query(
-          "SELECT id FROM marketplace_seasonal_promotions WHERE occasion_key=$1 AND active=TRUE AND starts_at < $3 AND ends_at > $2 LIMIT 1",
-          [occasionKey, startsAt.toISOString(), endsAt.toISOString()]
-        );
-        if (overlap.rowCount) {
-          await client.query("ROLLBACK");
-          return res.status(409).json({ error: "an active campaign with this key already overlaps the selected time window" });
+        if (active) {
+          const overlap = await client.query(
+            "SELECT id FROM marketplace_seasonal_promotions WHERE occasion_key=$1 AND active=TRUE AND starts_at < $3 AND ends_at > $2 LIMIT 1",
+            [occasionKey, startsAt.toISOString(), endsAt.toISOString()]
+          );
+          if (overlap.rowCount) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "an active campaign with this key already overlaps the selected time window" });
+          }
         }
         result = await client.query(
           "INSERT INTO marketplace_seasonal_promotions (promotion_type,occasion_key,headline,body,action_label,artwork_media_id,destination_type,destination_value,starts_at,ends_at,active,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *",
