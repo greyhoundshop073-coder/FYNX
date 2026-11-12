@@ -27,7 +27,6 @@ checks = [
     ("group message edit", "FynxGroupsPanel.kt", "FynxGroupRemoteClient.editMessage"),
     ("group history visibility control", "FynxGroupSettingsPanel.kt", "showHistoryToNewMembers"),
     ("group settings errors are user-safe", "FynxGroupSettingsPanel.kt", "Group permissions could not be saved. Please try again."),
-    ("server recent conversation index", "server.js", 'app.get("/api/messages/recent", auth'),
     ("Chats list hydrates from server", "ChatsPanel.kt", "FynxProductionMessaging.recentConversations(context)"),
     ("Groups list hydrates from server", "ChatsPanel.kt", "FynxGroupRemoteClient.loadMyGroups(context)"),
     ("Groups list client calls authenticated endpoint", "FynxGroupRemoteClient.kt", 'FynxBackendClient.get(context, "/api/groups")'),
@@ -45,6 +44,7 @@ for label, filename, needle in checks:
 
 # Backend routes are checked from the backend root, not the Android source tree.
 backend_checks = [
+    ("server recent conversation index", ROOT / "backend/server.js", 'app.get("/api/messages/recent", auth'),
     ("authenticated group-list endpoint", ROOT / "backend/groupRoutes.js", "app.get('/api/groups', auth"),
     ("group-list membership scoping", ROOT / "backend/groupRoutes.js", "WHERE mine.user_id = $1"),
     ("production group route registration", ROOT / "backend/server.js", "registerGroupRoutes({ app });"),
