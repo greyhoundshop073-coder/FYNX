@@ -155,3 +155,11 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The workflow now sets `FYNX_ADMIN_VISUALS_ONLY=1` only for this PR branch. The runtime runner records `FYNX-admin-runtime-certification.md` in the screenshot artifact, preserves Android instrumentation as a blocking check, and does not run Marketplace/My Shop/Wallet capture for this Admin-only change.
 - IMPORTANT: Admin screen runtime certification remains explicitly BLOCKED until the backend health endpoint is healthy and a real OWNER/ADMIN test session is available. This change does not claim Admin runtime is green and does not weaken role authorization.
 - Re-run all three PR checks after this correction. Do not mark the PR fully certified until a healthy-backend OWNER/ADMIN runtime pass is captured.
+
+
+## Activity search hardening — 12 November 2026
+
+- The Activity endpoint previously parameterized the search term but used SQL `ILIKE '%term%'`, so user-entered `%` and `_` were treated as wildcard operators rather than literal characters. This could produce confusing or overly broad matches even though it was not SQL injection.
+- Replaced wildcard matching with case-insensitive literal substring matching via PostgreSQL `POSITION(LOWER($1) IN LOWER(...))` across action, summary, target ID and actor username. The query remains parameterized and bounded.
+- Added a contract assertion requiring the literal-search expression and rejecting the old wildcard expression.
+- This is backend/search correctness hardening; live OWNER/ADMIN database behavior and UI runtime remain subject to the existing environment-dependent verification gates.
