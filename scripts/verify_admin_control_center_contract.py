@@ -7,11 +7,13 @@ import sys
 SOURCE = Path("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")
 CLIENT = Path("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")
 BACKEND = Path("backend/adminRoutes.js")
+MEDIA_SERVER = Path("backend/server.js")
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
+media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -88,6 +90,38 @@ require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
         "account status changes must be audited")
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
+
+# Announcement publishing reuses authenticated FYNX media, validates links and persists schedules.
+for column in (
+    "ADD COLUMN IF NOT EXISTS media_id BIGINT REFERENCES message_media(id)",
+    "ADD COLUMN IF NOT EXISTS link_url TEXT NOT NULL DEFAULT ''",
+    "ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ",
+    "ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ",
+):
+    require(column in backend, f"announcement schema is missing {column}")
+require("app.get('/api/admin/announcements'" in backend and "app.post('/api/admin/announcements'" in backend,
+        "protected announcement management/list and create endpoints are missing")
+require("app.patch('/api/admin/announcements/:announcementId'" in backend,
+        "announcement publish/unpublish/schedule endpoint is missing")
+require("message_media WHERE id=$1 AND owner_id=$2" in backend and "startsWith('image/')" in backend,
+        "announcement images must be uploaded by the current admin and must be images")
+require("parsed.protocol" in backend and "http:" in backend and "https:" in backend,
+        "announcement external links must be protocol-validated")
+require("scheduledAt.getTime()<=Date.now()" in backend and "ANNOUNCEMENT_SCHEDULED" in backend,
+        "announcement schedules must be future-dated and audited")
+require("scheduled_at IS NULL OR scheduled_at<=NOW()" in backend,
+        "public announcements must not expose future scheduled items")
+require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_server and
+        "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()" in media_server,
+        "published announcement images must be authorized by the protected media route")
+require("ActivityResultContracts.GetContent()" in source and "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in source,
+        "announcement image attachment must use the existing authenticated media uploader")
+require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source,
+        "announcement admin queue must support listing and publishing/cancellation")
+require("FynxAdminClient.publishAnnouncement(" in source and "announcementScheduleAt" in source and "announcementLinkUrl" in source,
+        "announcement composer is missing image/link/scheduling controls")
+require("uriHandler.openUri(link)" in source and "FynxRemoteMedia(" in source,
+        "public announcements must render uploaded images and open validated links")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
