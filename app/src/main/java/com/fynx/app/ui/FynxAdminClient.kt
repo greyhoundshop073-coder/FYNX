@@ -38,8 +38,8 @@ object FynxAdminClient {
         val summary: String,
         val createdAt: String
     )
-    data class ActivityPage(
-        val items: List<AdminActivity>,
+    data class AdminPage<T>(
+        val items: List<T>,
         val offset: Int,
         val limit: Int,
         val hasMore: Boolean
@@ -227,7 +227,7 @@ object FynxAdminClient {
             JSONObject().put("active", active).toString()
         ).map { Unit }
 
-    suspend fun activity(context: Context, query: String = "", offset: Int = 0): Result<ActivityPage> =
+    suspend fun activity(context: Context, query: String = "", offset: Int = 0): Result<AdminPage<AdminActivity>> =
         FynxBackendClient.get(
             context,
             "/api/admin/activity?q=${encode(query)}&limit=50&offset=${offset.coerceIn(0, 10000)}"
@@ -240,7 +240,7 @@ object FynxAdminClient {
                     add(AdminActivity(item.optString("id"), item.optString("actorRole"), item.optString("actorUsername"), item.optString("actorDisplayName"), item.optString("action"), item.optString("targetType"), item.optString("targetId"), item.optString("summary"), item.optString("createdAt")))
                 }
             }
-            ActivityPage(
+            AdminPage(
                 items = items,
                 offset = value.optInt("offset", offset),
                 limit = value.optInt("limit", 50),
@@ -248,11 +248,12 @@ object FynxAdminClient {
             )
         }
 
-    suspend fun reports(context: Context): Result<List<AdminReport>> =
-        FynxBackendClient.get(context, "/api/admin/reports").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
+    suspend fun reports(context: Context, offset: Int = 0): Result<AdminPage<AdminReport>> =
+        FynxBackendClient.get(context, "/api/admin/reports?limit=50&offset=${offset.coerceIn(0, 10000)}").mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("reports")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(AdminReport(
                         id = item.optString("id"),
@@ -266,6 +267,7 @@ object FynxAdminClient {
                     ))
                 }
             }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", 50), value.optBoolean("hasMore", false))
         }
 
     suspend fun reviewReport(context: Context, reportId: String, status: String): Result<Unit> =
@@ -275,15 +277,17 @@ object FynxAdminClient {
             JSONObject().put("status", status.trim().uppercase()).toString()
         ).map { Unit }
 
-    suspend fun appeals(context: Context): Result<List<AppealReview>> =
-        FynxBackendClient.get(context, "/api/admin/appeals").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("appeals") ?: return@mapCatching emptyList()
-            buildList {
-                for (i in 0 until array.length()) {
+    suspend fun appeals(context: Context, offset: Int = 0): Result<AdminPage<AppealReview>> =
+        FynxBackendClient.get(context, "/api/admin/appeals?limit=50&offset=${offset.coerceIn(0, 10000)}").mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("appeals")
+            val items = buildList {
+                if (array != null) for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(AppealReview(item.optString("id"), item.optString("userId"), item.optString("username"), item.optString("displayName"), item.optString("reportId").takeIf { it.isNotBlank() && it != "null" }, item.optString("subject"), item.optString("details"), item.optString("status"), item.optString("decisionNote"), item.optString("accountStatus"), item.optString("createdAt")))
                 }
             }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", 50), value.optBoolean("hasMore", false))
         }
 
     suspend fun reviewAppeal(context: Context, appealId: String, status: String, decisionNote: String): Result<Unit> =
