@@ -163,14 +163,14 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const announcementId=String(req.params.announcementId||'');
     const published=req.body?.published;
-    if(!/^[1-9]\\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    if(!/^[1-9]\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
     const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
     const hasContent=['title','body','priority','mediaId','linkUrl'].some(key=>Object.prototype.hasOwnProperty.call(req.body||{},key));
     let scheduledAt;
     if(hasSchedule){
       const raw=typeof req.body.scheduledAt==='string'?req.body.scheduledAt.trim():'';
       scheduledAt=raw?new Date(raw):null;
-      if(raw&&(!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
+      if(raw&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(raw)||!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a future ISO 8601 date/time with an explicit timezone'});
     }
     const client=await pool.connect();
     try{
@@ -184,7 +184,7 @@ export function registerAdminRoutes({ app }) {
       let mediaId=existing.media_id;
       if(Object.prototype.hasOwnProperty.call(req.body||{},'mediaId')){
         const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
-        if(raw&&!/^[1-9]\\d*$/.test(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
+        if(raw&&!/^[1-9]\d*$/.test(raw)){await client.query('ROLLBACK');return res.status(400).json({error:'invalid announcement image'});}
         if(raw){
           const owned=await client.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[raw,req.user.sub]);
           if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/')){await client.query('ROLLBACK');return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});}
