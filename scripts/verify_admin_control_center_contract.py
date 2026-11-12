@@ -5,9 +5,13 @@ import re
 import sys
 
 SOURCE = Path("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")
+CLIENT = Path("app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt")
+BACKEND = Path("backend/adminRoutes.js")
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
+client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
+backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -48,6 +52,14 @@ require(not re.search(r"dashboard\s*=\s*FynxAdminClient\.Dashboard\(", source),
         "dashboard role must not be constructed locally")
 require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
+require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
+        "existing owner announcement route parameter must remain compatible")
+require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
+        "music administration must be visible only to the verified owner")
+require('"/api/admin/accounts/${encode(userId)}/status"' in client,
+        "account status client must call the backend status route")
+require("app.patch('/api/admin/accounts/:userId/status'" in backend,
+        "server account status route is missing")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
