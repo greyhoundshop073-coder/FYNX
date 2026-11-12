@@ -10,6 +10,8 @@ BACKEND = Path("backend/adminRoutes.js")
 MEDIA_SERVER = Path("backend/server.js")
 ADVERTISING = Path("backend/marketplaceAdvertising.js")
 SOCIAL = Path("backend/socialRoutes.js")
+GROUPS = Path("backend/groupRoutes.js")
+MARKETPLACE_CHECKOUT = Path("backend/marketplaceCheckout.js")
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
@@ -18,6 +20,8 @@ backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
 advertising = ADVERTISING.read_text(encoding="utf-8") if ADVERTISING.is_file() else ""
 social = SOCIAL.read_text(encoding="utf-8") if SOCIAL.is_file() else ""
+groups = GROUPS.read_text(encoding="utf-8") if GROUPS.is_file() else ""
+marketplace_checkout = MARKETPLACE_CHECKOUT.read_text(encoding="utf-8") if MARKETPLACE_CHECKOUT.is_file() else ""
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -92,6 +96,12 @@ require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminA
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
         "account status changes must be audited")
+require('FynxAdminClient.setAccountStatus(context, user.id, "LIMITED")' in source and
+        "'LIMITED'" in backend,
+        "People section must expose a server-supported limited-account action")
+require("String(safety.account_status)==='LIMITED'" in groups and
+        "String(safety.account_status) === 'LIMITED'" in marketplace_checkout,
+        "LIMITED must enforce restrictions in group messaging and Marketplace checkout")
 require("FOR UPDATE" in backend and "appeal has already received a final decision" in backend,
         "appeal decisions must lock the appeal and reject final-state rewrites")
 
