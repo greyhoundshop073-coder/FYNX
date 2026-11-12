@@ -75,6 +75,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Merge a server refresh without discarding older pages already loaded by the user.
+ * Server copies win for matching IDs; locally queued unsent messages remain visible.
+ */
+internal fun mergeGroupMessageRefresh(existing: List<ChatMessage>, latestRemote: List<ChatMessage>): List<ChatMessage> {
+    val refreshedIds = latestRemote.asSequence().map { it.id }.toSet()
+    return (existing.filter { it.id !in refreshedIds } + latestRemote)
+        .distinctBy { it.id }
+        .sortedBy { it.timestamp }
+}
+
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
     val context = LocalContext.current
@@ -583,11 +593,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 }
                             }
                         }
-                        val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                        val pendingLocal = messages.filter { it.id !in remoteIds && !it.delivered }
-                        val mergedMessages = (remoteMessages + pendingLocal)
-                            .distinctBy { it.id }
-                            .sortedBy { it.timestamp }
+                        // Keep older delivered pages in memory; the server page is only the newest window.
+                        val mergedMessages = mergeGroupMessageRefresh(messages, remoteMessages)
                         messages = mergedMessages
                         if (showError) syncMessage = null
                         runCatching {
@@ -659,7 +666,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
                                     }
                                 }
-                                val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
                                 val eventMessageId = runCatching { JSONObject(event.messageJson).optString("id") }.getOrNull()
                                 val incomingEventMessage = remoteMessages.firstOrNull {
                                     it.id == eventMessageId && !it.fromMe && latestMessages.none { old -> old.id == it.id }
@@ -669,8 +675,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     !FynxConversationPreferences.groupMuted(context, groupId)) {
                                     FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
                                 }
-                                val pendingLocal = latestMessages.filter { it.id !in remoteIds && !it.delivered }
-                                val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
+                                // Realtime fetches the newest server window, not the complete history.
+                                val merged = mergeGroupMessageRefresh(latestMessages, remoteMessages)
                                 messages = merged
                                 // Group history may contain years of chat JSON. Keep
                                 // local persistence off Main just like initial restoration.
