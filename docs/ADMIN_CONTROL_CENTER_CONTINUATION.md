@@ -146,3 +146,12 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Backend CI succeeded on an earlier intermediate commit. Newer commits were added before the full Android and Chat/Group build stages had completed, cancelling those earlier runs.
 - Re-query workflows for the newest PR head. The static source checks performed while editing are not a substitute for green CI.
 - Emulator screenshots, the live backend probe and credential-backed role tests remain unverified unless a later run explicitly records them.
+
+
+## 2026-11-12 runtime-gate correction
+
+- Latest pre-correction Android run (PR head `1838e65d6e13dc27cbc25660da50724c76b31383`, run `43206484716`) completed fast build, full build, lint and APK assembly successfully. Connected instrumentation completed 58 tests with 0 failures and 1 backend reachability test skipped.
+- The Android job was red only after instrumentation: the broad Marketplace/Wallet visual script received HTTP 404 from the configured Railway health endpoint, Wallet did not settle, and the debug-local UI session did not expose My Shop. This was an out-of-scope visual gate for this Admin PR, not an Admin UI failure.
+- The workflow now sets `FYNX_ADMIN_VISUALS_ONLY=1` only for this PR branch. The runtime runner records `FYNX-admin-runtime-certification.md` in the screenshot artifact, preserves Android instrumentation as a blocking check, and does not run Marketplace/My Shop/Wallet capture for this Admin-only change.
+- IMPORTANT: Admin screen runtime certification remains explicitly BLOCKED until the backend health endpoint is healthy and a real OWNER/ADMIN test session is available. This change does not claim Admin runtime is green and does not weaken role authorization.
+- Re-run all three PR checks after this correction. Do not mark the PR fully certified until a healthy-backend OWNER/ADMIN runtime pass is captured.
