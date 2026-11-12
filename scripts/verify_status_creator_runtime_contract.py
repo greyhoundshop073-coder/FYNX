@@ -67,7 +67,7 @@ checks = [
     (
         "existing Status source gate still verifies the Home creator callback and Voice/Text choices",
         'Home Status plus opens the full Add status hub' in status_gate
-        and 'Add status exposes video recording and gallery selection' in status_gate
+        and 'Add Status video action opens the shared camera and gallery selection remains available' in status_gate
         and 'Add status Voice opens the composer in voice mode' in status_gate,
     ),
 ]
