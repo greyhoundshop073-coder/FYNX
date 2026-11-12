@@ -41,7 +41,7 @@ sensitive_actions = {
     "admin revocation": r"FynxAdminClient\.revokeAdmin\(context,",
     "account status change": r"FynxAdminClient\.setAccountStatus\(context,",
     "admin grant": r"FynxAdminClient\.grantAdmin\(context,",
-    "announcement publishing": r"FynxAdminClient\.publishAnnouncement\(context,",
+    "announcement publishing": r"FynxAdminClient\.publishAnnouncement\(\s*context,",
 }
 for label, pattern in sensitive_actions.items():
     require(re.search(pattern, source) is not None, f"server action for {label} is missing")
