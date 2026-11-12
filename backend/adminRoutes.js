@@ -201,7 +201,18 @@ export function registerAdminRoutes({ app }) {
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }catch(error){console.error('admin account status',error);return res.status(500).json({error:'account status update failed'});}});
 
-  app.get('/api/admin/reports',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT r.id,r.reporter_id,r.target_user_id,r.target_username,r.reason,r.details,r.status,r.created_at,reporter.username AS reporter_username,reporter.display_name AS reporter_display_name FROM safety_reports r JOIN users reporter ON reporter.id=r.reporter_id WHERE r.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE r.status WHEN 'OPEN' THEN 0 ELSE 1 END,r.created_at ASC LIMIT 100`);return res.json({reports:result.rows.map(r=>({id:String(r.id),reporterId:String(r.reporter_id),reporterUsername:r.reporter_username||'',reporterDisplayName:r.reporter_display_name||'',targetUserId:r.target_user_id==null?null:String(r.target_user_id),targetUsername:r.target_username||'',reason:r.reason,details:r.details||'',status:r.status,createdAt:r.created_at}))});}catch(error){console.error('admin reports',error);return res.status(500).json({error:'admin reports unavailable'});}});
+  app.get('/api/admin/reports',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await pool.query(`SELECT r.id,r.reporter_id,r.target_user_id,r.target_username,r.reason,r.details,r.status,r.created_at,reporter.username AS reporter_username,reporter.display_name AS reporter_display_name FROM safety_reports r JOIN users reporter ON reporter.id=r.reporter_id WHERE r.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE r.status WHEN 'OPEN' THEN 0 ELSE 1 END,r.created_at ASC,r.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    return res.json({reports:rows.map(r=>({id:String(r.id),reporterId:String(r.reporter_id),reporterUsername:r.reporter_username||'',reporterDisplayName:r.reporter_display_name||'',targetUserId:r.target_user_id==null?null:String(r.target_user_id),targetUsername:r.target_username||'',reason:r.reason,details:r.details||'',status:r.status,createdAt:r.created_at})),limit,offset,hasMore});
+  }catch(error){console.error('admin reports',error);return res.status(500).json({error:'admin reports unavailable'});}});
 
   app.patch('/api/admin/reports/:reportId',auth,async(req,res)=>{try{
     await ensureSchema();
@@ -220,7 +231,18 @@ export function registerAdminRoutes({ app }) {
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }catch(error){console.error('admin report review',error);return res.status(500).json({error:'admin report review failed'});}});
 
-  app.get('/api/admin/appeals',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT a.id,a.user_id,a.report_id,a.subject,a.details,a.status,a.decision_note,a.created_at,u.username,u.display_name,COALESCE(fs.account_status,fas.account_status,'ACTIVE') AS account_status FROM safety_appeals a JOIN users u ON u.id=a.user_id LEFT JOIN safety_settings fs ON fs.user_id=a.user_id LEFT JOIN fynx_account_safety fas ON fas.user_id=a.user_id WHERE a.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE a.status WHEN 'OPEN' THEN 0 ELSE 1 END,a.created_at ASC LIMIT 100`);return res.json({appeals:result.rows.map(a=>({id:String(a.id),userId:String(a.user_id),username:a.username||'',displayName:a.display_name||'',reportId:a.report_id==null?null:String(a.report_id),subject:a.subject,details:a.details,status:a.status,decisionNote:a.decision_note||'',accountStatus:a.account_status||'ACTIVE',createdAt:a.created_at}))});}catch(error){console.error('admin appeals',error);return res.status(500).json({error:'admin appeals unavailable'});}});
+  app.get('/api/admin/appeals',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await pool.query(`SELECT a.id,a.user_id,a.report_id,a.subject,a.details,a.status,a.decision_note,a.created_at,u.username,u.display_name,COALESCE(fs.account_status,fas.account_status,'ACTIVE') AS account_status FROM safety_appeals a JOIN users u ON u.id=a.user_id LEFT JOIN safety_settings fs ON fs.user_id=a.user_id LEFT JOIN fynx_account_safety fas ON fas.user_id=a.user_id WHERE a.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE a.status WHEN 'OPEN' THEN 0 ELSE 1 END,a.created_at ASC,a.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    return res.json({appeals:rows.map(a=>({id:String(a.id),userId:String(a.user_id),username:a.username||'',displayName:a.display_name||'',reportId:a.report_id==null?null:String(a.report_id),subject:a.subject,details:a.details,status:a.status,decisionNote:a.decision_note||'',accountStatus:a.account_status||'ACTIVE',createdAt:a.created_at})),limit,offset,hasMore});
+  }catch(error){console.error('admin appeals',error);return res.status(500).json({error:'admin appeals unavailable'});}});
 
   app.patch('/api/admin/appeals/:appealId',auth,async(req,res)=>{try{
     await ensureSchema();
