@@ -121,7 +121,7 @@ export function registerAdminRoutes({ app }) {
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
     if(scheduledRaw&&(!Number.isFinite(scheduledAt.getTime())||scheduledAt.getTime()<=Date.now()))return res.status(400).json({error:'scheduled time must be a valid future ISO date/time'});
-    if(mediaIdRaw&&!/^[1-9]\\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
+    if(mediaIdRaw&&!/^[1-9]\d*$/.test(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
     if(mediaIdRaw){
       const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
       if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/'))return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});
@@ -143,7 +143,7 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const announcementId=String(req.params.announcementId||'');
     const published=req.body?.published;
-    if(!/^[1-9]\\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    if(!/^[1-9]\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
     const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
     let scheduledAt;
     if(hasSchedule){
