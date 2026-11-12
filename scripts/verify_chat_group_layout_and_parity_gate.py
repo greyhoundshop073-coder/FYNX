@@ -103,6 +103,10 @@ require("private and group conversation screens expose older-history loading", "
 require("private chat supports multi-message selection and copy", "selectedMessageIds" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "toggleMessageSelection(message.id)" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8") and "clipboardManager.setText" in (UI / "ConversationPanel.kt").read_text(encoding="utf-8"))
 
 
+require("private Chat search queries server history instead of only the loaded local page", "FynxProductionMessaging.searchHistoryPage(" in PRIVATE and "loadPrivateSearchPage(" in PRIVATE and "remoteSearchMessages" in PRIVATE)
+require("private Chat search supports paginated matches", "load_more_private_search_results" in PRIVATE and "remoteSearchCursor" in PRIVATE)
+require("active Group search queries server history with group pagination", "loadGroupSearchPage(" in ACTIVE_GROUP and "FynxGroupRemoteClient.loadMessagesPage(context, groupId, before = before, limit = 40, query = cleanQuery)" in ACTIVE_GROUP)
+require("active Group search uses server-returned matches, not only cached messages", "remoteGroupSearchMessages" in ACTIVE_GROUP and "remoteGroupSearchHasMore" in ACTIVE_GROUP)
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
