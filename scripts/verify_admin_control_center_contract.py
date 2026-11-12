@@ -83,7 +83,12 @@ require('"/api/admin/activity?q=' in client, "searchable activity client is miss
 require("app.get('/api/admin/activity'" in backend, "searchable activity endpoint is missing")
 require("CREATE TABLE IF NOT EXISTS fynx_admin_activity" in backend, "admin activity audit table is missing")
 require('activeSection == "Activity"' in source, "activity history section is missing")
-require("FynxAdminClient.activity(context, activityQuery, activityOffset)" in source, "activity history is not connected to the backend")
+require("FynxAdminClient.activity(context, activityQuery, activityOffset, activityAction)" in source and "activityActionMenuExpanded" in source,
+        "activity history is not connected to the backend with action filters")
+require('"/api/admin/activity?q=${encode(query)}&action=${encode(action)}&limit=50&offset=' in client and
+        "const action=typeof req.query?.action==='string'?req.query.action.trim().slice(0,80):''" in backend and
+        "AND ($2='' OR a.action=$2)" in backend,
+        "activity action filtering must be URL-encoded and parameterized on the server")
 require("activityHasMore" in source and "Text(\"Previous\")" in source and "Text(\"Next\")" in source,
         "activity history is missing bounded previous/next pagination")
 require("OFFSET $4" in backend and "limit+1" in backend and "Math.min(10000" in backend,
