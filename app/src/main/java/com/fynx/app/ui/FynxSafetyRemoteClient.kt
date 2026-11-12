@@ -21,6 +21,14 @@ object FynxSafetyRemoteClient {
         val status: String
     )
 
+    data class ContentReport(
+        val id: String,
+        val targetType: String,
+        val targetId: String,
+        val reason: String,
+        val status: String
+    )
+
     data class Appeal(
         val id: String,
         val reportId: String?,
@@ -69,6 +77,46 @@ object FynxSafetyRemoteClient {
         FynxBackendClient.postJson(context, "/api/social/reports", JSONObject().put("targetUsername", targetUsername.trim().removePrefix("@")).put("reason", reason.trim()).put("details", details.trim()).toString()).mapCatching { raw ->
             val item = JSONObject(raw).optJSONObject("report") ?: JSONObject()
             Report(item.optString("id"), item.optString("targetUsername"), item.optString("reason"), item.optString("status"))
+        }
+
+    suspend fun submitContentReport(
+        context: Context,
+        targetType: String,
+        targetId: String,
+        reason: String,
+        details: String = ""
+    ): Result<ContentReport> {
+        val normalizedType = targetType.trim().uppercase()
+        val numericId = targetId.trim().toLongOrNull()
+        require(normalizedType in setOf("SOCIAL_POST", "SOCIAL_COMMENT", "MARKETPLACE_LISTING")) { "Unsupported content type" }
+        require(numericId != null && numericId > 0L) { "Invalid content identifier" }
+        require(reason.trim().length >= 3) { "Please select a report reason" }
+        return FynxBackendClient.postJson(
+            context,
+            "/api/social/content-reports",
+            JSONObject().put("targetType", normalizedType).put("targetId", numericId)
+                .put("reason", reason.trim()).put("details", details.trim().take(2000)).toString()
+        ).mapCatching { raw ->
+            val item = JSONObject(raw).optJSONObject("report") ?: error("Report response was incomplete")
+            ContentReport(
+                id = item.optString("id"),
+                targetType = item.optString("targetType"),
+                targetId = item.optString("targetId"),
+                reason = item.optString("reason"),
+                status = item.optString("status")
+            ).also { report -> require(report.id.isNotBlank() && report.targetId.isNotBlank()) { "Report response was incomplete" } }
+        }
+    }
+
+    suspend fun contentReports(context: Context): Result<List<ContentReport>> =
+        FynxBackendClient.get(context, "/api/social/content-reports/mine").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("reports") ?: org.json.JSONArray()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ContentReport(item.optString("id"), item.optString("targetType"), item.optString("targetId"), item.optString("reason"), item.optString("status")))
+                }
+            }
         }
 
     suspend fun appeals(context: Context): Result<List<Appeal>> =

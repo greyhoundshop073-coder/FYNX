@@ -122,6 +122,16 @@ export function registerAdminRoutes({ app }) {
       await client.query('BEGIN');
       const current=(await client.query('SELECT id,status FROM safety_content_reports WHERE id=$1 FOR UPDATE',[reportId])).rows[0];
       if(!current){await client.query('ROLLBACK');return res.status(404).json({error:'content report not found'});}
+      const allowedNextStatuses = {
+        OPEN: new Set(['UNDER_REVIEW','RESOLVED','DISMISSED']),
+        UNDER_REVIEW: new Set(['RESOLVED','DISMISSED']),
+        RESOLVED: new Set(),
+        DISMISSED: new Set()
+      };
+      if(!allowedNextStatuses[current.status]?.has(status)){
+        await client.query('ROLLBACK');
+        return res.status(409).json({error:'invalid moderation status transition',code:'INVALID_REPORT_STATUS_TRANSITION',currentStatus:current.status,requestedStatus:status});
+      }
       const updated=await client.query('UPDATE safety_content_reports SET status=$1,updated_at=NOW() WHERE id=$2 RETURNING id,status,updated_at',[status,reportId]);
       await client.query(`INSERT INTO safety_content_moderation_audit(report_id,moderator_id,previous_status,new_status,decision_note)
         VALUES($1,$2,$3,$4,$5)`,[reportId,req.user.sub,current.status,status,note]);
