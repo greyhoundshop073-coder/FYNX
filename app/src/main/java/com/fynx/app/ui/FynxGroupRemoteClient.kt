@@ -178,6 +178,7 @@ object FynxGroupRemoteClient {
                 "/api/groups/$groupId/events/${Uri.encode(entry.key)}/rsvp",
                 JSONObject().put("response",entry.value).toString()
             )
+            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
             if(result.isSuccess){clearPendingRsvp(context,groupId,entry.key);completed++}
         }
         return completed
@@ -191,6 +192,7 @@ object FynxGroupRemoteClient {
             if(FynxAuthStore.accountStorageKey(context)!=account)return completed
             if (group.id in pendingGroupIds) {
                 val groupSync = syncGroup(context, group)
+                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
                 if (groupSync.isSuccess) {
                     FynxGroupsStore.markSynced(context, group.id)
                     completed++
@@ -204,6 +206,7 @@ object FynxGroupRemoteClient {
             for(message in pending) {
                 if(FynxAuthStore.accountStorageKey(context)!=account)return completed
                 val result=sendMessage(context,group.id,message)
+                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
                 if(result.isSuccess) {
                     val remote=result.getOrThrow()
                     FynxChatStore.replaceMessage(context,"group_${group.id}",message.id,
@@ -277,13 +280,18 @@ object FynxGroupRemoteClient {
     }
 
     suspend fun loadContent(context:Context,groupId:String):Result<RemoteContent> = runCatching {
+        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}
+            ?: throw IllegalStateException("Sign in to load group content.")
         syncPendingRsvps(context,groupId)
         val raw=FynxBackendClient.get(context,"/api/groups/$groupId/content").getOrThrow()
+        if(FynxAuthStore.accountStorageKey(context)!=account)throw IllegalStateException("FYNX account changed while group content was loading.")
         contentPreferences(context,groupId)?.edit()?.putString("content_json",raw)?.apply()
         applyPendingRsvps(context,groupId,parseContent(raw))
     }
 
     suspend fun rsvpEvent(context:Context,groupId:String,eventId:String,response:String):Result<Boolean> = runCatching {
+        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}
+            ?: throw IllegalStateException("Sign in before responding to a group event.")
         val normalized=response.uppercase()
         require(normalized in setOf("GOING","MAYBE","NOT_GOING")) { "Choose Going, Maybe, or Not going." }
         val result=FynxBackendClient.postJson(
@@ -291,6 +299,7 @@ object FynxGroupRemoteClient {
             "/api/groups/$groupId/events/${Uri.encode(eventId)}/rsvp",
             JSONObject().put("response",normalized).toString()
         )
+        if(FynxAuthStore.accountStorageKey(context)!=account)throw IllegalStateException("FYNX account changed while your event response was saving.")
         if(result.isSuccess) {
             clearPendingRsvp(context,groupId,eventId)
             false

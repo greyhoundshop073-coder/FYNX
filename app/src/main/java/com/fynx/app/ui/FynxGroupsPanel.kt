@@ -1841,6 +1841,7 @@ private suspend fun stagePendingGroupAttachment(context: android.content.Context
                 }
             }
             if (destination.length() <= 0L) error("Attachment is empty. Choose it again.")
+            if(FynxAuthStore.accountStorageKey(context)!=accountKey) error("Your FYNX account changed while the attachment was being saved. Choose it again.")
             Uri.fromFile(destination)
         } catch (error: Throwable) {
             destination.delete()
