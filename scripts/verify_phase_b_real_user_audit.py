@@ -76,7 +76,12 @@ messages = read("backend/server.js")
 check("two-real-user status visibility path", "FynxStatusClient.list(context)" in timeline and "expires_at > NOW()" in status_routes)
 check("two-real-user post visibility path", "FynxRemoteSocialClient.feedPage" in home and "visibility" in social_routes)
 check("two-real-user block enforcement", "blocks" in social_routes and "blocks" in messages and "conversation unavailable" in messages)
-check("production app is not in preview mode", "FYNX_PREVIEW_MODE = false" in app)
+check(
+    "debug preview is restricted to debug builds and production requires sign-in",
+    "import com.fynx.app.BuildConfig" in app
+    and "private val FYNX_PREVIEW_MODE = BuildConfig.DEBUG" in app
+    and "if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN)" in app
+)
 check("signed-in gate protects the production surface", "AuthState.SIGNED_IN" in app)
 check("backend client owns authenticated API access", "hasAccessToken" in client and "Authorization" in client)
 check("logout clears the secure local token and session state", "fun clear(context: Context)" in auth and "FynxSecureTokenStore.save(context, null)" in auth)
