@@ -28,7 +28,7 @@ def require(condition: bool, message: str) -> None:
     if not condition:
         sys.exit(f"ADMIN_CONTROL_CENTER_CONTRACT=FAIL: {message}")
 
-require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
+require("fun FynxAdminControlCenterPanel(previewMode: Boolean = false)" in source, "control center composable is missing or lost its safe preview parameter")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")
 require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
         "safetyActions24h:counts[3]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
