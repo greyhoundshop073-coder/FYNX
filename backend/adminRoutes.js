@@ -122,6 +122,18 @@ export function registerAdminRoutes({ app }) {
   }catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
 
   app.get('/api/admin/dashboard',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const counts=await Promise.all([countRows('users'),countRows('safety_reports',"status IN ('OPEN','UNDER_REVIEW')"),countRows('safety_appeals',"status IN ('OPEN','UNDER_REVIEW')"),countRows('fynx_admin_activity',"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'")]);return res.json({role:req.fynxAdminRole,counts:{users:counts[0],openReports:counts[1],openAppeals:counts[2],safetyActions24h:counts[3]}});}catch(error){console.error('admin dashboard',error);return res.status(500).json({error:'admin dashboard unavailable'});}});
+  app.get('/api/admin/users',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const query=typeof req.query?.q==='string'?req.query.q.trim().replace(/^@+/, '').slice(0,80):'';
+    if(query.length<2)return res.status(400).json({error:'search query must be at least 2 characters'});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):20;
+    const result=await pool.query(`SELECT id,username,display_name FROM users WHERE id<>$3 AND (username ILIKE $1 OR display_name ILIKE $2) ORDER BY CASE WHEN lower(username)=lower($4) THEN 0 ELSE 1 END,username ASC,id ASC LIMIT $5`,[`%${query}%`,`%${query}%`,req.user.sub,query,limit]);
+    res.set('Cache-Control','private, no-store');
+    return res.json({users:result.rows.map(user=>({id:String(user.id),username:user.username||'',displayName:user.display_name||''})),limit});
+  }catch(error){console.error('admin user search',error);return res.status(500).json({error:'admin user search failed'});}});
+
 
   app.get('/api/admin/activity',auth,async(req,res)=>{try{
     await ensureSchema();
