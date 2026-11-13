@@ -528,8 +528,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     messages = messages.map { if (it.id == optimistic.id) it.copy(attachmentUri = durableUri.toString()) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                 }
-                .onFailure { error ->
-                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
+                .onFailure {
+                    // Do not leave an unsendable URI in the outbox when durable staging failed.
+                    messages = messages.filterNot { it.id == optimistic.id }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = "Attachment could not be saved for retry. Please choose it again."
                 }
@@ -1482,31 +1483,23 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
             val cleanUsername = username.trim().removePrefix("@")
-            if (!canAddMembers) {
-                syncMessage = "Adding members is disabled in Group Settings."
-            } else if (groupForDialogs.members.any { it.username.equals(cleanUsername, true) }) {
-                syncMessage = "@$cleanUsername is already in this group."
-            } else if (!FynxBackendClient.hasAccessToken(context)) {
-                val updated = groupForDialogs.copy(members = groupForDialogs.members + FynxGroupMember(cleanUsername))
-                if (FynxGroupsBatch1.validate(updated).isEmpty()) {
-                    FynxGroupsStore.updateGroup(context, updated)
-                    currentGroup = updated
-                    syncMessage = "Member added locally; server sync is unavailable."
-                }
-            } else {
-                scope.launch {
-                    FynxGroupRemoteClient.addMember(context, groupId, cleanUsername).onSuccess { remoteMember ->
-                        val base = currentGroup ?: groupForDialogs
-                        val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
-                            else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
-                        FynxGroupsStore.updateGroup(context, updated)
-                        currentGroup = updated
-                        syncMessage = null
-                    }.onFailure { syncMessage = "This member could not be added. Check group permissions and try again." }
+            when {
+                !canAddMembers -> Result.failure(IllegalStateException("Adding members is disabled in Group Settings."))
+                groupForDialogs.members.any { it.username.equals(cleanUsername, true) } ->
+                    Result.failure(IllegalStateException("@$cleanUsername is already in this group."))
+                !FynxBackendClient.hasAccessToken(context) ->
+                    Result.failure(IllegalStateException("Connect to FYNX before inviting group members. Offline membership changes are not supported."))
+                else -> FynxGroupRemoteClient.addMember(context, groupId, cleanUsername).map { remoteMember ->
+                    val base = currentGroup ?: groupForDialogs
+                    val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
+                        else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
+                    if (FynxGroupsStore.updateGroup(context, updated)) currentGroup = updated
+                    else syncMessage = "Member was added on the server, but the local list could not refresh. Reopen the group."
+                    Unit
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved for retry; check your connection." } } }
+            sendGroupAttachment(uri, type)
         }, onStoryShare = {
             if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onSuccess { sent -> messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }; FynxChatStore.save(context, "group_$groupId", messages) }.onFailure { syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." } } }
         }, openContentInitially = showPollsDirectly)

@@ -85,7 +85,7 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
@@ -136,7 +136,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                                             val stillFriend = friends.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
                                             if (stillFriend) {
                                                 onInvite(friend.username)
-                                                inviteMessage = "Invitation prepared for ${friend.username}"
+                                                    .onSuccess { inviteMessage = "@${friend.username.removePrefix("@")} was added to the group." }
+                                                    .onFailure { inviteMessage = it.message ?: "The member could not be added. Please try again." }
                                             } else {
                                                 inviteMessage = "This account is no longer on your accepted friends list."
                                             }
