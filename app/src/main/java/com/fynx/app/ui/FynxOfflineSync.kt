@@ -31,6 +31,18 @@ object FynxOfflineSync {
         val items = FynxOfflineOutbox.load(context)
         for (item in items) {
             if (FynxAuthStore.accountStorageKey(context) != accountKey) break
+            val acceptedMessageId = item.sentMessageId?.takeIf { it.isNotBlank() }
+            if (acceptedMessageId != null) {
+                val linked = if (!item.marketplaceListingId.isNullOrBlank()) {
+                    FynxR6GIntegrationClient.attachListingToMessage(context, acceptedMessageId, item.marketplaceListingId)
+                } else {
+                    Result.success(Unit)
+                }
+                if (linked.isFailure) break
+                FynxOfflineOutbox.remove(context, item.id)
+                completed++
+                continue
+            }
             var resolvedMediaId = item.mediaId
             if (resolvedMediaId.isNullOrBlank() && !item.localMediaPath.isNullOrBlank()) {
                 if (FynxAuthStore.accountStorageKey(context) != accountKey) break
@@ -82,6 +94,7 @@ object FynxOfflineSync {
                     item.id,
                     FynxProductionMessaging.toChatMessage(remote, currentUserId)
                 )
+                FynxOfflineOutbox.markSent(context, item.id, remote.id)
                 // Keep this item until the attached listing context is also accepted.
                 // The stable requestId makes a retry safe if the message already exists.
                 if (!item.marketplaceListingId.isNullOrBlank()) {

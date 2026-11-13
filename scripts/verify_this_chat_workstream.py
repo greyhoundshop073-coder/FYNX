@@ -64,6 +64,8 @@ check('pending private outbox messages are restored and can be retried after app
 check('private outbox draining is serialized to prevent parallel media uploads and duplicate sends', 'private val drainMutex = Mutex()' in offline_sync and 'drainMutex.withLock' in offline_sync)
 check('offline send reconciliation replaces the local row in the actual @-prefixed conversation store', 'conversationStoreKey(context, item)' in offline_sync and 'FynxChatStore.load(context, candidate)' in offline_sync)
 check('queued Marketplace conversations retain their listing context until the authenticated link succeeds', 'marketplaceListingId = marketplaceListingId' in conversation and 'marketplaceListingId' in offline_outbox and 'attachListingToMessage' in offline_sync)
+check('cold-start chat reconstruction restores staged media rows before delivery', 'suspend fun restorePendingOutboxMessages()' in conversation and 'pendingBubbles' in conversation and 'FynxOfflineOutbox.load(context)' in conversation)
+check('outbox stores server acceptance so Marketplace association retries do not resend accepted messages', 'sentMessageId: String? = null' in offline_outbox and 'fun markSent(context: Context, id: String, messageId: String)' in offline_outbox and 'item.sentMessageId' in offline_sync)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
 check('media privacy guard remains installed', 'app.use("/api/media", mediaGuard)' in media_privacy)

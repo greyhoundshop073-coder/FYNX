@@ -169,24 +169,54 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
     var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var hasPendingOutbox by remember(chat.username) { mutableStateOf(false) }
-    LaunchedEffect(chat.username) {
+    suspend fun restorePendingOutboxMessages() {
         val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
-        hasPendingOutbox = withContext(Dispatchers.IO) {
-            FynxOfflineOutbox.load(context).any {
+        val restored = withContext(Dispatchers.IO) {
+            val stored = FynxChatStore.load(context, chat.username, fallbackMessage)
+            val queued = FynxOfflineOutbox.load(context).filter {
                 it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
             }
-        }
-        FynxOfflineOutbox.updates.collect { updatedRecipient ->
-            if (updatedRecipient == normalizedRecipient) {
-                messages = withContext(Dispatchers.IO) {
-                    FynxChatStore.load(context, chat.username, fallbackMessage)
-                }
-                hasPendingOutbox = withContext(Dispatchers.IO) {
-                    FynxOfflineOutbox.load(context).any {
-                        it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
+            val pendingBubbles = queued.asSequence()
+                .filter { it.sentMessageId.isNullOrBlank() }
+                .map { item ->
+                    val label = when (item.messageType) {
+                        "gif" -> "GIF"
+                        "sticker" -> "Sticker"
+                        else -> when (item.mediaType) {
+                            "image" -> "Photo"
+                            "video", "video_note" -> "Video"
+                            "audio" -> "Voice message"
+                            else -> "Attachment"
+                        }
                     }
+                    ChatMessage(
+                        text = item.text,
+                        fromMe = true,
+                        id = item.id,
+                        timestamp = item.createdAt,
+                        delivered = false,
+                        read = false,
+                        replyToId = item.replyToId,
+                        attachmentType = item.mediaType,
+                        voiceDurationMs = item.voiceDurationMs,
+                        messageType = item.messageType,
+                        messagePayload = item.messagePayload + mapOf(
+                            "pendingLocalUpload" to "true",
+                            "pendingLabel" to label
+                        )
+                    )
                 }
-            }
+                .toList()
+            (stored + pendingBubbles).distinctBy { it.id }.sortedBy { it.timestamp } to queued.isNotEmpty()
+        }
+        messages = restored.first
+        hasPendingOutbox = restored.second
+    }
+    LaunchedEffect(chat.username) {
+        val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
+        restorePendingOutboxMessages()
+        FynxOfflineOutbox.updates.collect { updatedRecipient ->
+            if (updatedRecipient == normalizedRecipient) restorePendingOutboxMessages()
         }
     }
     var typingSent by remember { mutableStateOf(false) }

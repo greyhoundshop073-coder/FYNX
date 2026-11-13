@@ -38,7 +38,8 @@ object FynxOfflineOutbox {
         val messagePayload: Map<String, String> = emptyMap(),
         val localMediaPath: String? = null,
         val localMediaMimeType: String? = null,
-        val marketplaceListingId: String? = null
+        val marketplaceListingId: String? = null,
+        val sentMessageId: String? = null
     )
 
     private fun preferencesName(context: Context): String? {
@@ -75,6 +76,18 @@ object FynxOfflineOutbox {
         val name = preferencesName(context) ?: return
         val current = load(context)
         save(context, name, current.map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })
+        current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
+    }
+
+    @Synchronized
+    fun markSent(context: Context, id: String, messageId: String) {
+        val cleanMessageId = messageId.trim()
+        if (cleanMessageId.isBlank()) return
+        val name = preferencesName(context) ?: return
+        val current = load(context)
+        save(context, name, current.map { item ->
+            if (item.id == id) item.copy(sentMessageId = cleanMessageId) else item
+        })
         current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
     }
 
@@ -162,7 +175,8 @@ object FynxOfflineOutbox {
                             messagePayload = payload,
                             localMediaPath = o.optString("localMediaPath").takeIf { it.isNotBlank() && it != "null" },
                             localMediaMimeType = o.optString("localMediaMimeType").takeIf { it.isNotBlank() && it != "null" },
-                            marketplaceListingId = o.optString("marketplaceListingId").takeIf { it.isNotBlank() && it != "null" }
+                            marketplaceListingId = o.optString("marketplaceListingId").takeIf { it.isNotBlank() && it != "null" },
+                            sentMessageId = o.optString("sentMessageId").takeIf { it.isNotBlank() && it != "null" }
                         )
                     )
                 }
@@ -180,6 +194,7 @@ object FynxOfflineOutbox {
                 put("messageType", item.messageType); put("messagePayload", JSONObject(item.messagePayload))
                 put("localMediaPath", item.localMediaPath ?: JSONObject.NULL); put("localMediaMimeType", item.localMediaMimeType ?: JSONObject.NULL)
                 put("marketplaceListingId", item.marketplaceListingId ?: JSONObject.NULL)
+                put("sentMessageId", item.sentMessageId ?: JSONObject.NULL)
             })
         }
         context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
