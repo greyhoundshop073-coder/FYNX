@@ -295,6 +295,47 @@ def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     rid=(node.attrib.get("resource-id") or "").strip()
     return text or desc or rid,center[0],center[1]
 
+def find_labeled_scroll_container_bounds(xml_text: str, labels: list[str]):
+    """Return bounds for the explicitly labelled, visible scrollable Compose container."""
+    if not xml_text:
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    wanted = [label.casefold() for label in labels]
+    candidates = []
+    for node in root.iter("node"):
+        hay = " | ".join(((node.attrib.get("text") or "").strip(),
+                          (node.attrib.get("content-desc") or "").strip())).casefold()
+        if not any(label in hay for label in wanted):
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        bounds = _node_bounds(node)
+        if bounds:
+            left, top, right, bottom = bounds
+            if right - left > 120 and bottom - top > 20:
+                candidates.append(((right-left)*(bottom-top), left, top, right, bottom))
+    if not candidates:
+        return None
+    _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+    return left, top, right, bottom
+
+
+def find_visible_control_in_labeled_scroll_container(xml_text: str, labels: list[str], container_labels: list[str]):
+    """Match a control only when its centre is inside the named Compose scroll viewport."""
+    control = find_control(xml_text, labels)
+    bounds = find_labeled_scroll_container_bounds(xml_text, container_labels)
+    if not control or not bounds:
+        return None
+    _, center_x, center_y = control
+    left, top, right, bottom = bounds
+    return control if left <= center_x <= right and top <= center_y <= bottom else None
+
+
 def find_visible_scroll_control(xml_text: str, labels: list[str], container_class: str):
     """Return a labelled control only when its centre is inside the current scroll viewport."""
     control = find_control(xml_text, labels)
@@ -2286,7 +2327,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # not reliably reach a carousel that is still below the fold.
     for style_scroll_attempt in range(12):
         editor = dump_ui(f"{prefix}-camera-video-style-viewport-{style_scroll_attempt + 1}.xml") or editor
-        if find_visible_scroll_control(editor, ["Video styles"], "android.widget.ScrollView") and find_visible_scroll_control(editor, ["Cinematic"], "android.widget.HorizontalScrollView"):
+        if find_visible_scroll_control(editor, ["Video styles"], "android.widget.ScrollView") and find_visible_control_in_labeled_scroll_container(editor, ["Cinematic"], ["Video style carousel"]):
             break
         scroll_viewports = []
         for node in nodes(editor):
@@ -2317,7 +2358,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         FAILURES.append(prefix + ": Video styles section was not reachable by scrolling the real editor viewport")
     # Re-find the action after the captions UI and vertical scroll may have changed it.
     editor = dump_ui(f"{prefix}-camera-video-before-style-apply.xml") or editor
-    style = find_visible_scroll_control(editor, ["Cinematic"], "android.widget.HorizontalScrollView")
+    style = find_visible_control_in_labeled_scroll_container(editor, ["Cinematic"], ["Video style carousel"])
     cinematic_style_selected = bool(style)
     if style:
         _, sx, sy = style
@@ -2426,22 +2467,14 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "450")
             time.sleep(0.45)
             current_editor = dump_ui(f"{prefix}-camera-video-{slug}-vertical-scroll-{vertical_attempt + 1}.xml") or current_editor
-        style_node = find_visible_scroll_control(current_editor, [style_label], "android.widget.HorizontalScrollView")
+        style_node = find_visible_control_in_labeled_scroll_container(current_editor, [style_label], ["Video style carousel"])
         for horizontal_attempt in range(8):
             if style_node:
                 break
-            horizontal_candidates = []
-            for node in nodes(current_editor):
-                if node.attrib.get("class") != "android.widget.HorizontalScrollView" or node.attrib.get("scrollable", "false").lower() != "true":
-                    continue
-                bounds = _node_bounds(node)
-                if bounds:
-                    left, top, right, bottom = bounds
-                    if right - left > 120 and bottom > top:
-                        horizontal_candidates.append((right-left, left, top, right, bottom))
-            if not horizontal_candidates:
+            carousel_bounds = find_labeled_scroll_container_bounds(current_editor, ["Video style carousel"])
+            if not carousel_bounds:
                 break
-            _, left, top, right, bottom = max(horizontal_candidates, key=lambda item: item[0])
+            left, top, right, bottom = carousel_bounds
             y = (top + bottom) // 2
             start_x, end_x = right - 8, left + 8
             if start_x <= end_x:
@@ -2449,7 +2482,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
             time.sleep(0.45)
             current_editor = dump_ui(f"{prefix}-camera-video-{slug}-horizontal-scroll-{horizontal_attempt + 1}.xml") or current_editor
-            style_node = find_visible_scroll_control(current_editor, [style_label], "android.widget.HorizontalScrollView")
+            style_node = find_visible_control_in_labeled_scroll_container(current_editor, [style_label], ["Video style carousel"])
         if not style_node:
             FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
             break
@@ -2494,11 +2527,11 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Open the existing Status composer with the processed video selected, then close it
     # without pressing Send; publishing remains an explicit user action.
     current = dump_ui(f"{prefix}-camera-video-before-status.xml") or editor
-    if not find_control(current, ["Status"]):
-        FAILURES.append(prefix + ": recorded-video preview did not expose the Status destination")
+    if not find_control(current, ["Share to Status"]):
+        FAILURES.append(prefix + ": recorded-video preview did not expose the accessible Share to Status action; visible markers: " + visible_marker_summary(current))
     else:
         video_status_xml = tap_control(
-            current, ["Status"], f"{prefix}-camera-video-status-handoff",
+            current, ["Share to Status"], f"{prefix}-camera-video-status-handoff",
             ["Back from Status composer"]
         )
         if not video_status_xml:

@@ -1554,7 +1554,7 @@ fun FynxCameraCapturePanel(
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
                     }
                     Text("Video styles", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).semantics { contentDescription = "Video style carousel" }.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         CameraVideoStyle.values().forEach { option ->
                             CameraEffectTile(
                                 category = "Video FX",

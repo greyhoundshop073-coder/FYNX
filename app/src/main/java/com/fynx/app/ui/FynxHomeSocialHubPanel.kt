@@ -1538,7 +1538,7 @@ fun FynxHomeSocialHubPanel(
                         selectedMusic = selectedCatalogueMusic,
                         onChooseMusic = { showMusicPicker = true; notice = null },
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
-                        showYourStoryAction = cameraEditingMediaUri == null,
+                        showYourStoryAction = true, // Keep Status available while editing captured or draft media as well.
                         onShareToStatus = { uri, type ->
                             showCamera = false
                             showFastCamera = false
