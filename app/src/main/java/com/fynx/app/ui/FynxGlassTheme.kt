@@ -68,7 +68,7 @@ fun fynxGlassMessageBubbleBrush(
 
 fun fynxGlassPalette(id: FynxGlassThemeId): FynxGlassThemePalette = when (id) {
     FynxGlassThemeId.PURE_BLACK -> FynxGlassThemePalette(
-        id, Color(0xFF000000), Color(0xFF080B18), Color(0xFF182B52),
+        id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000),
         Color(0xFF6F8CFF), Color(0xFF8B6DFF), Color(0xFF45D9FF),
         Color(0xFF242A33), Color(0xFF007FFF), Color(0xFF0066CC), Color(0xFF60B5FF),
         Color(0xFFF7F9FF), Color(0xFFCBD4E6)
