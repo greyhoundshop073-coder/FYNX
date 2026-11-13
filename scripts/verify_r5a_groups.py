@@ -93,3 +93,8 @@ for index, (name, ok) in enumerate(checks, 1):
 if failed:
     raise SystemExit('R5A groups gate failed: ' + '; '.join(failed))
 print(f'R5A groups gate passed ({len(checks)} checks)')
+
+check('active group conversation state is keyed by authenticated account and cleared before reloading', 'remember(groupId, groupAccountKey)' in active_group_panel and 'LaunchedEffect(groupId, groupAccountKey)' in active_group_panel and 'currentGroup = null' in active_group_panel and 'messages = emptyList()' in active_group_panel)
+check('group text, edit and media callbacks reject late results from another signed-in account', 'if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess' in active_group_panel and 'stagedUri == null || !isCurrentGroupAccount(requestAccountKey)' in active_group_panel)
+check('group realtime and history responses cannot overwrite another account conversation cache', 'isCurrentGroupAccount(groupAccountKey) && event is FynxRealtimeClient.Event.GroupMessage' in active_group_panel and 'if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save' in active_group_panel)
+check('group manager role lookup handles usernames with or without the @ prefix', 'normalizedFynxGroupUsername(it.username) == normalizedFynxGroupUsername(currentUsername)' in active_group_panel)
