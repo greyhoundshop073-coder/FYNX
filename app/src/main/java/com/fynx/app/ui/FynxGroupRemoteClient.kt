@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -14,7 +15,7 @@ object FynxGroupRemoteClient {
     data class RemotePollOption(val id:String,val text:String,val voteCount:Int)
     data class RemotePoll(val id:String,val question:String,val multipleChoice:Boolean,val closed:Boolean,val options:List<RemotePollOption>)
     data class RemotePost(val id:String,val text:String,val authorUsername:String,val marketplaceProductId:String?,val pinned:Boolean,val createdAt:Long,val poll:RemotePoll?)
-    data class RemoteEvent(val id:String,val title:String,val description:String,val startsAt:Long,val endsAt:Long?,val location:String,val creatorUsername:String,val goingCount:Int,val maybeCount:Int,val notGoingCount:Int,val myResponse:String?)
+    data class RemoteEvent(val id:String,val title:String,val description:String,val startsAt:Long,val endsAt:Long?,val location:String,val creatorUsername:String,val goingCount:Int,val maybeCount:Int,val notGoingCount:Int,val myResponse:String?,val pendingResponse:Boolean=false)
     data class RemoteContent(val posts:List<RemotePost>,val events:List<RemoteEvent>)
 
     suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching { val body=JSONObject().apply{put("ownerUsername",group.ownerUsername.trim().removePrefix("@"));put("name",group.name);put("groupPhotoMediaId",group.groupPhotoMediaId ?: JSONObject.NULL);put("description",group.description);put("visibility",group.visibility.name);put("members",JSONArray().apply{group.members.forEach{member->put(JSONObject().apply{put("username",member.username.trim().removePrefix("@"));put("role",member.role.name)})}})};FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow();Unit }
@@ -56,18 +57,149 @@ object FynxGroupRemoteClient {
     suspend fun deleteMessage(context:Context,groupId:String,messageId:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","delete")})
     private suspend fun messageAction(context:Context,groupId:String,messageId:String,body:JSONObject):Result<RemoteMessage> = runCatching{toRemoteMessage(JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/messages/${Uri.encode(messageId)}",body.toString()).getOrThrow()).getJSONObject("message"))}
 
-    suspend fun loadContent(context:Context,groupId:String):Result<RemoteContent> = runCatching {
-        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/content").getOrThrow())
-        val posts=root.optJSONArray("posts")?:JSONArray();val events=root.optJSONArray("events")?:JSONArray()
-        val mappedPosts=buildList { for(i in 0 until posts.length()){val p=posts.getJSONObject(i);val po=p.optJSONObject("poll");val options=buildList{if(po!=null){val a=po.optJSONArray("options")?:JSONArray();for(j in 0 until a.length()){val o=a.getJSONObject(j);add(RemotePollOption(o.getString("id"),o.optString("text"),o.optInt("voteCount")))}}};add(RemotePost(p.getString("id"),p.optString("text"),p.optString("authorUsername"),p.optString("marketplaceProductId").takeIf{it.isNotBlank()&&it!="null"},p.optBoolean("pinned"),p.optLong("createdAt"),po?.let{RemotePoll(it.getString("id"),it.optString("question"),it.optBoolean("multipleChoice"),it.optBoolean("closed"),options)}))} }
-        val mappedEvents=buildList { for(i in 0 until events.length()){val e=events.getJSONObject(i);add(RemoteEvent(e.getString("id"),e.optString("title"),e.optString("description"),e.optLong("startsAt"),e.optLong("endsAt").takeIf{it>0},e.optString("location"),e.optString("creatorUsername"),e.optInt("goingCount"),e.optInt("maybeCount"),e.optInt("notGoingCount"),e.optString("myResponse").takeIf{it.isNotBlank()}))} }
-        RemoteContent(mappedPosts,mappedEvents)
+    private fun contentPreferences(context:Context,groupId:String):android.content.SharedPreferences? {
+        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return null
+        val encoded=Base64.encodeToString(account.toByteArray(Charsets.UTF_8),Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        val safeGroup=groupId.replace(Regex("[^A-Za-z0-9_.-]"),"_").take(100).ifBlank{"unknown"}
+        return context.getSharedPreferences("fynx_group_content_${encoded}_${safeGroup}",Context.MODE_PRIVATE)
     }
+
+    private fun loadPendingRsvps(context:Context,groupId:String):Map<String,String> {
+        val raw=contentPreferences(context,groupId)?.getString("pending_rsvps",null)?:return emptyMap()
+        return runCatching {
+            val json=JSONObject(raw)
+            buildMap { val keys=json.keys();while(keys.hasNext()){val key=keys.next();val value=json.optString(key).uppercase();if(key.isNotBlank()&&value in setOf("GOING","MAYBE","NOT_GOING"))put(key,value)} }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun savePendingRsvp(context:Context,groupId:String,eventId:String,response:String) {
+        val prefs=contentPreferences(context,groupId)?:return
+        val values=loadPendingRsvps(context,groupId).toMutableMap()
+        values[eventId]=response
+        prefs.edit().putString("pending_rsvps",JSONObject(values).toString()).apply()
+    }
+
+    private fun clearPendingRsvp(context:Context,groupId:String,eventId:String) {
+        val prefs=contentPreferences(context,groupId)?:return
+        val values=loadPendingRsvps(context,groupId).toMutableMap()
+        values.remove(eventId)
+        val edit=prefs.edit()
+        if(values.isEmpty())edit.remove("pending_rsvps") else edit.putString("pending_rsvps",JSONObject(values).toString())
+        edit.apply()
+    }
+
+    private fun countRsvp(current:Int,old:String?,next:String?,bucket:String):Int =
+        (current-(if(old==bucket)1 else 0)+(if(next==bucket)1 else 0)).coerceAtLeast(0)
+
+    fun applyEventResponse(content:RemoteContent,eventId:String,response:String,pending:Boolean):RemoteContent =
+        content.copy(events=content.events.map { event ->
+            if(event.id!=eventId)return@map event
+            val next=response.uppercase()
+            event.copy(
+                goingCount=countRsvp(event.goingCount,event.myResponse,next,"GOING"),
+                maybeCount=countRsvp(event.maybeCount,event.myResponse,next,"MAYBE"),
+                notGoingCount=countRsvp(event.notGoingCount,event.myResponse,next,"NOT_GOING"),
+                myResponse=next,
+                pendingResponse=pending
+            )
+        })
+
+    private fun applyPendingRsvps(context:Context,groupId:String,content:RemoteContent):RemoteContent =
+        loadPendingRsvps(context,groupId).entries.fold(content) { current,entry ->
+            applyEventResponse(current,entry.key,entry.value,true)
+        }
+
+    private suspend fun syncPendingRsvps(context:Context,groupId:String) {
+        loadPendingRsvps(context,groupId).forEach { entry ->
+            val result=FynxBackendClient.postJson(
+                context,
+                "/api/groups/$groupId/events/${Uri.encode(entry.key)}/rsvp",
+                JSONObject().put("response",entry.value).toString()
+            )
+            if(result.isSuccess)clearPendingRsvp(context,groupId,entry.key)
+        }
+    }
+
+    private fun parseContent(raw:String):RemoteContent {
+        val root=JSONObject(raw)
+        val posts=root.optJSONArray("posts")?:JSONArray()
+        val events=root.optJSONArray("events")?:JSONArray()
+        val mappedPosts=buildList {
+            for(i in 0 until posts.length()) {
+                val post=posts.getJSONObject(i)
+                val poll=post.optJSONObject("poll")
+                val options=buildList {
+                    if(poll!=null) {
+                        val array=poll.optJSONArray("options")?:JSONArray()
+                        for(j in 0 until array.length()) {
+                            val option=array.getJSONObject(j)
+                            add(RemotePollOption(option.getString("id"),option.optString("text"),option.optInt("voteCount")))
+                        }
+                    }
+                }
+                add(RemotePost(
+                    post.getString("id"),post.optString("text"),post.optString("authorUsername"),
+                    post.optString("marketplaceProductId").takeIf{it.isNotBlank()&&it!="null"},
+                    post.optBoolean("pinned"),post.optLong("createdAt"),
+                    poll?.let{RemotePoll(it.getString("id"),it.optString("question"),it.optBoolean("multipleChoice"),it.optBoolean("closed"),options)}
+                ))
+            }
+        }
+        val mappedEvents=buildList {
+            for(i in 0 until events.length()) {
+                val event=events.getJSONObject(i)
+                add(RemoteEvent(
+                    event.getString("id"),event.optString("title"),event.optString("description"),
+                    event.optLong("startsAt"),event.optLong("endsAt").takeIf{it>0},
+                    event.optString("location"),event.optString("creatorUsername"),
+                    event.optInt("goingCount"),event.optInt("maybeCount"),event.optInt("notGoingCount"),
+                    event.optString("myResponse").takeIf{it.isNotBlank()}
+                ))
+            }
+        }
+        return RemoteContent(mappedPosts,mappedEvents)
+    }
+
+    fun loadCachedContent(context:Context,groupId:String):RemoteContent? {
+        val raw=contentPreferences(context,groupId)?.getString("content_json",null)?:return null
+        return runCatching { applyPendingRsvps(context,groupId,parseContent(raw)) }.getOrNull()
+    }
+
+    suspend fun loadContent(context:Context,groupId:String):Result<RemoteContent> = runCatching {
+        syncPendingRsvps(context,groupId)
+        val raw=FynxBackendClient.get(context,"/api/groups/$groupId/content").getOrThrow()
+        contentPreferences(context,groupId)?.edit()?.putString("content_json",raw)?.apply()
+        applyPendingRsvps(context,groupId,parseContent(raw))
+    }
+
+    suspend fun rsvpEvent(context:Context,groupId:String,eventId:String,response:String):Result<Boolean> = runCatching {
+        val normalized=response.uppercase()
+        require(normalized in setOf("GOING","MAYBE","NOT_GOING")) { "Choose Going, Maybe, or Not going." }
+        val result=FynxBackendClient.postJson(
+            context,
+            "/api/groups/$groupId/events/${Uri.encode(eventId)}/rsvp",
+            JSONObject().put("response",normalized).toString()
+        )
+        if(result.isSuccess) {
+            clearPendingRsvp(context,groupId,eventId)
+            false
+        } else {
+            val failure=result.exceptionOrNull()?:IllegalStateException("Event response could not be saved.")
+            val status=Regex("(?:HTTP|status)[^0-9]*([0-9]{3})",RegexOption.IGNORE_CASE)
+                .find(failure.message.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
+            if(FynxBackendClient.isAccessDeniedOrMissing(failure)||(status!=null&&status in 400..499))throw failure
+            savePendingRsvp(context,groupId,eventId,normalized)
+            true
+        }
+    }
+
     suspend fun createPoll(context:Context,groupId:String,question:String,options:List<String>,multipleChoice:Boolean):Result<Unit> = runCatching { val body=JSONObject().apply{put("question",question);put("multipleChoice",multipleChoice);put("options",JSONArray(options))};FynxBackendClient.postJson(context,"/api/groups/$groupId/polls",body.toString()).getOrThrow();Unit }
     suspend fun votePoll(context:Context,groupId:String,pollId:String,optionId:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/polls/${Uri.encode(pollId)}/votes",JSONObject().apply{put("optionId",optionId)}.toString()).getOrThrow();Unit}
     suspend fun setGroupPostPinned(context:Context,groupId:String,postId:String,pinned:Boolean):Result<Unit> = runCatching {FynxBackendClient.patchJson(context,"/api/groups/$groupId/posts/${Uri.encode(postId)}/pin",JSONObject().apply{put("pinned",pinned)}.toString()).getOrThrow();Unit}
     suspend fun createEvent(context:Context,groupId:String,title:String,description:String,startsAt:String,location:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/events",JSONObject().apply{put("title",title);put("description",description);put("startsAt",startsAt);put("location",location)}.toString()).getOrThrow();Unit}
     suspend fun rsvpEvent(context:Context,groupId:String,eventId:String,response:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/events/${Uri.encode(eventId)}/rsvp",JSONObject().apply{put("response",response)}.toString()).getOrThrow();Unit}
+
+    fun fromRealtimeMessage(messageJson:String):RemoteMessage? = runCatching { toRemoteMessage(JSONObject(messageJson)) }.getOrNull()
 
     private fun toRemoteMessage(o:JSONObject):RemoteMessage {
         val rawId=o.optString("id").trim()
