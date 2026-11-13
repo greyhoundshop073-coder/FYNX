@@ -68,17 +68,31 @@ object FynxMarketplaceSeasonalPromotionClient {
         }
     }
 
-    suspend fun listForAdmin(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> =
-        FynxBackendClient.get(context, "/api/admin/marketplace/seasonal-promotions").mapCatching { raw ->
-            val rows = JSONObject(raw).optJSONArray("promotions")
+    suspend fun listForAdmin(
+        context: Context,
+        offset: Int = 0,
+        limit: Int = 50
+    ): Result<FynxAdminClient.AdminPage<FynxMarketplaceSeasonalPromotion>> =
+        FynxBackendClient.get(
+            context,
+            "/api/admin/marketplace/seasonal-promotions?limit=${limit.coerceIn(1, 100)}&offset=${offset.coerceIn(0, 10000)}"
+        ).mapCatching { raw ->
+            val value = JSONObject(raw)
+            val rows = value.optJSONArray("promotions")
                 ?: throw IllegalStateException("Seasonal campaign list was incomplete.")
-            buildList {
+            val items = buildList {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: continue
                     val promotion = parsePromotion(row)
                     if (promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank()) add(promotion)
                 }
             }
+            FynxAdminClient.AdminPage(
+                items = items,
+                offset = value.optInt("offset", offset),
+                limit = value.optInt("limit", limit),
+                hasMore = value.optBoolean("hasMore", false)
+            )
         }
 
     suspend fun uploadArtwork(context: Context, uri: Uri): Result<String> {

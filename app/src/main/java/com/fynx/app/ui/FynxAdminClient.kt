@@ -172,15 +172,20 @@ object FynxAdminClient {
             }
         }
 
-    suspend fun admins(context: Context): Result<List<Admin>> =
-        FynxBackendClient.get(context, "/api/admin/admins").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("admins") ?: return@mapCatching emptyList()
-            buildList {
+    suspend fun admins(context: Context, offset: Int = 0, limit: Int = 50): Result<AdminPage<Admin>> =
+        FynxBackendClient.get(
+            context,
+            "/api/admin/admins?limit=${limit.coerceIn(1, 100)}&offset=${offset.coerceIn(0, 10000)}"
+        ).mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("admins") ?: throw IllegalStateException("Admin list was incomplete.")
+            val items = buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(Admin(item.optString("id"), item.optString("username"), item.optString("displayName"), item.optString("grantedAt")))
                 }
             }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", limit), value.optBoolean("hasMore", false))
         }
 
     suspend fun musicCatalogue(context: Context): Result<List<MusicTrack>> =

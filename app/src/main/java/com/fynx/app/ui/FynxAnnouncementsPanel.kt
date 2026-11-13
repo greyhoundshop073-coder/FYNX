@@ -173,6 +173,9 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
     val scope = rememberCoroutineScope()
     var dashboard by remember { mutableStateOf(if (previewMode) FynxAdminClient.Dashboard("OWNER", 1240, 8, 3, 12) else null) }
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
+    var adminsOffset by remember { mutableIntStateOf(0) }
+    var adminsHasMore by remember { mutableStateOf(false) }
+    var adminsLoading by remember { mutableStateOf(false) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
     var activityQuery by remember { mutableStateOf("") }
@@ -274,7 +277,15 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
             loading = false
         }
     }
-    LaunchedEffect(refreshAdmins, dashboard?.role) { if (!previewMode && dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshAdmins, dashboard?.role, adminsOffset) {
+        if (!previewMode && dashboard != null && dashboard.role == "OWNER") {
+            adminsLoading = true
+            FynxAdminClient.admins(context, adminsOffset)
+                .onSuccess { page -> admins = page.items; adminsHasMore = page.hasMore }
+                .onFailure { statusMessage = it.message ?: "Administrator list unavailable." }
+            adminsLoading = false
+        }
+    }
     LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset, activityAction) {
         if (!previewMode && dashboard != null && activeSection == "Activity") {
             activityLoading = true
@@ -747,6 +758,16 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                     }
                 }
             }) { Text("Remove") } } } } }
+            if (adminsLoading) CircularProgressIndicator()
+            if (!adminsLoading && (adminsOffset > 0 || adminsHasMore)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (admins.isEmpty()) "No administrators on this page" else "Showing ${adminsOffset + 1}–${adminsOffset + admins.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(enabled = adminsOffset > 0, onClick = { adminsOffset = (adminsOffset - 50).coerceAtLeast(0) }) { Text("Previous admins") }
+                        TextButton(enabled = adminsHasMore && adminsOffset < 10000, onClick = { adminsOffset = (adminsOffset + 50).coerceAtMost(10000) }) { Text("Next admins") }
+                    }
+                }
+            }
             Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxAdminClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             targets.forEach { user ->
                 Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {

@@ -244,6 +244,10 @@ function positiveInt(value, max = Number.MAX_SAFE_INTEGER) {
   return Number.isSafeInteger(number) && number >= 0 && number <= max ? number : null;
 }
 
+function positivePostgresId(value) {
+  return isPositivePostgresBigint(value) ? String(value).trim() : null;
+}
+
 // Campaign timestamps must carry an explicit offset so deployment timezone
 // settings cannot silently shift the campaign window.
 function parseCampaignTimestamp(value) {
@@ -262,7 +266,7 @@ function parseCampaignTimestamp(value) {
 
 async function validateCreativeReference(client, ownerId, creativeType, creativeRef) {
   if (typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)) return false;
-  const referenceId = positiveInt(creativeRef);
+  const referenceId = positivePostgresId(creativeRef);
   if (!referenceId) return false;
   if (creativeType === "product") {
     const result = await client.query(
@@ -332,7 +336,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
       const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
       let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
-      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
+      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positivePostgresId(req.body.artworkMediaId);
       const startsAt = parseCampaignTimestamp(req.body?.startsAt);
       const endsAt = parseCampaignTimestamp(req.body?.endsAt);
       const active = req.body?.active !== false;
@@ -432,7 +436,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     try {
       const role = await requireMarketplaceAdmin(req, res, auth);
       if (!role) return;
-      const id = positiveInt(req.params.id);
+      const id = positivePostgresId(req.params.id);
       const promotionType = typeof req.body?.promotionType === "string" ? req.body.promotionType.trim().toUpperCase() : "";
       const occasionKey = typeof req.body?.occasionKey === "string" ? req.body.occasionKey.trim().toLowerCase() : "";
       const headline = typeof req.body?.headline === "string" ? req.body.headline.trim() : "";
@@ -440,7 +444,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
       const actionLabel = typeof req.body?.actionLabel === "string" ? req.body.actionLabel.trim() : "Explore Marketplace";
       const destinationType = typeof req.body?.destinationType === "string" ? req.body.destinationType.trim().toUpperCase() : "MARKETPLACE";
       let destinationValue = typeof req.body?.destinationValue === "string" ? req.body.destinationValue.trim() : "";
-      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positiveInt(req.body.artworkMediaId);
+      const artworkMediaId = req.body?.artworkMediaId == null || req.body.artworkMediaId === "" ? null : positivePostgresId(req.body.artworkMediaId);
       const startsAt = parseCampaignTimestamp(req.body?.startsAt);
       const endsAt = parseCampaignTimestamp(req.body?.endsAt);
       const active = req.body?.active === true;
@@ -520,7 +524,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     try {
       const role = await requireMarketplaceAdmin(req, res, auth);
       if (!role) return;
-      const id = positiveInt(req.params.id);
+      const id = positivePostgresId(req.params.id);
       if (!id || typeof req.body?.active !== "boolean") return res.status(400).json({ error: "valid promotion id and active flag are required" });
       const client = await pool.connect();
       let result;
@@ -567,7 +571,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     try {
       const role = await requireMarketplaceAdmin(req, res, auth);
       if (!role) return;
-      const id = positiveInt(req.params.id);
+      const id = positivePostgresId(req.params.id);
       if (!id) return res.status(400).json({ error: "invalid seasonal promotion id" });
       const client = await pool.connect();
       try {
@@ -675,7 +679,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
   app.get("/api/advertising/campaigns/:id", async (req, res) => {
     const auth = await authenticate(req, res);
     if (!auth) return;
-    const id = positiveInt(req.params.id);
+    const id = positivePostgresId(req.params.id);
     if (!id) return res.status(400).json({ error: "invalid campaign" });
     try {
       const result = await pool.query(`SELECT c.*, m.impressions, m.clicks, m.engagements, m.conversions
@@ -687,7 +691,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   app.post("/api/advertising/campaigns/:id/submit-review", async (req, res) => {
     const auth = await authenticate(req, res); if (!auth) return;
-    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    const id = positivePostgresId(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
     try {
       const result = await pool.query("UPDATE marketplace_ad_campaigns SET status='pending_review', review_note=NULL, updated_at=NOW() WHERE id=$1 AND owner_id=$2 AND status IN ('draft','rejected') RETURNING *", [id, auth.userId]);
       if (!result.rowCount) return res.status(409).json({ error: "campaign is not eligible for review" });
@@ -699,7 +703,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     const adminIds = String(process.env.FYNX_AD_ADMIN_IDS || "").split(",").map(v => v.trim()).filter(Boolean);
     const auth = await authenticate(req, res); if (!auth) return;
     if (!adminIds.includes(String(auth.userId))) return res.status(403).json({ error: "advertising review access denied" });
-    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    const id = positivePostgresId(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
     const approved = req.body?.approved !== false;
     try {
       const result = await pool.query("UPDATE marketplace_ad_campaigns SET status=$1, approved_at=$2, review_note=$3, updated_at=NOW() WHERE id=$4 AND status='pending_review' RETURNING *",
@@ -711,7 +715,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   app.post("/api/advertising/campaigns/:id/payment/initialize", async (req, res) => {
     const auth = await authenticate(req, res); if (!auth) return;
-    const id = positiveInt(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
+    const id = positivePostgresId(req.params.id); if (!id) return res.status(400).json({ error: "invalid campaign" });
     const secret = process.env.PAYSTACK_SECRET_KEY || "";
     if (!secret) return res.status(503).json({ error: "advertising payment provider is not configured yet" });
     try {
@@ -735,7 +739,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
 
   app.post("/api/advertising/campaigns/:id/payment/verify", async (req, res) => {
     const auth = await authenticate(req, res); if (!auth) return;
-    const id = positiveInt(req.params.id); const reference = String(req.body?.reference || "").trim();
+    const id = positivePostgresId(req.params.id); const reference = String(req.body?.reference || "").trim();
     if (!id || !reference) return res.status(400).json({ error: "campaign and payment reference are required" });
     const secret = process.env.PAYSTACK_SECRET_KEY || "";
     if (!secret) return res.status(503).json({ error: "advertising payment provider is not configured yet" });
@@ -777,7 +781,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
   app.patch("/api/advertising/campaigns/:id/status", async (req, res) => {
     const auth = await authenticate(req, res);
     if (!auth) return;
-    const id = positiveInt(req.params.id);
+    const id = positivePostgresId(req.params.id);
     const status = req.body?.status;
     const idempotencyKey = req.body?.idempotencyKey || "";
     if (!id || !CAMPAIGN_STATUSES.has(status) || (idempotencyKey && (typeof idempotencyKey !== "string" || idempotencyKey.length > 120))) return res.status(400).json({ error: "invalid status request" });
@@ -809,7 +813,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     if (!auth) return;
     const metric = req.body?.metric;
     if (!["impression", "click", "engagement", "conversion"].includes(metric)) return res.status(400).json({ error: "invalid metric" });
-    const id = positiveInt(req.params.id);
+    const id = positivePostgresId(req.params.id);
     if (!id) return res.status(400).json({ error: "invalid campaign" });
 
     if (metric === "click") {

@@ -134,6 +134,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var startsAt by remember { mutableStateOf("") }
     var endsAt by remember { mutableStateOf("") }
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
+    var campaignsOffset by remember { mutableStateOf(0) }
+    var campaignsHasMore by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var editingCampaignId by remember { mutableStateOf<String?>(null) }
@@ -143,14 +145,14 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
         scope.launch {
             loading = true
             error = null
-            FynxMarketplaceSeasonalPromotionClient.listForAdmin(context)
-                .onSuccess { campaigns = it }
+            FynxMarketplaceSeasonalPromotionClient.listForAdmin(context, campaignsOffset)
+                .onSuccess { page -> campaigns = page.items; campaignsHasMore = page.hasMore }
                 .onFailure { error = marketplaceSafeError(it, "Seasonal campaigns could not load.") }
             loading = false
         }
     }
 
-    LaunchedEffect(Unit) { refresh() }
+    LaunchedEffect(campaignsOffset) { refresh() }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Marketplace campaigns", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -506,5 +508,14 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             }
         }
         Spacer(Modifier.height(4.dp))
+        if (!loading && error == null && (campaignsOffset > 0 || campaignsHasMore)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (campaigns.isEmpty()) "No campaigns on this page" else "Showing ${campaignsOffset + 1}–${campaignsOffset + campaigns.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(enabled = campaignsOffset > 0, onClick = { campaignsOffset = (campaignsOffset - 50).coerceAtLeast(0) }) { Text("Previous campaigns") }
+                    TextButton(enabled = campaignsHasMore && campaignsOffset < 10000, onClick = { campaignsOffset = (campaignsOffset + 50).coerceAtMost(10000) }) { Text("Next campaigns") }
+                }
+            }
+        }
     }
 }

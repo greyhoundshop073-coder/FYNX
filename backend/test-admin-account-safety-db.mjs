@@ -59,6 +59,19 @@ async function invoke(token, userId, status, note = "") {
   return res;
 }
 
+async function invokeAdmins(offset = 0) {
+  const handlers = routes.get("GET /api/admin/admins");
+  assert.ok(handlers && handlers.length === 2, "Owner Admin directory route must be registered");
+  const [authenticate, handler] = handlers;
+  const req = {
+    query: { limit: 50, offset },
+    get(name) { return name.toLowerCase() === "authorization" ? "Bearer owner" : ""; }
+  };
+  const res = response();
+  await authenticate(req, res, () => handler(req, res));
+  return res;
+}
+
 async function accountState(userId) {
   const result = await db.query(`
     SELECT u.session_version,
@@ -103,6 +116,31 @@ try {
   const dashboard = await invokeDashboard();
   assert.equal(dashboard.statusCode, 200);
   await db.query("INSERT INTO fynx_admin_roles(user_id,role) VALUES(2,'ADMIN')");
+  await db.query(`
+    INSERT INTO users(id,username,display_name,session_version)
+    SELECT id,'directory-admin-'||id,'Directory Admin '||id,0 FROM generate_series(1000,1104) AS generated(id);
+    INSERT INTO fynx_admin_roles(user_id,role)
+    SELECT id,'ADMIN' FROM users WHERE id BETWEEN 1000 AND 1104;
+  `);
+  const firstAdminPage = await invokeAdmins(0);
+  assert.equal(firstAdminPage.statusCode, 200);
+  assert.equal(firstAdminPage.body.admins.length, 50);
+  assert.equal(firstAdminPage.body.offset, 0);
+  assert.equal(firstAdminPage.body.limit, 50);
+  assert.equal(firstAdminPage.body.hasMore, true);
+  assert.equal(firstAdminPage.headers["cache-control"], "private, no-store");
+  const secondAdminPage = await invokeAdmins(50);
+  assert.equal(secondAdminPage.statusCode, 200);
+  assert.equal(secondAdminPage.body.admins.length, 50);
+  assert.equal(secondAdminPage.body.offset, 50);
+  assert.equal(secondAdminPage.body.hasMore, true);
+  const firstAdminIds = new Set(firstAdminPage.body.admins.map(item => item.id));
+  assert.ok(secondAdminPage.body.admins.every(item => !firstAdminIds.has(item.id)), "Owner Admin directory pages must not overlap");
+  const finalAdminPage = await invokeAdmins(100);
+  assert.equal(finalAdminPage.body.admins.length, 6);
+  assert.equal(finalAdminPage.body.hasMore, false);
+  console.log("ADMIN_DIRECTORY_PAGINATION_DB=GREEN (106 administrators, stable non-overlapping pages, final page metadata and private response)");
+
 
   const regularDenied = await invoke("regular", "3", "LOCKED");
   assert.equal(regularDenied.statusCode, 403, "ordinary accounts must not change account restrictions");

@@ -184,8 +184,15 @@ export function registerAdminRoutes({ app, databasePool = pool, jwtApi = jwt, jw
     const actorRole=await requireAdmin(req,res);
     if(actorRole===null)return;
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
-    const result=await routePool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE) ORDER BY r.created_at ASC LIMIT 100`);
-    return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await routePool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE) ORDER BY r.created_at DESC,u.id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    res.set('Cache-Control','private, no-store');
+    return res.json({admins:rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at})),offset,limit,hasMore});
   }catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
   app.get('/api/admin/announcements',auth,async(req,res)=>{try{

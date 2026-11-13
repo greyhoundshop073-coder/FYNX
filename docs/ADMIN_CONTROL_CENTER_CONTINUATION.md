@@ -397,3 +397,25 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The first Android run failed in Large Badge #9 (Trust, Safety & Account Protection), not in the Admin source contract. Its old assertion still required `Number.isSafeInteger(reportId)` and the old `positive integer` message after the user-facing appeal route was upgraded to the shared PostgreSQL BIGINT validator.
 - The verifier now checks the shared `isPositivePostgresBigint` import/use, exact decimal-string preservation, absence of `Number(rawReportId)`, the PostgreSQL signed BIGINT maximum and rejection of unsafe numeric inputs. The behavioral test covers large, overflow, unsafe numeric and non-canonical string IDs.
 - Backend CI has passed the new reports/appeals PostgreSQL route test; Android and Chat/Groups must rerun on the verifier repair commit.
+
+
+## Group 5 — Admin directory and Marketplace campaign history completeness — 13 November 2026
+
+### Five verified problems
+1. The Owner-only Admin directory returned a fixed first 100 administrators with no offset/hasMore metadata; the Android client parsed it as a complete list and exposed no paging controls. Above 100 Admins, the Owner could not reach older grants to review or revoke them.
+2. Marketplace seasonal campaign administration returned only the first 100 rows, with no pagination parameters or hasMore metadata.
+3. The seasonal campaign Android client requested a single unpaged list and silently treated the truncated response as the complete history.
+4. Marketplace Advertising used Number-based positiveInt parsing for BIGINT creative references, artwork media IDs, and seasonal/paid campaign path IDs. Valid PostgreSQL BIGINT IDs above Number.MAX_SAFE_INTEGER were rejected, breaking exact database identity consistency.
+5. The campaign scheduler rendered every row in that truncated response and provided no Previous/Next controls, so campaign history beyond the first 100 could not be managed in-app.
+
+### Group 5 changes
+- Added bounded limit/offset/hasMore pagination for the Owner-only Admin directory and seasonal campaign history.
+- Added Previous/Next controls to the Admin People directory and Marketplace campaign scheduler.
+- Added exact PostgreSQL BIGINT string parsing for Marketplace Advertising campaign, artwork, and creative-reference IDs; retained Number-based positiveInt only for monetary budgets and counters.
+- Added a PostgreSQL-backed Admin directory test covering 106 administrators, three non-overlapping pages, final-page metadata, and private/no-store response behavior.
+- Extended the Marketplace seasonal verifier to enforce exact campaign-ID parsing and paginated Admin campaign history.
+
+### Verification still required
+- Backend CI must execute the updated Admin directory PostgreSQL route test and Marketplace seasonal verifier.
+- Android build must compile both pagination UIs and run the Admin source contract.
+- Live production role checks, media ownership, and campaign feed navigation still require the deployed backend and a physical/device session.
