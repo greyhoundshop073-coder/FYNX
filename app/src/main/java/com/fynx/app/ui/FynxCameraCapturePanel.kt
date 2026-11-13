@@ -1124,6 +1124,11 @@ fun FynxCameraCapturePanel(
                         exportedPhoto?.let(::deleteUri)
                         error = validationError
                     } else {
+                        // Status now owns this URI. Retain it when it is one of the disposable
+                        // initial Gallery/draft copies; otherwise onDispose would delete it before
+                        // the Status composer has uploaded or cancelled the media.
+                        releaseUnneededInitialMediaCopies(setOf(finalUri))
+                        initialMediaHandedOff = true
                         statusShareChecking = false
                         recordingNotice = null
                         onShareToStatus(finalUri, if (mediaType == "video_note") "video" else mediaType)
@@ -1324,7 +1329,7 @@ fun FynxCameraCapturePanel(
             Column(
                 Modifier.align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * 0.44f)
+                    .heightIn(max = if (editingTextOverlayId != null && selectedCameraTool == "Text") 0.dp else LocalConfiguration.current.screenHeightDp.dp * (if (previewType == "image") 0.44f else 0.52f))
                     .navigationBarsPadding()
                     .imePadding()
                     .background(Color(0xFF172438).copy(alpha = 0.62f), RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))

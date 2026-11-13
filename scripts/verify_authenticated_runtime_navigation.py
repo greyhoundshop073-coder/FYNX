@@ -2476,12 +2476,26 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 break
             left, top, right, bottom = carousel_bounds
             y = (top + bottom) // 2
-            start_x, end_x = right - 8, left + 8
+            # Keep both swipe endpoints well inside the app content. Starting at right - 8
+            # entered Android's system Back gesture zone, dismissed the editor and made the
+            # next Status assertion inspect the New post composer instead of the video preview.
+            edge_inset = max(120, min(180, (right - left) // 7))
+            start_x, end_x = right - edge_inset, left + edge_inset
             if start_x <= end_x:
                 break
             run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
             time.sleep(0.45)
             current_editor = dump_ui(f"{prefix}-camera-video-{slug}-horizontal-scroll-{horizontal_attempt + 1}.xml") or current_editor
+            if not (
+                find_control(current_editor, ["Share to Status"])
+                and find_control(current_editor, ["Next"])
+                and find_control(current_editor, ["Apply text / effects"])
+            ):
+                FAILURES.append(
+                    prefix + f": {style_label} carousel swipe left the active video editor; "
+                    "visible markers: " + visible_marker_summary(current_editor)
+                )
+                break
             style_node = find_visible_control_in_labeled_scroll_container(current_editor, [style_label], ["Video style carousel"])
         if not style_node:
             FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
@@ -2527,8 +2541,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Open the existing Status composer with the processed video selected, then close it
     # without pressing Send; publishing remains an explicit user action.
     current = dump_ui(f"{prefix}-camera-video-before-status.xml") or editor
-    if not find_control(current, ["Share to Status"]):
-        FAILURES.append(prefix + ": recorded-video preview did not expose the accessible Share to Status action; visible markers: " + visible_marker_summary(current))
+    if not (find_control(current, ["Apply text / effects"]) and find_control(current, ["Next"])):
+        FAILURES.append(
+            prefix + ": video editor was no longer active when Status hand-off was checked; "
+            "visible markers: " + visible_marker_summary(current)
+        )
+    elif not find_control(current, ["Share to Status"]):
+        FAILURES.append(prefix + ": active recorded-video preview did not expose the accessible Share to Status action; visible markers: " + visible_marker_summary(current))
     else:
         video_status_xml = tap_control(
             current, ["Share to Status"], f"{prefix}-camera-video-status-handoff",

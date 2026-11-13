@@ -62,6 +62,41 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun providerBackedGalleryImageUriIsCopiedIntoAppOwnedMedia() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val resolver = context.contentResolver
+        val name = "fynx-gallery-picker-${System.currentTimeMillis()}.jpg"
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/FYNX Test")
+        }
+        val pickerUri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("The Gallery provider did not accept the disposable image fixture")
+        val bitmap = Bitmap.createBitmap(48, 64, Bitmap.Config.ARGB_8888)
+        var working: File? = null
+        var original: File? = null
+        try {
+            Canvas(bitmap).drawColor(Color.GREEN)
+            resolver.openOutputStream(pickerUri, "w")!!.use { stream ->
+                assertTrue("The Gallery fixture could not be encoded", bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream))
+            }
+            val copied = copyCameraGalleryMediaToCache(context, pickerUri)
+            working = copied.first
+            original = copied.second
+            assertEquals("Gallery provider MIME should classify the item as an image", "image", copied.third)
+            assertTrue("The Gallery source copy must be app-owned and non-empty", original!!.isFile && original!!.length() > 0L)
+            assertTrue("The Gallery working copy must be app-owned and non-empty", working!!.isFile && working!!.length() > 0L)
+            assertEquals("jpg", working!!.extension)
+        } finally {
+            working?.delete()
+            original?.takeIf { it != working }?.delete()
+            bitmap.recycle()
+            resolver.delete(pickerUri, null, null)
+        }
+    }
+
+    @Test
     fun videoOverlayCoordinatesPreserveTopCentreAndBottomMediaPositions() {
         val topLeft = cameraVideoTextOverlayBackgroundAnchor(
             FynxCameraTextOverlay(x = 0.04f, y = 0.06f)
@@ -198,6 +233,70 @@ class CameraTextOverlayInstrumentationTest {
             val restored = decodeFynxCameraMediaDraftEdit(Uri.fromFile(File(storedSource)), stateJson)
                 ?: error("Editable text state could not be decoded from the saved draft")
             assertEquals(overlay, restored.overlays.single())
+        } finally {
+            draftId?.let { FynxLocalPostDraftStore.delete(context, it) }
+            finalMedia.delete()
+            editableSource.delete()
+        }
+    }
+
+    @Test
+    fun localVideoPostDraftPreservesEditableSourceCaptionAndStyleAcrossRestore() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val finalMedia = File(context.cacheDir, "fynx-video-draft-final-${System.currentTimeMillis()}.mp4")
+        val editableSource = File(context.cacheDir, "fynx-video-draft-source-${System.currentTimeMillis()}.mp4")
+        var draftId: String? = null
+        try {
+            // Store-level regression coverage: verifies durable file ownership and edit metadata,
+            // not MP4 codec playback (which the camera runtime journey exercises).
+            finalMedia.writeBytes(byteArrayOf(0, 0, 0, 24, 102, 116, 121, 112))
+            editableSource.writeBytes(byteArrayOf(0, 0, 0, 24, 102, 116, 121, 112))
+            val finalUri = Uri.fromFile(finalMedia)
+            val overlay = FynxCameraTextOverlay(
+                id = "saved-video-overlay",
+                text = "Video draft overlay",
+                x = 0.42f,
+                y = 0.68f,
+                startMs = 500L,
+                endMs = 2_500L
+            )
+            val saved = FynxLocalPostDraftStore.save(
+                context = context,
+                existingId = null,
+                caption = "Saved video caption",
+                visibility = FynxPostVisibility.FRIENDS_ONLY,
+                audience = FynxPostAudience.FRIENDS,
+                selectedAudienceIds = emptySet(),
+                location = null,
+                textBackground = null,
+                media = listOf(finalUri to "video"),
+                music = null,
+                mediaEdits = mapOf(
+                    finalUri.toString() to FynxCameraMediaDraftEdit(
+                        sourceUri = Uri.fromFile(editableSource),
+                        overlays = listOf(overlay),
+                        videoStyle = CameraVideoStyle.VIVID.name,
+                        captionText = "Timed video captions"
+                    )
+                )
+            ).getOrThrow()
+            draftId = saved.id
+            val restoredDraft = FynxLocalPostDraftStore.list(context).firstOrNull { it.id == saved.id }
+                ?: error("The saved video post draft could not be restored")
+            assertEquals(listOf("video"), restoredDraft.mediaTypes)
+            val durableFinal = File(restoredDraft.mediaPaths.single())
+            assertTrue("The final video draft copy must be durable", durableFinal.isFile && durableFinal.length() > 0L)
+            assertEquals("mp4", durableFinal.extension)
+            val sourcePath = restoredDraft.mediaEditSourcePaths.single()
+                ?: error("The original editable video was not retained")
+            assertTrue("The original video source copy must be durable", File(sourcePath).isFile)
+            val editState = restoredDraft.mediaEditStates.single()
+                ?: error("The saved video edit state is missing")
+            val restoredEdit = decodeFynxCameraMediaDraftEdit(Uri.fromFile(File(sourcePath)), editState)
+                ?: error("Saved video edit state could not be decoded")
+            assertEquals(CameraVideoStyle.VIVID.name, restoredEdit.videoStyle)
+            assertEquals("Timed video captions", restoredEdit.captionText)
+            assertEquals(listOf(overlay), restoredEdit.overlays)
         } finally {
             draftId?.let { FynxLocalPostDraftStore.delete(context, it) }
             finalMedia.delete()
