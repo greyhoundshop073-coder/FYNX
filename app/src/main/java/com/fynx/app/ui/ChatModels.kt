@@ -31,5 +31,6 @@ data class ChatMessage(
     val pinned: Boolean = false,
     val messageType: String = "text",
     val messagePayload: Map<String, String> = emptyMap(),
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val readBy: List<String> = emptyList()
 )

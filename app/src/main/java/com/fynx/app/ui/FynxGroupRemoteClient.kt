@@ -10,7 +10,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 object FynxGroupRemoteClient {
-    data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false)
+    data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false,val readBy:List<String> = emptyList())
     data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean)
     private val sendMutex = Mutex()
     data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0)
@@ -101,11 +101,19 @@ object FynxGroupRemoteClient {
                     val o=a.getJSONObject(i)
                     val rawId=o.optString("id").trim()
                     val safeId=rawId.ifBlank { "group-remote-$i-" + o.optLong("timestamp") }
-                    RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"))
+                    RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
         RemoteMessagePage(parsed,root.optBoolean("hasMore",false))
+    }
+    suspend fun markMessagesRead(context:Context,groupId:String,messageIds:List<String>):Result<List<RemoteMessage>> = runCatching {
+        val safeIds=messageIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{8,80}")) }.take(100)
+        if(safeIds.isEmpty())return@runCatching emptyList()
+        val body=JSONObject().put("messageIds",JSONArray(safeIds))
+        val root=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/read",body.toString()).getOrThrow())
+        val values=root.optJSONArray("messages")?:JSONArray()
+        buildList { for(index in 0 until values.length()) runCatching { toRemoteMessage(values.getJSONObject(index)) }.getOrNull()?.let(::add) }
     }
     suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> =
         loadMessagePage(context,groupId).map { it.messages }
@@ -323,9 +331,9 @@ object FynxGroupRemoteClient {
     private fun toRemoteMessage(o:JSONObject):RemoteMessage {
         val rawId=o.optString("id").trim()
         val safeId=rawId.ifBlank { "group-response-" + o.optLong("timestamp") + "-" + o.optString("senderUsername").hashCode() }
-        return RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"))
+        RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
     }
-    fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(if(m.deleted)"Message deleted" else m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=false,replyToId=m.replyToId,reaction=m.reaction,edited=m.edited,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType,senderUsername=m.senderUsername,pinned=m.pinned,deleted=m.deleted)
+    fun toChatMessage(m:RemoteMessage,currentUsername:String,baseUrl:String)=ChatMessage(if(m.deleted)"Message deleted" else m.text,m.senderUsername.equals(currentUsername.removePrefix("@"),true),m.id,m.timestamp,delivered=true,read=false,replyToId=m.replyToId,reaction=m.reaction,edited=m.edited,attachmentUri=m.attachmentUrl?.let{if(it.startsWith("http"))it else baseUrl.trimEnd('/')+it},attachmentType=m.attachmentType,senderUsername=m.senderUsername,pinned=m.pinned,deleted=m.deleted,readBy=m.readBy)
 }
 
 

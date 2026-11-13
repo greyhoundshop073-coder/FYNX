@@ -80,6 +80,11 @@ check('group event RSVP retry rechecks account identity after the server respons
 check('group content response is cached only for the account that initiated the request', 'FYNX account changed while group content was loading.' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)throw' in group_remote_client)
 
 
+check('group read receipts are persisted per message and member with membership-scoped writes', 'CREATE TABLE IF NOT EXISTS fynx_group_message_reads' in group and "app.post('/api/groups/:groupId/read'" in group and 'message.sender_id<>$3' in group and 'ON CONFLICT(message_id,user_id) DO NOTHING' in group)
+check('group message history and realtime payloads expose reader usernames', 'AS read_by' in group and 'readBy:Array.isArray(row.read_by)?row.read_by:[]' in group)
+check('active group chat marks incoming history and realtime messages read without crossing accounts', 'FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingIds)' in active_group_panel and 'FynxGroupRemoteClient.markMessagesRead(context, groupId, listOf(incoming.id))' in active_group_panel and 'if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess' in active_group_panel)
+check('group sender UI shows real per-member read state instead of a generic delivered tick', 'readBy:List<String> = emptyList()' in group_remote_client and 'readBy=m.readBy' in group_remote_client and 'Seen by ${message.readBy.size}' in active_group_panel)
+
 check('group poll history returns the authenticated member selection for every option', 'BOOL_OR(v.user_id=$2)' in content_routes and 'selected_by_me' in content_routes and 'selectedByMe: Boolean(o.selected_by_me)' in content_routes and 'selectedByMe:Boolean=false' in group_remote_client and 'optBoolean("selectedByMe")' in group_remote_client)
 check('single-choice poll votes are serialized against the poll row in a transaction', "await client.query('BEGIN')" in content_routes and 'FOR UPDATE OF p' in content_routes and "await client.query('COMMIT')" in content_routes and 'client.release()' in content_routes)
 check('closed polls are visibly closed and their vote actions are disabled', 'poll.closed' in group_social and 'enabled = !poll.closed' in group_social and 'Voting is closed.' in group_social)

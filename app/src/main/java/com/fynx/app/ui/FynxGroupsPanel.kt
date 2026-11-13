@@ -724,6 +724,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             .distinctBy { it.id }
                             .sortedBy { it.timestamp }
                         messages = mergedMessages
+                        val incomingIds = remoteMessages.filter { !it.fromMe }.map { it.id }.takeLast(100)
+                        if (incomingIds.isNotEmpty()) {
+                            FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingIds).onSuccess { readUpdates ->
+                                if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                                val byId = readUpdates.associateBy { it.id }
+                                val withReceipts = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                messages = withReceipts
+                                withContext(Dispatchers.IO) { if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", withReceipts) }
+                            }
+                        }
                         if (showError) syncMessage = null
                         runCatching {
                             withContext(Dispatchers.IO) {
@@ -791,6 +801,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             messages = merged
                             withContext(Dispatchers.IO) {
                                 if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", merged)
+                            }
+                            if (!incoming.fromMe) {
+                                FynxGroupRemoteClient.markMessagesRead(context, groupId, listOf(incoming.id)).onSuccess { readUpdates ->
+                                    if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                                    val byId = readUpdates.associateBy { it.id }
+                                    val withReceipts = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                    messages = withReceipts
+                                    withContext(Dispatchers.IO) { if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", withReceipts) }
+                                }
                             }
                             if (isNewIncoming && groupNotificationsEnabled && !groupMuted) {
                                 FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
@@ -1158,7 +1177,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     if (message.fromMe) {
                                         Spacer(Modifier.width(4.dp))
                                         // Group history has no per-member delivery/read receipts.
-                                        Text(if (message.delivered) "✓" else "◷", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                        Text(if (message.readBy.isNotEmpty()) "✓✓" else if (message.delivered) "✓" else "◷", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                        if (message.readBy.isNotEmpty()) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Seen by ${message.readBy.size}", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                        }
                                     }
                                 }
                                 }
