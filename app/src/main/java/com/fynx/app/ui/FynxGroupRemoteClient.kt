@@ -131,24 +131,18 @@ object FynxGroupRemoteClient {
             }
             val chatKey = "group_$groupId"
             val persisted = FynxChatStore.load(context, chatKey).firstOrNull { it.id == message.id }
-            var mediaId: String? = message.mediaId
-                ?: persisted?.mediaId
-                ?: message.attachmentUri?.substringAfterLast('/')?.takeIf { it.all(Char::isDigit) }
+            var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/')?.takeIf{it?.all(Char::isDigit)==true}
             var mediaType = message.attachmentType ?: persisted?.attachmentType
             if (mediaId == null && message.attachmentUri != null) {
                 val uri = Uri.parse(message.attachmentUri!!)
-                val mime = groupAttachmentMimeType(context, uri, mediaType)
+                val mime=groupAttachmentMimeType(context,uri,mediaType)
                 val uploaded = FynxProductionMessaging.uploadMedia(
                     context, uri, mime, expectedAccountKey, requestToken
                 ).getOrThrow()
                 mediaId = uploaded.id
                 mediaType = mediaType ?: mime.substringBefore('/')
                 val saved = FynxChatStore.load(context, chatKey)
-                if (saved.any { it.id == message.id }) {
-                    FynxChatStore.save(context, chatKey, saved.map {
-                        if (it.id == message.id) it.copy(mediaId = mediaId, attachmentType = mediaType) else it
-                    })
-                }
+                if (saved.any { it.id == message.id }) FynxChatStore.save(context, chatKey, saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})
             }
             check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
                 "Your account changed while the attachment was uploading. The message was not sent."
