@@ -300,6 +300,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupLoadComplete by remember(groupId) { mutableStateOf(false) }
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var hasMoreGroupHistory by remember(groupId) { mutableStateOf(false) }
+    var loadingOlderGroupHistory by remember(groupId) { mutableStateOf(false) }
     LaunchedEffect(groupId) {
         // Group and message stores grow over time; parse them away from the UI thread.
         val local = withContext(Dispatchers.IO) {
@@ -535,9 +537,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         val selected = currentGroup ?: return@LaunchedEffect
         runCatching {
             suspend fun refreshGroupMessages(showError: Boolean) {
-                FynxGroupRemoteClient.loadMessages(context, groupId)
-                    .onSuccess { remote ->
-                        val remoteMessages = remote.mapIndexedNotNull { index, item ->
+                FynxGroupRemoteClient.loadMessagePage(context, groupId)
+                    .onSuccess { page ->
+                        hasMoreGroupHistory = page.hasMore
+                        val remoteMessages = page.messages.mapIndexedNotNull { index, item ->
                             runCatching {
                                 FynxGroupRemoteClient.toChatMessage(
                                     item,
@@ -545,11 +548,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     FynxBackendClient.baseUrl(context)
                                 )
                             }.getOrNull()?.let { message ->
-                                if (message.id.isBlank()) {
-                                    message.copy(id = "group-remote-" + index + "-" + message.timestamp)
-                                } else {
-                                    message
-                                }
+                                if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
                             }
                         }
                         val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
@@ -797,6 +796,33 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+            if (hasMoreGroupHistory && searchQuery.isBlank()) {
+                item(key = "group-load-older") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        TextButton(
+                            enabled = !loadingOlderGroupHistory,
+                            onClick = {
+                                val oldest = messages.firstOrNull { it.delivered } ?: return@TextButton
+                                loadingOlderGroupHistory = true
+                                scope.launch {
+                                    FynxGroupRemoteClient.loadMessagePage(context, groupId, oldest.let {
+                                        FynxGroupRemoteClient.RemoteMessage(
+                                            it.id,it.text,it.senderUsername.orEmpty(),it.timestamp,it.mediaId,it.attachmentType,it.attachmentUri,
+                                            it.replyToId,it.reaction,it.edited,false,it.pinned
+                                        )
+                                    }).onSuccess { page ->
+                                        val older = page.messages.map { FynxGroupRemoteClient.toChatMessage(it,currentUsername,FynxBackendClient.baseUrl(context)) }
+                                        messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                        hasMoreGroupHistory = page.hasMore
+                                        withContext(Dispatchers.IO) { FynxChatStore.save(context,"group_$groupId",messages) }
+                                    }.onFailure { syncMessage = "Older group messages could not load. Reconnect and try again." }
+                                    loadingOlderGroupHistory = false
+                                }
+                            }
+                        ) { Text(if (loadingOlderGroupHistory) "Loading older messages…" else "Load older messages") }
+                    }
+                }
+            }
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -1073,7 +1099,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
                             if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
+                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
                                 messages = messages + optimistic
                                 FynxChatStore.save(context, "group_$groupId", messages)
                                 text = ""; replyToId = null; sending = true

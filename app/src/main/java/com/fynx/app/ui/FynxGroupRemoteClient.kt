@@ -5,9 +5,14 @@ import android.net.Uri
 import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.io.File
 
 object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false)
+    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean)
+    private val sendMutex = Mutex()
     data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0)
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
@@ -37,9 +42,12 @@ object FynxGroupRemoteClient {
     suspend fun loadJoinRequests(context:Context,groupId:String):Result<List<RemoteJoinRequest>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/join-requests").getOrThrow()).optJSONArray("requests")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteJoinRequest(o.optString("username"),o.optLong("requestedAt")))}} }
     suspend fun approveJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/approve",JSONObject().toString()).getOrThrow();Unit}
     suspend fun rejectJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/reject",JSONObject().toString()).getOrThrow();Unit}
-    suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> = runCatching {
-        val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages").getOrThrow()).optJSONArray("messages")?:JSONArray()
-        buildList {
+    suspend fun loadMessagePage(context:Context,groupId:String,before:RemoteMessage?=null,limit:Int=50):Result<RemoteMessagePage> = runCatching {
+        val safeLimit=limit.coerceIn(1,100)
+        val cursor=before?.let { "&beforeTimestamp=${it.timestamp}&beforeId=${Uri.encode(it.id)}" }.orEmpty()
+        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages?limit=$safeLimit$cursor").getOrThrow())
+        val a=root.optJSONArray("messages")?:JSONArray()
+        val parsed=buildList {
             for(i in 0 until a.length()) {
                 runCatching {
                     val o=a.getJSONObject(i)
@@ -49,8 +57,11 @@ object FynxGroupRemoteClient {
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
+        RemoteMessagePage(parsed,root.optBoolean("hasMore",false))
     }
-    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = runCatching { val chatKey="group_$groupId";val persisted=FynxChatStore.load(context,chatKey).firstOrNull{it.id==message.id};var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType?:persisted?.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/');val saved=FynxChatStore.load(context,chatKey);if(saved.any{it.id==message.id})FynxChatStore.save(context,chatKey,saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} }
+    suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> =
+        loadMessagePage(context,groupId).map { it.messages }
+    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = sendMutex.withLock { runCatching { val chatKey="group_$groupId";val persisted=FynxChatStore.load(context,chatKey).firstOrNull{it.id==message.id};var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType?:persisted?.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/');val saved=FynxChatStore.load(context,chatKey);if(saved.any{it.id==message.id})FynxChatStore.save(context,chatKey,saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} } }
     suspend fun editMessage(context:Context,groupId:String,messageId:String,text:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","edit");put("text",text)})
     suspend fun reactToMessage(context:Context,groupId:String,messageId:String,reaction:String?):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","reaction");if(reaction!=null)put("reaction",reaction)})
     suspend fun setPinned(context:Context,groupId:String,messageId:String,pinned:Boolean):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","pin");put("pinned",pinned)})
@@ -109,14 +120,56 @@ object FynxGroupRemoteClient {
             applyEventResponse(current,entry.key,entry.value,true)
         }
 
-    private suspend fun syncPendingRsvps(context:Context,groupId:String) {
+    suspend fun syncPendingRsvps(context:Context,groupId:String):Int {
+        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return 0
+        var completed=0
         loadPendingRsvps(context,groupId).forEach { entry ->
+            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
             val result=FynxBackendClient.postJson(
                 context,
                 "/api/groups/$groupId/events/${Uri.encode(entry.key)}/rsvp",
                 JSONObject().put("response",entry.value).toString()
             )
-            if(result.isSuccess)clearPendingRsvp(context,groupId,entry.key)
+            if(result.isSuccess){clearPendingRsvp(context,groupId,entry.key);completed++}
+        }
+        return completed
+    }
+
+    suspend fun drainPendingWork(context:Context):Int {
+        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return 0
+        var completed=0
+        for(group in FynxGroupsStore.load(context)) {
+            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+            val pending=FynxChatStore.load(context,"group_${group.id}")
+                .filter { it.fromMe && !it.delivered }
+                .sortedBy { it.timestamp }
+            for(message in pending) {
+                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+                val result=sendMessage(context,group.id,message)
+                if(result.isSuccess) {
+                    val remote=result.getOrThrow()
+                    FynxChatStore.replaceMessage(context,"group_${group.id}",message.id,
+                        toChatMessage(remote,FynxAuthStore.storedUsername(context).orEmpty(),FynxBackendClient.baseUrl(context)))
+                    deleteStagedAttachment(context,message.attachmentUri)
+                    completed++
+                } else break
+            }
+            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+            completed+=syncPendingRsvps(context,group.id)
+        }
+        return completed
+    }
+
+    private fun deleteStagedAttachment(context:Context,rawUri:String?) {
+        if(rawUri.isNullOrBlank())return
+        runCatching {
+            val uri=Uri.parse(rawUri)
+            if(uri.scheme!="file")return@runCatching
+            val file=File(uri.path?:return@runCatching).canonicalFile
+            val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return@runCatching
+            val suffix=Base64.encodeToString(account.toByteArray(Charsets.UTF_8),Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            val expected=File(context.filesDir,"fynx_group_pending_media_$suffix").canonicalFile
+            if(file.parentFile==expected)file.delete()
         }
     }
 
