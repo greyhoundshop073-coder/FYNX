@@ -270,7 +270,7 @@ try {
   const outsiderContent = await call("GET", contentPath, params, outsiderId);
   assert.equal(outsiderContent.statusCode, 403, "non-members must not read private group content");
 
-  console.log("GROUP CONTENT POSTGRESQL ROUTE INTEGRATION: GREEN (poll creation and persistence, single/multiple voting, closed poll rejection, member privacy, event validation and RSVP)");
+  console.log("GROUP MESSAGE + CONTENT POSTGRESQL ROUTE INTEGRATION: GREEN (two-account send/reply, idempotent retry, read receipts, search pagination, message permissions, new-member history privacy, poll creation/voting, event validation and RSVP)");
 } finally {
   await client.query("DELETE FROM fynx_groups WHERE id=$1", [groupId]).catch(() => {});
   await client.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [[adminId.toString(), memberId.toString(), outsiderId.toString()]]).catch(() => {});
