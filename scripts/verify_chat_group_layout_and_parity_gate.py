@@ -64,6 +64,7 @@ require("private chat protects top system inset", "statusBarsPadding" in PRIVATE
 require("message model supports audio attachments", "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS)
 
 require("group remote messages are not falsely marked read before a participant read receipt", "delivered=true,read=false" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "delivered=true,read=true" not in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+require("ChatMessage model carries the server deleted-message state without changing existing constructor call sites", "val deleted: Boolean = false" in MODELS and "deleted=m.deleted" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 require("deleted group messages render the deleted state rather than their old text", 'if(m.deleted)"Message deleted" else m.text' in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "deleted=m.deleted" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 require("successful group attachment cleanup targets the account-scoped staging directory and remains confined to app files", 'accountScopedDirectory.name.startsWith("fynx_group_pending_media_")' in ACTIVE_GROUP and "accountScopedDirectory.parentFile == filesDirectory" in ACTIVE_GROUP and 'File(context.filesDir, "fynx_group_pending_media")' not in ACTIVE_GROUP)
 
