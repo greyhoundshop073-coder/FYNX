@@ -1173,7 +1173,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
 
     }
     selectedGroup?.let { groupForDialogs ->
-        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } } }
+        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { FynxGroupsStore.markPendingSync(context, updated.id); currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onSuccess { FynxGroupsStore.markSynced(context, updated.id) }.onFailure { syncMessage = "Group changes saved on this device and will sync when the connection returns." } } } }
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
         if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
