@@ -197,7 +197,6 @@ object FynxGroupRemoteClient {
     suspend fun votePoll(context:Context,groupId:String,pollId:String,optionId:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/polls/${Uri.encode(pollId)}/votes",JSONObject().apply{put("optionId",optionId)}.toString()).getOrThrow();Unit}
     suspend fun setGroupPostPinned(context:Context,groupId:String,postId:String,pinned:Boolean):Result<Unit> = runCatching {FynxBackendClient.patchJson(context,"/api/groups/$groupId/posts/${Uri.encode(postId)}/pin",JSONObject().apply{put("pinned",pinned)}.toString()).getOrThrow();Unit}
     suspend fun createEvent(context:Context,groupId:String,title:String,description:String,startsAt:String,location:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/events",JSONObject().apply{put("title",title);put("description",description);put("startsAt",startsAt);put("location",location)}.toString()).getOrThrow();Unit}
-    suspend fun rsvpEvent(context:Context,groupId:String,eventId:String,response:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/events/${Uri.encode(eventId)}/rsvp",JSONObject().apply{put("response",response)}.toString()).getOrThrow();Unit}
 
     fun fromRealtimeMessage(messageJson:String):RemoteMessage? = runCatching { toRemoteMessage(JSONObject(messageJson)) }.getOrNull()
 
