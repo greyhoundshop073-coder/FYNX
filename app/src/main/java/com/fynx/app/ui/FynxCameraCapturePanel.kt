@@ -624,6 +624,7 @@ fun FynxCameraCapturePanel(
         mutableStateOf(runCatching { CameraVideoStyle.valueOf(initialVideoStyle) }.getOrDefault(CameraVideoStyle.NATURAL))
     }
     var videoCaptionText by remember(initialMediaUri, initialVideoCaptionText) { mutableStateOf(initialVideoCaptionText) }
+    var videoCaptionMessage by remember(initialMediaUri) { mutableStateOf<String?>(null) }
     val videoCaptionBringIntoViewRequester = remember { BringIntoViewRequester() }
     var applyingVideoEffects by remember { mutableStateOf(false) }
     var generatingCaptions by remember { mutableStateOf(false) }
@@ -1040,16 +1041,15 @@ fun FynxCameraCapturePanel(
         if (pendingType != "video" && pendingType != "video_note") return
         val source = pendingOriginalUri ?: current
         generatingCaptions = true
-        error = null
-        recordingNotice = null
+        videoCaptionMessage = null
         scope.launch {
             val result = withContext(Dispatchers.IO) { runCatching { generateFynxVideoTranscript(context, source) } }
             result.onSuccess {
                 videoCaptionText = it
-                recordingNotice = "Transcript ready. Caption timing is approximate; review it before sending."
+                videoCaptionMessage = "Captions are ready. Review the wording and timing before continuing."
             }.onFailure {
-                recordingNotice = null
-                error = it.message ?: "Automatic captions could not be generated."
+                videoCaptionMessage = it.message?.takeIf(String::isNotBlank)
+                    ?: "Automatic captions are unavailable on this device. You can still type captions below."
             }
             generatingCaptions = false
         }
@@ -1605,6 +1605,21 @@ fun FynxCameraCapturePanel(
                     )
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
+                    }
+                    videoCaptionMessage?.let { message ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (videoCaptionText.isBlank()) Color(0xFF25364A).copy(alpha = 0.72f) else Color(0xFF123D32).copy(alpha = 0.82f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+                        ) {
+                            Text(
+                                message,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
                 }

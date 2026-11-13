@@ -807,9 +807,9 @@ fun FynxHomeSocialHubPanel(
                                 .padding(horizontal = if (textBackground != null) 18.dp else 0.dp, vertical = 14.dp),
                             enabled = !posting && postingAllowed,
                             textStyle = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 22.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                lineHeight = 30.sp,
+                                fontSize = 18.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                lineHeight = 26.sp,
                                 color = textBackground?.let { Color(it.foregroundColor) } ?: MaterialTheme.colorScheme.onBackground,
                                 textAlign = if (textBackground != null) androidx.compose.ui.text.style.TextAlign.Center else androidx.compose.ui.text.style.TextAlign.Start
                             ),
@@ -819,9 +819,9 @@ fun FynxHomeSocialHubPanel(
                                         Text(
                                             "Add description...",
                                             style = MaterialTheme.typography.titleLarge.copy(
-                                                fontSize = 22.sp,
-                                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                                lineHeight = 30.sp
+                                                fontSize = 18.sp,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                                lineHeight = 26.sp
                                             ),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
