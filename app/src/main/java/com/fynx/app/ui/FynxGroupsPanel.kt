@@ -726,11 +726,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(18.dp))
+                    .background(glassPalette.backgroundMid.copy(alpha = 0.98f), RoundedCornerShape(18.dp))
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp)) }
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = glassPalette.messageText, modifier = Modifier.size(24.dp)) }
                 Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                     if (selectedGroup?.groupPhotoMediaId.isNullOrBlank()) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
@@ -739,12 +739,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     }
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageText, maxLines = 1)
+                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, maxLines = 1)
                 }
-                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                 Box {
-                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
                         DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showMore = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showMore = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
@@ -855,10 +855,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             } else {
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
+                        if (!message.fromMe) {
+                            FynxAvatar(message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Member", Modifier.size(34.dp).padding(end = 6.dp))
+                        }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
-                            if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
+                            if (!message.fromMe) {
                                 Text(
-                                    "@${message.senderUsername.orEmpty().removePrefix("@")}",
+                                    message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername?.let { "@${it.removePrefix("@")}" } ?: "Group member",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                                     color = glassPalette.messageMuted,
