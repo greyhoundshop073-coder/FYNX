@@ -47,7 +47,7 @@ checks = [
     ("backend still requires uploaded media for sticker and GIF", "messageType === 'sticker' || messageType === 'gif'" in backend and "sticker and GIF messages require uploaded media" in backend),
     ("backend idempotency is enforced by client message ID", "client_message_id TEXT" in backend and "ON CONFLICT (sender_id, client_message_id)" in backend),
     ("location/contact/poll UI paths use structured transport", all(token in conversation for token in ['"location"', '"contact"', '"poll"', "sendStructuredMessage("])),
-    ("structured media uploads before message delivery is queued", "uploadMedia(context, selectedAttachment)" in conversation and "sendStructuredMessage(" in conversation),
+    ("structured media is copied to durable app storage before upload/retry", "FynxOfflineOutbox.enqueueAttachment(context, item, sourceUri, mimeType)" in conversation and "localMediaPath" in outbox and "uploadMedia(" in sync and "FynxOfflineSync.drain(context)" in conversation),
     ("pending media has a visible local placeholder", 'message.mediaId != null && message.attachmentUri == null' in conversation and "waiting to send" in conversation),
     ("pending polls cannot be voted before successful send", 'enabled = !message.id.startsWith("offline-")' in conversation),
 ]

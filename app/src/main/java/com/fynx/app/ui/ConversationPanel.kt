@@ -114,26 +114,6 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         messages = localMessages
         messagesLoaded = true
     }
-    LaunchedEffect(chat.username) {
-        val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
-        hasPendingOutbox = withContext(Dispatchers.IO) {
-            FynxOfflineOutbox.load(context).any {
-                it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
-            }
-        }
-        FynxOfflineOutbox.updates.collect { updatedRecipient ->
-            if (updatedRecipient == normalizedRecipient) {
-                messages = withContext(Dispatchers.IO) {
-                    FynxChatStore.load(context, chat.username, fallbackMessage)
-                }
-                hasPendingOutbox = withContext(Dispatchers.IO) {
-                    FynxOfflineOutbox.load(context).any {
-                        it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
-                    }
-                }
-            }
-        }
-    }
     var replyToId by remember { mutableStateOf<String?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
     var attachment by remember { mutableStateOf<Uri?>(null) }
@@ -189,6 +169,26 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
     var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var hasPendingOutbox by remember(chat.username) { mutableStateOf(false) }
+    LaunchedEffect(chat.username) {
+        val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
+        hasPendingOutbox = withContext(Dispatchers.IO) {
+            FynxOfflineOutbox.load(context).any {
+                it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
+            }
+        }
+        FynxOfflineOutbox.updates.collect { updatedRecipient ->
+            if (updatedRecipient == normalizedRecipient) {
+                messages = withContext(Dispatchers.IO) {
+                    FynxChatStore.load(context, chat.username, fallbackMessage)
+                }
+                hasPendingOutbox = withContext(Dispatchers.IO) {
+                    FynxOfflineOutbox.load(context).any {
+                        it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
+                    }
+                }
+            }
+        }
+    }
     var typingSent by remember { mutableStateOf(false) }
     var marketplaceContextAttached by remember { mutableStateOf(false) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
