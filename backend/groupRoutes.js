@@ -24,6 +24,7 @@ export function registerGroupRoutes({ app }) {
       CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE, login_alerts BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE', status_note TEXT NOT NULL DEFAULT '', CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED')));
       CREATE INDEX IF NOT EXISTS fynx_group_members_user_idx ON fynx_group_members(user_id,group_id);
       CREATE INDEX IF NOT EXISTS fynx_group_messages_group_idx ON fynx_group_messages(group_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_group_messages_search_idx ON fynx_group_messages USING GIN (to_tsvector('simple',COALESCE(text,'')));
       CREATE INDEX IF NOT EXISTS fynx_group_messages_media_idx ON fynx_group_messages(attachment_media_id);
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
@@ -119,6 +120,9 @@ export function registerGroupRoutes({ app }) {
     const groupId=String(req.params?.groupId||'');
     if(!validId(groupId))return res.status(400).json({error:'invalid group id'});
     if(!(await member(groupId,req.user.sub)))return res.status(403).json({error:'group membership required'});
+    const rawQuery=req.query?.q;
+    const searchQuery=rawQuery===undefined?null:String(rawQuery).trim().replace(/\s+/g,' ');
+    if(searchQuery!==null&&(searchQuery.length<2||searchQuery.length>100))return res.status(400).json({error:'message search must contain between 2 and 100 characters'});
     const limit=Math.min(Math.max(Number(req.query?.limit)||50,1),100);
     const rawBeforeTimestamp=req.query?.beforeTimestamp;
     const rawBeforeId=req.query?.beforeId;
@@ -129,12 +133,14 @@ export function registerGroupRoutes({ app }) {
     const rows=(await pool.query(
       `SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username
        FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id
-       WHERE m.group_id=$1 AND (
-         $2::bigint IS NULL OR m.created_at < to_timestamp($2::double precision / 1000.0)
-         OR (date_trunc('milliseconds',m.created_at)=to_timestamp($2::double precision / 1000.0) AND m.id < $3)
-       )
-       ORDER BY m.created_at DESC,m.id DESC LIMIT $4`,
-      [groupId,beforeTimestamp,beforeId,limit+1]
+       WHERE m.group_id=$1
+         AND ($2::text IS NULL OR to_tsvector('simple',COALESCE(m.text,'')) @@ plainto_tsquery('simple',$2))
+         AND (
+           $3::bigint IS NULL OR m.created_at < to_timestamp($3::double precision / 1000.0)
+           OR (date_trunc('milliseconds',m.created_at)=to_timestamp($3::double precision / 1000.0) AND m.id < $4)
+         )
+       ORDER BY m.created_at DESC,m.id DESC LIMIT $5`,
+      [groupId,searchQuery,beforeTimestamp,beforeId,limit+1]
     )).rows;
     const hasMore=rows.length>limit;
     const pageRows=rows.slice(0,limit);

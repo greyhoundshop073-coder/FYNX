@@ -24,6 +24,8 @@ checks = {
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
     "story shares are pending until the backend accepts them and remain retryable on failure": 'ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false)' in active and "Story not sent yet. Your share is saved" in active,
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
+    "group history search is bounded and membership-scoped before querying": "const rawQuery=req.query?.q" in group_routes and "searchQuery.length<2||searchQuery.length>100" in group_routes and group_routes.find("if(!(await member(groupId,req.user.sub)))") < group_routes.find("plainto_tsquery"),
+    "group full-text search is parameterized and backed by GIN": "to_tsvector('simple',COALESCE(m.text,'')) @@ plainto_tsquery('simple',$2)" in group_routes and "USING GIN (to_tsvector('simple',COALESCE(text,'')))" in group_routes and "[groupId,searchQuery,beforeTimestamp,beforeId,limit+1]" in group_routes,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
