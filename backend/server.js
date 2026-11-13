@@ -592,6 +592,29 @@ app.get("/api/media/:id", auth, async (req, res) => {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
     let privateEvidenceMedia = false;
+    let groupMessageAuthorization = "";
+    let groupMessageMediaFlag = "FALSE AS group_message_media";
+    let ownerMediaAuthorization = "mm.owner_id = $2";
+    const groupMediaSchema = await pool.query(
+      "SELECT to_regclass('public.fynx_group_messages') AS messages, to_regclass('public.fynx_group_members') AS members"
+    );
+    if (groupMediaSchema.rows[0]?.messages && groupMediaSchema.rows[0]?.members) {
+      const groupMessageAccess = `EXISTS (
+        SELECT 1
+        FROM fynx_group_messages gm
+        JOIN fynx_group_members gmem ON gmem.group_id = gm.group_id
+        WHERE gm.attachment_media_id = mm.id
+          AND gm.deleted_at IS NULL
+          AND gmem.user_id = $2
+      )`;
+      groupMessageAuthorization = `OR ${groupMessageAccess}`;
+      groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`;
+      // Ownership must not bypass membership for active group-message attachments.
+      ownerMediaAuthorization = `(mm.owner_id = $2 AND NOT EXISTS (
+        SELECT 1 FROM fynx_group_messages gm
+        WHERE gm.attachment_media_id = mm.id AND gm.deleted_at IS NULL
+      ))`;
+    }
     // Seasonal campaigns are provisioned by the advertising module. Check the
     // table before referencing it so an early media request remains safe while
     // optional campaign schema setup is still in progress.
@@ -621,16 +644,17 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.storage_provider, mm.object_key
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key, ${groupMessageMediaFlag}
       FROM message_media mm
       WHERE mm.id = $1
         AND (
-          mm.owner_id = $2
+          ${ownerMediaAuthorization}
           OR EXISTS (
             SELECT 1 FROM messages m
             WHERE m.media_id = mm.id
               AND (m.sender_id = $2 OR m.recipient_id = $2)
           )
+          ${groupMessageAuthorization}
           OR EXISTS (
             SELECT 1
             FROM marketplace_listings ml
@@ -748,6 +772,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    if (result.rows[0].group_message_media) privateEvidenceMedia = true;
     // Publicly shareable media stored in Neon/R2 is served through a short-lived
     // signed URL. Order evidence remains proxied so its response can enforce no-store.
     if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
