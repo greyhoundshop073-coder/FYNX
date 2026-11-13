@@ -67,8 +67,15 @@ check('group social media shares use the durable attachment staging and retry pa
 check('failed group media staging removes the unsendable original URI from the local message queue', 'messages = messages.filterNot { it.id == optimistic.id }' in active_group_panel and 'Attachment could not be saved for retry.' in active_group_panel)
 check('group polls and events controls are visible only to the signed-in admin or moderator', 'currentUsername: String' in group_social and 'it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)' in group_social and 'currentRole == FynxGroupRole.ADMIN || currentRole == FynxGroupRole.MODERATOR' in group_social)
 check('group staged media is discarded if the active account changes during copying', 'FynxAuthStore.accountStorageKey(context)!=accountKey' in active_group_panel and 'Your FYNX account changed while the attachment was being saved.' in active_group_panel)
-check('group message retry rechecks account identity after the network request before writing local state', 'val result=sendMessage(context,group.id,message)' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)return completed\\n                if(result.isSuccess)' in group_remote_client)
-check('group event RSVP retry rechecks account identity after the server response before clearing local intent', 'if(FynxAuthStore.accountStorageKey(context)!=account)return completed\\n            if(result.isSuccess){clearPendingRsvp' in group_remote_client)
+pending_group_drain = group_remote_client[group_remote_client.find('suspend fun drainPendingWork'):group_remote_client.find('private fun deleteStagedAttachment')]
+drain_send = pending_group_drain.find('val result=sendMessage(context,group.id,message)')
+drain_account_guard = pending_group_drain.find('if(FynxAuthStore.accountStorageKey(context)!=account)return completed', drain_send)
+drain_local_write = pending_group_drain.find('FynxChatStore.replaceMessage', drain_account_guard)
+check('group message retry rechecks account identity after the network request before writing local state', 0 <= drain_send < drain_account_guard < drain_local_write)
+pending_rsvp_sync = group_remote_client[group_remote_client.find('suspend fun syncPendingRsvps'):group_remote_client.find('suspend fun drainPendingWork')]
+rsvp_account_guard = pending_rsvp_sync.find('if(FynxAuthStore.accountStorageKey(context)!=account)return completed')
+rsvp_local_clear = pending_rsvp_sync.find('clearPendingRsvp(context,groupId,entry.key)')
+check('group event RSVP retry rechecks account identity after the server response before clearing local intent', 0 <= rsvp_account_guard < rsvp_local_clear)
 check('group content response is cached only for the account that initiated the request', 'FYNX account changed while group content was loading.' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)throw' in group_remote_client)
 
 
