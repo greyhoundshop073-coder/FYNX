@@ -40,6 +40,10 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
                 ?: runCatching { Uri.parse(route).pathSegments.lastOrNull()?.takeIf { it.isNotBlank() } }.getOrNull()
         } else null
+        val notificationBody = if (type == "MESSAGE" && chatUsername != null &&
+            !FynxConversationPreferences.chatMessagePreviews(this, chatUsername)) {
+            "You have a new message."
+        } else body
         if (type == "MESSAGE" && chatUsername != null &&
             !FynxConversationPreferences.chatNotifications(this, chatUsername)) return
 
@@ -63,7 +67,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             channelId = channel,
             id = stableHash,
             title = title,
-            message = body,
+            message = notificationBody,
             stableKey = notificationId,
             contentIntent = pendingIntent
         )

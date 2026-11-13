@@ -53,6 +53,10 @@ object FynxConversationPreferences {
     fun chatMessagePreviews(context: Context, username: String): Boolean =
         chatBoolean(context, username, "previews", true)
 
+    fun setChatMessagePreviews(context: Context, username: String, enabled: Boolean) {
+        chat(context, username).edit().putBoolean("previews_${chatKey(username)}", enabled).apply()
+    }
+
     fun chatSounds(context: Context, username: String): Boolean =
         chatBoolean(context, username, "sounds", true)
 
@@ -61,6 +65,10 @@ object FynxConversationPreferences {
 
     fun chatReadReceipts(context: Context, username: String): Boolean =
         chatBoolean(context, username, "read", true)
+
+    fun setChatReadReceipts(context: Context, username: String, enabled: Boolean) {
+        chat(context, username).edit().putBoolean("read_${chatKey(username)}", enabled).apply()
+    }
 
     fun chatAutoDownload(context: Context, username: String): Boolean =
         chatBoolean(context, username, "autodownload", true)

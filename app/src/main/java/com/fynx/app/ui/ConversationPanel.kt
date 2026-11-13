@@ -236,7 +236,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         }
                     }
                     realtimeClient.acknowledgeMessage(remote.id)
-                    conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                    if (FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
+                        conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                    }
                 }
             },
             onStateChanged = { state ->
@@ -354,7 +356,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     val unread = remoteMessages
                         .filter { it.recipientId == loadedCurrentUserId && !it.read }
                         .map { it.id }
-                    if (unread.isNotEmpty()) {
+                    if (unread.isNotEmpty() && FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
                         // The stable connection effect can connect while history is loading;
                         // send the realtime acknowledgement and retain HTTP as the durable path.
                         realtimeClient.sendRead(unread)

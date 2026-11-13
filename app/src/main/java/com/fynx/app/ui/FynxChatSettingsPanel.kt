@@ -55,6 +55,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
     var notifications by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chatUsername)) }
     var sounds by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatSounds(context, chatUsername)) }
     var vibration by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatVibration(context, chatUsername)) }
+    var previews by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatMessagePreviews(context, chatUsername)) }
+    var readReceipts by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatReadReceipts(context, chatUsername)) }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
@@ -101,6 +103,10 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
                     notifications = true
                     sounds = true
                     vibration = true
+                    previews = true
+                    readReceipts = true
+                    FynxConversationPreferences.setChatMessagePreviews(context, chatUsername, true)
+                    FynxConversationPreferences.setChatReadReceipts(context, chatUsername, true)
                     textSize = "Medium"
                     FynxConversationPreferences.setChatTextSize(context, chatUsername, "Medium")
                     bubbleTransparency = 0.90f
@@ -157,6 +163,14 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
             ChatSwitchRow("Vibration", "Vibrate briefly for incoming chat messages", vibration) {
                 vibration = it
                 FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("vibration_" + chatUsername.removePrefix("@").lowercase(), it).apply()
+            }
+            ChatSwitchRow("Message previews", "Show message text in notifications for this conversation", previews) {
+                previews = it
+                FynxConversationPreferences.setChatMessagePreviews(context, chatUsername, it)
+            }
+            ChatSwitchRow("Read receipts", "Send read status when you open and receive messages", readReceipts) {
+                readReceipts = it
+                FynxConversationPreferences.setChatReadReceipts(context, chatUsername, it)
             }
         }
 
