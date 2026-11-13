@@ -149,10 +149,10 @@ object FynxGroupRemoteClient {
     }
 
     @Synchronized
-    private fun clearPendingRsvp(context:Context,groupId:String,eventId:String,expectedResponse:String):Boolean {
+    private fun clearPendingRsvp(context:Context,groupId:String,eventId:String,expectedResponse:String?=null):Boolean {
         val prefs=contentPreferences(context,groupId)?:return false
         val values=loadPendingRsvps(context,groupId).toMutableMap()
-        if(values[eventId]!=expectedResponse) return false
+        if(expectedResponse!=null && values[eventId]!=expectedResponse) return false
         values.remove(eventId)
         val edit=prefs.edit()
         if(values.isEmpty())edit.remove("pending_rsvps") else edit.putString("pending_rsvps",JSONObject(values).toString())
@@ -315,7 +315,7 @@ object FynxGroupRemoteClient {
                 JSONObject().put("response",normalized).toString())
             if(FynxAuthStore.accountStorageKey(context)!=account)throw IllegalStateException("FYNX account changed while your event response was saving.")
             if(result.isSuccess) {
-                clearPendingRsvp(context,groupId,eventId,normalized)
+                clearPendingRsvp(context,groupId,eventId)
                 false
             } else {
                 val failure=result.exceptionOrNull()?:IllegalStateException("Event response could not be saved.")
