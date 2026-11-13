@@ -31,7 +31,7 @@ offline_sync = read('app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt')
 connection_manager = read('app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
-check('group membership is required to read messages', "group membership required" in group and "if(!(await member(groupId,req.user.sub)))" in group)
+check('group membership and joined-at history visibility are required to read messages', "group membership required" in group and "const memberHistory = async" in group and "const historyMember=await memberHistory(groupId,req.user.sub)" in group and "if(!historyMember)return res.status(403)" in group)
 check('group message sender owns attachments', "message_media WHERE id=$1 AND owner_id=$2" in group)
 check('group messages respect account safety state', "account_status" in group and "ACCOUNT_LOCKED" in group and "ACCOUNT_LIMITED" in group)
 check('group messages run trust safety inspection', "inspectTrustSafetyText" in group and "SAFETY_BLOCK" in group)
