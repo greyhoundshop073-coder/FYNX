@@ -32,7 +32,7 @@ from pathlib import Path
 p=Path("fynx-runtime-screenshots/admin-control-center-overview.png")
 xml=Path("fynx-runtime-screenshots/admin-control-center-overview.xml").read_text(encoding="utf-8",errors="replace")
 assert p.is_file() and p.stat().st_size > 10000, "Admin emulator screenshot is missing or unexpectedly small"
-assert p.read_bytes().startswith(b"\\x89PNG\\r\\n\\x1a\\n"), "Admin screenshot is not a valid PNG"
+assert p.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")), "Admin screenshot is not a valid PNG"
 assert "FYNX CONTROL CENTER" in xml, "Admin Control Center was not visible in the emulator hierarchy"
 assert "LOCAL VISUAL PREVIEW" in xml, "Preview-only safety banner was not visible"
 print(f"ADMIN_PREVIEW_SCREENSHOT=CAPTURED ({p.stat().st_size} bytes)")
