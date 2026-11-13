@@ -278,7 +278,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
         }
     }
     LaunchedEffect(refreshAdmins, dashboard?.role, adminsOffset) {
-        if (!previewMode && dashboard != null && dashboard.role == "OWNER") {
+        if (!previewMode && dashboard?.role == "OWNER") {
             adminsLoading = true
             FynxAdminClient.admins(context, adminsOffset)
                 .onSuccess { page -> admins = page.items; adminsHasMore = page.hasMore }
