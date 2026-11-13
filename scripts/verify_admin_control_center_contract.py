@@ -276,9 +276,11 @@ require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete
         "Admin PR must select its own runtime certification scope")
 require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
         "FYNX-admin-runtime-certification.md" in runtime_runner and
-        "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
-        'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
-        "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+        "admin-control-center-overview.png" in runtime_runner and
+        "ADMIN_PREVIEW_SCREENSHOT=CAPTURED" in runtime_runner and
+        "LIVE_ROLE_AUTH_BLOCKED" in runtime_runner and
+        "adb exec-out screencap -p" in runtime_runner,
+        "Admin runtime must capture a real emulator screenshot while clearly separating visual preview from live role authorization")
 
 
 # Harden the original five Admin findings without changing normal social search.
@@ -301,6 +303,19 @@ require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(conte
         "targets.take(5)" not in source,
         "Admin People UI must use the protected search and display the bounded server result set")
 
-print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
+const appShell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+require("FYNX_ADMIN_VISUAL_PREVIEW_KEY" in appShell and "FLAG_DEBUGGABLE" in appShell and
+        "getBoolean(FYNX_ADMIN_VISUAL_PREVIEW_KEY, false)" in appShell and
+        "FynxAdminControlCenterPanel(previewMode = adminVisualPreview)" in appShell,
+        "Admin visual preview entry must be explicitly debug-build-only and routed through the real app screen")
+require("fun FynxAdminControlCenterPanel(previewMode: Boolean = false)" in source and
+        'FynxAdminClient.Dashboard("OWNER", 1240, 8, 3, 12)' in source and
+        "LOCAL VISUAL PREVIEW" in source and "OWNER PREVIEW" in source and
+        "enabled = !previewMode" in source and "No financial figures are simulated." in source,
+        "Admin visual preview must be visibly labelled, read-only, and must not imply live financial or role data")
+require("if (!previewMode && dashboard != null" in source and
+        "if (!previewMode && (dashboard?.role == \"OWNER\" || dashboard?.role == \"ADMIN\"))" in source,
+        "Admin preview must not call protected server data or mutation endpoints")
+\nprint("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
