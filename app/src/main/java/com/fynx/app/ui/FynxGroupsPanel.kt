@@ -291,7 +291,8 @@ private fun FynxPulseStat(label: String, value: String, modifier: Modifier = Mod
 @Composable
 fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@preview", onBack: () -> Unit) {
     val context = LocalContext.current
-    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
+    val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
+    val glassThemeId = if (groupAppearance.equals("Light", true)) FynxGlassThemeId.LIGHT else FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
     val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, "group_$groupId")
@@ -703,7 +704,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
 
     if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context).firstOrNull { it.id == groupId }; showSettings = false }); return }
-    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize(), settingsKey = "group_$groupId") {
+    FynxGroupWallpaperBackground(groupId = groupId, modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
