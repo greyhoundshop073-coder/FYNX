@@ -27,6 +27,7 @@ object FynxOfflineSync {
     suspend fun drain(context: Context): Int = drainMutex.withLock {
         withContext(Dispatchers.IO) {
         val accountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() } ?: return@withContext 0
+        val requestToken = FynxBackendClient.accessToken(context)
         var completed = 0
         val items = FynxOfflineOutbox.load(context)
         for (item in items) {
@@ -52,7 +53,9 @@ object FynxOfflineSync {
                 val uploaded = FynxProductionMessaging.uploadMedia(
                     context,
                     Uri.fromFile(localFile),
-                    item.localMediaMimeType
+                    item.localMediaMimeType,
+                    expectedAccountKey = accountKey,
+                    requestToken = requestToken
                 ).getOrNull() ?: break
                 resolvedMediaId = uploaded.id
                 FynxOfflineOutbox.updateMediaId(context, item.id, uploaded.id)
@@ -69,7 +72,9 @@ object FynxOfflineSync {
                     mediaId = resolvedMediaId,
                     mediaType = item.mediaType,
                     voiceDurationMs = item.voiceDurationMs,
-                    allowOfflineQueue = false
+                    allowOfflineQueue = false,
+                    expectedAccountKey = accountKey,
+                    requestToken = requestToken
                 )
             } else {
                 FynxProductionMessaging.sendStructuredMessage(
@@ -81,7 +86,9 @@ object FynxOfflineSync {
                     mediaId = resolvedMediaId,
                     mediaType = item.mediaType,
                     allowOfflineQueue = false,
-                    requestId = item.requestId
+                    requestId = item.requestId,
+                    expectedAccountKey = accountKey,
+                    requestToken = requestToken
                 )
             }
             if (result.isSuccess) {

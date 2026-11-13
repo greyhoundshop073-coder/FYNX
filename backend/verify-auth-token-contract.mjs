@@ -6,6 +6,8 @@ const read = async (path) => readFile(new URL(path, root), "utf8");
 const backend = await read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt");
 const productionMessaging = await read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt");
 const groupRemoteClient = await read("app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt");
+const conversationPanel = await read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt");
+const offlineSync = await read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt");
 const authUi = await read("app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt");
 const remoteAuth = await read("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt");
 const server = await read("backend/server.js");
@@ -33,6 +35,14 @@ assert.match(backend, /internal fun isRequestSessionCurrent\(/,
   "the backend client must expose a shared account-and-token identity guard");
 assert.match(productionMessaging, /FynxBackendClient\.isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore\.accountStorageKey\(context\), requestToken, FynxBackendClient\.accessToken\(context\)\)/,
   "media preparation must abort rather than transfer an in-flight upload to another account");
+assert.match(productionMessaging, /FynxBackendClient\.postJsonForSession\(context, "\/api\/messages", body\.toString\(\), requestToken\)/,
+  "private text and structured message sends must use the initiating session token");
+assert.match(conversationPanel, /FynxProductionMessaging\.uploadMedia\([\s\S]*?requestAccountKey, requestToken\)/,
+  "private voice retry must upload under the account and token captured before IO");
+assert.match(conversationPanel, /expectedAccountKey = requestAccountKey, requestToken = requestToken/,
+  "private voice message creation must retain the upload's initiating session");
+assert.match(offlineSync, /expectedAccountKey = accountKey,[\s\S]*?requestToken = requestToken/,
+  "durable private message retries must retain the account and token captured at drain start");
 assert.match(groupRemoteClient, /FynxBackendClient\.isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore\.accountStorageKey\(context\), requestToken, FynxBackendClient\.accessToken\(context\)\)/,
   "group message creation and media upload must remain in the initiating account session");
 assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,

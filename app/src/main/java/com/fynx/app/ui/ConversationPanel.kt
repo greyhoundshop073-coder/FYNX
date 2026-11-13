@@ -634,27 +634,50 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     fun retryVoiceMessage() {
         val pending = pendingVoiceRetry ?: return
         if (sending) return
+        val requestAccountKey = FynxAuthStore.accountStorageKey(context)
+        val requestToken = FynxBackendClient.accessToken(context)
         conversationScope.launch {
             sending = true
             networkError = null
             val (pendingFile, duration) = pending
+            if (!FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                networkError = "Your account changed. Sign in to the original account to retry this voice message."
+                sending = false
+                return@launch
+            }
             val uploaded = uploadedVoiceCache?.takeIf { it.first == pendingFile.absolutePath }?.second
                 ?.let { Result.success(it) }
-                ?: FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
-                    .onSuccess { media -> uploadedVoiceCache = pendingFile.absolutePath to media }
+                ?: FynxProductionMessaging.uploadMedia(
+                    context, Uri.fromFile(pendingFile), "audio/mp4", requestAccountKey, requestToken
+                ).onSuccess { media ->
+                    if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                        uploadedVoiceCache = pendingFile.absolutePath to media
+                    }
+                }
             uploaded
                 .onSuccess { media ->
-                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
-                        .onSuccess { remote ->
-                            isNewConversation = false
-                            currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
-                            pendingFile.delete()
-                            pendingVoiceRetry = null
-                            uploadedVoiceCache = null
+                    FynxProductionMessaging.sendText(
+                        context, chat.username.removePrefix("@"), "",
+                        mediaId = media.id, mediaType = "audio", voiceDurationMs = duration,
+                        expectedAccountKey = requestAccountKey, requestToken = requestToken
+                    ).onSuccess { remote ->
+                        if (!FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return@onSuccess
+                        isNewConversation = false
+                        currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                        pendingFile.delete()
+                        pendingVoiceRetry = null
+                        uploadedVoiceCache = null
+                    }.onFailure {
+                        if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                            networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message."
                         }
-                        .onFailure { networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message." }
+                    }
                 }
-                .onFailure { networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message." }
+                .onFailure {
+                    if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                        networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message."
+                    }
+                }
             sending = false
         }
     }

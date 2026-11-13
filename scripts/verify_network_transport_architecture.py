@@ -18,6 +18,7 @@ for path in ROOT.rglob("*.kt"):
         violations.append(f"direct WebSocket transport in {path}")
 
 backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
+messaging = Path("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
@@ -38,6 +39,8 @@ if backend.count("shouldClearRejectedAccessToken(") != 4:
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
+if 'FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)' not in messaging:
+    violations.append("private chat send must preserve the initiating account token across attachment and voice upload workflows")
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")
