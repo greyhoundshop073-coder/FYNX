@@ -38,9 +38,14 @@ export function inspectTrustSafetyText(value) {
   };
 }
 
-let safetySchemaPromise;
+const safetySchemaPromises = new WeakMap();
 async function ensureSafetySchema(pool) {
-  if (!safetySchemaPromise) safetySchemaPromise = pool.query(`
+  if (!pool || (typeof pool !== "object" && typeof pool !== "function")) {
+    throw new TypeError("a database pool is required to initialize trust-safety schema");
+  }
+  let schemaPromise = safetySchemaPromises.get(pool);
+  if (!schemaPromise) {
+    schemaPromise = pool.query(`
     CREATE TABLE IF NOT EXISTS safety_content_reports (
       id BIGSERIAL PRIMARY KEY,
       reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -74,8 +79,13 @@ async function ensureSafetySchema(pool) {
     CREATE INDEX IF NOT EXISTS safety_reports_target_idx ON safety_reports(target_user_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS safety_appeals (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, report_id BIGINT REFERENCES safety_reports(id) ON DELETE SET NULL, subject TEXT NOT NULL, details TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','ACCEPTED','REJECTED')), decision_note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
     CREATE INDEX IF NOT EXISTS safety_appeals_user_idx ON safety_appeals(user_id,created_at DESC);
-  `).catch(e=>{safetySchemaPromise=undefined;throw e;});
-  return safetySchemaPromise;
+    `).catch(error => {
+      safetySchemaPromises.delete(pool);
+      throw error;
+    });
+    safetySchemaPromises.set(pool, schemaPromise);
+  }
+  return schemaPromise;
 }
 export function registerTrustSafetyRoutes({ app, pool, auth }) {
   if (!pool) return;
