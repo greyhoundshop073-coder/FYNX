@@ -157,10 +157,10 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
 }
 
 @Composable
-fun FynxAdminControlCenterPanel() {
+fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var dashboard by remember { mutableStateOf<FynxAdminClient.Dashboard?>(null) }
+    var dashboard by remember { mutableStateOf(if (previewMode) FynxAdminClient.Dashboard("OWNER", 1240, 8, 3, 12) else null) }
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
@@ -184,7 +184,7 @@ fun FynxAdminControlCenterPanel() {
     var appealsLoading by remember { mutableStateOf(false) }
     var appealsError by remember { mutableStateOf<String?>(null) }
     var refreshAppeals by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(!previewMode) }
     var protectionLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var protectionError by remember { mutableStateOf<String?>(null) }
@@ -253,15 +253,17 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshDashboard) {
-        loading = true
-        FynxAdminClient.dashboard(context)
-            .onSuccess { dashboard = it; error = null }
-            .onFailure { error = it.message ?: "Admin access required." }
-        loading = false
+        if (!previewMode) {
+            loading = true
+            FynxAdminClient.dashboard(context)
+                .onSuccess { dashboard = it; error = null }
+                .onFailure { error = it.message ?: "Admin access required." }
+            loading = false
+        }
     }
-    LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshAdmins, dashboard?.role) { if (!previewMode && dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
     LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset, activityAction) {
-        if (dashboard != null && activeSection == "Activity") {
+        if (!previewMode && dashboard != null && activeSection == "Activity") {
             activityLoading = true
             activityError = null
             FynxAdminClient.activity(context, activityQuery, activityOffset, activityAction)
@@ -275,7 +277,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection) {
-        if (dashboard != null && activeSection == "Announcements") {
+        if (!previewMode && dashboard != null && activeSection == "Announcements") {
             adminAnnouncementsLoading = true
             adminAnnouncementsError = null
             FynxAdminClient.adminAnnouncements(context)
@@ -286,7 +288,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshReports, dashboard?.role, activeSection, reportsOffset) {
-        if (dashboard != null && activeSection == "Safety") {
+        if (!previewMode && dashboard != null && activeSection == "Safety") {
             reportsLoading = true
             reportsError = null
             FynxAdminClient.reports(context, reportsOffset)
@@ -296,7 +298,7 @@ fun FynxAdminControlCenterPanel() {
         }
     }
     LaunchedEffect(refreshAppeals, dashboard?.role, activeSection, appealsOffset) {
-        if (dashboard != null && activeSection == "Safety") {
+        if (!previewMode && dashboard != null && activeSection == "Safety") {
             appealsLoading = true
             appealsError = null
             FynxAdminClient.appeals(context, appealsOffset)
@@ -307,7 +309,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshProtection, dashboard?.role) {
-        if (dashboard != null) {
+        if (!previewMode && dashboard != null) {
             protectionLoading = true
             protectionError = null
             FynxAdminClient.marketplaceProtectionCases(context)
@@ -318,7 +320,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshDrivers, dashboard?.role) {
-        if (dashboard != null) {
+        if (!previewMode && dashboard != null) {
             driversLoading = true
             driversError = null
             FynxAdminClient.marketplaceDrivers(context)
@@ -329,7 +331,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshRevenue, dashboard?.role) {
-        if (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN") {
+        if (!previewMode && (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN")) {
             revenueLoading = true
             revenueError = null
             FynxAdminClient.revenue(context)
@@ -365,6 +367,11 @@ fun FynxAdminControlCenterPanel() {
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = .92f))
             }
         }
+        if (previewMode) {
+            Card(Modifier.fillMaxWidth().padding(top = 10.dp), colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.08f)), border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.28f))) {
+                Text("LOCAL VISUAL PREVIEW • SAMPLE COUNTS • LIVE DATA AND ACTIONS DISABLED", modifier = Modifier.padding(12.dp), color = FynxDesign.AzureBlue, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(12.dp))
         if (loading) CircularProgressIndicator()
         else if (dashboard == null) {
@@ -378,8 +385,8 @@ fun FynxAdminControlCenterPanel() {
         } else {
             val d = dashboard!!
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                AssistChip(onClick = {}, label = { Text(if (d.role == "OWNER") "OWNER ACCOUNT" else "ADMIN ACCOUNT") })
-                TextButton(onClick = { refreshDashboard++ }, enabled = !loading) { Text("Refresh") }
+                AssistChip(onClick = {}, label = { Text(if (previewMode) "OWNER PREVIEW" else if (d.role == "OWNER") "OWNER ACCOUNT" else "ADMIN ACCOUNT") })
+                TextButton(onClick = { refreshDashboard++ }, enabled = !loading && !previewMode) { Text("Refresh") }
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Open reports", d.openReports) }
@@ -388,7 +395,7 @@ fun FynxAdminControlCenterPanel() {
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity").forEach { section ->
-                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
+                    FilterChip(selected = activeSection == section, onClick = { if (!previewMode) activeSection = section }, enabled = !previewMode, label = { Text(section) })
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -410,9 +417,11 @@ fun FynxAdminControlCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("Marketplace commission ledger", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                            TextButton(onClick = { refreshRevenue++ }, enabled = !revenueLoading) { Text("Refresh") }
+                            TextButton(onClick = { refreshRevenue++ }, enabled = !revenueLoading && !previewMode) { Text("Refresh") }
                         }
-                        if (revenueLoading && revenueReport == null) {
+                        if (previewMode) {
+                            Text("Live Marketplace revenue is not loaded in this visual preview. No financial figures are simulated.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else if (revenueLoading && revenueReport == null) {
                             CircularProgressIndicator()
                         } else if (revenueError != null && revenueReport == null) {
                             Text(revenueError!!, color = MaterialTheme.colorScheme.error)
@@ -457,13 +466,13 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
 
-            if (activeSection == "Overview" && d.role == "OWNER") {
+            if (activeSection == "Overview" && d.role == "OWNER" && !previewMode) {
                 Spacer(Modifier.height(20.dp))
                 Text("Music Library", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 FynxMusicAdminPanel()
             }
-            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
+            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN") && !previewMode) {
                 Spacer(Modifier.height(20.dp))
                 FynxMarketplaceSeasonalPromotionAdminPanel()
                 Spacer(Modifier.height(20.dp))
