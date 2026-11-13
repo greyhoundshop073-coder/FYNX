@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt"
 CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"
 BACKEND = ROOT / "backend/adminRoutes.js"
+OWNER_ROLE = ROOT / "backend/platformAdminRole.js"
 MEDIA_SERVER = ROOT / "backend/server.js"
 ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
 SOCIAL = ROOT / "backend/socialRoutes.js"
@@ -18,6 +19,7 @@ if not SOURCE.is_file():
 source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
+owner_role = OWNER_ROLE.read_text(encoding="utf-8") if OWNER_ROLE.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
 advertising = ADVERTISING.read_text(encoding="utf-8") if ADVERTISING.is_file() else ""
 social = SOCIAL.read_text(encoding="utf-8") if SOCIAL.is_file() else ""
@@ -316,12 +318,17 @@ require("APP_APK=\"app/build/outputs/apk/debug/app-debug.apk\"" in runtime_runne
 
 
 # Harden the original five Admin findings without changing normal social search.
-require("CREATE TABLE IF NOT EXISTS fynx_platform_owner" in backend and
-        "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in backend and
-        "INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,id FROM users ORDER BY id ASC LIMIT 1 ON CONFLICT(singleton) DO NOTHING" in backend and
-        "fynx_platform_owner_bootstrap" in backend and
-        "SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE" in backend,
-        "platform OWNER must be persisted once, concurrency-safe, and protected from accidental deletion/transfer")
+require("createPlatformAdminRoleResolver(pool)" in backend and
+        "CREATE TABLE IF NOT EXISTS fynx_platform_owner" in owner_role and
+        "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in owner_role and
+        "pg_advisory_xact_lock(hashtext('fynx_platform_owner_bootstrap'))" in owner_role and
+        "SELECT id FROM users ORDER BY id ASC LIMIT 1" in owner_role and
+        "ON CONFLICT(singleton) DO NOTHING" in owner_role and
+        "SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE" in owner_role and
+        "bootstrapLegacyOwner" in owner_role and
+        "createPlatformAdminRoleResolver(pool)" in advertising and
+        "createPlatformAdminRoleResolver(pool)" in social,
+        "platform OWNER must use one persisted, concurrency-safe, BIGINT-safe resolver shared by Admin, Marketplace and Music; legacy bootstrap must be protected from accidental deletion/transfer")
 require("isPositivePostgresBigint(targetId)" in backend and
         "isPositivePostgresBigint(reportId)" in backend and
         "isPositivePostgresBigint(appealId)" in backend,

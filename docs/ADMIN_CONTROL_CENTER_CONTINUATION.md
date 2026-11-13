@@ -281,3 +281,12 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Android Build and Chat/Groups parity must pass on the updated PR #536 head.
 - Live Owner/Admin/non-admin calls, production artwork retrieval and full campaign lifecycle remain unverified until production backend and credentialed test accounts are reachable. A skipped reachability probe is not a pass.
 - Keep PR #536 open/unmerged pending explicit approval. Keep PR #436 untouched. Only build/publish the canonical APK from the canonical integration branch after approved integration.
+
+
+## CI contract correction and Owner bootstrap edge case — 13 November 2026
+
+- Backend CI on `fc442f77697864dd2fd8afb5587bc2266b9ee694` failed because the sponsored-feed and CPC runtime verifiers still required the synchronous Advertising auth expression. Both were corrected to require the new awaited session-version check in commit `c1b19976f296eb04f6de0b49f1944134408bc6b9`.
+- Android CI exposed a stale Admin source-contract assertion expecting the Owner table/bootstrap SQL inline in `adminRoutes.js`. The implementation centralizes it in `backend/platformAdminRole.js`; the Python contract now checks the helper and its use by Admin, Marketplace Advertising and Music.
+- This review also caught cold startup before any user exists. The persisted Owner seed now retries on later role checks while no Owner singleton exists, then stops after the first registered account is persisted. The behavioral test covers empty startup, first signup, exact BIGINT IDs, ADMIN and ordinary-user denial.
+- The concurrent seasonal-verifier corrections at `f47825b76a6ec70cf78af8eb5cd0724b4b7689be` and `40f6ad160893e7a0fc200b43d974470509a99662` are preserved.
+- Keep PR #536 open and unmerged. Re-query all three workflows on the exact new head; no green status is inferred from an intermediate run.
