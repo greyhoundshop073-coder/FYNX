@@ -412,10 +412,12 @@ checks.extend([
      and "} else if (editingTextOverlayId == null) {" in camera
      and 'label for label in ["Looks", "Face FX", "Background", "AI Studio"]' in runtime
      and "text-editing keyboard view hides the right-side effect rail and keeps Done visible" in runtime),
-    ("Runtime accessibility helpers detect leaf controls and caption verification handles keyboard-owned hierarchies",
+    ("Runtime accessibility helpers validate clickable controls and only dismiss Back after verified IME visibility",
      'return node is not None and node.attrib.get("enabled", "true").lower() != "false"' in runtime
      and 'return node is not None and node.attrib.get("clickable", "false").lower() == "true"' in runtime
-     and "Gboard owned the keyboard-open accessibility hierarchy" in runtime
+     and 'caption_value_entered = "FYNXcap" in manual_keyboard_xml' in runtime
+     and "if ime_visible:" in runtime
+     and "Never send a second Back key" in runtime
      and "camera-video-text-timing-open" in runtime
      and "video text timing dialog did not expose Show from and Show until" in runtime),
     ("Media overlay geometry is anchored to intrinsic photo/video dimensions and preview crop mode",
