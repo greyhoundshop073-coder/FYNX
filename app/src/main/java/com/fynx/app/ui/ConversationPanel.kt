@@ -687,7 +687,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
 
     if (showChatSettings) {
-        FynxChatSettingsPanel(chatUsername = chat.username, onBack = { showChatSettings = false })
+        FynxChatSettingsPanel(chatUsername = chat.username, onBack = { chatNotificationsEnabled = FynxConversationPreferences.chatNotifications(context, chat.username); showChatSettings = false }, onClearHistory = { messages = emptyList() })
         return
     }
 
