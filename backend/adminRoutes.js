@@ -1,6 +1,7 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { ensureTrustSafetySchema } from './trustSafety.js';
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 export function registerAdminRoutes({
@@ -13,23 +14,8 @@ export function registerAdminRoutes({
   if (!databasePool) return;
   let schemaPromise;
   const ensureSchema = async () => {
+    await ensureTrustSafetySchema(databasePool);
     if (!schemaPromise) schemaPromise = databasePool.query(`
-      CREATE TABLE IF NOT EXISTS safety_content_reports (
-        id BIGSERIAL PRIMARY KEY, reporter_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        target_type TEXT NOT NULL CHECK(target_type IN ('SOCIAL_POST','SOCIAL_COMMENT','MARKETPLACE_LISTING')),
-        target_id BIGINT NOT NULL CHECK(target_id > 0), target_owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        reason TEXT NOT NULL, details TEXT NOT NULL DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','UNDER_REVIEW','RESOLVED','DISMISSED')),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS safety_content_reports_queue_idx ON safety_content_reports(status,created_at ASC);
-      CREATE TABLE IF NOT EXISTS safety_content_moderation_audit (
-        id BIGSERIAL PRIMARY KEY, report_id BIGINT NOT NULL REFERENCES safety_content_reports(id) ON DELETE RESTRICT,
-        moderator_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-        previous_status TEXT NOT NULL, new_status TEXT NOT NULL CHECK(new_status IN ('UNDER_REVIEW','RESOLVED','DISMISSED')),
-        decision_note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS safety_content_moderation_audit_report_idx ON safety_content_moderation_audit(report_id,created_at DESC);
       CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE TABLE IF NOT EXISTS fynx_announcements (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL' CHECK(priority IN ('NORMAL','IMPORTANT','URGENT')), published BOOLEAN NOT NULL DEFAULT TRUE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE INDEX IF NOT EXISTS fynx_announcements_feed_idx ON fynx_announcements(published,created_at DESC);
