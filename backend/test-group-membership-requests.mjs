@@ -56,7 +56,7 @@ try {
  assert.equal((await client.query("SELECT 1 FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2",[group,second])).rowCount,1);
  assert.equal((await call("POST","/api/groups/:groupId/join-requests/:username/reject",{groupId:group,username:"second_"+suffix.slice(0,12)},admin)).statusCode,200);
  assert.equal((await client.query("SELECT 1 FROM fynx_group_members WHERE group_id=$1 AND user_id=$2",[group,second])).rowCount,0);
- const bulk=await client.query("INSERT INTO users(id,username,password_hash) SELECT $1+g,'capacity_'||g||'_'||$2,'' FROM generate_series(1,499) AS series(g)",[base+100n,suffix.slice(0,8)]);
+ const bulk=await client.query("INSERT INTO users(id,username,password_hash) SELECT $1::bigint+g::bigint,'capacity_'||g||'_'||$2,'' FROM generate_series(1,499) AS series(g)",[base+100n,suffix.slice(0,8)]);
  assert.equal(bulk.rowCount,499);
  await client.query("INSERT INTO fynx_group_members(group_id,user_id,role) SELECT $1,id,'MEMBER' FROM users WHERE id BETWEEN $2 AND $3",[capGroup,base+100n,base+598n]);
  await client.query("UPDATE fynx_groups SET approve_new_members=TRUE WHERE id=$1",[capGroup]);
