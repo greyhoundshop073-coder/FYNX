@@ -50,7 +50,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 
 @Composable
-fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
+fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClearHistory: () -> Unit = {}) {
     val context = LocalContext.current
     var notifications by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatNotifications(context, chatUsername)) }
     var sounds by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatSounds(context, chatUsername)) }
@@ -78,6 +78,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}) {
             confirmButton = {
                 TextButton(onClick = {
                     FynxChatStore.clear(context, chatUsername)
+                    onClearHistory()
                     showClearDialog = false
                 }) { Text("Clear") }
             },
