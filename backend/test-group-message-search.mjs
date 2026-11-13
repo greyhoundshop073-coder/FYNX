@@ -66,7 +66,14 @@ async function run(){
   assert(visibleOldHistory.rows.map(row=>row.id).join(",")==="history-old-visible,history-new-visible","enabled history visibility must preserve access to earlier messages");
   const oldAttachment=await client.query(`SELECT EXISTS(SELECT 1 FROM group_history_policy_messages message JOIN group_history_policy_members member ON member.group_id=message.group_id AND member.user_id=$2 JOIN group_history_policy_groups settings ON settings.id=message.group_id WHERE message.media_id=$1 AND (settings.show_history_to_new_members IS DISTINCT FROM FALSE OR message.created_at >= member.joined_at)) AS allowed`,[701,31]);
   assert(oldAttachment.rows[0].allowed===false,"hidden message attachments must not bypass the history policy");
-  console.log("GROUP MESSAGE SEARCH + READ RECEIPTS + NEW-MEMBER HISTORY POSTGRESQL: GREEN (full-text, group isolation, cursor stability, idempotent per-member receipts, sender exclusion)");
+  await client.query(`CREATE TEMP TABLE group_message_idempotency_fixture(id TEXT PRIMARY KEY,group_id TEXT NOT NULL,sender_id BIGINT NOT NULL,text TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL,attachment_media_id BIGINT,attachment_type TEXT,reply_to_id TEXT) ON COMMIT PRESERVE ROWS`);
+  await client.query("INSERT INTO group_message_idempotency_fixture(id,group_id,sender_id,text,created_at) VALUES ('retry-own','group-a',10,'same payload','2026-11-13T11:00:00Z'),('retry-other','group-a',11,'other sender','2026-11-13T11:00:00Z'),('retry-hidden-old','group-a',10,'old payload','2026-11-13T09:00:00Z'),('retry-changed','group-a',10,'original payload','2026-11-13T11:00:00Z')");
+  const retryAllowed=async(id,userId,text,joinedAt,showHistory)=>client.query(`SELECT EXISTS(SELECT 1 FROM group_message_idempotency_fixture existing WHERE existing.id=$1 AND existing.group_id='group-a' AND existing.sender_id=$2 AND existing.text=$3 AND ($5::boolean OR existing.created_at >= $4::timestamptz)) AS allowed`,[id,userId,text,joinedAt,showHistory]);
+  assert((await retryAllowed("retry-own",10,"same payload","2026-11-13T10:00:00Z",false)).rows[0].allowed===true,"same-sender identical retries after joining must remain idempotent");
+  assert((await retryAllowed("retry-other",10,"other sender","2026-11-13T10:00:00Z",false)).rows[0].allowed===false,"a conflicting message id must not expose another sender's message");
+  assert((await retryAllowed("retry-hidden-old",10,"old payload","2026-11-13T10:00:00Z",false)).rows[0].allowed===false,"an idempotent retry must not expose a hidden pre-join message");
+  assert((await retryAllowed("retry-changed",10,"different payload","2026-11-13T10:00:00Z",false)).rows[0].allowed===false,"reusing a message id with changed content must be rejected");
+  console.log("GROUP MESSAGE SEARCH + READ RECEIPTS + NEW-MEMBER HISTORY + MESSAGE-ID SAFETY POSTGRESQL: GREEN (full-text, group isolation, cursor stability, idempotent per-member receipts, sender exclusion)");
  }finally{client.release();}
 }
 run().catch(error=>{console.error("GROUP MESSAGE SEARCH POSTGRESQL: RED",error);process.exitCode=1;}).finally(async()=>{await pool.end();});

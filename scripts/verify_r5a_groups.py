@@ -83,6 +83,7 @@ check('group content response is cached only for the account that initiated the 
 
 
 check('new-member history visibility is an admin-controlled server policy', 'show_history_to_new_members' in membership and 'showHistoryToNewMembers' in group_remote_client and 'Show previous messages to new members' in group_settings_panel and 'isAdmin&&FynxBackendClient.hasAccessToken(context)' in group_settings_panel)
+check('group message idempotency rejects cross-sender, changed-payload and hidden-history collisions', 'ON CONFLICT(id) DO NOTHING RETURNING id' in group and 'existingMessage.sender_id' in group and 'samePayload' in group and 'visibleForMember' in group and "message id conflict" in group)
 check('new-member history cutoff is enforced for message pages, read receipts, replies, actions and media attachments', 'const memberHistory = async' in group and 'm.created_at >= $6' in group and 'message.created_at >= $4' in group and 'm.created_at >= gm.created_at' in group and 'parent.created_at >= gm.created_at' in group and 'gm.created_at >= gmem.created_at' in server)
 check('group read receipts are persisted per message and member with membership-scoped writes', 'CREATE TABLE IF NOT EXISTS fynx_group_message_reads' in group and "app.post('/api/groups/:groupId/read'" in group and 'message.sender_id<>$3' in group and 'ON CONFLICT(message_id,user_id) DO NOTHING' in group)
 check('group message history and realtime payloads expose reader usernames', 'AS read_by' in group and 'readBy:Array.isArray(row.read_by)?row.read_by:[]' in group)

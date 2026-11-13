@@ -90,3 +90,6 @@ Local chat persistence now round-trips message deletion state, pin state, sender
 The group service already stored an admin-controlled `show_history_to_new_members` permission but had not connected it to the active chat history, search, read-receipt, message-action or attachment authorization paths. The active Group settings now expose the switch. When disabled, a newly joined member can only load messages sent from their membership start time onward; the same cutoff is enforced for read receipts, replies, edits/reactions/pins/deletes and protected group-media retrieval. Existing groups retain the prior default of showing history to new members.
 
 The PostgreSQL history test now verifies both policy states and confirms that a hidden old attachment cannot bypass the setting. CI source contracts cover the settings UI/API and each protected access path. Runtime verification with two real group accounts remains required before certification.
+
+
+The group send endpoint also validates an idempotent retry against the original sender, message payload and current member history cutoff. A reused message ID can no longer return another member's message or reveal an old message hidden by the new-member history policy; mismatched retries receive HTTP 409.
