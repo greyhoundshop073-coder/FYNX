@@ -131,6 +131,12 @@ object FynxChatStore {
                     put("mediaId", message.mediaId ?: "")
                     put("messageType", message.messageType)
                     put("messagePayload", JSONObject(message.messagePayload))
+                    put("senderName", message.senderName ?: "")
+                    put("senderUsername", message.senderUsername ?: "")
+                    put("senderAvatarUri", message.senderAvatarUri ?: "")
+                    put("pinned", message.pinned)
+                    put("deleted", message.deleted)
+                    put("readBy", JSONArray(message.readBy))
                 }
             )
         }
@@ -261,7 +267,13 @@ object FynxChatStore {
                         messageType = item.optString("messageType").ifBlank { "text" },
                         messagePayload = item.optJSONObject("messagePayload")?.let { payload ->
                             payload.keys().asSequence().associateWith { key -> payload.optString(key) }
-                        }.orEmpty()
+                        }.orEmpty(),
+                        senderName = item.optString("senderName").takeIf { it.isNotBlank() },
+                        senderUsername = item.optString("senderUsername").takeIf { it.isNotBlank() },
+                        senderAvatarUri = item.optString("senderAvatarUri").takeIf { it.isNotBlank() },
+                        pinned = item.optBoolean("pinned"),
+                        deleted = item.optBoolean("deleted"),
+                        readBy = item.optJSONArray("readBy")?.let { values -> buildList { for (i in 0 until values.length()) values.optString(i).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList()
                     )
                 )
             }

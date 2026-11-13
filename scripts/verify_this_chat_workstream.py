@@ -58,6 +58,7 @@ market_cache_authority = 'cachedProfilePhotoId(context,' in remote_media and 'sa
 check('Marketplace seller avatar uses the shared cache-first avatar authority path', market_avatar_call and market_cache_authority)
 
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
+check('local chat history round-trips deleted state, pinned state, sender identity and group read receipts', all(token in chat_store for token in ['put("deleted", message.deleted)','put("pinned", message.pinned)','put("senderUsername", message.senderUsername ?: "")','put("readBy", JSONArray(message.readBy))','deleted = item.optBoolean("deleted")','pinned = item.optBoolean("pinned")','senderUsername = item.optString("senderUsername")','readBy = item.optJSONArray("readBy")']))
 check('private media attachments are copied into the durable outbox before network upload', 'queuePrivateAttachment(' in conversation and 'FynxOfflineOutbox.enqueueAttachment(context, item, sourceUri, mimeType)' in conversation and 'localMediaPath' in offline_outbox)
 check('private media staging writes only to the account captured before copying', 'val accountKey = FynxAuthStore.accountStorageKey(context)' in offline_outbox and 'FynxAuthStore.accountStorageKey(context) != accountKey' in offline_outbox and 'enqueue(context, name, item.copy(localMediaPath' in offline_outbox)
 check('offline retry does not remove another account’s queued item after an account switch', offline_sync.count('FynxAuthStore.accountStorageKey(context) != accountKey') >= 5)

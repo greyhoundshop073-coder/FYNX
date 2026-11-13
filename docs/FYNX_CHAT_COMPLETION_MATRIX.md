@@ -72,3 +72,14 @@ The active Group search previously filtered only currently loaded local messages
 ## 2026-11-13 — Group leave and ownership journey
 
 The active Group More menu now exposes Leave group. Non-owners call the authenticated leave route and the local group/chat cache is cleared only after server success. Owners are required to choose another current member; ownership is transferred through the server transaction before the owner leaves. If transfer succeeds but leave fails, local roles are updated to the server-confirmed owner/moderator state and the user can retry leaving without re-transferring ownership. This still requires two-account live verification.
+
+
+## 2026-11-13 — Group read receipts and durable conversation metadata
+
+The active Group conversation now records read receipts per message and authenticated group member. The server creates an idempotent `fynx_group_message_reads` relation, only accepts receipt batches from current group members, excludes a sender marking their own message, and publishes updated message payloads over the existing authenticated group realtime channel. The client marks incoming messages read when the conversation opens, when realtime messages arrive, and when older history pages are loaded. The sender sees a double tick and a real `Seen by N` count; the UI no longer treats server acceptance as a group read receipt.
+
+Local chat persistence now round-trips message deletion state, pin state, sender identity, and the last known group read-receipt usernames. This keeps the offline conversation view consistent after process restart while the server remains authoritative when online.
+
+**Verification added:** the PostgreSQL group-history test now exercises per-member receipt uniqueness, idempotent repeats, sender exclusion and group isolation. Source contracts cover the authenticated route, receipt payload, account-bound history/realtime handling, older-page marking and local persistence. Exact-head Android and parity checks are required before certification; live two-account receipt visibility still requires runtime verification.
+
+**Still not implemented:** group voice/video calling. The current call transport models one caller and one callee with a single remote peer connection; adding group calling requires a proper multi-participant room/signaling and media architecture, not a decorative call button. Automatic gallery saving and configurable new-member history visibility also remain outstanding.
