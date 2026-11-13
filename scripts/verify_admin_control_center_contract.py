@@ -316,6 +316,6 @@ require("fun FynxAdminControlCenterPanel(previewMode: Boolean = false)" in sourc
 require("if (!previewMode && dashboard != null" in source and
         "if (!previewMode && (dashboard?.role == \"OWNER\" || dashboard?.role == \"ADMIN\"))" in source,
         "Admin preview must not call protected server data or mutation endpoints")
-\nprint("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
+print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
