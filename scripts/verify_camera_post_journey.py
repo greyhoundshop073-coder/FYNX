@@ -50,9 +50,11 @@ checks = [
      'timerCountingDown = 0' in camera
      and 'showCaptureControls = true' in camera
      and 'Camera is still starting. Please try again.' in camera),
-    ("Caption success is shown as a neutral success notice, not an error",
-     'recordingNotice = "Transcript ready. Caption timing is approximate; review it before sending."' in camera
-     and 'error = "Transcript ready. Caption timing is approximate; review it before sending."' not in camera),
+    ("Caption success is shown as an inline neutral notice, not a blocking error",
+     'videoCaptionMessage = "Captions are ready. Review the wording and timing before continuing."' in camera
+     and 'error = "Captions are ready. Review the wording and timing before continuing."' not in camera
+     and "videoCaptionMessage?.let { message ->" in camera
+     and 'Text(message, style = MaterialTheme.typography.bodySmall' in camera),
     ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
      'find_control(caption_xml, ["Video captions"])' in runtime
      and 'input_text_slowly("FYNXcap")' in runtime
