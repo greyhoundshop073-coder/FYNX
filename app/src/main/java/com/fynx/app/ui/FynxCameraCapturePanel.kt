@@ -1554,26 +1554,10 @@ fun FynxCameraCapturePanel(
                     )
                 }
                 else {
-                    // Keep manual captions first in the editor scroll viewport. Large style
-                    // thumbnails previously pushed this field below the fold, making manual
-                    // caption entry difficult to discover and unreliable on compact screens.
-                    // Keep the visual style choices in the first editor viewport, matching
-                    // the camera reference flow. Manual captions remain available immediately
-                    // below and can scroll into view without hiding the style carousel.
-                    Text("Video styles", style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CameraVideoStyle.values().forEach { option ->
-                            CameraEffectTile(
-                                category = "Video FX",
-                                label = option.label,
-                                previewStyle = cameraEffectPreviewStyle("Video FX", option.label),
-                                selected = videoStyle == option,
-                                enabled = !applyingVideoEffects && !generatingCaptions,
-                                onClick = { videoStyle = option },
-                                modifier = Modifier.width(78.dp)
-                            )
-                        }
-                    }
+                    // Keep manual captions first in the editor scroll viewport. On compact
+                    // phones, the style carousel must not push the direct-entry field below
+                    // the tap-safe area. Optional style presets remain available immediately
+                    // after the caption field and can be reached by scrolling.
                     OutlinedTextField(
                         value = videoCaptionText,
                         onValueChange = { videoCaptionText = it },
@@ -1603,6 +1587,20 @@ fun FynxCameraCapturePanel(
                             }
                             .semantics { contentDescription = "Video captions" }
                     )
+                    Text("Video styles", style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        CameraVideoStyle.values().forEach { option ->
+                            CameraEffectTile(
+                                category = "Video FX",
+                                label = option.label,
+                                previewStyle = cameraEffectPreviewStyle("Video FX", option.label),
+                                selected = videoStyle == option,
+                                enabled = !applyingVideoEffects && !generatingCaptions,
+                                onClick = { videoStyle = option },
+                                modifier = Modifier.width(78.dp)
+                            )
+                        }
+                    }
                     OutlinedButton(onClick = ::generateCaptionsForVideo, enabled = !generatingCaptions && !applyingVideoEffects, modifier = Modifier.fillMaxWidth()) {
                         Text(if (generatingCaptions) "Generating captions…" else "✦ Generate on-device captions")
                     }

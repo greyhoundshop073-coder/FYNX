@@ -15,6 +15,9 @@ manifest = read("app/src/main/AndroidManifest.xml")
 # permits equivalent callback formatting, so do not require one exact source-string layout.
 caption_limit = "take(4000)" in home and "Add description..." in home and "# Hashtags" in home and "@ Mention" in home
 
+video_caption_field_position = camera.find("value = videoCaptionText,")
+video_style_controls_position = camera.find('Text("Video styles", style = MaterialTheme.typography.labelLarge)')
+
 checks = [
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
     ("microphone permission", 'Manifest.permission.RECORD_AUDIO' in camera and 'android.permission.RECORD_AUDIO' in manifest),
@@ -22,6 +25,8 @@ checks = [
     ("CameraX uses the SurfaceView-backed performance preview and rear-first lens fallback", 'PreviewView.ImplementationMode.PERFORMANCE' in camera and 'No camera is available on this device.' in camera),
     ("camera capture and editor docks reserve additional bottom safe area", camera.count("bottom = 84.dp") >= 2),
     ("photo capture", 'ImageCapture' in camera and 'takePicture' in camera),
+    ("manual video caption field precedes video style carousel in the editor scroll viewport",
+     video_caption_field_position >= 0 and video_style_controls_position > video_caption_field_position),
     ("video capture", 'VideoCapture' in camera and 'VideoRecordEvent.Finalize' in camera),
     ("capture preview", 'pendingUri' in camera and 'Preview before' not in camera),
     ("photo filters", 'CameraFilter' in camera and 'FilterChip' in camera),
