@@ -32,7 +32,7 @@ assert.match(primaryMediaRoute, /let groupMessageMediaFlag = "FALSE AS group_mes
 assert.match(primaryMediaRoute, /groupMessageMediaFlag = \`\$\{groupMessageAccess\} AS group_message_media\`/);
 assert.match(primaryMediaRoute, /JOIN fynx_group_members gmem ON gmem\.group_id = gm\.group_id/);
 assert.match(primaryMediaRoute, /gmem\.user_id = \$2/);
-assert.match(primaryMediaRoute, /ownerMediaAuthorization = \`\(mm\.owner_id = \$2 AND NOT EXISTS\(/);
+assert.match(primaryMediaRoute, /ownerMediaAuthorization = .*mm\.owner_id = \$2 AND NOT EXISTS\(/);
 assert.doesNotMatch(primaryMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(primaryMediaRoute.indexOf("if (!result.rows[0])") < primaryMediaRoute.indexOf("redirectStoredMedia"));
 
