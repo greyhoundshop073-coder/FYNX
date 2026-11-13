@@ -26,4 +26,12 @@ class FynxBackendSessionBoundaryTest {
     fun alreadyClearedSessionIsNotClearedAgain() {
         assertFalse(FynxBackendClient.shouldClearRejectedAccessToken("expired-token", null))
     }
+
+    @Test
+    fun groupSendAndAttachmentUploadMustRemainInTheInitiatingAccountAndToken() {
+        assertTrue(FynxBackendClient.isRequestSessionCurrent("alice", "alice", "token-a", "token-a"))
+        assertFalse(FynxBackendClient.isRequestSessionCurrent("alice", "bob", "token-a", "token-b"))
+        assertFalse(FynxBackendClient.isRequestSessionCurrent("alice", "alice", "token-a", "token-b"))
+        assertFalse(FynxBackendClient.isRequestSessionCurrent(null, null, null, null))
+    }
 }

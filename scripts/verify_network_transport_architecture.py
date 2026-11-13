@@ -23,6 +23,8 @@ required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
     'val requestToken = if (isPublicAuthPath(path)) null else accessToken(context)',
     'val requestToken = accessToken(context)',
+    'internal suspend fun postJsonForSession',
+    'internal fun isRequestSessionCurrent',
     'internal fun shouldClearRejectedAccessToken',
     'shouldClearRejectedAccessToken(requestToken, accessToken(context))',
     'shouldClearRejectedAccessToken(token, accessToken(context))',

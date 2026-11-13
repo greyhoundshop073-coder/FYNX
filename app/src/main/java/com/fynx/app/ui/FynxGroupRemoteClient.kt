@@ -118,7 +118,62 @@ object FynxGroupRemoteClient {
     }
     suspend fun loadMessages(context:Context,groupId:String):Result<List<RemoteMessage>> =
         loadMessagePage(context,groupId).map { it.messages }
-    suspend fun sendMessage(context:Context,groupId:String,message:ChatMessage):Result<RemoteMessage> = sendMutex.withLock { runCatching { val chatKey="group_$groupId";val persisted=FynxChatStore.load(context,chatKey).firstOrNull{it.id==message.id};var mediaId:String?=message.mediaId?:persisted?.mediaId?:message.attachmentUri?.substringAfterLast('/').takeIf{it?.all(Char::isDigit)==true};var mediaType=message.attachmentType?:persisted?.attachmentType;if(mediaId==null&&message.attachmentUri!=null){val uri=Uri.parse(message.attachmentUri!!);val mime=groupAttachmentMimeType(context,uri,mediaType);val uploaded=FynxProductionMessaging.uploadMedia(context,uri,mime).getOrThrow();mediaId=uploaded.id;mediaType=mediaType?:mime.substringBefore('/');val saved=FynxChatStore.load(context,chatKey);if(saved.any{it.id==message.id})FynxChatStore.save(context,chatKey,saved.map{if(it.id==message.id)it.copy(mediaId=mediaId,attachmentType=mediaType)else it})};val body=JSONObject().apply{put("id",message.id);put("text",message.text);if(mediaId!=null)put("attachmentMediaId",mediaId);if(mediaType!=null)put("attachmentType",mediaType);if(message.replyToId!=null)put("replyToId",message.replyToId)};val result=runCatching{val o=JSONObject(FynxBackendClient.postJson(context,"/api/groups/$groupId/messages",body.toString()).getOrThrow()).getJSONObject("message");toRemoteMessage(o)};result.getOrElse{error->loadMessages(context,groupId).getOrNull()?.firstOrNull{it.id==message.id}?.let{return@getOrElse it};throw error} } }
+    suspend fun sendMessage(
+        context: Context,
+        groupId: String,
+        message: ChatMessage,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessage> = sendMutex.withLock {
+        runCatching {
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed before this group message could be sent."
+            }
+            val chatKey = "group_$groupId"
+            val persisted = FynxChatStore.load(context, chatKey).firstOrNull { it.id == message.id }
+            var mediaId: String? = message.mediaId
+                ?: persisted?.mediaId
+                ?: message.attachmentUri?.substringAfterLast('/')?.takeIf { it.all(Char::isDigit) }
+            var mediaType = message.attachmentType ?: persisted?.attachmentType
+            if (mediaId == null && message.attachmentUri != null) {
+                val uri = Uri.parse(message.attachmentUri!!)
+                val mime = groupAttachmentMimeType(context, uri, mediaType)
+                val uploaded = FynxProductionMessaging.uploadMedia(
+                    context, uri, mime, expectedAccountKey, requestToken
+                ).getOrThrow()
+                mediaId = uploaded.id
+                mediaType = mediaType ?: mime.substringBefore('/')
+                val saved = FynxChatStore.load(context, chatKey)
+                if (saved.any { it.id == message.id }) {
+                    FynxChatStore.save(context, chatKey, saved.map {
+                        if (it.id == message.id) it.copy(mediaId = mediaId, attachmentType = mediaType) else it
+                    })
+                }
+            }
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed while the attachment was uploading. The message was not sent."
+            }
+            val body = JSONObject().apply {
+                put("id", message.id)
+                put("text", message.text)
+                if (mediaId != null) put("attachmentMediaId", mediaId)
+                if (mediaType != null) put("attachmentType", mediaType)
+                if (message.replyToId != null) put("replyToId", message.replyToId)
+            }
+            val result = runCatching {
+                val raw = FynxBackendClient.postJsonForSession(
+                    context, "/api/groups/$groupId/messages", body.toString(), requestToken
+                ).getOrThrow()
+                toRemoteMessage(JSONObject(raw).getJSONObject("message"))
+            }
+            result.getOrElse { error ->
+                if (FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                    loadMessages(context, groupId).getOrNull()?.firstOrNull { it.id == message.id }?.let { return@getOrElse it }
+                }
+                throw error
+            }
+        }
+    }
     suspend fun editMessage(context:Context,groupId:String,messageId:String,text:String):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","edit");put("text",text)})
     suspend fun reactToMessage(context:Context,groupId:String,messageId:String,reaction:String?):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","reaction");if(reaction!=null)put("reaction",reaction)})
     suspend fun setPinned(context:Context,groupId:String,messageId:String,pinned:Boolean):Result<RemoteMessage> = messageAction(context,groupId,messageId,JSONObject().apply{put("action","pin");put("pinned",pinned)})

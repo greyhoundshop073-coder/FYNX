@@ -98,6 +98,8 @@ object FynxBackendClient {
     suspend fun health(context: Context): Result<String> = get(context, "/health")
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+    internal suspend fun postJsonForSession(context: Context, path: String, body: String, sessionToken: String?): Result<String> =
+        request(context, "POST", path, body, sessionToken, useRequestTokenOverride = true)
     suspend fun postJsonStream(context: Context, path: String, body: String, onEvent: suspend (String) -> Unit): Result<String> {
         // Capture the initiating account before the IO dispatcher can resume this request.
         val requestToken = if (isPublicAuthPath(path)) null else accessToken(context)
@@ -156,9 +158,17 @@ object FynxBackendClient {
         try { val status = connection.responseCode; if (status == HttpURLConnection.HTTP_UNAUTHORIZED) { if (shouldClearRejectedAccessToken(requestToken, accessToken(context))) FynxAuthStore.clear(context); throw FynxUnauthorizedException() }; val stream = if (status in 200..299) connection.inputStream else connection.errorStream; if (status !in 200..299) throw FynxHttpException(status, stream?.use { it.bufferedReader().readText().take(600) }.orEmpty()); val declaredLength = connection.contentLengthLong; require(declaredLength < 0L || declaredLength <= maxBytes) { "FYNX media is too large" }; temporary.delete(); var total = 0L; stream?.use { input -> temporary.outputStream().use { output -> val buffer = ByteArray(32 * 1024); while (true) { val count = input.read(buffer); if (count < 0) break; total += count; if (total > maxBytes) throw IOException("FYNX media is too large"); output.write(buffer, 0, count) }; output.flush() } } ?: throw IOException("FYNX media response was empty"); if (total <= 0L || temporary.length() != total) throw IOException("FYNX media download was incomplete"); return DownloadedMedia(connection.contentType?.substringBefore(';')?.trim()?.lowercase(), total) } finally { cancellationHandle.dispose(); connection.disconnect() }
     }
 
-    private suspend fun request(context: Context, method: String, path: String, body: String?): Result<String> {
-        // Keep this call bound to the session that initiated it, including retries.
-        val requestToken = if (isPublicAuthPath(path)) null else accessToken(context)
+    private suspend fun request(
+        context: Context,
+        method: String,
+        path: String,
+        body: String?,
+        requestTokenOverride: String? = null,
+        useRequestTokenOverride: Boolean = false
+    ): Result<String> {
+        // Snapshot before IO dispatch unless a longer user journey explicitly supplies
+        // the session token captured at its entry point.
+        val requestToken = if (useRequestTokenOverride) requestTokenOverride else if (isPublicAuthPath(path)) null else accessToken(context)
         return withContext(Dispatchers.IO) {
             try {
                 val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }; awaitValidatedNetwork(context)
@@ -180,6 +190,14 @@ object FynxBackendClient {
 
     internal fun shouldClearRejectedAccessToken(rejectedToken: String?, currentToken: String?): Boolean =
         !rejectedToken.isNullOrBlank() && rejectedToken == currentToken
+
+    internal fun isRequestSessionCurrent(
+        expectedAccountKey: String?,
+        currentAccountKey: String?,
+        expectedToken: String?,
+        currentToken: String?
+    ): Boolean = !expectedAccountKey.isNullOrBlank() &&
+        expectedAccountKey == currentAccountKey && expectedToken == currentToken
 
     private suspend fun awaitValidatedNetwork(context: Context) { if (hasNetwork(context)) return; var waited = 0L; while (waited < NETWORK_VALIDATION_WAIT_MS) { delay(NETWORK_VALIDATION_POLL_MS); waited += NETWORK_VALIDATION_POLL_MS; if (hasNetwork(context)) return }; throw FynxNetworkUnavailableException() }
     private fun isPublicAuthPath(path: String): Boolean =

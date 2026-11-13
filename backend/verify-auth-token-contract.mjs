@@ -21,10 +21,14 @@ assert.match(backend, /FynxSecureTokenStore\.save\(context, token\)/,
   "access tokens must be saved through encrypted storage");
 assert.match(backend, /requestToken\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
   "protected API requests must attach the bearer token captured for the initiating session");
-assert.match(backend, /val requestToken = if \(isPublicAuthPath\(path\)\) null else accessToken\(context\)/,
-  "ordinary and streaming requests must capture authentication before dispatching to IO");
+assert.match(backend, /val requestToken = if \(useRequestTokenOverride\) requestTokenOverride else if \(isPublicAuthPath\(path\)\) null else accessToken\(context\)/,
+  "ordinary and streaming requests must capture authentication before dispatching to IO or use the explicitly supplied session");
 assert.match(backend, /val requestToken = accessToken\(context\)/,
   "authenticated media downloads must capture authentication before dispatching to IO");
+assert.match(backend, /internal suspend fun postJsonForSession\(context: Context, path: String, body: String, sessionToken: String\?\): Result<String>/,
+  "a multi-step send journey must be able to keep one captured token across upload and message creation");
+assert.match(backend, /isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore.accountStorageKey\(context\), requestToken, FynxBackendClient.accessToken\(context\)\)/,
+  "media and group-message staging must abort rather than transfer an in-flight action to another account");
 assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,
   "a 401 may clear the session only when the rejected token still belongs to the current session");
 assert.match(backend, /shouldClearRejectedAccessToken\(requestToken, accessToken\(context\)\)/,

@@ -472,6 +472,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         if (!canSendMessages) { syncMessage = "Sending messages is disabled in Group Settings."; return }
         if (normalized.isBlank() || sending || selectedGroup == null) return
         val requestAccountKey = groupAccountKey
+        val requestToken = FynxBackendClient.accessToken(context)
         val message = ChatMessage(normalized, true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyTarget)
         val updatedMessages = messages + message
         messages = updatedMessages
@@ -481,7 +482,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         sending = true
         scope.launch {
             if (!isCurrentGroupAccount(requestAccountKey)) return@launch
-            FynxGroupRemoteClient.sendMessage(context, groupId, message)
+            FynxGroupRemoteClient.sendMessage(context, groupId, message, requestAccountKey, requestToken)
                 .onSuccess { remote ->
                     if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                     val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
@@ -524,6 +525,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
     fun sendGroupAttachment(uri: android.net.Uri, type: String) {
         val requestAccountKey = groupAccountKey
+        val requestToken = FynxBackendClient.accessToken(context)
         if (!isCurrentGroupAccount(requestAccountKey)) return
         if (!canSendMedia) {
             syncMessage = "Sending media and files is disabled in Group Settings."
@@ -563,7 +565,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             if (stagedUri == null || !isCurrentGroupAccount(requestAccountKey)) return@launch
             val stagedMessage = messages.firstOrNull { it.id == optimistic.id } ?: optimistic.copy(attachmentUri = stagedUri.toString())
-            FynxGroupRemoteClient.sendMessage(context, groupId, stagedMessage)
+            FynxGroupRemoteClient.sendMessage(context, groupId, stagedMessage, requestAccountKey, requestToken)
                 .onSuccess { remote ->
                     if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                     val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
@@ -991,9 +993,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             var failedCount = 0
                             var lastError: String? = null
                             val requestAccountKey = groupAccountKey
+                            val requestToken = FynxBackendClient.accessToken(context)
                             for (failedMessage in pendingMessages) {
                                 if (!isCurrentGroupAccount(requestAccountKey)) break
-                                FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage)
+                                FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage, requestAccountKey, requestToken)
                                     .onSuccess { remote ->
                                         if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                                         val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
@@ -1576,7 +1579,25 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }, onMedia = { uri, type ->
             sendGroupAttachment(uri, type)
         }, onStoryShare = {
-            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onSuccess { sent -> messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }; FynxChatStore.save(context, "group_$groupId", messages) }.onFailure { syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." } } }
+            if (!canSendMedia) {
+                syncMessage = "Media sharing is disabled in Group Settings."
+            } else {
+                val requestAccountKey = groupAccountKey
+                val requestToken = FynxBackendClient.accessToken(context)
+                val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false)
+                messages = next
+                FynxChatStore.save(context, "group_$groupId", next)
+                scope.launch {
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@launch
+                    FynxGroupRemoteClient.sendMessage(context, groupId, next.last(), requestAccountKey, requestToken)
+                        .onSuccess { sent ->
+                            if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
+                            messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }
+                            FynxChatStore.save(context, "group_$groupId", messages)
+                        }
+                        .onFailure { if (isCurrentGroupAccount(requestAccountKey)) syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." }
+                }
+            }
         }, openContentInitially = showPollsDirectly)
         if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
             val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
