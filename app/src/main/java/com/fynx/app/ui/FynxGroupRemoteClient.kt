@@ -187,7 +187,7 @@ object FynxGroupRemoteClient {
             val failure=result.exceptionOrNull()?:IllegalStateException("Event response could not be saved.")
             val status=Regex("(?:HTTP|status)[^0-9]*([0-9]{3})",RegexOption.IGNORE_CASE)
                 .find(failure.message.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
-            if(FynxBackendClient.isAccessDeniedOrMissing(failure)||(status!=null&&status in 400..499))throw failure
+            if(status!=null&&status in 400..499)throw failure
             savePendingRsvp(context,groupId,eventId,normalized)
             true
         }
