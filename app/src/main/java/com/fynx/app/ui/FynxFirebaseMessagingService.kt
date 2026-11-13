@@ -36,6 +36,12 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         if (type == "GROUP" && groupId != null &&
             (!FynxConversationPreferences.groupNotifications(this, groupId) ||
                 FynxConversationPreferences.groupMuted(this, groupId))) return
+        val chatUsername = if (type == "MESSAGE") {
+            data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
+                ?: runCatching { Uri.parse(route).pathSegments.lastOrNull()?.takeIf { it.isNotBlank() } }.getOrNull()
+        } else null
+        if (type == "MESSAGE" && chatUsername != null &&
+            !FynxConversationPreferences.chatNotifications(this, chatUsername)) return
 
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
