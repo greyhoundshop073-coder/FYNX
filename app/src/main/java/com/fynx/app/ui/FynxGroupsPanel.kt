@@ -878,7 +878,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 transferTargetUsername = ""
                                 showLeaveGroupDialog = true
                             },
-                            leadingIcon = { Icon(Icons.Default.ExitToApp, null) }
+                            leadingIcon = { Icon(Icons.Default.ArrowBack, null) }
                         )
                         DropdownMenuItem(text = { Text(if (groupNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { groupNotificationsEnabled = !groupNotificationsEnabled; FynxConversationPreferences.setGroupNotifications(context, groupId, groupNotificationsEnabled); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                         DropdownMenuItem(text = { Text(if (groupMuted) "Unmute this group" else "Mute this group") }, onClick = { groupMuted = !groupMuted; FynxConversationPreferences.setGroupMuted(context, groupId, groupMuted); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
