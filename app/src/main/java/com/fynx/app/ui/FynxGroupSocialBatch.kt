@@ -85,7 +85,7 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, currentUsername: String, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
@@ -157,7 +157,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: sus
             }
         }, confirmButton = { TextButton(onClick = { showFriends = false }) { Text("Done") } })
     } else if (showContent) {
-        FynxGroupContentPanel(groupId = group.id, canManage = group.members.any { it.role != FynxGroupRole.MEMBER && it.username.equals(group.ownerUsername, true) || it.role == FynxGroupRole.ADMIN }) {
+        val currentRole = group.members.firstOrNull { it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true) }?.role
+        FynxGroupContentPanel(groupId = group.id, canManage = currentRole == FynxGroupRole.ADMIN || currentRole == FynxGroupRole.MODERATOR) {
             showContent = false
         }
     } else {

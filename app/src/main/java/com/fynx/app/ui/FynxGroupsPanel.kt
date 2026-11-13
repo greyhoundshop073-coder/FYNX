@@ -1481,7 +1481,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         )
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
-        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
+        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, currentUsername = currentUsername, onInvite = { username ->
             val cleanUsername = username.trim().removePrefix("@")
             when {
                 !canAddMembers -> Result.failure(IllegalStateException("Adding members is disabled in Group Settings."))
