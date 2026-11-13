@@ -51,12 +51,15 @@ object FynxOfflineOutbox {
         return PREFS_PREFIX + encodedAccount
     }
 
-    @Synchronized
     fun enqueue(context: Context, item: Item): Boolean {
         val name = preferencesName(context) ?: return false
-        val current = load(context).filterNot { it.id == item.id }.toMutableList()
-        current += item
-        save(context, name, current)
+        return enqueue(context, name, item)
+    }
+
+    @Synchronized
+    private fun enqueue(context: Context, name: String, item: Item): Boolean {
+        val current = loadForPreferences(context, name).filterNot { it.id == item.id }
+        save(context, name, current + item)
         notifyRecipient(item.recipient)
         return true
     }
@@ -92,6 +95,8 @@ object FynxOfflineOutbox {
     }
 
     suspend fun enqueueAttachment(context: Context, item: Item, sourceUri: Uri, mimeType: String): String? = withContext(Dispatchers.IO) {
+        val accountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+            ?: return@withContext null
         val name = preferencesName(context) ?: return@withContext null
         val accountSuffix = name.removePrefix(PREFS_PREFIX)
         val directory = File(context.filesDir, "fynx_chat_outbox_media_$accountSuffix")
@@ -131,7 +136,11 @@ object FynxOfflineOutbox {
             }
             if (target.length() !in 1..MAX_ATTACHMENT_BYTES) throw IllegalArgumentException("Attachment is empty or too large.")
             val path = target.absolutePath
-            if (enqueue(context, item.copy(localMediaPath = path, localMediaMimeType = mimeType))) path else {
+            if (FynxAuthStore.accountStorageKey(context) != accountKey) {
+                target.delete()
+                return@withContext null
+            }
+            if (enqueue(context, name, item.copy(localMediaPath = path, localMediaMimeType = mimeType))) path else {
                 target.delete()
                 null
             }
@@ -143,6 +152,10 @@ object FynxOfflineOutbox {
 
     fun load(context: Context): List<Item> {
         val name = preferencesName(context) ?: return emptyList()
+        return loadForPreferences(context, name)
+    }
+
+    private fun loadForPreferences(context: Context, name: String): List<Item> {
         val raw = context.getSharedPreferences(name, Context.MODE_PRIVATE).getString(KEY, null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)

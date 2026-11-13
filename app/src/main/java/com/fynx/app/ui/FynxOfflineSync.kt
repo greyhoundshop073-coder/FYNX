@@ -39,6 +39,7 @@ object FynxOfflineSync {
                     Result.success(Unit)
                 }
                 if (linked.isFailure) break
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
                 FynxOfflineOutbox.remove(context, item.id)
                 completed++
                 continue
@@ -103,6 +104,7 @@ object FynxOfflineSync {
                     )
                     if (linked.isFailure) break
                 }
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
                 FynxOfflineOutbox.remove(context, item.id)
                 completed++
             } else {
