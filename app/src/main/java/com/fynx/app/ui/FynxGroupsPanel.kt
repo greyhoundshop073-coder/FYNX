@@ -1454,8 +1454,16 @@ private fun deletePendingGroupAttachment(context: android.content.Context, uriTe
     runCatching {
         val uri = Uri.parse(uriText)
         if (uri.scheme != "file") return@runCatching
-        val pendingDirectory = File(context.filesDir, "fynx_group_pending_media").canonicalFile
+        val filesDirectory = context.filesDir.canonicalFile
         val candidate = File(uri.path.orEmpty()).canonicalFile
-        if (candidate.parentFile == pendingDirectory) candidate.delete()
+        val accountScopedDirectory = candidate.parentFile ?: return@runCatching
+        // Staged files live in fynx_group_pending_media_<account-key>. Match the
+        // actual account-scoped directory while refusing paths outside filesDir.
+        if (accountScopedDirectory.parentFile == filesDirectory &&
+            accountScopedDirectory.name.startsWith("fynx_group_pending_media_") &&
+            candidate.isFile
+        ) {
+            candidate.delete()
+        }
     }
 }
