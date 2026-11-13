@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.net.Uri
+import com.fynx.app.BuildConfig
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -45,7 +46,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
-private const val FYNX_PREVIEW_MODE = false
+private val FYNX_PREVIEW_MODE = BuildConfig.DEBUG
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 private fun fynxBackDestination(
