@@ -19,10 +19,24 @@ assert.match(backend, /fun saveAccessToken\(context: Context, token: String\?\)/
   "backend client must expose the secure token persistence boundary");
 assert.match(backend, /FynxSecureTokenStore\.save\(context, token\)/,
   "access tokens must be saved through encrypted storage");
-assert.match(backend, /if \(requiresAuthentication\) accessToken\(context\)\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
-  "protected API requests must attach the stored bearer token");
-assert.match(backend, /if \(requiresAuthentication && !accessToken\(context\)\.isNullOrBlank\(\)\) FynxAuthStore\.clear\(context\)/,
-  "an unauthorized request clears only a server token that was actually present");
+assert.match(backend, /requestToken\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
+  "protected API requests must attach the bearer token captured for the initiating session");
+assert.match(backend, /val requestToken = if \(isPublicAuthPath\(path\)\) null else accessToken\(context\)/,
+  "ordinary and streaming requests must capture authentication before dispatching to IO");
+assert.match(backend, /val requestToken = accessToken\(context\)/,
+  "authenticated media downloads must capture authentication before dispatching to IO");
+assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,
+  "a 401 may clear the session only when the rejected token still belongs to the current session");
+assert.match(backend, /shouldClearRejectedAccessToken\(requestToken, accessToken\(context\)\)/,
+  "ordinary requests and media downloads must protect a newer account from a stale 401");
+assert.match(backend, /shouldClearRejectedAccessToken\(token, accessToken\(context\)\)/,
+  "streaming requests must protect a newer account from a stale 401");
+assert.match(backend, /executeRequest\(context, root, method, path, body, requestToken\)/,
+  "ordinary requests and retries must reuse the initiating session token");
+assert.match(backend, /executeStreamingRequest\(context, root, path, body, requestToken, onEvent\)/,
+  "streaming requests must forward the initiating session token");
+assert.match(backend, /downloadOnce\(context, target, temporary, maxBytes, requestToken\)/,
+  "media downloads must forward the initiating session token");
 assert.match(backend, /private fun isPublicAuthPath\(path: String\): Boolean =\s*path == "\/health" \|\|\s*path == "\/ready"/,
   "health and readiness probes must remain public so they measure backend reachability, not login state");
 assert.ok(authUi.indexOf("FynxAuthStore.saveAccount(context, account.displayName") < authUi.indexOf("FynxBackendClient.saveAccessToken(context, account.token)"),
