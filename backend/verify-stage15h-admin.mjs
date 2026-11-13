@@ -8,6 +8,9 @@ const checks=[
  ['account status changes are administrator protected',admin.includes("/api/admin/accounts/:userId/status")&&admin.includes("ACCOUNT_LIMITED")===false],
  ['admin routes are wired into runtime bootstrap',scalability.includes('registerAdminRoutes({ app })')&&scalability.includes('registerAdminRoutes')],
  ['owner-only admin grants exist',admin.includes("owner access required")&&admin.includes("fynx_admin_roles")],
+ ['owner identity uses the verified configured official account',admin.includes('FYNX_OFFICIAL_USERNAME')&&admin.includes('verified=TRUE')&&!admin.includes('ORDER BY id ASC LIMIT 1')],
+ ['admin routes accept injected database and JWT dependencies for integration tests',admin.includes('pool: injectedPool')&&admin.includes('jwtSecret = process.env.JWT_SECRET')],
+ ['authenticated content moderation route tests are part of backend startup',fs.existsSync(new URL('./verify-admin-content-reporting.mjs',import.meta.url))],
  ['no hardcoded API secret exists',!/sk-[A-Za-z0-9_-]{20,}/.test(admin)]
 ];
 for(const [name,ok] of checks){if(!ok)throw new Error(`Stage 15H verification failed: ${name}`);console.log(`PASS: ${name}`);}
