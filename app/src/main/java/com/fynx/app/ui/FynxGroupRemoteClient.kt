@@ -17,7 +17,7 @@ object FynxGroupRemoteClient {
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
     data class RemoteJoinRequest(val username:String,val requestedAt:Long)
-    data class RemotePollOption(val id:String,val text:String,val voteCount:Int)
+    data class RemotePollOption(val id:String,val text:String,val voteCount:Int,val selectedByMe:Boolean=false)
     data class RemotePoll(val id:String,val question:String,val multipleChoice:Boolean,val closed:Boolean,val options:List<RemotePollOption>)
     data class RemotePost(val id:String,val text:String,val authorUsername:String,val marketplaceProductId:String?,val pinned:Boolean,val createdAt:Long,val poll:RemotePoll?)
     data class RemoteEvent(val id:String,val title:String,val description:String,val startsAt:Long,val endsAt:Long?,val location:String,val creatorUsername:String,val goingCount:Int,val maybeCount:Int,val notGoingCount:Int,val myResponse:String?,val pendingResponse:Boolean=false)
@@ -219,7 +219,7 @@ object FynxGroupRemoteClient {
                         val array=poll.optJSONArray("options")?:JSONArray()
                         for(j in 0 until array.length()) {
                             val option=array.getJSONObject(j)
-                            add(RemotePollOption(option.getString("id"),option.optString("text"),option.optInt("voteCount")))
+                            add(RemotePollOption(option.getString("id"),option.optString("text"),option.optInt("voteCount"),option.optBoolean("selectedByMe")))
                         }
                     }
                 }

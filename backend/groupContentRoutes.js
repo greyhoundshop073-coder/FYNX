@@ -2,6 +2,7 @@ import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import { inspectTrustSafetyText } from './trustSafety.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -88,6 +89,39 @@ export function registerGroupContentRoutes({ app }) {
 
   const canPost = role => ['ADMIN', 'MODERATOR', 'MEMBER'].includes(String(role));
   const canManage = role => ['ADMIN', 'MODERATOR'].includes(String(role));
+  const canCreateGroupContent = async (groupId, role) => {
+    if (canManage(role)) return true;
+    const settings = (await pool.query('SELECT send_messages FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
+    return Boolean(settings?.send_messages);
+  };
+
+  const groupContentSafetyFailure = async (userId, values) => {
+    const safety = (await pool.query(
+      'SELECT message_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1',
+      [userId]
+    )).rows[0] || { message_safety: true, account_status: 'ACTIVE' };
+    if (String(safety.account_status) === 'LOCKED') {
+      return { status: 403, body: { error: 'account is locked', code: 'ACCOUNT_LOCKED' } };
+    }
+    if (String(safety.account_status) === 'LIMITED') {
+      return { status: 403, body: { error: 'account is temporarily limited from creating group content', code: 'ACCOUNT_LIMITED' } };
+    }
+    const text = values.map(value => String(value || '').trim()).filter(Boolean).join('\n');
+    if (safety.message_safety && text) {
+      const result = inspectTrustSafetyText(text);
+      if (result.shouldBlock) {
+        return {
+          status: 422,
+          body: {
+            error: 'content blocked by safety protection',
+            code: 'SAFETY_BLOCK',
+            safety: { risk: result.risk, scamSignals: result.scamSignals, spamSignals: result.spamSignals }
+          }
+        };
+      }
+    }
+    return null;
+  };
 
   app.get('/api/groups/:groupId/content', auth, async (req, res) => {
     try {
@@ -109,13 +143,14 @@ export function registerGroupContentRoutes({ app }) {
 
       const postIds = posts.map(p => p.id);
       const options = postIds.length ? (await pool.query(`
-        SELECT o.id,o.poll_id,o.text,o.position,COUNT(v.user_id)::int AS vote_count
+        SELECT o.id,o.poll_id,o.text,o.position,COUNT(v.user_id)::int AS vote_count,
+               COALESCE(BOOL_OR(v.user_id=$2),FALSE) AS selected_by_me
         FROM fynx_group_poll_options o
         LEFT JOIN fynx_group_poll_votes v ON v.option_id=o.id
         WHERE o.poll_id IN (SELECT poll_id FROM fynx_group_polls WHERE post_id = ANY($1::text[]))
         GROUP BY o.id,o.poll_id,o.text,o.position
         ORDER BY o.poll_id,o.position
-      `, [postIds])).rows : [];
+      `, [postIds, req.user.sub])).rows : [];
 
       const events = (await pool.query(`
         SELECT e.id,e.title,e.description,e.starts_at,e.ends_at,e.location,u.username AS creator_username,
@@ -145,7 +180,7 @@ export function registerGroupContentRoutes({ app }) {
             question: row.question,
             multipleChoice: row.multiple_choice,
             closed: row.closed,
-            options: options.filter(o => o.poll_id === row.poll_id).map(o => ({ id: o.id, text: o.text, voteCount: Number(o.vote_count) }))
+            options: options.filter(o => o.poll_id === row.poll_id).map(o => ({ id: o.id, text: o.text, voteCount: Number(o.vote_count), selectedByMe: Boolean(o.selected_by_me) }))
           } : null
         })),
         events: events.map(row => ({
@@ -174,9 +209,12 @@ export function registerGroupContentRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!actor || !canPost(actor.role)) return res.status(403).json({ error: 'group posting permission required' });
+      if (!(await canCreateGroupContent(groupId, actor.role))) return res.status(403).json({ error: 'group message sending is disabled', code: 'GROUP_SEND_MESSAGES_DISABLED' });
       const text = String(req.body?.text || '').trim();
       const marketplaceProductId = String(req.body?.marketplaceProductId || '').trim() || null;
       if (!text && !marketplaceProductId) return res.status(400).json({ error: 'post content is required' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [text]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const id = String(req.body?.id || randomUUID());
       await pool.query(
         'INSERT INTO fynx_group_posts(id,group_id,author_id,text,marketplace_product_id) VALUES($1,$2,$3,$4,$5)',
@@ -196,10 +234,13 @@ export function registerGroupContentRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!actor || !canPost(actor.role)) return res.status(403).json({ error: 'group posting permission required' });
+      if (!(await canCreateGroupContent(groupId, actor.role))) return res.status(403).json({ error: 'group message sending is disabled', code: 'GROUP_SEND_MESSAGES_DISABLED' });
       const question = String(req.body?.question || '').trim();
       const rawOptions = Array.isArray(req.body?.options) ? req.body.options : [];
       const options = rawOptions.map(v => String(v || '').trim()).filter(Boolean).slice(0, 10);
       if (question.length < 2 || options.length < 2) return res.status(400).json({ error: 'A poll needs a question and at least two options.' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [question, ...options]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const postId = randomUUID();
       const pollId = randomUUID();
       await client.query('BEGIN');
@@ -220,24 +261,42 @@ export function registerGroupContentRoutes({ app }) {
   });
 
   app.post('/api/groups/:groupId/polls/:pollId/votes', auth, async (req, res) => {
+    const client = await pool.connect();
     try {
       await ensureSchema();
       const groupId = String(req.params?.groupId || '');
-      const actor = await member(groupId, req.user.sub);
-      if (!actor) return res.status(403).json({ error: 'group membership required' });
       const pollId = String(req.params?.pollId || '');
       const optionId = String(req.body?.optionId || '');
-      const poll = (await pool.query(`SELECT p.id,p.multiple_choice,p.closed FROM fynx_group_polls p JOIN fynx_group_posts gp ON gp.id=p.post_id WHERE p.id=$1 AND gp.group_id=$2 LIMIT 1`, [pollId, groupId])).rows[0];
-      if (!poll) return res.status(404).json({ error: 'poll not found' });
-      if (poll.closed) return res.status(409).json({ error: 'poll is closed' });
-      const option = (await pool.query('SELECT id FROM fynx_group_poll_options WHERE id=$1 AND poll_id=$2 LIMIT 1', [optionId, pollId])).rows[0];
-      if (!option) return res.status(400).json({ error: 'poll option not found' });
-      if (!poll.multiple_choice) await pool.query('DELETE FROM fynx_group_poll_votes WHERE poll_id=$1 AND user_id=$2', [pollId, req.user.sub]);
-      await pool.query('INSERT INTO fynx_group_poll_votes(poll_id,option_id,user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [pollId, optionId, req.user.sub]);
+      await client.query('BEGIN');
+      const actor = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!actor) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group membership required' });
+      }
+      const poll = (await client.query(`SELECT p.id,p.multiple_choice,p.closed FROM fynx_group_polls p JOIN fynx_group_posts gp ON gp.id=p.post_id WHERE p.id=$1 AND gp.group_id=$2 LIMIT 1 FOR UPDATE OF p`, [pollId, groupId])).rows[0];
+      if (!poll) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'poll not found' });
+      }
+      if (poll.closed) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'poll is closed' });
+      }
+      const option = (await client.query('SELECT id FROM fynx_group_poll_options WHERE id=$1 AND poll_id=$2 LIMIT 1', [optionId, pollId])).rows[0];
+      if (!option) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'poll option not found' });
+      }
+      if (!poll.multiple_choice) await client.query('DELETE FROM fynx_group_poll_votes WHERE poll_id=$1 AND user_id=$2', [pollId, req.user.sub]);
+      await client.query('INSERT INTO fynx_group_poll_votes(poll_id,option_id,user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING', [pollId, optionId, req.user.sub]);
+      await client.query('COMMIT');
       return res.json({ voted: true });
     } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       console.error('group poll vote', error);
       return res.status(500).json({ error: 'group poll vote could not be saved' });
+    } finally {
+      client.release();
     }
   });
 
@@ -263,14 +322,21 @@ export function registerGroupContentRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!actor || !canPost(actor.role)) return res.status(403).json({ error: 'group posting permission required' });
+      if (!(await canCreateGroupContent(groupId, actor.role))) return res.status(403).json({ error: 'group message sending is disabled', code: 'GROUP_SEND_MESSAGES_DISABLED' });
       const title = String(req.body?.title || '').trim();
       const startsAt = String(req.body?.startsAt || '').trim();
       const description = String(req.body?.description || '').trim();
       const location = String(req.body?.location || '').trim();
       if (title.length < 2 || !startsAt) return res.status(400).json({ error: 'Event title and start time are required.' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [title, description, location]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const parsed = new Date(startsAt);
       if (Number.isNaN(parsed.getTime())) return res.status(400).json({ error: 'Event start time is invalid.' });
-      const result = await pool.query(`INSERT INTO fynx_group_events(id,group_id,creator_id,title,description,starts_at,ends_at,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [randomUUID(), groupId, req.user.sub, title, description, parsed.toISOString(), req.body?.endsAt ? new Date(req.body.endsAt).toISOString() : null, location]);
+      const rawEndsAt = typeof req.body?.endsAt === 'string' ? req.body.endsAt.trim() : '';
+      const parsedEnd = rawEndsAt ? new Date(rawEndsAt) : null;
+      if (rawEndsAt && Number.isNaN(parsedEnd.getTime())) return res.status(400).json({ error: 'Event end time is invalid.' });
+      if (parsedEnd && parsedEnd.getTime() <= parsed.getTime()) return res.status(400).json({ error: 'Event end time must be after its start time.' });
+      const result = await pool.query(`INSERT INTO fynx_group_events(id,group_id,creator_id,title,description,starts_at,ends_at,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [randomUUID(), groupId, req.user.sub, title, description, parsed.toISOString(), parsedEnd ? parsedEnd.toISOString() : null, location]);
       return res.status(201).json({ id: result.rows[0].id });
     } catch (error) {
       console.error('group event create', error);

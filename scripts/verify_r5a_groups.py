@@ -13,6 +13,7 @@ def compact(value):
     return ' '.join(value.split())
 
 group = read('backend/groupRoutes.js')
+content_routes = read('backend/groupContentRoutes.js')
 membership = read('backend/groupMembershipRoutes.js')
 bootstrap = read('backend/scalability.js')
 server = read('backend/server.js')
@@ -59,6 +60,15 @@ check('signed-in users can discover all current server group memberships after r
 check('group message history supports stable timestamp and ID cursor pagination', 'beforeTimestamp' in group and 'beforeId' in group and 'ORDER BY m.created_at DESC,m.id DESC' in group and 'loadMessagePage' in group_remote_client and 'Load older messages' in active_group_panel)
 check('authenticated reconnect drains account-scoped pending group messages and RSVPs', 'FynxGroupRemoteClient.drainPendingWork(appContext)' in connection_manager and 'FynxChatStore.load(context,"group_' in group_remote_client and 'syncPendingRsvps(context,group.id)' in group_remote_client and 'FynxAuthStore.accountStorageKey(context)!=account' in group_remote_client)
 check('group pending sends are serialized and retain stable message IDs for idempotent retry', 'sendMutex.withLock' in group_remote_client and 'put("id",message.id)' in group_remote_client and 'delivered = false, read = false' in active_group_panel)
+
+
+check('group poll history returns the authenticated member selection for every option', 'BOOL_OR(v.user_id=$2)' in content_routes and 'selected_by_me' in content_routes and 'selectedByMe: Boolean(o.selected_by_me)' in content_routes and 'selectedByMe:Boolean=false' in group_remote_client and 'optBoolean("selectedByMe")' in group_remote_client)
+check('single-choice poll votes are serialized against the poll row in a transaction', "await client.query('BEGIN')" in content_routes and 'FOR UPDATE OF p' in content_routes and "await client.query('COMMIT')" in content_routes and 'client.release()' in content_routes)
+check('closed polls are visibly closed and their vote actions are disabled', 'poll.closed' in group_social and 'enabled = !poll.closed' in group_social and 'Voting is closed.' in group_social)
+check('poll vote failures are shown to the member instead of silently discarded', 'Your vote could not be saved.' in group_social and '.onFailure { error = it.message' in group_social)
+check('group post pin failures are surfaced to the member', 'This group post could not be updated.' in group_social)
+check('group event end-time input is validated and must follow the start time', 'Event end time is invalid.' in content_routes and 'Event end time must be after its start time.' in content_routes and 'parsedEnd.getTime() <= parsed.getTime()' in content_routes)
+check('group social content creation respects server message permissions and trust-safety checks', 'canCreateGroupContent(groupId, actor.role)' in content_routes and 'groupContentSafetyFailure' in content_routes and 'SAFETY_BLOCK' in content_routes)
 
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):

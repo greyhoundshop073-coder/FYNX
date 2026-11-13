@@ -37,3 +37,21 @@ When all required gates are GREEN, update this matrix with the certified commit 
 ## Post-completion rule
 
 After certification, Chat is not reopened for theoretical feature comparisons. Reopen only for regression, failed test, confirmed security/privacy defect, production-critical defect, or an explicitly approved Chat upgrade.
+
+
+## 2026-11-13 — Group polls and events reliability batch
+
+**Delivery:** PR [#535](https://github.com/greyhoundshop073-coder/FYNX/pull/535), continuing the existing Chat/Groups branch; preceding green checkpoint `c44c6e1ecb493df2b978b7423bdcc7fea0b856e6`.
+
+**Verified defects addressed**
+- Poll history previously returned aggregate vote counts only. The API and Android model now include the authenticated member's own option selection.
+- Closed polls were still clickable despite an existing server-side closed state. The screen now labels closed polls and disables voting.
+- Vote failures had no visible feedback. The screen now surfaces the failure.
+- Single-choice votes previously used separate pool-level delete/insert operations. Voting is now serialized with a row lock and transaction, reusing the reviewed implementation from open PR #523.
+- Event end-time parsing previously allowed invalid values to reach date serialization and did not reject an end time at/before the start. Both cases are rejected.
+- Pin/unpin failures are now surfaced.
+- Group content creation reuses server group-permission and trust-safety checks carried forward from #523.
+
+**Verification on this exact head:** R5A Group verifier, Android unit tests, lint, APK compilation, Backend CI and Chat/Group parity/layout must be checked from this commit's own Actions runs.
+
+**Not certified:** no claim of live Railway/Neon poll persistence, two-account vote isolation, event RSVP cross-account behaviour or physical-device UX. Group membership/invite fixes already implemented in open PR #523 remain pending integration; do not duplicate them.

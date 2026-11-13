@@ -185,6 +185,7 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
     var showPoll by remember { mutableStateOf(false) }
     var showEvent by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    var votingPollId by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
         scope.launch {
@@ -236,15 +237,37 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
                         }
                         post.poll?.let { poll ->
                             Text(poll.question, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                when {
+                                    poll.closed -> "Voting is closed."
+                                    poll.multipleChoice -> "Choose all options that apply."
+                                    else -> "Choose one option."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             poll.options.forEach { option ->
-                                OutlinedButton(onClick = { scope.launch { FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id).onSuccess { reload() } } }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("${option.text}  •  ${option.voteCount}")
+                                OutlinedButton(
+                                    enabled = !poll.closed && votingPollId != poll.id,
+                                    onClick = {
+                                        scope.launch {
+                                            error = null
+                                            votingPollId = poll.id
+                                            FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id)
+                                                .onSuccess { reload() }
+                                                .onFailure { error = it.message ?: "Your vote could not be saved." }
+                                            votingPollId = null
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("${if (option.selectedByMe) "✓ " else ""}${option.text}  •  ${option.voteCount}")
                                 }
                             }
                         }
                         if (post.text.isNotBlank()) Text(post.text)
                         if (post.marketplaceProductId != null) Text("Marketplace item shared in this group", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        if (canManage) TextButton(onClick = { scope.launch { FynxGroupRemoteClient.setGroupPostPinned(context, groupId, post.id, !post.pinned).onSuccess { reload() } } }) { Text(if (post.pinned) "Unpin" else "Pin") }
+                        if (canManage) TextButton(onClick = { scope.launch { FynxGroupRemoteClient.setGroupPostPinned(context, groupId, post.id, !post.pinned).onSuccess { reload() }.onFailure { error = it.message ?: "This group post could not be updated." } } }) { Text(if (post.pinned) "Unpin" else "Pin") }
                     }
                 }
             }

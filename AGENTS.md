@@ -6,6 +6,9 @@ Before editing code, every contributor/chat/agent MUST read:
 1. [the single-APK integration policy](docs/SINGLE_APK_INTEGRATION_POLICY.md)
 2. [the mandatory development and platform compliance rules](docs/DEVELOPMENT_POLICY_COMPLIANCE.md)
 3. [the Google Play launch readiness plan](docs/GOOGLE_PLAY_READINESS.md)
+4. [the backend-ready development and reconnection policy](docs/BACKEND_READY_DEVELOPMENT_POLICY.md)
+
+**Backend-ready requirement:** Every contributor MUST follow `docs/BACKEND_READY_DEVELOPMENT_POLICY.md`. Build features so UI, typed API contracts, backend logic, storage/realtime/payment adapters, configuration, failure states and tests are ready even when production services are offline. Connect every safe/local capability now; document exact live-only blockers and reconnection steps. No fake production success, inert controls or undocumented disconnected features.
 
 Inspect the latest canonical branch head and open pull requests before starting.
 
