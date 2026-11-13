@@ -245,7 +245,7 @@ export function registerGroupContentRoutes({ app }) {
       const pollId = randomUUID();
       await client.query('BEGIN');
       await client.query('INSERT INTO fynx_group_posts(id,group_id,author_id,text) VALUES($1,$2,$3,$4)', [postId, groupId, req.user.sub, '']);
-      await client.query('INSERT INTO fynx_group_polls(id,post_id,question,multiple_choice) VALUES($1,$2,$3,$4)', [pollId, postId, Boolean(req.body?.multipleChoice)]);
+      await client.query('INSERT INTO fynx_group_polls(id,post_id,question,multiple_choice) VALUES($1,$2,$3,$4)', [pollId, postId, question, Boolean(req.body?.multipleChoice)]);
       for (let i = 0; i < options.length; i += 1) {
         await client.query('INSERT INTO fynx_group_poll_options(id,poll_id,text,position) VALUES($1,$2,$3,$4)', [randomUUID(), pollId, options[i], i]);
       }
