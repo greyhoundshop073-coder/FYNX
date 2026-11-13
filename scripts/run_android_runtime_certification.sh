@@ -11,23 +11,28 @@ TEST_EXIT=$?
 # Preserve emulator evidence even if instrumentation fails.
 adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
-adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
-
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # The actual server-authorized OWNER/ADMIN journey still requires the live backend.
   # Separately capture the production Admin layout in a debug-only, read-only preview
   # so the PR supplies genuine emulator pixels without inventing live account data.
   BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(new RegExp("/+$"), ""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
   mkdir -p fynx-runtime-screenshots
+  CAPTURE_STATUS=1
   if [ "${TEST_EXIT}" -eq 0 ]; then
-    printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'
-    adb shell am force-stop com.fynx.app
-    adb shell monkey -p com.fynx.app 1 >/dev/null
-    sleep 5
-    adb shell uiautomator dump /sdcard/fynx-admin-preview.xml >/dev/null
-    adb exec-out cat /sdcard/fynx-admin-preview.xml > fynx-runtime-screenshots/admin-control-center-overview.xml
-    adb exec-out screencap -p > fynx-runtime-screenshots/admin-control-center-overview.png
-    python3 - <<'PY'
+    # connectedDebugAndroidTest uninstalls the target APK during runner teardown.
+    # Reinstall the exact debug APK before setting the preview preference or launching
+    # the app; otherwise run-as/monkey silently leave the emulator on its launcher.
+    APP_APK="app/build/outputs/apk/debug/app-debug.apk"
+    if [ -f "${APP_APK}" ] && adb install -r "${APP_APK}"; then
+      adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
+      if printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'; then
+        adb shell am force-stop com.fynx.app
+        adb shell monkey -p com.fynx.app 1 >/dev/null
+        sleep 5
+        adb shell uiautomator dump /sdcard/fynx-admin-preview.xml >/dev/null
+        adb exec-out cat /sdcard/fynx-admin-preview.xml > fynx-runtime-screenshots/admin-control-center-overview.xml
+        adb exec-out screencap -p > fynx-runtime-screenshots/admin-control-center-overview.png
+        if python3 - <<'PY'
 from pathlib import Path
 p=Path("fynx-runtime-screenshots/admin-control-center-overview.png")
 xml=Path("fynx-runtime-screenshots/admin-control-center-overview.xml").read_text(encoding="utf-8",errors="replace")
@@ -37,9 +42,15 @@ assert "FYNX CONTROL CENTER" in xml, "Admin Control Center was not visible in th
 assert "LOCAL VISUAL PREVIEW" in xml, "Preview-only safety banner was not visible"
 print(f"ADMIN_PREVIEW_SCREENSHOT=CAPTURED ({p.stat().st_size} bytes)")
 PY
-    CAPTURE_STATUS=$?
-  else
-    CAPTURE_STATUS=1
+        then
+          CAPTURE_STATUS=0
+        fi
+      else
+        echo "::error::Could not write the debug-only Admin preview preference."
+      fi
+    else
+      echo "::error::Could not reinstall the debug APK after instrumentation teardown."
+    fi
   fi
   {
     echo "# FYNX Admin Control Center runtime certification"
