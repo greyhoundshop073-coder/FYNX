@@ -281,7 +281,7 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         "LIVE_ROLE_AUTH_BLOCKED" in runtime_runner and
         "adb exec-out screencap -p" in runtime_runner and
         "mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml" in runtime_runner and
-        `adb shell "run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'"` in runtime_runner and
+        "adb shell \"run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'\"" in runtime_runner and
         "| adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs" not in runtime_runner and
         'replace(new RegExp("/+$"), "")' in runtime_runner,
         "Admin runtime must initialize the app preference directory, use a valid backend diagnostic, and capture a real emulator screenshot while clearly separating visual preview from live role authorization")
