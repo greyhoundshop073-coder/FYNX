@@ -1,7 +1,7 @@
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def read(p): return (ROOT/p).read_text(encoding="utf-8")
-trust=read("backend/trustSafety.js"); server=read("backend/server.js"); social=read("backend/socialRoutes.js"); client=read("app/src/main/java/com/fynx/app/ui/FynxSafetyRemoteClient.kt"); privacy=read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
+trust=read("backend/trustSafety.js"); postgres_ids=read("backend/postgresIds.js"); server=read("backend/server.js"); social=read("backend/socialRoutes.js"); client=read("app/src/main/java/com/fynx/app/ui/FynxSafetyRemoteClient.kt"); privacy=read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
 checks=[
 ("trust safety route module exists","registerTrustSafetyRoutes" in trust and "inspectTrustSafetyText" in trust),
 ("safety settings are server-backed and account-scoped","CREATE TABLE IF NOT EXISTS safety_settings" in trust and "WHERE user_id=$1" in trust),
@@ -14,7 +14,7 @@ checks=[
 ("appeals are authenticated and persisted",'app.post("/api/safety/appeals",auth' in trust and "INSERT INTO safety_appeals" in trust),
 ("appeals can only reference a report against the appellant","SELECT id FROM safety_reports WHERE id=$1 AND target_user_id=$2" in trust and "report is not an account case against this user" in trust),
 ("appeal ownership is bound to the authenticated appellant","INSERT INTO safety_appeals(user_id,report_id,subject,details)" in trust and "req.user.sub,reportId,subject,details" in trust),
-("appeal report IDs reject malformed and unsafe integers","Number.isSafeInteger(reportId)" in trust and "report ID must be a positive integer" in trust),
+("appeal report IDs preserve exact PostgreSQL BIGINT strings and reject overflow/unsafe numeric inputs",'import { isPositivePostgresBigint } from "./postgresIds.js"' in trust and "isPositivePostgresBigint(rawReportId)" in trust and "reportId=String(rawReportId).trim()" in trust and "Number(rawReportId)" not in trust and "9223372036854775807n" in postgres_ids and "Number.isSafeInteger(value)" in postgres_ids and "BigInt(raw) <= MAX_POSTGRES_BIGINT" in postgres_ids),
 ("appeal history is account-scoped",'app.get("/api/safety/appeals",auth' in trust and "WHERE user_id=$1" in trust),
 ("server wires trust safety with real auth and database","registerTrustSafetyRoutes({ app, pool, auth });" in server and 'import { registerTrustSafetyRoutes } from "./trustSafety.js";' in server),
 ("block routes are authenticated",'app.post("/api/blocks/:username", auth' in social and 'app.delete("/api/blocks/:username", auth' in social),

@@ -182,6 +182,10 @@ jobs:
           node verify-media-route.mjs
           node test-media-route-db.mjs
           node test-marketplace-advertising-schema-db.mjs
+      - name: Verify persisted platform Owner and Admin role resolution
+        run: node test-platform-admin-role.mjs
+      - name: Verify exact PostgreSQL BIGINT ID validation
+        run: node test-postgres-id-validation.mjs
       - name: Verify Marketplace advertising auth failure isolation
         run: node verify-marketplace-advertising-auth.mjs
       - name: Verify Marketplace CPC billing, deduplication and budget guards
@@ -247,7 +251,15 @@ jobs:
       - name: Run Stage 15G regression verification
         run: node verify-stage15g-regression.mjs
       - name: Run Stage 15H admin verification
-        run: node verify-stage15h-admin.mjs
+        run: |
+          node verify-stage15h-admin.mjs
+          node test-admin-auth-session-version.mjs
+      - name: Run Admin announcement PostgreSQL route integration tests
+        run: node test-admin-announcements-db.mjs
+      - name: Run Admin account-safety PostgreSQL route integration tests
+        run: node test-admin-account-safety-db.mjs
+      - name: Run Admin reports and appeals PostgreSQL route integration tests
+        run: node test-admin-reports-appeals-db.mjs
       - name: Run Marketplace Price Watch verification
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard

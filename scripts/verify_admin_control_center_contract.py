@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt"
 CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"
 BACKEND = ROOT / "backend/adminRoutes.js"
+OWNER_ROLE = ROOT / "backend/platformAdminRole.js"
+POSTGRES_IDS = ROOT / "backend/postgresIds.js"
 MEDIA_SERVER = ROOT / "backend/server.js"
 ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
 SOCIAL = ROOT / "backend/socialRoutes.js"
@@ -18,6 +20,9 @@ if not SOURCE.is_file():
 source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
+trust_safety = (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8")
+owner_role = OWNER_ROLE.read_text(encoding="utf-8") if OWNER_ROLE.is_file() else ""
+postgres_ids = POSTGRES_IDS.read_text(encoding="utf-8") if POSTGRES_IDS.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
 advertising = ADVERTISING.read_text(encoding="utf-8") if ADVERTISING.is_file() else ""
 social = SOCIAL.read_text(encoding="utf-8") if SOCIAL.is_file() else ""
@@ -28,7 +33,7 @@ def require(condition: bool, message: str) -> None:
     if not condition:
         sys.exit(f"ADMIN_CONTROL_CENTER_CONTRACT=FAIL: {message}")
 
-require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
+require("fun FynxAdminControlCenterPanel(previewMode: Boolean = false)" in source, "control center composable is missing or lost its safe preview parameter")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")
 require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
         "safetyActions24h:counts[3]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
@@ -71,8 +76,8 @@ require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
 require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
         "existing owner announcement route parameter must remain compatible")
-require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
-        "music administration must be visible only to the verified owner")
+require('if (activeSection == "Overview" && d.role == "OWNER" && !previewMode)' in source,
+        "music administration must be visible only to the verified owner and excluded from the read-only preview")
 require('"/api/admin/accounts/${encode(userId)}/status"' in client,
         "account status client must call the backend status route")
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,
@@ -101,7 +106,7 @@ require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynx
 require("recordAdminActivity(req,'ADMIN_GRANTED'" in backend and "recordAdminActivity(req,'ADMIN_REVOKED'" in backend and
         "RETURNING user_id" in backend and "await client.query('COMMIT')" in backend,
         "admin grant/revoke and their audit records must be committed atomically")
-require("owner already has owner access" in backend and "u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1)" in backend,
+require("owner already has owner access" in backend and "u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE)" in backend,
         "OWNER must not receive a duplicate ADMIN grant or appear in the admin roster")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
@@ -124,7 +129,7 @@ require("account reports; content-report types are not presented as account repo
         "moderation queue must not misrepresent account reports as content reports")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
-require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
+require("executor = routePool" in backend, "audit helper cannot use a transaction-scoped executor")
 require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminActivity(req,'APPEAL_DECIDED'" in backend,
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
@@ -167,6 +172,16 @@ require("app.get('/api/admin/announcements'" in backend and "app.post('/api/admi
         "protected announcement management/list and create endpoints are missing")
 require("app.patch('/api/admin/announcements/:announcementId'" in backend,
         "announcement publish/unpublish/schedule endpoint is missing")
+announcement_public_route = backend[backend.index("app.get('/api/announcements'"):backend.index("app.get('/api/admin/dashboard'")]
+announcement_admin_route = backend[backend.index("app.get('/api/admin/announcements'"):backend.index("app.post('/api/admin/announcements'")]
+announcement_create_route = backend[backend.index("app.post('/api/admin/announcements'"):backend.index("app.patch('/api/admin/announcements/:announcementId'")]
+announcement_update_route = backend[backend.index("app.patch('/api/admin/announcements/:announcementId'"):backend.index("app.patch('/api/admin/accounts/:userId/status'")]
+require("isPositivePostgresBigint(announcementId)" in announcement_update_route, "announcement updates must reject IDs outside PostgreSQL BIGINT")
+require("res.set('Cache-Control','private, no-store')" in announcement_admin_route, "Admin announcement data must not be cached")
+require("id DESC LIMIT $1 OFFSET $2" in announcement_public_route and "const hasMore=result.rows.length>limit" in announcement_public_route, "public feed must use bounded stable pagination")
+require("id DESC LIMIT $1 OFFSET $2" in announcement_admin_route and "const hasMore=result.rows.length>limit" in announcement_admin_route, "Admin feed must use bounded stable pagination")
+require("title.length>120||body.length>4000||linkUrl.length>2048" in announcement_create_route and "title.length>120" in announcement_update_route and "body.length>4000" in announcement_update_route and "linkUrl.length>2048" in announcement_update_route, "announcement create/edit must reject over-limit inputs")
+require(".trim().slice(0,120)" not in announcement_create_route+announcement_update_route and ".trim().slice(0,4000)" not in announcement_create_route+announcement_update_route and ".trim().slice(0,2048)" not in announcement_create_route+announcement_update_route, "announcement create/edit must not silently truncate content")
 require("hasContent=['title','body','priority','mediaId','linkUrl']" in backend and
         "ANNOUNCEMENT_UPDATED" in backend and "UPDATE fynx_announcements SET title=$1,body=$2,priority=$3,media_id=$4,link_url=$5" in backend,
         "announcement edits must update validated content, image and link in the same audited transaction")
@@ -188,13 +203,15 @@ require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_s
         "published announcement images must be authorized by the protected media route")
 require("ActivityResultContracts.GetContent()" in source and "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in source,
         "announcement image attachment must use the existing authenticated media uploader")
-require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source and
+require("FynxAdminClient.adminAnnouncements(context, adminAnnouncementsOffset)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source and
         "FynxAdminClient.updateAnnouncement(context" in source and "editingAnnouncementId = item.id" in source,
         "announcement admin queue must support listing, editing, publishing and cancellation")
 require("FynxAdminClient.publishAnnouncement(" in source and "announcementScheduleAt" in source and "announcementLinkUrl" in source,
         "announcement composer is missing image/link/scheduling controls")
 require("uriHandler.openUri(link)" in source and "Text(\"Open link\")" in source and "FynxRemoteMedia(" in source,
         "public announcements must render uploaded images and open validated links")
+require(re.search(r"suspend\s+fun\s+announcements\s*\(\s*context\s*:\s*Context,\s*offset\s*:\s*Int\s*=\s*0,\s*limit\s*:\s*Int\s*=\s*50\s*\)\s*:\s*Result\s*<\s*AdminPage\s*<\s*Announcement\s*>\s*>", client) is not None and re.search(r"suspend\s+fun\s+adminAnnouncements\s*\(\s*context\s*:\s*Context,\s*offset\s*:\s*Int\s*=\s*0,\s*limit\s*:\s*Int\s*=\s*50\s*\)\s*:\s*Result\s*<\s*AdminPage\s*<\s*Announcement\s*>\s*>", client) is not None and "Previous updates" in source and "Next updates" in source and "Previous announcements" in source and "Next announcements" in source, "announcement paging UI contract")
+require("${title.length}/120 characters" in source and "${announcementLinkUrl.length}/2048 characters" in source and "title.length <= 120" in source and "announcementLinkUrl.length <= 2048" in source, "announcement composer counters contract")
 require('Text("YYYY-MM-DDTHH:mm:ss+01:00")' in source,
         "announcement schedule hint must remain timezone-aware without a stale fixed date")
 require("does not sign the user out or disable other FYNX features" in source,
@@ -263,9 +280,11 @@ require("function parseCampaignTimestamp(value)" in advertising and
         "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
         "(Z|([+-])(\\d{2}):(\\d{2}))" in advertising,
         "seasonal promotion create/edit must require explicit timezone and validate calendar timestamps")
-require("MAX_POSTGRES_BIGINT" in backend and "function isPositivePostgresBigint(value)" in backend and
-        "isPositivePostgresBigint(mediaIdRaw)" in backend and "isPositivePostgresBigint(raw)" in backend,
-        "announcement image IDs must be bounded to positive PostgreSQL BIGINT before database access")
+require("isPositivePostgresBigint" in backend and "isPositivePostgresBigint(mediaIdRaw)" in backend and
+        "isPositivePostgresBigint(raw)" in backend and
+        "export const MAX_POSTGRES_BIGINT = 9223372036854775807n" in postgres_ids and
+        "Number.isSafeInteger(value)" in postgres_ids and "BigInt(raw) <= MAX_POSTGRES_BIGINT" in postgres_ids,
+        "announcement image IDs must use shared exact positive PostgreSQL BIGINT validation before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
 # OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
@@ -276,10 +295,120 @@ require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete
         "Admin PR must select its own runtime certification scope")
 require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
         "FYNX-admin-runtime-certification.md" in runtime_runner and
-        "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
-        'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
-        "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+        "admin-control-center-overview.png" in runtime_runner and
+        "ADMIN_PREVIEW_SCREENSHOT=CAPTURED" in runtime_runner and
+        "LIVE_ROLE_AUTH_BLOCKED" in runtime_runner and
+        "adb exec-out screencap -p" in runtime_runner and
+        "mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml" in runtime_runner and
+        "adb shell \"run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'\"" in runtime_runner and
+        "| adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs" not in runtime_runner and
+        'replace(new RegExp("/+$"), "")' in runtime_runner,
+        "Admin runtime must initialize the app preference directory, use a valid backend diagnostic, and capture a real emulator screenshot while clearly separating visual preview from live role authorization")
 
+require("name: Upload FYNX runtime screenshots and UI hierarchies" in workflow and
+        "if: \u0024{{ always() &&" in workflow and
+        "path: fynx-runtime-screenshots/" in workflow,
+        "Admin screenshot and UI hierarchy artifacts must upload even when runtime capture fails")
+
+
+# Instrumentation teardown removes the target APK; the visual preview must
+# reinstall the built debug APK before run-as writes preferences or launches it.
+install_at = runtime_runner.find('adb install -r "${APP_APK}"')
+preference_at = runtime_runner.find("fynx_admin_visual_preview", install_at)
+launch_at = runtime_runner.find("adb shell monkey -p com.fynx.app", preference_at)
+screenshot_at = runtime_runner.find("adb exec-out screencap -p", launch_at)
+require("APP_APK=\"app/build/outputs/apk/debug/app-debug.apk\"" in runtime_runner and
+        install_at >= 0 and preference_at > install_at and launch_at > preference_at and screenshot_at > launch_at,
+        "Admin preview must reinstall the debug APK after instrumentation teardown before configuring and capturing the screen")
+
+
+# Harden the original five Admin findings without changing normal social search.
+require("createPlatformAdminRoleResolver(routePool)" in backend and
+        "CREATE TABLE IF NOT EXISTS fynx_platform_owner" in owner_role and
+        "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in owner_role and
+        "pg_advisory_xact_lock(hashtext('fynx_platform_owner_bootstrap'))" in owner_role and
+        "SELECT id FROM users ORDER BY id ASC LIMIT 1" in owner_role and
+        "ON CONFLICT(singleton) DO NOTHING" in owner_role and
+        "SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE" in owner_role and
+        "bootstrapLegacyOwner" in owner_role and
+        "createPlatformAdminRoleResolver(pool)" in advertising and
+        "createPlatformAdminRoleResolver(pool)" in social,
+        "platform OWNER must use one persisted, concurrency-safe, BIGINT-safe resolver shared by Admin, Marketplace and Music; legacy bootstrap must be protected from accidental deletion/transfer")
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in backend and
+        "isPositivePostgresBigint(targetId)" in backend and
+        "isPositivePostgresBigint(reportId)" in backend and
+        "isPositivePostgresBigint(appealId)" in backend,
+        "account, report and appeal route IDs must all reject values outside PostgreSQL BIGINT")
+require("isPositivePostgresBigint(claims?.sub)" in backend and
+        "const subject=String(claims.sub).trim()" in backend,
+        "Admin JWT subjects must be bounded to PostgreSQL BIGINT and normalized to exact strings before SQL")
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in owner_role and
+        "isPositivePostgresBigint(userId)" in owner_role,
+        "shared Owner resolver must reject PostgreSQL BIGINT overflow and unsafe numeric identities before SQL")
+require("isPositivePostgresBigint(claims?.sub)" in (ROOT / "backend/sessionAwareAuth.js").read_text(encoding="utf-8"),
+        "session-aware Marketplace authentication must share the exact PostgreSQL BIGINT subject validator")
+grant_route = backend[backend.index("app.post('/api/admin/admins'"):backend.index("app.delete('/api/admin/admins/:userId'")]
+revoke_route = backend[backend.index("app.delete('/api/admin/admins/:userId'"):]
+require("const userIdInput=req.body?.userId" in grant_route and
+        "isPositivePostgresBigint(userIdInput)" in grant_route and
+        "const userId=String(userIdInput).trim()" in grant_route and "Number(" not in grant_route,
+        "Admin grants must validate the original ID value and preserve exact decimal strings")
+require("const userId=String(req.params.userId??'').trim()" in revoke_route and
+        "isPositivePostgresBigint(userId)" in revoke_route and "Number(" not in revoke_route,
+        "Admin revocations must validate and preserve the exact route ID")
+workflow_file = (ROOT / ".github/workflows/fynx-backend-ci.yml").read_text(encoding="utf-8")
+require("databasePool = pool" in backend and "jwtApi = jwt" in backend and
+        "jwtSecret = JWT_SECRET" in backend and "const routePool = databasePool" in backend,
+        "Admin route registration must permit isolated test dependencies while preserving production defaults")
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in trust_safety and
+        'isPositivePostgresBigint(rawReportId)' in trust_safety and
+        'reportId=String(rawReportId).trim()' in trust_safety and 'Number(rawReportId)' not in trust_safety,
+        "user appeal submission must preserve exact PostgreSQL BIGINT report IDs without Number coercion")
+require("node test-admin-reports-appeals-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin reports and appeals route lifecycle test")
+require("node test-admin-account-safety-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin account-safety route test")
+require("node test-admin-announcements-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin announcement route lifecycle test")
+require("app.get('/api/admin/users'" in backend and
+        "if(!(await requireAdmin(req,res)))return" in backend and
+        "FROM users u" in backend and
+        "LEFT JOIN fynx_account_safety s ON s.user_id=u.id" in backend and
+        "POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0" in backend,
+        "Admin People search must use its own authenticated endpoint, include accounts hidden by social block filtering, and read the enforced account state")
+require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(context, targetQuery)" in source and
+        "targets.forEach { user ->" in source and "FynxSocialClient.searchUsers(context, targetQuery)" not in source and
+        "targets.take(5)" not in source,
+        "Admin People UI must use the protected search and display the bounded server result set")
+
+people_search = backend[backend.index("app.get('/api/admin/users'"):backend.index("app.get('/api/admin/activity'")]
+require("createAdminAuthMiddleware" in backend and "SELECT session_version FROM users WHERE id=$1" in backend and
+        "session expired; sign in again" in backend and "authentication temporarily unavailable" in backend,
+        "Admin routes must reject password-reset-revoked sessions and fail closed when session verification is unavailable")
+require("POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0" in people_search and
+        "POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0" in people_search and
+        "ILIKE" not in people_search,
+        "Admin People search must treat percent and underscore as literal search characters")
+require("COALESCE(s.account_status,'ACTIVE') AS account_status" in people_search and
+        "accountStatus:user.account_status||'ACTIVE'" in people_search and
+        'val accountStatus: String = "ACTIVE"' in client and
+        "Current account status: ${user.accountStatus}" in source,
+        "Admin People results must display the current enforced account status")
+
+
+appShell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+require("FYNX_ADMIN_VISUAL_PREVIEW_KEY" in appShell and "FLAG_DEBUGGABLE" in appShell and
+        "getBoolean(FYNX_ADMIN_VISUAL_PREVIEW_KEY, false)" in appShell and
+        "FynxAdminControlCenterPanel(previewMode = adminVisualPreview)" in appShell,
+        "Admin visual preview entry must be explicitly debug-build-only and routed through the real app screen")
+require("fun FynxAdminControlCenterPanel(previewMode: Boolean = false)" in source and
+        'FynxAdminClient.Dashboard("OWNER", 1240, 8, 3, 12)' in source and
+        "LOCAL VISUAL PREVIEW" in source and "OWNER PREVIEW" in source and
+        "enabled = !previewMode" in source and "No financial figures are simulated." in source,
+        "Admin visual preview must be visibly labelled, read-only, and must not imply live financial or role data")
+require("if (!previewMode && dashboard != null" in source and
+        "if (!previewMode && (dashboard?.role == \"OWNER\" || dashboard?.role == \"ADMIN\"))" in source,
+        "Admin preview must not call protected server data or mutation endpoints")
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")

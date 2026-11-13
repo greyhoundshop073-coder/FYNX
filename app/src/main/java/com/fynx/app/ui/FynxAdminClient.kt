@@ -18,6 +18,7 @@ object FynxAdminClient {
     )
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
+    data class AdminUser(val id: String, val username: String, val displayName: String, val accountStatus: String = "ACTIVE")
     data class MusicTrack(
         val id: String,
         val mediaId: String,
@@ -111,28 +112,21 @@ object FynxAdminClient {
                 val item = array.optJSONObject(i) ?: continue
                 val mediaId = item.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }
                 val scheduledAt = item.optString("scheduledAt").takeIf { it.isNotBlank() && it != "null" }
-                add(
-                    Announcement(
-                        id = item.optString("id"),
-                        title = item.optString("title"),
-                        body = item.optString("body"),
-                        priority = item.optString("priority", "NORMAL"),
-                        publishedAt = item.optString("publishedAt", item.optString("createdAt")),
-                        mediaId = mediaId,
-                        linkUrl = item.optString("linkUrl"),
-                        scheduledAt = scheduledAt,
-                        published = item.optBoolean("published", true)
-                    )
-                )
+                add(Announcement(id=item.optString("id"),title=item.optString("title"),body=item.optString("body"),priority=item.optString("priority","NORMAL"),publishedAt=item.optString("publishedAt",item.optString("createdAt")),mediaId=mediaId,linkUrl=item.optString("linkUrl"),scheduledAt=scheduledAt,published=item.optBoolean("published",true)))
             }
         }
     }
 
-    suspend fun announcements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/announcements").mapCatching(::parseAnnouncements)
+    private fun parseAnnouncementPage(raw:String,requestedOffset:Int,requestedLimit:Int):AdminPage<Announcement> {
+        val value=JSONObject(raw)
+        return AdminPage(items=parseAnnouncements(raw),offset=value.optInt("offset",requestedOffset),limit=value.optInt("limit",requestedLimit),hasMore=value.optBoolean("hasMore",false))
+    }
 
-    suspend fun adminAnnouncements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/admin/announcements").mapCatching(::parseAnnouncements)
+    suspend fun announcements(context:Context,offset:Int=0,limit:Int=50):Result<AdminPage<Announcement>> =
+        FynxBackendClient.get(context,"/api/announcements?limit=${limit.coerceIn(1,100)}&offset=${offset.coerceIn(0,10000)}").mapCatching{parseAnnouncementPage(it,offset.coerceIn(0,10000),limit.coerceIn(1,100))}
+
+    suspend fun adminAnnouncements(context:Context,offset:Int=0,limit:Int=50):Result<AdminPage<Announcement>> =
+        FynxBackendClient.get(context,"/api/admin/announcements?limit=${limit.coerceIn(1,100)}&offset=${offset.coerceIn(0,10000)}").mapCatching{parseAnnouncementPage(it,offset.coerceIn(0,10000),limit.coerceIn(1,100))}
 
     suspend fun dashboard(context: Context): Result<Dashboard> =
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->
@@ -162,15 +156,36 @@ object FynxAdminClient {
             RevenueReport(value.optString("role"), breakdown)
         }
 
-    suspend fun admins(context: Context): Result<List<Admin>> =
-        FynxBackendClient.get(context, "/api/admin/admins").mapCatching { raw ->
-            val array = JSONObject(raw).optJSONArray("admins") ?: return@mapCatching emptyList()
+    suspend fun searchUsers(context: Context, query: String): Result<List<AdminUser>> =
+        FynxBackendClient.get(context, "/api/admin/users?q=${encode(query.trim())}&limit=20").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("users") ?: return@mapCatching emptyList()
             buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    val status = when (item.optString("accountStatus", "ACTIVE").uppercase()) {
+                        "LIMITED" -> "LIMITED"
+                        "LOCKED" -> "LOCKED"
+                        else -> "ACTIVE"
+                    }
+                    add(AdminUser(item.optString("id"), item.optString("username"), item.optString("displayName"), status))
+                }
+            }
+        }
+
+    suspend fun admins(context: Context, offset: Int = 0, limit: Int = 50): Result<AdminPage<Admin>> =
+        FynxBackendClient.get(
+            context,
+            "/api/admin/admins?limit=${limit.coerceIn(1, 100)}&offset=${offset.coerceIn(0, 10000)}"
+        ).mapCatching { raw ->
+            val value = JSONObject(raw)
+            val array = value.optJSONArray("admins") ?: throw IllegalStateException("Admin list was incomplete.")
+            val items = buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
                     add(Admin(item.optString("id"), item.optString("username"), item.optString("displayName"), item.optString("grantedAt")))
                 }
             }
+            AdminPage(items, value.optInt("offset", offset), value.optInt("limit", limit), value.optBoolean("hasMore", false))
         }
 
     suspend fun musicCatalogue(context: Context): Result<List<MusicTrack>> =

@@ -28,10 +28,12 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refresh) {
+    var announcementsOffset by remember { mutableIntStateOf(0) }
+    var announcementsHasMore by remember { mutableStateOf(false) }
+    LaunchedEffect(refresh, announcementsOffset) {
         loading = true
-        FynxAdminClient.announcements(context)
-            .onSuccess { items = it; error = null }
+        FynxAdminClient.announcements(context, announcementsOffset)
+            .onSuccess { page -> items = page.items; announcementsHasMore = page.hasMore; error = null }
             .onFailure { error = it.message ?: "Unable to load announcements." }
         loading = false
     }
@@ -108,8 +110,8 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
                         tint = FynxDesign.AzureBlue, modifier = Modifier.size(36.dp))
-                    Text("No announcements yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Official FYNX updates will appear here when published.",
+                    Text(if (announcementsOffset == 0) "No announcements yet" else "No announcements on this page", style = MaterialTheme.typography.titleMedium)
+                    Text(if (announcementsOffset == 0) "Official FYNX updates will appear here when published." else "There are no more official updates at this page position.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -153,15 +155,27 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                 }
             }
         }
+        if (!loading && error == null && (announcementsOffset > 0 || announcementsHasMore)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (items.isEmpty()) "No updates on this page" else "Showing ${announcementsOffset + 1}–${announcementsOffset + items.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(enabled = announcementsOffset > 0, onClick = { announcementsOffset = (announcementsOffset - 50).coerceAtLeast(0) }) { Text("Previous updates") }
+                    TextButton(enabled = announcementsHasMore && announcementsOffset < 10000, onClick = { announcementsOffset = (announcementsOffset + 50).coerceAtMost(10000) }) { Text("Next updates") }
+                }
+            }
+        }
     }
 }
 
 @Composable
-fun FynxAdminControlCenterPanel() {
+fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var dashboard by remember { mutableStateOf<FynxAdminClient.Dashboard?>(null) }
+    var dashboard by remember { mutableStateOf(if (previewMode) FynxAdminClient.Dashboard("OWNER", 1240, 8, 3, 12) else null) }
     var admins by remember { mutableStateOf<List<FynxAdminClient.Admin>>(emptyList()) }
+    var adminsOffset by remember { mutableIntStateOf(0) }
+    var adminsHasMore by remember { mutableStateOf(false) }
+    var adminsLoading by remember { mutableStateOf(false) }
     var protectionCases by remember { mutableStateOf<List<FynxAdminClient.ProtectionCase>>(emptyList()) }
     var activity by remember { mutableStateOf<List<FynxAdminClient.AdminActivity>>(emptyList()) }
     var activityQuery by remember { mutableStateOf("") }
@@ -184,7 +198,7 @@ fun FynxAdminControlCenterPanel() {
     var appealsLoading by remember { mutableStateOf(false) }
     var appealsError by remember { mutableStateOf<String?>(null) }
     var refreshAppeals by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(!previewMode) }
     var protectionLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var protectionError by remember { mutableStateOf<String?>(null) }
@@ -198,11 +212,13 @@ fun FynxAdminControlCenterPanel() {
     var announcementPriority by remember { mutableStateOf("NORMAL") }
     var announcementUploading by remember { mutableStateOf(false) }
     var adminAnnouncementItems by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
+    var adminAnnouncementsOffset by remember { mutableIntStateOf(0) }
+    var adminAnnouncementsHasMore by remember { mutableStateOf(false) }
     var adminAnnouncementsLoading by remember { mutableStateOf(false) }
     var adminAnnouncementsError by remember { mutableStateOf<String?>(null) }
     var refreshAdminAnnouncements by remember { mutableIntStateOf(0) }
     var targetQuery by remember { mutableStateOf("") }
-    var targets by remember { mutableStateOf<List<FynxSocialClient.User>>(emptyList()) }
+    var targets by remember { mutableStateOf<List<FynxAdminClient.AdminUser>>(emptyList()) }
     var targetMessage by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var refreshAdmins by remember { mutableIntStateOf(0) }
@@ -253,15 +269,25 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshDashboard) {
-        loading = true
-        FynxAdminClient.dashboard(context)
-            .onSuccess { dashboard = it; error = null }
-            .onFailure { error = it.message ?: "Admin access required." }
-        loading = false
+        if (!previewMode) {
+            loading = true
+            FynxAdminClient.dashboard(context)
+                .onSuccess { dashboard = it; error = null }
+                .onFailure { error = it.message ?: "Admin access required." }
+            loading = false
+        }
     }
-    LaunchedEffect(refreshAdmins, dashboard?.role) { if (dashboard != null) FynxAdminClient.admins(context).onSuccess { admins = it } }
+    LaunchedEffect(refreshAdmins, dashboard?.role, adminsOffset) {
+        if (!previewMode && dashboard?.role == "OWNER") {
+            adminsLoading = true
+            FynxAdminClient.admins(context, adminsOffset)
+                .onSuccess { page -> admins = page.items; adminsHasMore = page.hasMore }
+                .onFailure { statusMessage = it.message ?: "Administrator list unavailable." }
+            adminsLoading = false
+        }
+    }
     LaunchedEffect(refreshActivity, dashboard?.role, activeSection, activityOffset, activityAction) {
-        if (dashboard != null && activeSection == "Activity") {
+        if (!previewMode && dashboard != null && activeSection == "Activity") {
             activityLoading = true
             activityError = null
             FynxAdminClient.activity(context, activityQuery, activityOffset, activityAction)
@@ -274,19 +300,19 @@ fun FynxAdminControlCenterPanel() {
         }
     }
 
-    LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection) {
-        if (dashboard != null && activeSection == "Announcements") {
+    LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection, adminAnnouncementsOffset) {
+        if (!previewMode && dashboard != null && activeSection == "Announcements") {
             adminAnnouncementsLoading = true
             adminAnnouncementsError = null
-            FynxAdminClient.adminAnnouncements(context)
-                .onSuccess { adminAnnouncementItems = it }
+            FynxAdminClient.adminAnnouncements(context, adminAnnouncementsOffset)
+                .onSuccess { page -> adminAnnouncementItems = page.items; adminAnnouncementsHasMore = page.hasMore }
                 .onFailure { adminAnnouncementsError = it.message ?: "Announcement management is unavailable." }
             adminAnnouncementsLoading = false
         }
     }
 
     LaunchedEffect(refreshReports, dashboard?.role, activeSection, reportsOffset) {
-        if (dashboard != null && activeSection == "Safety") {
+        if (!previewMode && dashboard != null && activeSection == "Safety") {
             reportsLoading = true
             reportsError = null
             FynxAdminClient.reports(context, reportsOffset)
@@ -296,7 +322,7 @@ fun FynxAdminControlCenterPanel() {
         }
     }
     LaunchedEffect(refreshAppeals, dashboard?.role, activeSection, appealsOffset) {
-        if (dashboard != null && activeSection == "Safety") {
+        if (!previewMode && dashboard != null && activeSection == "Safety") {
             appealsLoading = true
             appealsError = null
             FynxAdminClient.appeals(context, appealsOffset)
@@ -307,7 +333,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshProtection, dashboard?.role) {
-        if (dashboard != null) {
+        if (!previewMode && dashboard != null) {
             protectionLoading = true
             protectionError = null
             FynxAdminClient.marketplaceProtectionCases(context)
@@ -318,7 +344,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshDrivers, dashboard?.role) {
-        if (dashboard != null) {
+        if (!previewMode && dashboard != null) {
             driversLoading = true
             driversError = null
             FynxAdminClient.marketplaceDrivers(context)
@@ -329,7 +355,7 @@ fun FynxAdminControlCenterPanel() {
     }
 
     LaunchedEffect(refreshRevenue, dashboard?.role) {
-        if (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN") {
+        if (!previewMode && (dashboard?.role == "OWNER" || dashboard?.role == "ADMIN")) {
             revenueLoading = true
             revenueError = null
             FynxAdminClient.revenue(context)
@@ -365,6 +391,11 @@ fun FynxAdminControlCenterPanel() {
                     color = androidx.compose.ui.graphics.Color.White.copy(alpha = .92f))
             }
         }
+        if (previewMode) {
+            Card(Modifier.fillMaxWidth().padding(top = 10.dp), colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue.copy(alpha = 0.08f)), border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = 0.28f))) {
+                Text("LOCAL VISUAL PREVIEW • SAMPLE COUNTS • LIVE DATA AND ACTIONS DISABLED", modifier = Modifier.padding(12.dp), color = FynxDesign.AzureBlue, style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(12.dp))
         if (loading) CircularProgressIndicator()
         else if (dashboard == null) {
@@ -378,8 +409,8 @@ fun FynxAdminControlCenterPanel() {
         } else {
             val d = dashboard!!
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                AssistChip(onClick = {}, label = { Text(if (d.role == "OWNER") "OWNER ACCOUNT" else "ADMIN ACCOUNT") })
-                TextButton(onClick = { refreshDashboard++ }, enabled = !loading) { Text("Refresh") }
+                AssistChip(onClick = {}, label = { Text(if (previewMode) "OWNER PREVIEW" else if (d.role == "OWNER") "OWNER ACCOUNT" else "ADMIN ACCOUNT") })
+                TextButton(onClick = { refreshDashboard++ }, enabled = !loading && !previewMode) { Text("Refresh") }
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Users", d.users); StatCard("Open reports", d.openReports) }
@@ -388,7 +419,7 @@ fun FynxAdminControlCenterPanel() {
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity").forEach { section ->
-                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
+                    FilterChip(selected = activeSection == section, onClick = { if (!previewMode) activeSection = section }, enabled = !previewMode, label = { Text(section) })
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -410,9 +441,11 @@ fun FynxAdminControlCenterPanel() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("Marketplace commission ledger", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                            TextButton(onClick = { refreshRevenue++ }, enabled = !revenueLoading) { Text("Refresh") }
+                            TextButton(onClick = { refreshRevenue++ }, enabled = !revenueLoading && !previewMode) { Text("Refresh") }
                         }
-                        if (revenueLoading && revenueReport == null) {
+                        if (previewMode) {
+                            Text("Live Marketplace revenue is not loaded in this visual preview. No financial figures are simulated.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else if (revenueLoading && revenueReport == null) {
                             CircularProgressIndicator()
                         } else if (revenueError != null && revenueReport == null) {
                             Text(revenueError!!, color = MaterialTheme.colorScheme.error)
@@ -457,13 +490,13 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
 
-            if (activeSection == "Overview" && d.role == "OWNER") {
+            if (activeSection == "Overview" && d.role == "OWNER" && !previewMode) {
                 Spacer(Modifier.height(20.dp))
                 Text("Music Library", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 FynxMusicAdminPanel()
             }
-            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
+            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN") && !previewMode) {
                 Spacer(Modifier.height(20.dp))
                 FynxMarketplaceSeasonalPromotionAdminPanel()
                 Spacer(Modifier.height(20.dp))
@@ -725,12 +758,24 @@ fun FynxAdminControlCenterPanel() {
                     }
                 }
             }) { Text("Remove") } } } } }
-            Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxSocialClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            targets.take(5).forEach { user ->
+            if (adminsLoading) CircularProgressIndicator()
+            if (!adminsLoading && (adminsOffset > 0 || adminsHasMore)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(if (admins.isEmpty()) "No administrators on this page" else "Showing ${adminsOffset + 1}–${adminsOffset + admins.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(enabled = adminsOffset > 0, onClick = { adminsOffset = (adminsOffset - 50).coerceAtLeast(0) }) { Text("Previous admins") }
+                        TextButton(enabled = adminsHasMore && adminsOffset < 10000, onClick = { adminsOffset = (adminsOffset + 50).coerceAtMost(10000) }) { Text("Next admins") }
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxAdminClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            targets.forEach { user ->
                 Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(user.displayName.ifBlank { "FYNX user" }, style = MaterialTheme.typography.titleMedium)
                         Text("@${user.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Current account status: ${user.accountStatus}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = {
                                 requestAdminConfirmation(
@@ -740,7 +785,10 @@ fun FynxAdminControlCenterPanel() {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
-                                            .onSuccess { statusMessage = "@${user.username} blocked from Marketplace purchases and group messaging." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "LOCKED") else target }
+                                                statusMessage = "@${user.username} blocked from Marketplace purchases and group messaging."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Action failed." }
                                     }
                                 }
@@ -753,7 +801,10 @@ fun FynxAdminControlCenterPanel() {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
-                                            .onSuccess { statusMessage = "@${user.username} restored." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "ACTIVE") else target }
+                                                statusMessage = "@${user.username} restored."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Action failed." }
                                     }
                                 }
@@ -805,7 +856,10 @@ fun FynxAdminControlCenterPanel() {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "LIMITED")
-                                            .onSuccess { statusMessage = "@${user.username} is now limited." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "LIMITED") else target }
+                                                statusMessage = "@${user.username} is now limited."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Account restriction failed." }
                                     }
                                 }
@@ -943,7 +997,8 @@ fun FynxAdminControlCenterPanel() {
                     border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .18f))) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
-                            label = { Text("Announcement title") }, singleLine = true)
+                            label = { Text("Announcement title") }, singleLine = true,
+                            supportingText = { Text("${title.length}/120 characters") })
                         OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(),
                             label = { Text("Message to users") }, minLines = 4,
                             supportingText = { Text(body.length.toString() + "/4000 characters") })
@@ -953,7 +1008,8 @@ fun FynxAdminControlCenterPanel() {
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("External link (optional)") },
                             placeholder = { Text("https://example.com") },
-                            singleLine = true
+                            singleLine = true,
+                            supportingText = { Text("${announcementLinkUrl.length}/2048 characters • HTTPS links only") }
                         )
                         OutlinedTextField(
                             value = announcementScheduleAt,
@@ -1000,7 +1056,7 @@ fun FynxAdminControlCenterPanel() {
                         val isScheduled = announcementScheduleAt.isNotBlank()
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 4000 && !announcementUploading,
+                            enabled = title.isNotBlank() && title.length <= 120 && body.isNotBlank() && body.length <= 4000 && announcementLinkUrl.length <= 2048 && !announcementUploading,
                             onClick = {
                                 requestAdminConfirmation(
                                     if (editingAnnouncementId != null) "Save announcement changes?" else if (isScheduled) "Schedule this official announcement?" else "Publish this official announcement?",
@@ -1028,6 +1084,7 @@ fun FynxAdminControlCenterPanel() {
                                                 announcementPriority = "NORMAL"
                                                 editingAnnouncementId = null
                                                 editingAnnouncementPublished = true
+                                                adminAnnouncementsOffset = 0
                                                 refreshAdminAnnouncements++
                                             }
                                             .onFailure { statusMessage = it.message ?: "Announcement could not be saved." }
@@ -1053,7 +1110,7 @@ fun FynxAdminControlCenterPanel() {
                         Text(adminAnnouncementsError!!, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { refreshAdminAnnouncements++ }) { Text("Retry") }
                     }
-                    adminAnnouncementItems.isEmpty() -> Text("No announcements have been created yet.",
+                    adminAnnouncementItems.isEmpty() -> Text(if (adminAnnouncementsOffset == 0) "No announcements have been created yet." else "No announcements on this page.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else -> adminAnnouncementItems.forEach { item ->
                         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -1087,7 +1144,7 @@ fun FynxAdminControlCenterPanel() {
                                             ) {
                                                 scope.launch {
                                                     FynxAdminClient.setAnnouncementPublishing(context, item.id, false, null)
-                                                        .onSuccess { statusMessage = "Announcement unpublished."; refreshAdminAnnouncements++ }
+                                                        .onSuccess { statusMessage = "Announcement unpublished."; adminAnnouncementsOffset = 0; refreshAdminAnnouncements++ }
                                                         .onFailure { statusMessage = it.message ?: "Could not unpublish announcement." }
                                                 }
                                             }
@@ -1101,7 +1158,7 @@ fun FynxAdminControlCenterPanel() {
                                             ) {
                                                 scope.launch {
                                                     FynxAdminClient.setAnnouncementPublishing(context, item.id, true, null)
-                                                        .onSuccess { statusMessage = "Announcement published."; refreshAdminAnnouncements++ }
+                                                        .onSuccess { statusMessage = "Announcement published."; adminAnnouncementsOffset = 0; refreshAdminAnnouncements++ }
                                                         .onFailure { statusMessage = it.message ?: "Could not publish announcement." }
                                                 }
                                             }
@@ -1109,6 +1166,15 @@ fun FynxAdminControlCenterPanel() {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                if (!adminAnnouncementsLoading && adminAnnouncementsError == null && (adminAnnouncementsOffset > 0 || adminAnnouncementsHasMore)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (adminAnnouncementItems.isEmpty()) "Page ${adminAnnouncementsOffset / 50 + 1}" else "Showing ${adminAnnouncementsOffset + 1}–${adminAnnouncementsOffset + adminAnnouncementItems.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TextButton(enabled = adminAnnouncementsOffset > 0, onClick = { adminAnnouncementsOffset = (adminAnnouncementsOffset - 50).coerceAtLeast(0) }) { Text("Previous announcements") }
+                            TextButton(enabled = adminAnnouncementsHasMore && adminAnnouncementsOffset < 10000, onClick = { adminAnnouncementsOffset = (adminAnnouncementsOffset + 50).coerceAtMost(10000) }) { Text("Next announcements") }
                         }
                     }
                 }

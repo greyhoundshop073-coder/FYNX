@@ -5,11 +5,11 @@
 ## 1. Where to resume
 
 - Repository: `greyhoundshop073-coder/FYNX`
-- Active PR: [#527 — Integrate Owner/Admin Control Center refresh on canonical branch](https://github.com/greyhoundshop073-coder/FYNX/pull/527)
-- Feature branch: `admin/control-center-complete-20261112`
+- Active PR: [#536 — Admin Control Center hardening](https://github.com/greyhoundshop073-coder/FYNX/pull/536)
+- Feature branch: `fix/admin-control-center-hardening-20261113`
 - PR base / canonical Android integration branch: `integration/fynx-single-apk-20261013`
-- Code head when this handoff was prepared: `40a83bcf72a5df742d1804fab5c68229999dc5a3`
-- PR state at handoff: open and unmerged.
+- Latest verified Group 1 head: `c8ee4837f9898c03ee195adaa4942c2ff2ab9034`
+- PR state: open, draft and unmerged. Do not merge without explicit user approval.
 
 The PR already contains the existing Control Center refresh, Overview/Safety/Marketplace/People/Announcements sections, account-status route correction, account-report review work, appeal UI/API work, OWNER-only Music Library controls, OWNER/ADMIN seasonal promotion controls, a new admin activity audit endpoint/client/UI, and the focused contract verifier. Inspect the current branch and PR diff before changing anything; this list describes work in progress, not proof that each flow is fully correct.
 
@@ -188,3 +188,234 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-13 Admin runtime certification and Group 1 continuation
+
+### Exact-head runtime certification
+- PR #536 is the current Admin hardening PR; it supersedes the historical #527 handoff references above. It remains open and unmerged on `fix/admin-control-center-hardening-20261113`, targeting `integration/fynx-single-apk-20261013`.
+- At commit `55d961cadf09a27f646321b27952c36bb994d314`, the Android PR workflow, Backend CI and Chat/Groups parity/layout workflows all completed GREEN:
+  - Android run `43441597401`
+  - Backend run `43441597306`
+  - Chat/Groups run `43441597346`
+- Android instrumentation completed 58 tests with zero failures and one skipped; the Admin read-only visual preview was captured from the running emulator as a real 1080×1920 PNG, 167081 bytes. The uploaded artifact also contains its UI hierarchy, instrumentation logs and certification report.
+- Certification report records backend health HTTP 404 and explicitly marks live OWNER/ADMIN authorization NOT CERTIFIED. The preview uses sample counts and disables live data/actions. No production role, account, moderation, announcement or publishing mutation was performed.
+- No canonical APK was published from this PR branch; canonical APK production remains tied to the canonical integration branch after an approved merge.
+
+### Verified Group 1 findings now being addressed
+- The Admin route module had its own JWT middleware which verified signature/expiry but did not compare the token's `sv` claim with `users.session_version`. Password-reset completion increments that database version, and the shared backend auth checks it; Admin endpoints could otherwise accept a revoked token until expiry. This is now being hardened with a separately testable middleware and a focused behavioral test.
+- Admin People search returned only identity fields, forcing the operator to guess whether a target account is ACTIVE, LIMITED or LOCKED before choosing an action. The response and screen now expose the enforced `fynx_account_safety.account_status`.
+- Admin People search used `ILIKE '%query%'`, so `%` and `_` were interpreted as SQL wildcard operators rather than literal characters. It is being changed to bounded, parameterized literal substring matching with PostgreSQL `POSITION`.
+- The Chat/Groups route module also has a local token verifier without session-version checking. That file is owned by PR #535; preserve it and coordinate its correction with the Chat/Groups workstream rather than editing it in PR #536.
+- Content-report moderation is not part of the current account-only `/api/social/reports` flow. PRs #531 and #533 own the separate UGC report integration; do not duplicate or overwrite that work.
+
+### Remaining Group 1 verification
+- Run the new Admin auth behavioral tests, Stage 15H Admin verification, Python Admin source contract, full Android build/lint/unit/instrumentation and all three PR workflows on the final head.
+- Live OWNER/ADMIN/non-admin authorization, DB counts and state transitions still require a healthy backend and real test credentials. Current health probe is HTTP 404; no live authorization claim is permitted.
+- Verify report/appeal empty states, server limits, pagination and transactional decisions against a database-backed test environment. Preserve the content-report PRs and Chat/Groups PR #535.
+
+## 10. Group 2 continuation — Admin announcements and publishing
+
+### Group 1 verification
+- PR head: `c8ee4837f9898c03ee195adaa4942c2ff2ab9034`.
+- Backend CI run 7852 (`43446084820`): passed; Stage 15H Admin verification passed 10 checks and session-version auth tests passed for current/revoked/deleted/invalid/missing/database-unavailable cases.
+- Chat/Group Parity + Layout Safety run 4472 (`43446084742`): passed.
+- Android Build run 14097 (`43446084736`): fast and full build/test/lint passed; Admin contract passed; instrumentation completed 58 tests (0 failures, 1 backend test skipped); Admin preview screenshot captured (166619 bytes); APK exact-commit verification passed. PR APK upload steps skipped; no canonical APK produced.
+- Runtime artifact: https://github.com/greyhoundshop073-coder/FYNX/actions/runs/43446084736. Preview is visibly labelled and read-only with sample data.
+- Live Railway health/OWNER/ADMIN authorization is not certified; earlier probe returned HTTP 404 and latest probe was skipped.
+
+### Five verified Group 2 defects
+1. Announcement PATCH validated positive-decimal IDs but not PostgreSQL BIGINT upper range.
+2. Admin announcement history used hard `LIMIT 100` and had no offset/hasMore contract.
+3. Public announcement feed used hard `LIMIT 50` and had no offset/hasMore contract.
+4. Admin history with private drafts/scheduled records lacked explicit `Cache-Control: private, no-store`.
+5. Create/edit silently truncated title/body/link at 120/4000/2048 chars; UI did not show title/link counters or enforce the same bounds.
+
+### Group 2 corrections
+- PATCH now uses `isPositivePostgresBigint`; both feeds have bounded limit/offset, hasMore lookahead and stable ID tie-break ordering (50 default, max 100, offset max 10000).
+- Admin list is `private, no-store`; create/edit reject oversize values, rather than truncating. Composer displays title/link counters and enforces limits.
+- Typed client uses `AdminPage<Announcement>`. Public and Admin UI expose Previous/Next, including empty page recovery; Admin write actions reset pagination.
+- Added Python Admin contract assertions and Backend CI Stage15H regression checks.
+
+### Dependencies and next stage
+- Required exact-head checks: Backend CI (expanded Stage15H), Android fast/full build/test/lint/Admin contract/emulator evidence, Chat/Groups parity.
+- Railway health was 404 previously and latest production probe skipped. Live Owner/Admin operations, announcement writes, Neon data, external media retrieval require a healthy backend.
+- No login change or auth bypass. Admin preview debug-only/read-only. PR #536 stays unmerged.
+
+### Group 3 — next five investigations
+1. Seasonal promotion create/edit/activate/deactivate through Owner/Admin UI, backend authorization and audit.
+2. Promotion date/timezone boundary validation: future, expired and overlapping campaigns.
+3. Campaign artwork MIME, uploader ownership, access, replacement/removal and retry/failure behavior.
+4. Audit-row atomicity for every promotion mutation, including rollback if audit insert fails.
+5. OWNER-only direct API and UI for Music Library upload/publish/hide/restore/remove; preserve current music contribution.
+
+---
+
+---
+
+## Group 3 Admin identity, session and protected-list hardening — 13 November 2026
+
+### Prior-stage evidence
+- PR #536 head: `93c13cc1a4ff65e184f4815fefdcf6c9aff840aa`; canonical integration base: `c8d0777dfe06089552fdaecc4cc888ea33bd6cbe`.
+- Android Build `43454383887`, Backend CI `43454384063`, and Chat/Groups `43454384222` all passed on that head.
+- Android instrumentation: 57 tests, zero failures, one skipped. Admin preview captured (166110 bytes); artifact: https://github.com/greyhoundshop073-coder/FYNX/actions/runs/43454383887/artifacts/14052959544
+- Preview used read-only sample data. Live backend probes and PR APK upload were skipped; no canonical APK was published.
+
+### Five verified Group 3 findings
+1. Marketplace seasonal-promotion authorization inferred OWNER from lowest user ID rather than persisted `fynx_platform_owner`.
+2. Music Library authorization independently repeated the lowest-user-ID OWNER lookup.
+3. Marketplace advertising JWT verification did not compare `claims.sv` with `users.session_version`; reset-password-revoked sessions could remain valid until token expiry.
+4. Admin seasonal-promotion history lacked an explicit `private, no-store` cache policy.
+5. OWNER-only Music Library history lacked an explicit `private, no-store` cache policy.
+
+### Grouped corrections
+- Added a shared platform role resolver backed by the persisted Owner singleton; a locked one-time legacy bootstrap runs only when no Owner row exists. BIGINT IDs remain strings.
+- Routed Admin Control Center, Marketplace seasonal promotion and Music Library authorization through the shared resolver. Existing OWNER-only Music mutation rules remain unchanged.
+- Replaced Marketplace advertising's signature-only auth with session-version-aware auth; all 17 advertising route callsites await verification, and database outages fail closed with HTTP 503.
+- Added `Cache-Control: private, no-store` to both protected Admin lists.
+- Added behavioral tests for Owner/Admin/non-admin roles, BIGINT IDs, revoked/deleted sessions, missing/invalid tokens and database outages. Existing campaign schedule, overlap, artwork ownership and audit-transaction code was preserved.
+- No login flow, UI, Chat/Groups, Camera, Home/Feed, Status, Wallet, Marketplace UI, Music UI or APK code was modified. PR #436's changed files were not edited.
+
+### Verification required on the new head
+- Backend CI must run the new role resolver behavior test, expanded advertising session-auth test, existing seasonal-promotion verifier and PostgreSQL schema migration test.
+- Android Build and Chat/Groups parity must pass on the updated PR #536 head.
+- Live Owner/Admin/non-admin calls, production artwork retrieval and full campaign lifecycle remain unverified until production backend and credentialed test accounts are reachable. A skipped reachability probe is not a pass.
+- Keep PR #536 open/unmerged pending explicit approval. Keep PR #436 untouched. Only build/publish the canonical APK from the canonical integration branch after approved integration.
+
+
+## CI contract correction and Owner bootstrap edge case — 13 November 2026
+
+- Backend CI on `fc442f77697864dd2fd8afb5587bc2266b9ee694` failed because the sponsored-feed and CPC runtime verifiers still required the synchronous Advertising auth expression. Both were corrected to require the new awaited session-version check in commit `c1b19976f296eb04f6de0b49f1944134408bc6b9`.
+- Android CI exposed a stale Admin source-contract assertion expecting the Owner table/bootstrap SQL inline in `adminRoutes.js`. The implementation centralizes it in `backend/platformAdminRole.js`; the Python contract now checks the helper and its use by Admin, Marketplace Advertising and Music.
+- This review also caught cold startup before any user exists. The persisted Owner seed now retries on later role checks while no Owner singleton exists, then stops after the first registered account is persisted. The behavioral test covers empty startup, first signup, exact BIGINT IDs, ADMIN and ordinary-user denial.
+- The concurrent seasonal-verifier corrections at `f47825b76a6ec70cf78af8eb5cd0724b4b7689be` and `40f6ad160893e7a0fc200b43d974470509a99662` are preserved.
+- Keep PR #536 open and unmerged. Re-query all three workflows on the exact new head; no green status is inferred from an intermediate run.
+
+
+## Group 4 — shared PostgreSQL BIGINT boundaries — 13 November 2026
+
+### Five verified issues / evidence
+1. Seasonal campaign creation accepted PRODUCT destination IDs with any 1–20 decimal digits; values above PostgreSQL BIGINT maximum `9223372036854775807` reached a BIGINT parameter query and could become HTTP 500 instead of a 400 validation response.
+2. Campaign editing repeated the same 20-digit-only regex, so fixing create alone would have left the edit route vulnerable to the same overflow.
+3. Owner/Admin account, report, appeal and announcement routes had an in-file BIGINT validator, while Marketplace product destinations had a separate, weaker validator. This split made the bounds inconsistent.
+4. The existing Admin helper converted all values to strings before testing; an unsafe JavaScript Number could already be rounded before it reached `BigInt()`. Route parameters normally arrive as strings, but the helper also accepts body values and should reject unsafe numeric values.
+5. Existing campaign verifier and Admin Python contract did not assert that PRODUCT IDs are within PostgreSQL BIGINT or that create and edit share the same exact bound. This allowed the 20-digit regex to pass CI.
+
+### Group 4 grouped correction
+- Added `backend/postgresIds.js` exporting one exact positive signed-BIGINT validator. String IDs stay strings; positive BigInt values are supported; numeric inputs are accepted only when `Number.isSafeInteger` is true; zero, leading zero, negative, decimal, exponent, malformed, overflow and unsafe Number values are rejected.
+- Reused the shared helper in Admin announcements/people/reports/appeals/media IDs and Marketplace seasonal create/edit PRODUCT destinations.
+- Added `test-postgres-id-validation.mjs` with valid max-BIGINT and >MAX_SAFE_INTEGER string cases plus invalid overflow, unsafe Number and malformed inputs. Wired it into Backend CI.
+- Updated seasonal source-contract and Admin Python verifier to inspect the shared helper and both destination paths.
+- Existing product lookup still verifies that a destination references an active listing with available stock. No feature, login, UI, or Marketplace buyer/seller behavior was changed.
+
+### Remaining independent verification
+- Backend CI must run the new validator behavior test, existing Stage 15H Admin contract, PostgreSQL campaign schema test, and seasonal verifier.
+- Android and Chat/Groups checks remain separate required gates for the PR head.
+- Campaign HTTP create/edit/activate/deactivate/delete lifecycle, audit rollback, competing-overlap concurrency and media visibility still lack a dedicated route-level end-to-end test in this repository. Existing source contracts and PostgreSQL schema migration tests do not substitute for those checks.
+
+
+## Group 5 — Admin identity precision and PostgreSQL bounds — 13 November 2026
+
+### Five verified findings
+1. `POST /api/admin/admins` converted target IDs through JavaScript `Number`, rounding valid PostgreSQL BIGINT strings above `Number.MAX_SAFE_INTEGER`.
+2. `DELETE /api/admin/admins/:userId` repeated that conversion and could query or compare a rounded identity.
+3. Grant/revoke numeric coercion accepted non-canonical string forms such as exponent notation and leading-zero values rather than canonical decimal IDs.
+4. Admin JWT middleware accepted any non-empty `sub`, then queried PostgreSQL without enforcing the signed BIGINT maximum.
+5. Shared session-aware authentication and the Owner-role resolver enforced decimal syntax but not the PostgreSQL maximum, allowing out-of-range identities to reach SQL.
+
+### Group 5 corrections
+- Admin grant validates the original request value with `isPositivePostgresBigint` before converting it to a string; decimal-string IDs stay exact and unsafe numeric JSON values are rejected.
+- Admin revoke preserves its route parameter as a string and validates before SQL.
+- Admin JWT auth, shared Marketplace/session-aware auth and Owner-role resolution now use the same exact BIGINT validator and fail closed before database lookup.
+- Extended Owner resolver, Admin auth, Marketplace auth and Stage 15H source-contract tests. Existing large decimal-string identities remain supported.
+- No login flow, credential logic, session-version behavior or authentication shortcut was changed.
+
+### Verification required
+- Backend CI must pass `test-platform-admin-role.mjs`, `test-admin-auth-session-version.mjs`, `verify-marketplace-advertising-auth.mjs`, `verify-stage15h-admin.mjs`, and the shared PostgreSQL BIGINT boundary test.
+- Android and Chat/Groups remain required on the exact latest PR head.
+
+
+## Group 6 — Admin announcement route-level PostgreSQL verification — 13 November 2026
+
+### Five verified coverage gaps
+1. Admin announcement creation and its audit row were only checked with source assertions; no test invoked the registered HTTP route against PostgreSQL.
+2. Owner/Admin denial, normal-user denial, and password-reset-revoked Admin sessions were tested in separate middleware/source checks, not through the real announcements route.
+3. Scheduled announcement visibility had no route-level DB test proving that a future item appears in Admin history but not in the public feed until published immediately or its schedule arrives.
+4. Announcement artwork ownership/MIME restrictions and HTTPS-link validation were source-tested, not exercised with actual route requests and stored media rows.
+5. The production routes pass the transaction client to audit logging, but no integration test deliberately failed the audit insert to prove create/edit mutations roll back.
+
+### Group 6 grouped correction
+- Added an optional test dependency seam to registerAdminRoutes: databasePool, jwtApi, and jwtSecret. Production defaults remain the existing shared pool, JWT library and configured secret; no production auth behavior or login flow changes.
+- Added backend/test-admin-announcements-db.mjs, a PostgreSQL-backed route test using a unique schema and the actual registered Admin handlers.
+- Coverage includes Owner/Admin/regular-user access, stale Admin session rejection, exact large-ID grant/revoke behavior, future schedule visibility, impossible dates, HTTPS-only links, artwork owner/MIME checks, publish/unpublish, private no-store Admin history, pagination beyond 50 entries, and rollback of create/edit when audit insertion fails.
+- Wired the new DB route test into Backend CI and added source-contract assertions for the test seam and CI step.
+
+### External verification
+- The test uses the CI PostgreSQL service and does not require live production credentials, providers or device access.
+- Physical-device Admin interaction and actual production Owner/Admin authorization remain separate certification requirements; emulator visual capture is not a substitute for live backend authorization.
+
+
+### Group 6 CI review correction — 13 November 2026
+- The first Backend CI run failed in the repository's shared-pool contract because the test seam renamed the required module-level declaration from `const pool = getFynxDatabasePool()` to `defaultPool`. That violated an existing architectural guard even though it still called the shared factory.
+- The route test seam now preserves the canonical module-level `pool` binding and defaults the optional `databasePool` argument to that binding; route handlers use a scoped `routePool`. No separate pool is constructed.
+- Test review also found the audit test asserted `ANNOUNCEMENT_UPDATED` without a successful content-edit case. A successful edit is now committed before the forced audit-failure edit, and the rollback assertion checks that the last committed title remains unchanged.
+- Re-run the exact-head Backend, Android and Chat/Groups workflows. The route-level PostgreSQL test must be confirmed successful before claiming Group 6 complete.
+
+
+### Group 6 Android source-contract correction — 13 November 2026
+- Android's Admin Python verifier initially failed because it still searched for the old local variable name in two source assertions: `executor = pool` and `createPlatformAdminRoleResolver(pool)`. The route injection seam intentionally scopes the injected dependency as `routePool`.
+- Both checks now require `executor = routePool` and `createPlatformAdminRoleResolver(routePool)`. The assertions still verify transactional audit execution and shared Owner authorization; only the expected scoped variable name changed.
+
+
+## Group 7 — Admin account-safety route certification — 13 November 2026
+
+### Five verified coverage gaps
+1. The Admin status route had source-contract coverage but no PostgreSQL-backed route invocation proving that only Owner/Admin roles can apply restrictions.
+2. The route's self-modification block and protection of the persisted Owner from non-Owner changes had no database-backed behavioral assertions.
+3. Status is mirrored into `fynx_account_safety` and legacy `safety_settings` within one transaction, but there was no test proving both tables stay synchronized across LOCKED, LIMITED, and ACTIVE transitions.
+4. The status route writes an audit event in the same transaction, but no test forced audit failure and proved that both mirrored state records roll back.
+5. The policy is intentionally scoped: LOCKED/LIMITED block Marketplace purchases and group-message sending, not all app access or existing sessions. The Admin UI explicitly tells the operator the feature scope, but no combined route test protects that behavior and session version remains unchanged.
+
+### Group 7 grouped correction
+- Added `backend/test-admin-account-safety-db.mjs` using a temporary PostgreSQL schema and actual registered Admin route. It covers regular-user denial, Admin self-lock denial, Admin protection of OWNER, invalid/out-of-range target IDs, Owner-applied LOCKED/LIMITED/ACTIVE transitions, mirrored notes/status, unchanged session version, audit rows, and forced audit-failure rollback.
+- The existing implementation already protects the persisted Owner, blocks self-modification, mirrors both safety tables, and writes the audit event transactionally; this group is closing behavioral coverage gaps, not broadening the lock policy.
+- Source contracts verify that Marketplace checkout and group-message sends both read the canonical `fynx_account_safety` status and emit the expected `ACCOUNT_LOCKED`/`ACCOUNT_LIMITED` guards.
+- CI will execute the new PostgreSQL route test.
+
+### Safety boundary
+- LOCKED/LIMITED are not global logout switches. The user-facing UI promises Marketplace purchase and group-send restrictions, so no login or session invalidation behavior is changed here.
+- Production Owner/Admin testing and handset interaction still need separate live/device certification; PostgreSQL CI proves backend route behavior in the isolated test schema only.
+
+
+### Group 8 additional correction — user appeal BIGINT round-trip — 13 November 2026
+- `POST /api/safety/appeals` parsed report IDs through `Number()` and `Number.isSafeInteger()`, rejecting legitimate PostgreSQL BIGINT string IDs above `Number.MAX_SAFE_INTEGER`.
+- It now uses `isPositivePostgresBigint` on the original input and retains the validated ID as an exact decimal string for ownership lookup and insert.
+- The reports/appeals PostgreSQL route test includes a report ID of `9007199254740993`, asserts exact appeal round-trip, and rejects `9223372036854775808`.
+
+
+### Group 8 Android verifier alignment — 13 November 2026
+- The first Android run failed in Large Badge #9 (Trust, Safety & Account Protection), not in the Admin source contract. Its old assertion still required `Number.isSafeInteger(reportId)` and the old `positive integer` message after the user-facing appeal route was upgraded to the shared PostgreSQL BIGINT validator.
+- The verifier now checks the shared `isPositivePostgresBigint` import/use, exact decimal-string preservation, absence of `Number(rawReportId)`, the PostgreSQL signed BIGINT maximum and rejection of unsafe numeric inputs. The behavioral test covers large, overflow, unsafe numeric and non-canonical string IDs.
+- Backend CI has passed the new reports/appeals PostgreSQL route test; Android and Chat/Groups must rerun on the verifier repair commit.
+
+
+## Group 5 — Admin directory and Marketplace campaign history completeness — 13 November 2026
+
+### Five verified problems
+1. The Owner-only Admin directory returned a fixed first 100 administrators with no offset/hasMore metadata; the Android client parsed it as a complete list and exposed no paging controls. Above 100 Admins, the Owner could not reach older grants to review or revoke them.
+2. Marketplace seasonal campaign administration returned only the first 100 rows, with no pagination parameters or hasMore metadata.
+3. The seasonal campaign Android client requested a single unpaged list and silently treated the truncated response as the complete history.
+4. Marketplace Advertising used Number-based positiveInt parsing for BIGINT creative references, artwork media IDs, and seasonal/paid campaign path IDs. Valid PostgreSQL BIGINT IDs above Number.MAX_SAFE_INTEGER were rejected, breaking exact database identity consistency.
+5. The campaign scheduler rendered every row in that truncated response and provided no Previous/Next controls, so campaign history beyond the first 100 could not be managed in-app.
+
+### Group 5 changes
+- Added bounded limit/offset/hasMore pagination for the Owner-only Admin directory and seasonal campaign history.
+- Added Previous/Next controls to the Admin People directory and Marketplace campaign scheduler.
+- Added exact PostgreSQL BIGINT string parsing for Marketplace Advertising campaign, artwork, and creative-reference IDs; retained Number-based positiveInt only for monetary budgets and counters.
+- Added a PostgreSQL-backed Admin directory test covering 106 administrators, three non-overlapping pages, final-page metadata, and private/no-store response behavior.
+- Extended the Marketplace seasonal verifier to enforce exact campaign-ID parsing and paginated Admin campaign history.
+
+### Verification still required
+- Backend CI must execute the updated Admin directory PostgreSQL route test and Marketplace seasonal verifier.
+- Android build must compile both pagination UIs and run the Admin source contract.
+- Live production role checks, media ownership, and campaign feed navigation still require the deployed backend and a physical/device session.

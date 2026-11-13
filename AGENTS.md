@@ -12,7 +12,7 @@ Before editing code, every contributor/chat/agent MUST read:
 
 Inspect the latest canonical branch head and open pull requests before starting.
 
-**Active Owner/Admin Control Center continuation:** For the remaining work tracked by PR #527, read and follow [docs/ADMIN_CONTROL_CENTER_CONTINUATION.md](docs/ADMIN_CONTROL_CENTER_CONTINUATION.md). Resume its existing branch and grouped work; do not restart or create a parallel implementation. Keep that handoff updated as grouped work is completed.
+**Active Owner/Admin Control Center continuation:** Continue the existing Admin/Owner implementation on [PR #536](https://github.com/greyhoundshop073-coder/FYNX/pull/536) and maintain [docs/ADMIN_CONTROL_CENTER_CONTINUATION.md](docs/ADMIN_CONTROL_CENTER_CONTINUATION.md). PR #527 has already merged; do not restart the Control Center or create a parallel implementation. Keep the handoff current after each grouped push.
 
 - Start every work branch from the latest `integration/fynx-single-apk-20261013`.
 - Every feature PR must use `integration/fynx-single-apk-20261013` as its base. Do not merge work into `main` or a competing APK branch as the delivery path.

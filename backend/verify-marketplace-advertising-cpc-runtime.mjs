@@ -13,7 +13,7 @@ const checks = [
   ["click ledger has one buyer charge per campaign and Lagos day", source.includes("UNIQUE (campaign_id, viewer_id, click_day)")],
   ["click ledger deduplicates idempotency keys", source.includes("UNIQUE (campaign_id, click_key)")],
   ["billable click transaction locks the campaign row", metricRoute.includes("SELECT * FROM marketplace_ad_campaigns WHERE id=$1 FOR UPDATE")],
-  ["only authenticated buyers can create payable clicks", metricRoute.includes("advertisers cannot bill their own clicks") && metricRoute.includes("const auth = authenticate(req, res)")],
+  ["only authenticated buyers can create payable clicks", metricRoute.includes("advertisers cannot bill their own clicks") && metricRoute.includes("const auth = await authenticate(req, res)")],
   ["campaign must be active, approved, paid and inside its schedule", metricRoute.includes('campaign.status !== "active"') && metricRoute.includes('campaign.payment_status !== "paid"') && metricRoute.includes("!campaign.approved_at")],
   ["total prepaid limit is checked before billing", metricRoute.includes("totalSpent + clickCost > totalBudget")],
   ["daily campaign cap is checked before billing", metricRoute.includes("todaySpent + clickCost > dailyBudget")],

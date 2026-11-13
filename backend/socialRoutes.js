@@ -3,8 +3,10 @@ import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { redirectStoredMedia } from "./mediaStorage.js";
 import { queueFynxNotification } from "./notificationPush.js";
 import { ensureMarketplaceShopProfileSchema } from "./marketplaceShopProfiles.js";
+import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
 
 export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
+  const resolvePlatformAdminRole = createPlatformAdminRoleResolver(pool);
   let marketplaceSchemaPromise;
   const ensureMarketplaceSchema = async () => {
     if (!marketplaceSchemaPromise) {
@@ -893,13 +895,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   }
 
   async function fynxMusicAdminRole(userId) {
-    // Keep direct Music Library calls safe on a cold deployment, but run DDL once
-    // per process rather than on every OWNER-only request.
     await ensureFynxMusicAdminSchema();
-    const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
-    if (first && String(first.id) === String(userId)) return "OWNER";
-    const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
-    return result.rowCount ? "ADMIN" : null;
+    return resolvePlatformAdminRole(userId);
   }
 
   async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}, executor = pool) {
@@ -975,6 +972,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const result = await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,c.category,c.active,c.created_at FROM fynx_music_catalogue c ORDER BY c.created_at DESC`);
+      res.set("Cache-Control", "private, no-store");
       return res.json({ tracks: result.rows.map((row) => ({
         id: String(row.id),
         mediaId: String(row.media_id),

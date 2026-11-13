@@ -46,6 +46,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 
 private const val FYNX_PREVIEW_MODE = false
+private const val FYNX_ADMIN_VISUAL_PREVIEW_KEY = "fynx_admin_visual_preview"
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
 
 private fun fynxBackDestination(
@@ -81,7 +82,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     val appConnectionManager = remember(context) { FynxAppConnectionManager(context.applicationContext) }
     val appConnectionState by appConnectionManager.state.collectAsState()
     val scope = rememberCoroutineScope()
-    var selected by remember { mutableStateOf("Home") }
+    val adminVisualPreview = remember(context) {
+        (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
+            context.getSharedPreferences("fynx_preferences", android.content.Context.MODE_PRIVATE)
+                .getBoolean(FYNX_ADMIN_VISUAL_PREVIEW_KEY, false)
+    }
+    var selected by remember { mutableStateOf(if (adminVisualPreview) "Admin" else "Home") }
     var profileAvatarMenuOpen by remember { mutableStateOf(false) }
     val currentSelected by rememberUpdatedState(selected)
     var navigationHistory by remember { mutableStateOf(listOf("Home")) }
@@ -103,10 +109,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
-    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
+    var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE || adminVisualPreview) AuthSession(AuthState.SIGNED_IN, "fynx-preview-owner") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
-    var adminRole by remember { mutableStateOf<String?>(null) }
+    var adminRole by remember { mutableStateOf<String?>(if (adminVisualPreview) "OWNER" else null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
     var inviteCode by remember { mutableStateOf<String?>(null) }
@@ -318,13 +324,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 remoteMyProfileLoaded = true
             }
         }
-        adminRole = null
-        if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
+        adminRole = if (adminVisualPreview) "OWNER" else null
+        if (!FYNX_PREVIEW_MODE && !adminVisualPreview && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
             FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
         }
     }
-    if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
+    if (!FYNX_PREVIEW_MODE && !adminVisualPreview && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
     if (selected == "Admin" && adminRole == null) selected = "Features"
     val mainNav = listOf(FynxNavItem("Home", "Home", Icons.Default.Home), FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline), FynxNavItem("Friends", "Friends", Icons.Default.Person), FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag), FynxNavItem("Features", "More", Icons.Default.MoreHoriz))
     val isSecondary = selected !in mainNav.map { it.key }.toSet()
@@ -855,7 +861,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising Dashboard" -> FynxAdvertisingDashboardPanel()
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
-            "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
+            "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel(previewMode = adminVisualPreview)
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)
                     }

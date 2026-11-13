@@ -42,7 +42,7 @@ check("existing workstream verifies profile/media continuity", "remote media use
 check("announcements route is wired into runtime", "registerAdminRoutes({ app })" in read("backend/scalability.js"))
 check("Announcements route is reachable from app navigation", '"Announcements"' in app and ('FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")' in app or "FynxAnnouncementsPanel()" in app))
 check("Announcement Center music tools use the server-confirmed OWNER role", 'FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }' in app and 'ownerAccess: Boolean = false' in ann and "if (ownerAccess)" in ann and 'FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")' in app)
-check("Admin route is reachable from app navigation", '"Admin"' in app and "FynxAdminControlCenterPanel()" in app)
+check("Admin route remains server-role gated and supports the debug-only visual preview", '"Admin" -> if (adminRole != null) FynxAdminControlCenterPanel(previewMode = adminVisualPreview)' in app)
 check("no fabricated announcement/admin data", "sampleAnnouncement" not in ann and "fakeAnnouncement" not in ann and "dummyAnnouncement" not in ann)
 check("badge #11 verification is wired into CI", "verify_large_badge11_product_completeness.py" in workflow)
 

@@ -1,17 +1,12 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
+import { isPositivePostgresBigint } from "./postgresIds.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const pool = getFynxDatabasePool();
-
-const MAX_POSTGRES_BIGINT = 9223372036854775807n;
-function isPositivePostgresBigint(value) {
-  const raw = String(value ?? '').trim();
-  if (!/^[1-9]\d*$/.test(raw)) return false;
-  try { return BigInt(raw) <= MAX_POSTGRES_BIGINT; } catch { return false; }
-}
 
 // Validate calendar fields before Date.parse, which normalizes impossible dates.
 function parseFutureAnnouncementSchedule(value) {
@@ -29,12 +24,41 @@ function parseFutureAnnouncementSchedule(value) {
   return { valid: true, date };
 }
 
-export function registerAdminRoutes({ app }) {
-  if (!pool) return;
+export function createAdminAuthMiddleware({ pool, jwt: jwtApi, jwtSecret }) {
+  return async (req,res,next) => {
+    const header=req.get('authorization')||'';
+    const token=header.startsWith('Bearer ')?header.slice(7).trim():'';
+    if(!token||!jwtSecret)return res.status(401).json({error:'authentication required'});
+    let claims;
+    try {
+      claims=jwtApi.verify(token,jwtSecret);
+    } catch {
+      return res.status(401).json({error:'invalid or expired token'});
+    }
+    if(!isPositivePostgresBigint(claims?.sub))return res.status(401).json({error:'invalid or expired token'});
+    const subject=String(claims.sub).trim();
+    try {
+      if(!pool)return res.status(503).json({error:'authentication temporarily unavailable'});
+      const current=await pool.query('SELECT session_version FROM users WHERE id=$1',[subject]);
+      const currentVersion=current.rows?.[0]?Number(current.rows[0].session_version||0):-1;
+      if(currentVersion<0||currentVersion!==Number(claims.sv||0))return res.status(401).json({error:'session expired; sign in again'});
+      req.user={...claims,sub:subject};
+      return next();
+    } catch {
+      return res.status(503).json({error:'authentication temporarily unavailable'});
+    }
+  };
+}
+
+export function registerAdminRoutes({ app, databasePool = pool, jwtApi = jwt, jwtSecret = JWT_SECRET }) {
+  const routePool = databasePool;
+  if (!routePool) return;
   let schemaPromise;
   const ensureSchema = async () => {
-    if (!schemaPromise) schemaPromise = pool.query(`
+    if (!schemaPromise) schemaPromise = routePool.query(`
       CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      CREATE TABLE IF NOT EXISTS fynx_platform_owner (singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK(singleton=TRUE), owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,id FROM users ORDER BY id ASC LIMIT 1 ON CONFLICT(singleton) DO NOTHING;
       CREATE TABLE IF NOT EXISTS fynx_announcements (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL' CHECK(priority IN ('NORMAL','IMPORTANT','URGENT')), published BOOLEAN NOT NULL DEFAULT TRUE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
       ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS link_url TEXT NOT NULL DEFAULT '';
@@ -87,33 +111,54 @@ export function registerAdminRoutes({ app }) {
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
-  const auth = (req,res,next) => { const header=req.get('authorization')||''; const token=header.startsWith('Bearer ')?header.slice(7).trim():''; if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'}); try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});} };
-  const role = async userId => {
-    const first=(await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1')).rows[0];
-    if(first && String(first.id)===String(userId)) return 'OWNER';
-    const admin=(await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',[userId])).rowCount;
-    return admin ? 'ADMIN' : null;
-  };
+  const auth = createAdminAuthMiddleware({ pool: routePool, jwt: jwtApi, jwtSecret });
+  const role = createPlatformAdminRoleResolver(routePool);
   const requireAdmin = async (req,res) => { const value=await role(req.user.sub); if(!value){res.status(403).json({error:'administrator access required',code:'ADMIN_REQUIRED'});return null;} req.fynxAdminRole=value; return value; };
   // Accept a transaction-scoped executor so state changes and their audit row commit atomically.
-  const recordAdminActivity = async (req, action, targetType = '', targetId = '', summary = '', metadata = {}, executor = pool) => {
+  const recordAdminActivity = async (req, action, targetType = '', targetId = '', summary = '', metadata = {}, executor = routePool) => {
     await executor.query(`INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`, [req.user.sub, req.fynxAdminRole || 'OWNER', action, targetType, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]);
   };
   const countRows = async (table, where = 'TRUE') => {
-    const exists = await pool.query('SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1 LIMIT 1',[table]);
+    const exists = await routePool.query('SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1 LIMIT 1',[table]);
     if (!exists.rowCount) return 0;
-    const result = await pool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE ${where}`);
+    const result = await routePool.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE ${where}`);
     return Number(result.rows[0]?.count || 0);
   };
 
   app.get('/api/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
-    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,published_at,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS effective_published_at,created_at,updated_at FROM fynx_announcements WHERE published=TRUE AND (scheduled_at IS NULL OR scheduled_at<=NOW()) ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,COALESCE(published_at,scheduled_at,created_at) DESC LIMIT 50`);
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await routePool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,published_at,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS effective_published_at,created_at,updated_at FROM fynx_announcements WHERE published=TRUE AND (scheduled_at IS NULL OR scheduled_at<=NOW()) ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,COALESCE(published_at,scheduled_at,created_at) DESC,id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
     res.set('Cache-Control','no-store');
-    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.effective_published_at||a.created_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+    return res.json({announcements:rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.effective_published_at||a.created_at,createdAt:a.created_at,updatedAt:a.updated_at})),limit,offset,hasMore});
   }catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
 
   app.get('/api/admin/dashboard',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const counts=await Promise.all([countRows('users'),countRows('safety_reports',"status IN ('OPEN','UNDER_REVIEW')"),countRows('safety_appeals',"status IN ('OPEN','UNDER_REVIEW')"),countRows('fynx_admin_activity',"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'")]);return res.json({role:req.fynxAdminRole,counts:{users:counts[0],openReports:counts[1],openAppeals:counts[2],safetyActions24h:counts[3]}});}catch(error){console.error('admin dashboard',error);return res.status(500).json({error:'admin dashboard unavailable'});}});
+  app.get('/api/admin/users',auth,async(req,res)=>{try{
+    await ensureSchema();
+    if(!(await requireAdmin(req,res)))return;
+    const query=typeof req.query?.q==='string'?req.query.q.trim().replace(/^@+/, '').slice(0,80):'';
+    if(query.length<2)return res.status(400).json({error:'search query must be at least 2 characters'});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):20;
+    const result=await routePool.query(`SELECT u.id,u.username,u.display_name,COALESCE(s.account_status,'ACTIVE') AS account_status
+      FROM users u
+      LEFT JOIN fynx_account_safety s ON s.user_id=u.id
+      WHERE u.id<>$2 AND (
+        POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0 OR
+        POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0
+      )
+      ORDER BY CASE WHEN lower(u.username)=lower($1) THEN 0 ELSE 1 END,u.username ASC,u.id ASC
+      LIMIT $3`,[query,req.user.sub,limit]);
+    res.set('Cache-Control','private, no-store');
+    return res.json({users:result.rows.map(user=>({id:String(user.id),username:user.username||'',displayName:user.display_name||'',accountStatus:user.account_status||'ACTIVE'})),limit});
+  }catch(error){console.error('admin user search',error);return res.status(500).json({error:'admin user search failed'});}});
+
 
   app.get('/api/admin/activity',auth,async(req,res)=>{try{
     await ensureSchema();
@@ -124,54 +169,69 @@ export function registerAdminRoutes({ app }) {
     const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
     const offsetValue=Number(req.query?.offset);
     const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
-    const result=await pool.query(`SELECT a.id,a.actor_user_id,a.actor_role,a.action,a.target_type,a.target_id,a.summary,a.metadata,a.created_at,u.username,u.display_name FROM fynx_admin_activity a LEFT JOIN users u ON u.id=a.actor_user_id WHERE ($1='' OR POSITION(LOWER($1) IN LOWER(COALESCE(a.action,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(a.summary,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(a.target_id,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0) AND ($2='' OR a.action=$2) ORDER BY a.created_at DESC,a.id DESC LIMIT $3 OFFSET $4`,[q,action,limit+1,offset]);
+    const result=await routePool.query(`SELECT a.id,a.actor_user_id,a.actor_role,a.action,a.target_type,a.target_id,a.summary,a.metadata,a.created_at,u.username,u.display_name FROM fynx_admin_activity a LEFT JOIN users u ON u.id=a.actor_user_id WHERE ($1='' OR POSITION(LOWER($1) IN LOWER(COALESCE(a.action,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(a.summary,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(a.target_id,'')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0) AND ($2='' OR a.action=$2) ORDER BY a.created_at DESC,a.id DESC LIMIT $3 OFFSET $4`,[q,action,limit+1,offset]);
     const hasMore=result.rows.length>limit;
     const rows=hasMore?result.rows.slice(0,limit):result.rows;
     return res.json({activities:rows.map(a=>({id:String(a.id),actorUserId:a.actor_user_id==null?null:String(a.actor_user_id),actorRole:a.actor_role,actorUsername:a.username||'',actorDisplayName:a.display_name||'',action:a.action,targetType:a.target_type,targetId:a.target_id,summary:a.summary,metadata:a.metadata||{},createdAt:a.created_at})),limit,offset,hasMore});
   }catch(error){console.error('admin activity',error);return res.status(500).json({error:'admin activity unavailable'});}});
 
-  app.get('/api/admin/revenue',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT source,status,currency,COUNT(*)::int AS transactions,COALESCE(SUM(amount),0)::numeric(14,2) AS amount FROM fynx_revenue_transactions GROUP BY source,status,currency ORDER BY source,status,currency`);const totals=await pool.query(`SELECT currency,COALESCE(SUM(amount) FILTER (WHERE status='SETTLED'),0)::numeric(14,2) AS settled,COALESCE(SUM(amount) FILTER (WHERE status='REVERSED'),0)::numeric(14,2) AS reversed,COALESCE(SUM(amount) FILTER (WHERE status='REFUNDED'),0)::numeric(14,2) AS refunded FROM fynx_revenue_transactions GROUP BY currency ORDER BY currency`);return res.json({role:req.fynxAdminRole,breakdown:result.rows,totals:totals.rows,reconciliation:{source:'fynx_revenue_transactions derived from marketplace fee ledger',duplicateProtection:'unique source_key',protectedFundsExcluded:true}});}catch(error){console.error('admin revenue',error);return res.status(500).json({error:'revenue report unavailable'});}});
+  app.get('/api/admin/revenue',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await routePool.query(`SELECT source,status,currency,COUNT(*)::int AS transactions,COALESCE(SUM(amount),0)::numeric(14,2) AS amount FROM fynx_revenue_transactions GROUP BY source,status,currency ORDER BY source,status,currency`);const totals=await routePool.query(`SELECT currency,COALESCE(SUM(amount) FILTER (WHERE status='SETTLED'),0)::numeric(14,2) AS settled,COALESCE(SUM(amount) FILTER (WHERE status='REVERSED'),0)::numeric(14,2) AS reversed,COALESCE(SUM(amount) FILTER (WHERE status='REFUNDED'),0)::numeric(14,2) AS refunded FROM fynx_revenue_transactions GROUP BY currency ORDER BY currency`);return res.json({role:req.fynxAdminRole,breakdown:result.rows,totals:totals.rows,reconciliation:{source:'fynx_revenue_transactions derived from marketplace fee ledger',duplicateProtection:'unique source_key',protectedFundsExcluded:true}});}catch(error){console.error('admin revenue',error);return res.status(500).json({error:'revenue report unavailable'});}});
 
-  app.get('/api/admin/ai-entitlements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await pool.query(`SELECT plan,active,COUNT(*)::int AS users FROM fynx_ai_entitlements GROUP BY plan,active ORDER BY plan,active`);return res.json({entitlements:result.rows,chargingEnabled:false,source:'entitlement foundation only'});}catch(error){console.error('ai entitlements',error);return res.status(500).json({error:'AI entitlement report unavailable'});}});
+  app.get('/api/admin/ai-entitlements',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const result=await routePool.query(`SELECT plan,active,COUNT(*)::int AS users FROM fynx_ai_entitlements GROUP BY plan,active ORDER BY plan,active`);return res.json({entitlements:result.rows,chargingEnabled:false,source:'entitlement foundation only'});}catch(error){console.error('ai entitlements',error);return res.status(500).json({error:'AI entitlement report unavailable'});}});
 
   app.get('/api/admin/admins',auth,async(req,res)=>{try{
     await ensureSchema();
     const actorRole=await requireAdmin(req,res);
     if(actorRole===null)return;
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
-    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1) ORDER BY r.created_at ASC LIMIT 100`);
-    return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await routePool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE) ORDER BY r.created_at DESC,u.id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    res.set('Cache-Control','private, no-store');
+    return res.json({admins:rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at})),offset,limit,hasMore});
   }catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
   app.get('/api/admin/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
     if(!(await requireAdmin(req,res)))return;
-    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS published_at,created_at,updated_at FROM fynx_announcements ORDER BY COALESCE(scheduled_at,published_at,created_at) DESC LIMIT 100`);
-    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await routePool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS published_at,created_at,updated_at FROM fynx_announcements ORDER BY COALESCE(scheduled_at,published_at,created_at) DESC,id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    res.set('Cache-Control','private, no-store');
+    return res.json({announcements:rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at,createdAt:a.created_at,updatedAt:a.updated_at})),limit,offset,hasMore});
   }catch(error){console.error('admin announcements list',error);return res.status(500).json({error:'admin announcements unavailable'});}});
 
   app.post('/api/admin/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
     if(!(await requireAdmin(req,res)))return;
-    const title=typeof req.body?.title==='string'?req.body.title.trim().slice(0,120):'';
-    const body=typeof req.body?.body==='string'?req.body.body.trim().slice(0,4000):'';
+    const title=typeof req.body?.title==='string'?req.body.title.trim():'';
+    const body=typeof req.body?.body==='string'?req.body.body.trim():'';
     const priority=typeof req.body?.priority==='string'?req.body.priority.trim().toUpperCase():'NORMAL';
     const mediaIdRaw=req.body?.mediaId==null?'':String(req.body.mediaId).trim();
-    const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):'';
+    const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim():'';
     const scheduledRaw=typeof req.body?.scheduledAt==='string'?req.body.scheduledAt.trim():'';
     const parsedSchedule=parseFutureAnnouncementSchedule(scheduledRaw);
     const scheduledAt=parsedSchedule.date;
     const published=req.body?.published===undefined?true:req.body.published===true;
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
+    if(title.length>120||body.length>4000||linkUrl.length>2048)return res.status(400).json({error:'title, body or link exceeds the allowed length'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
     if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
     if(mediaIdRaw&&!isPositivePostgresBigint(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
     if(mediaIdRaw){
-      const owned=await pool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
+      const owned=await routePool.query("SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1",[mediaIdRaw,req.user.sub]);
       if(!owned.rows[0]||!String(owned.rows[0].mime_type||'').toLowerCase().startsWith('image/'))return res.status(403).json({error:'announcement image must be an image uploaded by this administrator'});
     }
     if(linkUrl){try{const parsed=new URL(linkUrl);if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password)return res.status(400).json({error:'announcement link must be a valid HTTPS URL without embedded credentials'});}catch{return res.status(400).json({error:'announcement link is invalid'});}}
-    const client=await pool.connect();
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const result=await client.query(`INSERT INTO fynx_announcements(title,body,priority,published,author_id,media_id,link_url,scheduled_at,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,title,body,priority,media_id,link_url,scheduled_at,published,published_at,created_at,updated_at`,[title,body,priority,published,req.user.sub,mediaIdRaw||null,linkUrl,scheduledAt,published&&!scheduledAt?new Date():null]);
@@ -187,7 +247,7 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const announcementId=String(req.params.announcementId||'');
     const published=req.body?.published;
-    if(!/^[1-9]\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    if(!isPositivePostgresBigint(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
     const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
     const hasContent=['title','body','priority','mediaId','linkUrl'].some(key=>Object.prototype.hasOwnProperty.call(req.body||{},key));
     let scheduledAt;
@@ -197,15 +257,15 @@ export function registerAdminRoutes({ app }) {
       scheduledAt=parsedSchedule.date;
       if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
     }
-    const client=await pool.connect();
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const existing=(await client.query('SELECT id,title,body,priority,media_id,link_url,scheduled_at,published FROM fynx_announcements WHERE id=$1 FOR UPDATE',[announcementId])).rows[0];
       if(!existing){await client.query('ROLLBACK');return res.status(404).json({error:'announcement not found'});}
-      const title=Object.prototype.hasOwnProperty.call(req.body||{},'title')&&typeof req.body.title==='string'?req.body.title.trim().slice(0,120):existing.title;
-      const body=Object.prototype.hasOwnProperty.call(req.body||{},'body')&&typeof req.body.body==='string'?req.body.body.trim().slice(0,4000):existing.body;
+      const title=Object.prototype.hasOwnProperty.call(req.body||{},'title')&&typeof req.body.title==='string'?req.body.title.trim():existing.title;
+      const body=Object.prototype.hasOwnProperty.call(req.body||{},'body')&&typeof req.body.body==='string'?req.body.body.trim():existing.body;
       const priority=Object.prototype.hasOwnProperty.call(req.body||{},'priority')&&typeof req.body.priority==='string'?req.body.priority.trim().toUpperCase():existing.priority;
-      if(title.length<2||body.length<2||!['NORMAL','IMPORTANT','URGENT'].includes(priority)){await client.query('ROLLBACK');return res.status(400).json({error:'valid announcement title, body and priority are required'});}
+      if(title.length<2||body.length<2||title.length>120||body.length>4000||!['NORMAL','IMPORTANT','URGENT'].includes(priority)){await client.query('ROLLBACK');return res.status(400).json({error:'valid announcement title, body and priority are required'});}
       let mediaId=existing.media_id;
       if(Object.prototype.hasOwnProperty.call(req.body||{},'mediaId')){
         const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
@@ -218,7 +278,8 @@ export function registerAdminRoutes({ app }) {
           mediaId=raw;
         }else mediaId=null;
       }
-      const linkUrl=Object.prototype.hasOwnProperty.call(req.body||{},'linkUrl')&&typeof req.body.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):existing.link_url||'';
+      const linkUrl=Object.prototype.hasOwnProperty.call(req.body||{},'linkUrl')&&typeof req.body.linkUrl==='string'?req.body.linkUrl.trim():existing.link_url||'';
+      if(linkUrl.length>2048){await client.query('ROLLBACK');return res.status(400).json({error:'announcement link exceeds the allowed length'});}
       if(linkUrl){try{const parsed=new URL(linkUrl);if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password){await client.query('ROLLBACK');return res.status(400).json({error:'announcement link must be a valid HTTPS URL without embedded credentials'});}}catch{await client.query('ROLLBACK');return res.status(400).json({error:'announcement link is invalid'});}}
       const nextSchedule=hasSchedule?scheduledAt:existing.scheduled_at;
       const publishedAt=published&&!nextSchedule?new Date():null;
@@ -237,9 +298,9 @@ export function registerAdminRoutes({ app }) {
     const targetId=String(req.params.userId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.note==='string'?req.body.note.trim().slice(0,500):'';
-    if(!/^[1-9]\d*$/.test(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
+    if(!isPositivePostgresBigint(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
     if(targetId===String(req.user.sub))return res.status(400).json({error:'administrators cannot change their own account status'});
-    const client=await pool.connect();
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const target=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[targetId])).rows[0];
@@ -261,7 +322,7 @@ export function registerAdminRoutes({ app }) {
     const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):50;
     const offsetValue=Number(req.query?.offset);
     const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
-    const result=await pool.query(`SELECT r.id,r.reporter_id,r.target_user_id,r.target_username,r.reason,r.details,r.status,r.created_at,reporter.username AS reporter_username,reporter.display_name AS reporter_display_name FROM safety_reports r JOIN users reporter ON reporter.id=r.reporter_id WHERE r.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE r.status WHEN 'OPEN' THEN 0 ELSE 1 END,r.created_at ASC,r.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const result=await routePool.query(`SELECT r.id,r.reporter_id,r.target_user_id,r.target_username,r.reason,r.details,r.status,r.created_at,reporter.username AS reporter_username,reporter.display_name AS reporter_display_name FROM safety_reports r JOIN users reporter ON reporter.id=r.reporter_id WHERE r.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE r.status WHEN 'OPEN' THEN 0 ELSE 1 END,r.created_at ASC,r.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
     const hasMore=result.rows.length>limit;
     const rows=hasMore?result.rows.slice(0,limit):result.rows;
     return res.json({reports:rows.map(r=>({id:String(r.id),reporterId:String(r.reporter_id),reporterUsername:r.reporter_username||'',reporterDisplayName:r.reporter_display_name||'',targetUserId:r.target_user_id==null?null:String(r.target_user_id),targetUsername:r.target_username||'',reason:r.reason,details:r.details||'',status:r.status,createdAt:r.created_at})),limit,offset,hasMore});
@@ -272,8 +333,8 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const reportId=String(req.params.reportId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
-    if(!/^[1-9]\d*$/.test(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
-    const client=await pool.connect();
+    if(!isPositivePostgresBigint(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const result=await client.query(`UPDATE safety_reports SET status=$1,updated_at=NOW() WHERE id=$2 AND status IN ('OPEN','UNDER_REVIEW') RETURNING id,status,updated_at`,[status,reportId]);
@@ -291,7 +352,7 @@ export function registerAdminRoutes({ app }) {
     const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):50;
     const offsetValue=Number(req.query?.offset);
     const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
-    const result=await pool.query(`SELECT a.id,a.user_id,a.report_id,a.subject,a.details,a.status,a.decision_note,a.created_at,u.username,u.display_name,COALESCE(fs.account_status,fas.account_status,'ACTIVE') AS account_status FROM safety_appeals a JOIN users u ON u.id=a.user_id LEFT JOIN safety_settings fs ON fs.user_id=a.user_id LEFT JOIN fynx_account_safety fas ON fas.user_id=a.user_id WHERE a.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE a.status WHEN 'OPEN' THEN 0 ELSE 1 END,a.created_at ASC,a.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const result=await routePool.query(`SELECT a.id,a.user_id,a.report_id,a.subject,a.details,a.status,a.decision_note,a.created_at,u.username,u.display_name,COALESCE(fs.account_status,fas.account_status,'ACTIVE') AS account_status FROM safety_appeals a JOIN users u ON u.id=a.user_id LEFT JOIN safety_settings fs ON fs.user_id=a.user_id LEFT JOIN fynx_account_safety fas ON fas.user_id=a.user_id WHERE a.status IN ('OPEN','UNDER_REVIEW') ORDER BY CASE a.status WHEN 'OPEN' THEN 0 ELSE 1 END,a.created_at ASC,a.id ASC LIMIT $1 OFFSET $2`,[limit+1,offset]);
     const hasMore=result.rows.length>limit;
     const rows=hasMore?result.rows.slice(0,limit):result.rows;
     return res.json({appeals:rows.map(a=>({id:String(a.id),userId:String(a.user_id),username:a.username||'',displayName:a.display_name||'',reportId:a.report_id==null?null:String(a.report_id),subject:a.subject,details:a.details,status:a.status,decisionNote:a.decision_note||'',accountStatus:a.account_status||'ACTIVE',createdAt:a.created_at})),limit,offset,hasMore});
@@ -303,8 +364,8 @@ export function registerAdminRoutes({ app }) {
     const appealId=String(req.params.appealId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.decisionNote==='string'?req.body.decisionNote.trim().slice(0,500):'';
-    if(!/^[1-9]\d*$/.test(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
-    const client=await pool.connect();
+    if(!isPositivePostgresBigint(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const appeal=(await client.query('SELECT id,user_id,report_id,status FROM safety_appeals WHERE id=$1 FOR UPDATE',[appealId])).rows[0];
@@ -344,9 +405,10 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await role(req.user.sub);
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
     req.fynxAdminRole=actorRole;
-    const userId=Number(req.body?.userId);
-    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
-    const client=await pool.connect();
+    const userIdInput=req.body?.userId;
+    if(!isPositivePostgresBigint(userIdInput))return res.status(400).json({error:'valid user id is required'});
+    const userId=String(userIdInput).trim();
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const exists=(await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId])).rows[0];
@@ -364,11 +426,11 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await role(req.user.sub);
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
     req.fynxAdminRole=actorRole;
-    const userId=Number(req.params.userId);
-    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
+    const userId=String(req.params.userId??'').trim();
+    if(!isPositivePostgresBigint(userId))return res.status(400).json({error:'valid user id is required'});
     if(String(userId)===String(req.user.sub))return res.status(400).json({error:'owner role cannot be removed'});
     if(await role(userId)==='OWNER')return res.status(403).json({error:'owner role cannot be removed'});
-    const client=await pool.connect();
+    const client=await routePool.connect();
     try{
       await client.query('BEGIN');
       const result=await client.query('DELETE FROM fynx_admin_roles WHERE user_id=$1 RETURNING user_id',[userId]);
