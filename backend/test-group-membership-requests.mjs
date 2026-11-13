@@ -23,13 +23,13 @@ async function call(method,path,params,userId,body={}) {
 }
 await client.connect();
 try {
- await client.query(\`
+ await client.query(`
  CREATE TABLE IF NOT EXISTS users(id BIGINT PRIMARY KEY,username TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL DEFAULT '',display_name TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',verified BOOLEAN NOT NULL DEFAULT FALSE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
  CREATE TABLE IF NOT EXISTS fynx_groups(id TEXT PRIMARY KEY,owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',visibility TEXT NOT NULL DEFAULT 'PRIVATE',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
  ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
  CREATE TABLE IF NOT EXISTS fynx_group_members(group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,role TEXT NOT NULL DEFAULT 'MEMBER',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(group_id,user_id));
  ALTER TABLE fynx_group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
- \`);
+ `);
  await client.query("INSERT INTO users(id,username,password_hash) VALUES($1,$2,''),($3,$4,''),($5,$6,''),($7,$8,'')",
  [admin,"owner_"+suffix.slice(0,12),requester,"requester_"+suffix.slice(0,12),second,"second_"+suffix.slice(0,12),capacityRequester,"capacity_"+suffix.slice(0,12)]);
  await client.query("INSERT INTO fynx_groups(id,owner_id,name) VALUES($1,$2,'Approval group'),($3,$2,'Capacity group')",[group,admin,capGroup]);
