@@ -25,7 +25,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
     APP_APK="app/build/outputs/apk/debug/app-debug.apk"
     if [ -f "${APP_APK}" ] && adb install -r "${APP_APK}"; then
       adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
-      if printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'; then
+      if printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell "run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'"; then
         adb shell am force-stop com.fynx.app
         adb shell monkey -p com.fynx.app 1 >/dev/null
         sleep 5
