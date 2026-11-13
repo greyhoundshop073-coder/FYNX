@@ -23,11 +23,20 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
-            "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
             "REMINDER" -> FynxNotificationFoundation.REMINDERS_CHANNEL
             else -> FynxNotificationFoundation.FRIENDS_CHANNEL
         }
+        val groupId = data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                val parsed = Uri.parse(route)
+                if (type == "GROUP") parsed.lastPathSegment?.takeIf { it.isNotBlank() } else null
+            }.getOrNull()
+        if (type == "GROUP" && groupId != null &&
+            (!FynxConversationPreferences.groupNotifications(this, groupId) ||
+                FynxConversationPreferences.groupMuted(this, groupId))) return
+
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
         val safeRoute = runCatching { Uri.parse(route) }.getOrNull() ?: Uri.parse("fynx://home")
