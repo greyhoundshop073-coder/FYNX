@@ -1060,7 +1060,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         val older = page.messages.map { FynxGroupRemoteClient.toChatMessage(it,currentUsername,FynxBackendClient.baseUrl(context)) }
                                         messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
                                         hasMoreGroupHistory = page.hasMore
-                                        withContext(Dispatchers.IO) { FynxChatStore.save(context,"group_$groupId",messages) }
+                                        val incomingOlderIds = older.filter { !it.fromMe }.map { it.id }.takeLast(100)
+                                        if (incomingOlderIds.isNotEmpty()) {
+                                            FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingOlderIds).onSuccess { readUpdates ->
+                                                if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
+                                                val byId = readUpdates.associateBy { it.id }
+                                                messages = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                            }
+                                        }
+                                        withContext(Dispatchers.IO) { if (isCurrentGroupAccount(requestAccountKey)) FynxChatStore.save(context,"group_$groupId",messages) }
                                     }.onFailure { if (isCurrentGroupAccount(requestAccountKey)) syncMessage = "Older group messages could not load. Reconnect and try again." }
                                     if (isCurrentGroupAccount(requestAccountKey)) loadingOlderGroupHistory = false
                                 }

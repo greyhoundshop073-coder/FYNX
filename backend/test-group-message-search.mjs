@@ -38,7 +38,22 @@ async function run(){
   assert(all.messages.length===4&&all.messages.every(x=>x.id.startsWith("group-a-")),"q omitted must keep group scoping");
   const hostile=await searchPage({groupId:"group-a",query:"' OR 1=1 --",limit:10});
   assert(hostile.messages.length===0,"SQL-shaped input must remain a bound text value");
-  console.log("GROUP MESSAGE SEARCH POSTGRESQL: GREEN (full-text, group isolation, cursor stability, empty results, parameter binding)");
+  await client.query(`CREATE TEMP TABLE group_message_receipt_source(id TEXT PRIMARY KEY,group_id TEXT NOT NULL,sender_id BIGINT NOT NULL) ON COMMIT PRESERVE ROWS`);
+  await client.query(`CREATE TEMP TABLE group_message_receipt_fixture(message_id TEXT NOT NULL REFERENCES group_message_receipt_source(id) ON DELETE CASCADE,user_id BIGINT NOT NULL,read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(message_id,user_id)) ON COMMIT PRESERVE ROWS`);
+  await client.query("INSERT INTO group_message_receipt_source(id,group_id,sender_id) VALUES ('receipt-a-0001','group-a',10),('receipt-a-0002','group-a',11),('receipt-b-0001','group-b',12)");
+  const markRead=async(groupId,messageIds,userId)=>client.query(`INSERT INTO group_message_receipt_fixture(message_id,user_id)
+    SELECT message.id,$3 FROM group_message_receipt_source message
+    WHERE message.group_id=$1 AND message.id=ANY($2::text[]) AND message.sender_id<>$3
+    ON CONFLICT(message_id,user_id) DO NOTHING RETURNING message_id`,[groupId,messageIds,userId]);
+  const firstRead=await markRead("group-a",["receipt-a-0001","receipt-a-0002","receipt-b-0001"],10);
+  assert(firstRead.rows.length===1&&firstRead.rows[0].message_id==="receipt-a-0002","read receipts must exclude the reader's own messages and other groups");
+  const duplicateRead=await markRead("group-a",["receipt-a-0002"],10);
+  assert(duplicateRead.rows.length===0,"repeated read marking must be idempotent");
+  const secondReader=await markRead("group-a",["receipt-a-0002"],13);
+  assert(secondReader.rows.length===1,"each group member must have an independent read receipt");
+  const receiptCount=await client.query("SELECT COUNT(*)::int AS count FROM group_message_receipt_fixture WHERE message_id='receipt-a-0002'");
+  assert(receiptCount.rows[0].count===2,"the message must retain one read receipt per distinct reader");
+  console.log("GROUP MESSAGE SEARCH + READ RECEIPTS POSTGRESQL: GREEN (full-text, group isolation, cursor stability, idempotent per-member receipts, sender exclusion)");
  }finally{client.release();}
 }
 run().catch(error=>{console.error("GROUP MESSAGE SEARCH POSTGRESQL: RED",error);process.exitCode=1;}).finally(async()=>{await pool.end();});
