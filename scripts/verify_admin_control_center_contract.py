@@ -303,7 +303,7 @@ require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(conte
         "targets.take(5)" not in source,
         "Admin People UI must use the protected search and display the bounded server result set")
 
-const appShell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+appShell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 require("FYNX_ADMIN_VISUAL_PREVIEW_KEY" in appShell and "FLAG_DEBUGGABLE" in appShell and
         "getBoolean(FYNX_ADMIN_VISUAL_PREVIEW_KEY, false)" in appShell and
         "FynxAdminControlCenterPanel(previewMode = adminVisualPreview)" in appShell,
