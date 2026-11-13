@@ -138,8 +138,18 @@ object FynxGroupRemoteClient {
     suspend fun drainPendingWork(context:Context):Int {
         val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return 0
         var completed=0
+        val pendingGroupIds = FynxGroupsStore.pendingSyncGroups(context)
         for(group in FynxGroupsStore.load(context)) {
             if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+            if (group.id in pendingGroupIds) {
+                val groupSync = syncGroup(context, group)
+                if (groupSync.isSuccess) {
+                    FynxGroupsStore.markSynced(context, group.id)
+                    completed++
+                } else {
+                    continue
+                }
+            }
             val pending=FynxChatStore.load(context,"group_${group.id}")
                 .filter { it.fromMe && !it.delivered }
                 .sortedBy { it.timestamp }
