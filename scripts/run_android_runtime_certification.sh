@@ -17,10 +17,10 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # The actual server-authorized OWNER/ADMIN journey still requires the live backend.
   # Separately capture the production Admin layout in a debug-only, read-only preview
   # so the PR supplies genuine emulator pixels without inventing live account data.
-  BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\\/+$/,""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
+  BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(new RegExp("/+$"), ""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
   mkdir -p fynx-runtime-screenshots
   if [ "${TEST_EXIT}" -eq 0 ]; then
-    printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'cat > shared_prefs/fynx_preferences.xml'
+    printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml'
     adb shell am force-stop com.fynx.app
     adb shell monkey -p com.fynx.app 1 >/dev/null
     sleep 5
