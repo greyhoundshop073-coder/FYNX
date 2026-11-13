@@ -147,7 +147,7 @@ export function registerGroupContentRoutes({ app }) {
                COALESCE(BOOL_OR(v.user_id=$2),FALSE) AS selected_by_me
         FROM fynx_group_poll_options o
         LEFT JOIN fynx_group_poll_votes v ON v.option_id=o.id
-        WHERE o.poll_id IN (SELECT poll_id FROM fynx_group_polls WHERE post_id = ANY($1::text[]))
+        WHERE o.poll_id IN (SELECT id FROM fynx_group_polls WHERE post_id = ANY($1::text[]))
         GROUP BY o.id,o.poll_id,o.text,o.position
         ORDER BY o.poll_id,o.position
       `, [postIds, req.user.sub])).rows : [];
