@@ -437,6 +437,10 @@ checks.extend([
      and "videoDurationMs = cameraVideoDurationMs" in camera
      and "onTiming = { start, end ->" in camera
      and "updateCameraTextOverlay(it.copy(startMs = start, endMs = end))" in camera),
+    ("Camera editor restores app-owned file-backed draft media using extension MIME fallback",
+     'uri.scheme == "file"' in camera
+     and "getMimeTypeFromExtension(extensionHint)" in camera
+     and "File(uri.path" in camera),
     ("Retake explicitly releases and rebinds CameraX and gates the shutter on ready use cases",
      "Force a clean CameraX bind" in camera and "cameraReady = false" in camera
      and "galleryRebindRequest += 1" in camera

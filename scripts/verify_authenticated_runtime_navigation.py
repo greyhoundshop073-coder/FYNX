@@ -295,6 +295,35 @@ def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     rid=(node.attrib.get("resource-id") or "").strip()
     return text or desc or rid,center[0],center[1]
 
+def find_visible_scroll_control(xml_text: str, labels: list[str], container_class: str):
+    """Return a labelled control only when its centre is inside the current scroll viewport."""
+    control = find_control(xml_text, labels)
+    if not control:
+        return None
+    _, center_x, center_y = control
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    for node in root.iter("node"):
+        if node.attrib.get("class") != container_class:
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        if left <= center_x <= right and top <= center_y <= bottom:
+            return control
+    return None
+
+
 def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
     """Tap a real message bubble only; never mistake empty-state/navigation cards for a message."""
     if not xml_text: return ""
@@ -1696,9 +1725,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                             report.append("- PASS Add link rejected malformed URL input and displayed a clear validation message")
                             cancelled_link = tap_control(
                                 invalid_link_result, ["Cancel"], f"{prefix}-camera-post-link-cancel-invalid",
-                                ["Add link"]
+                                ["New post", "Post"]
                             )
                             if cancelled_link:
+                                cancelled_link = camera_scroll_until_control(
+                                    cancelled_link, ["Add link"], f"{prefix}-camera-post-link-return"
+                                )
                                 valid_link_dialog = tap_control(
                                     cancelled_link, ["Add link"], f"{prefix}-camera-post-link-reopen-valid",
                                     ["Website URL", "Add to caption"]
@@ -2252,13 +2284,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Scroll vertically inside the actual video-editor viewport until the style row
     # is visible. A horizontal swipe at the caption field's old screen coordinate does
     # not reliably reach a carousel that is still below the fold.
-    for style_scroll_attempt in range(8):
+    for style_scroll_attempt in range(12):
         editor = dump_ui(f"{prefix}-camera-video-style-viewport-{style_scroll_attempt + 1}.xml") or editor
-        if find_control(editor, ["Video styles"]) and find_control(editor, ["Cinematic"]):
+        if find_visible_scroll_control(editor, ["Video styles"], "android.widget.ScrollView") and find_visible_scroll_control(editor, ["Cinematic"], "android.widget.HorizontalScrollView"):
             break
         scroll_viewports = []
         for node in nodes(editor):
-            if node.attrib.get("class") not in ("android.widget.ScrollView", "android.widget.HorizontalScrollView"):
+            if node.attrib.get("class") != "android.widget.ScrollView":
                 continue
             if node.attrib.get("scrollable", "false").lower() != "true":
                 continue
@@ -2276,18 +2308,24 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             break
         _, _, left, top, right, bottom = max(scroll_viewports, key=lambda item: item[1])
         x = (left + right) // 2
-        run("adb", "shell", "input", "swipe", str(x), str(bottom - 30), str(x), str(top + 30), "450")
+        start_y, end_y = bottom - 8, top + 8
+        if start_y <= end_y:
+            break
+        run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "450")
         time.sleep(0.45)
-    if not find_control(editor, ["Video styles"]):
+    if not find_visible_scroll_control(editor, ["Video styles"], "android.widget.ScrollView"):
         FAILURES.append(prefix + ": Video styles section was not reachable by scrolling the real editor viewport")
     # Re-find the action after the captions UI and vertical scroll may have changed it.
     editor = dump_ui(f"{prefix}-camera-video-before-style-apply.xml") or editor
-    style = find_control(editor, ["Cinematic"])
+    style = find_visible_scroll_control(editor, ["Cinematic"], "android.widget.HorizontalScrollView")
+    cinematic_style_selected = bool(style)
     if style:
         _, sx, sy = style
         run("adb", "shell", "input", "tap", str(sx), str(sy))
         time.sleep(0.5)
         editor = dump_ui(f"{prefix}-camera-video-style-selected.xml") or editor
+    else:
+        FAILURES.append(prefix + ": Cinematic style control was not visible in the video-style carousel")
 
     editor = camera_wait_for_control(
         editor, ["Apply text / effects"], enabled=True, timeout=30.0,
@@ -2311,7 +2349,10 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 + visible_marker_summary(processed_xml)
             )
         else:
-            report.append("- PASS Cinematic export returned to a stable, enabled video editor; Next was not tapped")
+            if cinematic_style_selected:
+                report.append("- PASS Cinematic export returned to a stable, enabled video editor; Next was not tapped")
+            else:
+                FAILURES.append(prefix + ": video edit export completed without a verified Cinematic style selection")
             screenshot(f"{prefix}-camera-video-effect-output.png")
             (ROOT / f"{prefix}-camera-video-effect-output.xml").write_text(
                 processed_xml + chr(10), encoding="utf-8"
@@ -2348,6 +2389,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
 
     # Re-run the original source through every remaining video treatment. The app verifies each
     # decoded output frame and preserves the source audio track before accepting the export.
+    editor = dump_ui(f"{prefix}-camera-video-after-cinematic-export.xml") or processed_xml or editor
     for style_label, slug in [
         ("Warm Film", "warm-film"),
         ("Vintage", "vintage"),
@@ -2355,16 +2397,59 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         ("Vivid", "vivid"),
     ]:
         # Do not select another style while the previous export is still processing.
+        current_editor = dump_ui(f"{prefix}-camera-video-{slug}-before-style.xml") or editor
         current_editor = camera_wait_for_control(
-            editor, ["Apply text / effects"], enabled=True, timeout=150.0,
+            current_editor, ["Apply text / effects"], enabled=True, timeout=150.0,
             prefix=prefix + f"-camera-video-{slug}-ready"
         )
-        style_node = find_control(current_editor, [style_label])
-        if not style_node:
-            run("adb", "shell", "input", "swipe", "1220", "2360", "300", "2360", "420")
-            time.sleep(0.5)
-            current_editor = dump_ui(f"{prefix}-camera-video-{slug}-styles-scroll.xml") or current_editor
-            style_node = find_control(current_editor, [style_label])
+        # Bring the style section into the actual vertical viewport before looking for
+        # an individual item. Never reuse off-screen coordinates from the previous export.
+        for vertical_attempt in range(12):
+            if find_visible_scroll_control(current_editor, ["Video styles"], "android.widget.ScrollView"):
+                break
+            vertical_candidates = []
+            for node in nodes(current_editor):
+                if node.attrib.get("class") != "android.widget.ScrollView" or node.attrib.get("scrollable", "false").lower() != "true":
+                    continue
+                bounds = _node_bounds(node)
+                if bounds:
+                    left, top, right, bottom = bounds
+                    if right > left and bottom - top >= 80:
+                        vertical_candidates.append((bottom-top, left, top, right, bottom))
+            if not vertical_candidates:
+                break
+            _, left, top, right, bottom = max(vertical_candidates, key=lambda item: item[0])
+            x = (left + right) // 2
+            start_y, end_y = bottom - 8, top + 8
+            if start_y <= end_y:
+                break
+            run("adb", "shell", "input", "swipe", str(x), str(start_y), str(x), str(end_y), "450")
+            time.sleep(0.45)
+            current_editor = dump_ui(f"{prefix}-camera-video-{slug}-vertical-scroll-{vertical_attempt + 1}.xml") or current_editor
+        style_node = find_visible_scroll_control(current_editor, [style_label], "android.widget.HorizontalScrollView")
+        for horizontal_attempt in range(8):
+            if style_node:
+                break
+            horizontal_candidates = []
+            for node in nodes(current_editor):
+                if node.attrib.get("class") != "android.widget.HorizontalScrollView" or node.attrib.get("scrollable", "false").lower() != "true":
+                    continue
+                bounds = _node_bounds(node)
+                if bounds:
+                    left, top, right, bottom = bounds
+                    if right - left > 120 and bottom > top:
+                        horizontal_candidates.append((right-left, left, top, right, bottom))
+            if not horizontal_candidates:
+                break
+            _, left, top, right, bottom = max(horizontal_candidates, key=lambda item: item[0])
+            y = (top + bottom) // 2
+            start_x, end_x = right - 8, left + 8
+            if start_x <= end_x:
+                break
+            run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
+            time.sleep(0.45)
+            current_editor = dump_ui(f"{prefix}-camera-video-{slug}-horizontal-scroll-{horizontal_attempt + 1}.xml") or current_editor
+            style_node = find_visible_scroll_control(current_editor, [style_label], "android.widget.HorizontalScrollView")
         if not style_node:
             FAILURES.append(prefix + f": video style {style_label} was not reachable in the style carousel")
             break
@@ -2911,11 +2996,11 @@ def camera_scroll_until_control(xml_text: str, labels: list[str], prefix: str, m
     The post footer stays fixed while details rows move. Prefer accessibility scroll
     bounds; use display-relative coordinates only when no scroll node exists.
     """
-    latest = xml_text
+    latest = dump_ui(f"{prefix}-initial.xml") or xml_text
     previous_summary = None
     stagnant = 0
     for attempt in range(max_swipes):
-        if find_control(latest, labels):
+        if find_visible_scroll_control(latest, labels, "android.widget.ScrollView"):
             return latest
         candidates = []
         for node in nodes(latest):

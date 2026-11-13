@@ -35,6 +35,33 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun fileBackedPostDraftMediaCanBeReopenedByTheCameraEditor() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val source = File(context.cacheDir, "fynx-file-draft-" + System.currentTimeMillis() + ".jpg")
+        val bitmap = Bitmap.createBitmap(48, 64, Bitmap.Config.ARGB_8888)
+        var working: File? = null
+        var original: File? = null
+        try {
+            Canvas(bitmap).drawColor(Color.BLUE)
+            source.outputStream().use { stream ->
+                assertTrue("The draft image could not be encoded", bitmap.compress(Bitmap.CompressFormat.JPEG, 95, stream))
+            }
+            val copied = copyCameraGalleryMediaToCache(context, Uri.fromFile(source))
+            working = copied.first
+            original = copied.second
+            assertEquals("image", copied.third)
+            assertTrue("The working draft image was not copied", working!!.isFile && working!!.length() > 0L)
+            assertTrue("The original draft image was not retained", original!!.isFile && original!!.length() > 0L)
+            assertEquals("jpg", working!!.extension)
+        } finally {
+            working?.takeIf { it != source }?.delete()
+            original?.takeIf { it != source }?.delete()
+            source.delete()
+            bitmap.recycle()
+        }
+    }
+
+    @Test
     fun videoOverlayCoordinatesPreserveTopCentreAndBottomMediaPositions() {
         val topLeft = cameraVideoTextOverlayBackgroundAnchor(
             FynxCameraTextOverlay(x = 0.04f, y = 0.06f)

@@ -255,9 +255,13 @@ private const val MAX_CAMERA_GALLERY_VIDEO_BYTES = 512L * 1024 * 1024
  * uploaded automatically; the existing composer callback runs only after the user taps Send.
  * Returns (working file, untouched original, semantic media type).
  */
-private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<File, File, String> {
+internal fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<File, File, String> {
     val resolver = context.contentResolver
+    // Local post drafts use app-owned file:// URIs. ContentResolver.getType() returns null
+    // for those, so recover the MIME type from the stored media extension.
+    val extensionHint = MimeTypeMap.getFileExtensionFromUrl(uri.toString()).lowercase()
     val mime = resolver.getType(uri)?.substringBefore(';')?.trim()?.lowercase()
+        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extensionHint)?.lowercase()
         ?: error("The selected media type could not be determined.")
     val type = when {
         mime.startsWith("image/") -> "image"
@@ -277,8 +281,13 @@ private fun copyCameraGalleryMediaToCache(context: Context, uri: Uri): Triple<Fi
     val original = File.createTempFile("fynx_gallery_source_", ".$extension", context.cacheDir)
     var workingCopy: File? = null
     try {
-        val input = resolver.openInputStream(uri)
-            ?: error("The selected Gallery item could not be opened.")
+        val input = if (uri.scheme == "file") {
+            File(uri.path ?: error("The selected media path is missing."))
+                .takeIf { it.isFile }
+                ?.inputStream()
+        } else {
+            resolver.openInputStream(uri)
+        } ?: error("The selected Gallery item could not be opened.")
         val maxBytes = if (type == "image") MAX_CAMERA_GALLERY_IMAGE_BYTES else MAX_CAMERA_GALLERY_VIDEO_BYTES
         input.use { source ->
             FileOutputStream(original).use { output ->
