@@ -141,9 +141,15 @@ export function registerAdminRoutes({ app }) {
 
   app.get('/api/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
-    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,published_at,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS effective_published_at,created_at,updated_at FROM fynx_announcements WHERE published=TRUE AND (scheduled_at IS NULL OR scheduled_at<=NOW()) ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,COALESCE(published_at,scheduled_at,created_at) DESC LIMIT 50`);
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,published_at,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS effective_published_at,created_at,updated_at FROM fynx_announcements WHERE published=TRUE AND (scheduled_at IS NULL OR scheduled_at<=NOW()) ORDER BY CASE priority WHEN 'URGENT' THEN 0 WHEN 'IMPORTANT' THEN 1 ELSE 2 END,COALESCE(published_at,scheduled_at,created_at) DESC,id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
     res.set('Cache-Control','no-store');
-    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.effective_published_at||a.created_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+    return res.json({announcements:rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.effective_published_at||a.created_at,createdAt:a.created_at,updatedAt:a.updated_at})),limit,offset,hasMore});
   }catch(error){console.error('announcements get',error);return res.status(500).json({error:'announcements unavailable'});}});
 
   app.get('/api/admin/dashboard',auth,async(req,res)=>{try{await ensureSchema();if(!(await requireAdmin(req,res)))return;const counts=await Promise.all([countRows('users'),countRows('safety_reports',"status IN ('OPEN','UNDER_REVIEW')"),countRows('safety_appeals',"status IN ('OPEN','UNDER_REVIEW')"),countRows('fynx_admin_activity',"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'")]);return res.json({role:req.fynxAdminRole,counts:{users:counts[0],openReports:counts[1],openAppeals:counts[2],safetyActions24h:counts[3]}});}catch(error){console.error('admin dashboard',error);return res.status(500).json({error:'admin dashboard unavailable'});}});
@@ -199,23 +205,31 @@ export function registerAdminRoutes({ app }) {
   app.get('/api/admin/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
     if(!(await requireAdmin(req,res)))return;
-    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS published_at,created_at,updated_at FROM fynx_announcements ORDER BY COALESCE(scheduled_at,published_at,created_at) DESC LIMIT 100`);
-    return res.json({announcements:result.rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at,createdAt:a.created_at,updatedAt:a.updated_at}))});
+    const limitValue=Number(req.query?.limit);
+    const limit=Number.isInteger(limitValue)?Math.min(100,Math.max(1,limitValue)):50;
+    const offsetValue=Number(req.query?.offset);
+    const offset=Number.isInteger(offsetValue)?Math.min(10000,Math.max(0,offsetValue)):0;
+    const result=await pool.query(`SELECT id,title,body,priority,media_id,link_url,CASE WHEN scheduled_at>NOW() THEN scheduled_at ELSE NULL END AS scheduled_at,published,CASE WHEN scheduled_at IS NOT NULL AND scheduled_at<=NOW() THEN scheduled_at ELSE published_at END AS published_at,created_at,updated_at FROM fynx_announcements ORDER BY COALESCE(scheduled_at,published_at,created_at) DESC,id DESC LIMIT $1 OFFSET $2`,[limit+1,offset]);
+    const hasMore=result.rows.length>limit;
+    const rows=hasMore?result.rows.slice(0,limit):result.rows;
+    res.set('Cache-Control','private, no-store');
+    return res.json({announcements:rows.map(a=>({id:String(a.id),title:a.title,body:a.body,priority:a.priority,mediaId:a.media_id==null?null:String(a.media_id),linkUrl:a.link_url||'',scheduledAt:a.scheduled_at,published:Boolean(a.published),publishedAt:a.published_at,createdAt:a.created_at,updatedAt:a.updated_at})),limit,offset,hasMore});
   }catch(error){console.error('admin announcements list',error);return res.status(500).json({error:'admin announcements unavailable'});}});
 
   app.post('/api/admin/announcements',auth,async(req,res)=>{try{
     await ensureSchema();
     if(!(await requireAdmin(req,res)))return;
-    const title=typeof req.body?.title==='string'?req.body.title.trim().slice(0,120):'';
-    const body=typeof req.body?.body==='string'?req.body.body.trim().slice(0,4000):'';
+    const title=typeof req.body?.title==='string'?req.body.title.trim():'';
+    const body=typeof req.body?.body==='string'?req.body.body.trim():'';
     const priority=typeof req.body?.priority==='string'?req.body.priority.trim().toUpperCase():'NORMAL';
     const mediaIdRaw=req.body?.mediaId==null?'':String(req.body.mediaId).trim();
-    const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):'';
+    const linkUrl=typeof req.body?.linkUrl==='string'?req.body.linkUrl.trim():'';
     const scheduledRaw=typeof req.body?.scheduledAt==='string'?req.body.scheduledAt.trim():'';
     const parsedSchedule=parseFutureAnnouncementSchedule(scheduledRaw);
     const scheduledAt=parsedSchedule.date;
     const published=req.body?.published===undefined?true:req.body.published===true;
     if(title.length<2||body.length<2)return res.status(400).json({error:'title and body are required'});
+    if(title.length>120||body.length>4000||linkUrl.length>2048)return res.status(400).json({error:'title, body or link exceeds the allowed length'});
     if(!['NORMAL','IMPORTANT','URGENT'].includes(priority))return res.status(400).json({error:'invalid announcement priority'});
     if(!parsedSchedule.valid)return res.status(400).json({error:'scheduled time must be a real future ISO 8601 date/time with an explicit timezone'});
     if(mediaIdRaw&&!isPositivePostgresBigint(mediaIdRaw))return res.status(400).json({error:'invalid announcement image'});
@@ -240,7 +254,7 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const announcementId=String(req.params.announcementId||'');
     const published=req.body?.published;
-    if(!/^[1-9]\d*$/.test(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
+    if(!isPositivePostgresBigint(announcementId)||typeof published!=='boolean')return res.status(400).json({error:'valid announcement id and published state are required'});
     const hasSchedule=Object.prototype.hasOwnProperty.call(req.body||{},'scheduledAt');
     const hasContent=['title','body','priority','mediaId','linkUrl'].some(key=>Object.prototype.hasOwnProperty.call(req.body||{},key));
     let scheduledAt;
@@ -255,10 +269,10 @@ export function registerAdminRoutes({ app }) {
       await client.query('BEGIN');
       const existing=(await client.query('SELECT id,title,body,priority,media_id,link_url,scheduled_at,published FROM fynx_announcements WHERE id=$1 FOR UPDATE',[announcementId])).rows[0];
       if(!existing){await client.query('ROLLBACK');return res.status(404).json({error:'announcement not found'});}
-      const title=Object.prototype.hasOwnProperty.call(req.body||{},'title')&&typeof req.body.title==='string'?req.body.title.trim().slice(0,120):existing.title;
-      const body=Object.prototype.hasOwnProperty.call(req.body||{},'body')&&typeof req.body.body==='string'?req.body.body.trim().slice(0,4000):existing.body;
+      const title=Object.prototype.hasOwnProperty.call(req.body||{},'title')&&typeof req.body.title==='string'?req.body.title.trim():existing.title;
+      const body=Object.prototype.hasOwnProperty.call(req.body||{},'body')&&typeof req.body.body==='string'?req.body.body.trim():existing.body;
       const priority=Object.prototype.hasOwnProperty.call(req.body||{},'priority')&&typeof req.body.priority==='string'?req.body.priority.trim().toUpperCase():existing.priority;
-      if(title.length<2||body.length<2||!['NORMAL','IMPORTANT','URGENT'].includes(priority)){await client.query('ROLLBACK');return res.status(400).json({error:'valid announcement title, body and priority are required'});}
+      if(title.length<2||body.length<2||title.length>120||body.length>4000||!['NORMAL','IMPORTANT','URGENT'].includes(priority)){await client.query('ROLLBACK');return res.status(400).json({error:'valid announcement title, body and priority are required'});}
       let mediaId=existing.media_id;
       if(Object.prototype.hasOwnProperty.call(req.body||{},'mediaId')){
         const raw=req.body.mediaId==null?'':String(req.body.mediaId).trim();
@@ -271,7 +285,8 @@ export function registerAdminRoutes({ app }) {
           mediaId=raw;
         }else mediaId=null;
       }
-      const linkUrl=Object.prototype.hasOwnProperty.call(req.body||{},'linkUrl')&&typeof req.body.linkUrl==='string'?req.body.linkUrl.trim().slice(0,2048):existing.link_url||'';
+      const linkUrl=Object.prototype.hasOwnProperty.call(req.body||{},'linkUrl')&&typeof req.body.linkUrl==='string'?req.body.linkUrl.trim():existing.link_url||'';
+      if(linkUrl.length>2048){await client.query('ROLLBACK');return res.status(400).json({error:'announcement link exceeds the allowed length'});}
       if(linkUrl){try{const parsed=new URL(linkUrl);if(parsed.protocol!=='https:'||!parsed.hostname||parsed.username||parsed.password){await client.query('ROLLBACK');return res.status(400).json({error:'announcement link must be a valid HTTPS URL without embedded credentials'});}}catch{await client.query('ROLLBACK');return res.status(400).json({error:'announcement link is invalid'});}}
       const nextSchedule=hasSchedule?scheduledAt:existing.scheduled_at;
       const publishedAt=published&&!nextSchedule?new Date():null;

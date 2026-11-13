@@ -112,28 +112,21 @@ object FynxAdminClient {
                 val item = array.optJSONObject(i) ?: continue
                 val mediaId = item.optString("mediaId").takeIf { it.isNotBlank() && it != "null" }
                 val scheduledAt = item.optString("scheduledAt").takeIf { it.isNotBlank() && it != "null" }
-                add(
-                    Announcement(
-                        id = item.optString("id"),
-                        title = item.optString("title"),
-                        body = item.optString("body"),
-                        priority = item.optString("priority", "NORMAL"),
-                        publishedAt = item.optString("publishedAt", item.optString("createdAt")),
-                        mediaId = mediaId,
-                        linkUrl = item.optString("linkUrl"),
-                        scheduledAt = scheduledAt,
-                        published = item.optBoolean("published", true)
-                    )
-                )
+                add(Announcement(id=item.optString("id"),title=item.optString("title"),body=item.optString("body"),priority=item.optString("priority","NORMAL"),publishedAt=item.optString("publishedAt",item.optString("createdAt")),mediaId=mediaId,linkUrl=item.optString("linkUrl"),scheduledAt=scheduledAt,published=item.optBoolean("published",true)))
             }
         }
     }
 
-    suspend fun announcements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/announcements").mapCatching(::parseAnnouncements)
+    private fun parseAnnouncementPage(raw:String,requestedOffset:Int,requestedLimit:Int):AdminPage<Announcement> {
+        val value=JSONObject(raw)
+        return AdminPage(items=parseAnnouncements(raw),offset=value.optInt("offset",requestedOffset),limit=value.optInt("limit",requestedLimit),hasMore=value.optBoolean("hasMore",false))
+    }
 
-    suspend fun adminAnnouncements(context: Context): Result<List<Announcement>> =
-        FynxBackendClient.get(context, "/api/admin/announcements").mapCatching(::parseAnnouncements)
+    suspend fun announcements(context:Context,offset:Int=0,limit:Int=50):Result<AdminPage<Announcement>> =
+        FynxBackendClient.get(context,"/api/announcements?limit=${limit.coerceIn(1,100)}&offset=${offset.coerceIn(0,10000)}").mapCatching{parseAnnouncementPage(it,offset.coerceIn(0,10000),limit.coerceIn(1,100))}
+
+    suspend fun adminAnnouncements(context:Context,offset:Int=0,limit:Int=50):Result<AdminPage<Announcement>> =
+        FynxBackendClient.get(context,"/api/admin/announcements?limit=${limit.coerceIn(1,100)}&offset=${offset.coerceIn(0,10000)}").mapCatching{parseAnnouncementPage(it,offset.coerceIn(0,10000),limit.coerceIn(1,100))}
 
     suspend fun dashboard(context: Context): Result<Dashboard> =
         FynxBackendClient.get(context, "/api/admin/dashboard").mapCatching { raw ->

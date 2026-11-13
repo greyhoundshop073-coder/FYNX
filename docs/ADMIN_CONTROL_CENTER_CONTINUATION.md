@@ -5,11 +5,11 @@
 ## 1. Where to resume
 
 - Repository: `greyhoundshop073-coder/FYNX`
-- Active PR: [#527 — Integrate Owner/Admin Control Center refresh on canonical branch](https://github.com/greyhoundshop073-coder/FYNX/pull/527)
-- Feature branch: `admin/control-center-complete-20261112`
+- Active PR: [#536 — Admin Control Center hardening](https://github.com/greyhoundshop073-coder/FYNX/pull/536)
+- Feature branch: `fix/admin-control-center-hardening-20261113`
 - PR base / canonical Android integration branch: `integration/fynx-single-apk-20261013`
-- Code head when this handoff was prepared: `40a83bcf72a5df742d1804fab5c68229999dc5a3`
-- PR state at handoff: open and unmerged.
+- Latest verified Group 1 head: `c8ee4837f9898c03ee195adaa4942c2ff2ab9034`
+- PR state: open, draft and unmerged. Do not merge without explicit user approval.
 
 The PR already contains the existing Control Center refresh, Overview/Safety/Marketplace/People/Announcements sections, account-status route correction, account-report review work, appeal UI/API work, OWNER-only Music Library controls, OWNER/ADMIN seasonal promotion controls, a new admin activity audit endpoint/client/UI, and the focused contract verifier. Inspect the current branch and PR diff before changing anything; this list describes work in progress, not proof that each flow is fully correct.
 
@@ -213,3 +213,40 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Run the new Admin auth behavioral tests, Stage 15H Admin verification, Python Admin source contract, full Android build/lint/unit/instrumentation and all three PR workflows on the final head.
 - Live OWNER/ADMIN/non-admin authorization, DB counts and state transitions still require a healthy backend and real test credentials. Current health probe is HTTP 404; no live authorization claim is permitted.
 - Verify report/appeal empty states, server limits, pagination and transactional decisions against a database-backed test environment. Preserve the content-report PRs and Chat/Groups PR #535.
+
+## 10. Group 2 continuation — Admin announcements and publishing
+
+### Group 1 verification
+- PR head: `c8ee4837f9898c03ee195adaa4942c2ff2ab9034`.
+- Backend CI run 7852 (`43446084820`): passed; Stage 15H Admin verification passed 10 checks and session-version auth tests passed for current/revoked/deleted/invalid/missing/database-unavailable cases.
+- Chat/Group Parity + Layout Safety run 4472 (`43446084742`): passed.
+- Android Build run 14097 (`43446084736`): fast and full build/test/lint passed; Admin contract passed; instrumentation completed 58 tests (0 failures, 1 backend test skipped); Admin preview screenshot captured (166619 bytes); APK exact-commit verification passed. PR APK upload steps skipped; no canonical APK produced.
+- Runtime artifact: https://github.com/greyhoundshop073-coder/FYNX/actions/runs/43446084736. Preview is visibly labelled and read-only with sample data.
+- Live Railway health/OWNER/ADMIN authorization is not certified; earlier probe returned HTTP 404 and latest probe was skipped.
+
+### Five verified Group 2 defects
+1. Announcement PATCH validated positive-decimal IDs but not PostgreSQL BIGINT upper range.
+2. Admin announcement history used hard `LIMIT 100` and had no offset/hasMore contract.
+3. Public announcement feed used hard `LIMIT 50` and had no offset/hasMore contract.
+4. Admin history with private drafts/scheduled records lacked explicit `Cache-Control: private, no-store`.
+5. Create/edit silently truncated title/body/link at 120/4000/2048 chars; UI did not show title/link counters or enforce the same bounds.
+
+### Group 2 corrections
+- PATCH now uses `isPositivePostgresBigint`; both feeds have bounded limit/offset, hasMore lookahead and stable ID tie-break ordering (50 default, max 100, offset max 10000).
+- Admin list is `private, no-store`; create/edit reject oversize values, rather than truncating. Composer displays title/link counters and enforces limits.
+- Typed client uses `AdminPage<Announcement>`. Public and Admin UI expose Previous/Next, including empty page recovery; Admin write actions reset pagination.
+- Added Python Admin contract assertions and Backend CI Stage15H regression checks.
+
+### Dependencies and next stage
+- Required exact-head checks: Backend CI (expanded Stage15H), Android fast/full build/test/lint/Admin contract/emulator evidence, Chat/Groups parity.
+- Railway health was 404 previously and latest production probe skipped. Live Owner/Admin operations, announcement writes, Neon data, external media retrieval require a healthy backend.
+- No login change or auth bypass. Admin preview debug-only/read-only. PR #536 stays unmerged.
+
+### Group 3 — next five investigations
+1. Seasonal promotion create/edit/activate/deactivate through Owner/Admin UI, backend authorization and audit.
+2. Promotion date/timezone boundary validation: future, expired and overlapping campaigns.
+3. Campaign artwork MIME, uploader ownership, access, replacement/removal and retry/failure behavior.
+4. Audit-row atomicity for every promotion mutation, including rollback if audit insert fails.
+5. OWNER-only direct API and UI for Music Library upload/publish/hide/restore/remove; preserve current music contribution.
+
+---

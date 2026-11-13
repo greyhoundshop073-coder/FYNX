@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 const admin=fs.readFileSync(new URL('./adminRoutes.js',import.meta.url),'utf8');
 const scalability=fs.readFileSync(new URL('./scalability.js',import.meta.url),'utf8');
+const publicAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/announcements'"),admin.indexOf("app.get('/api/admin/dashboard'"));
+const adminAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/admin/announcements'"),admin.indexOf("app.post('/api/admin/announcements'"));
+const createAnnouncementRoute=admin.slice(admin.indexOf("app.post('/api/admin/announcements'"),admin.indexOf("app.patch('/api/admin/announcements/:announcementId'"));
+const updateAnnouncementRoute=admin.slice(admin.indexOf("app.patch('/api/admin/announcements/:announcementId'"),admin.indexOf("app.patch('/api/admin/accounts/:userId/status'"));
 const checks=[
  ['admin route module exists and exports registration',admin.includes('export function registerAdminRoutes')],
  ['announcements are server-backed',admin.includes('fynx_announcements')&&admin.includes("/api/announcements")],
@@ -11,6 +15,13 @@ const checks=[
  ['Admin auth enforces password-reset session revocation',admin.includes('createAdminAuthMiddleware')&&admin.includes("SELECT session_version FROM users WHERE id=$1")&&admin.includes("session expired; sign in again")],
  ['Admin People search returns enforced account status',admin.includes("COALESCE(s.account_status,'ACTIVE') AS account_status")&&admin.includes("accountStatus:user.account_status||'ACTIVE'")],
  ['Admin People search treats percent and underscore literally',admin.includes("POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0")&&admin.includes("POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0")],
+ ['announcement update IDs use the PostgreSQL BIGINT guard',updateAnnouncementRoute.includes("isPositivePostgresBigint(announcementId)")],
+ ['Admin announcement history is private and not cached',adminAnnouncementsRoute.includes("res.set('Cache-Control','private, no-store')")],
+ ['Admin announcement history uses bounded stable pagination',adminAnnouncementsRoute.includes("id DESC LIMIT $1 OFFSET $2")&&adminAnnouncementsRoute.includes("const hasMore=result.rows.length>limit")&&adminAnnouncementsRoute.includes("limit+1")],
+ ['public announcement history uses bounded stable pagination',publicAnnouncementsRoute.includes("id DESC LIMIT $1 OFFSET $2")&&publicAnnouncementsRoute.includes("const hasMore=result.rows.length>limit")&&publicAnnouncementsRoute.includes("limit+1")],
+ ['announcement create rejects over-limit title, body and link',createAnnouncementRoute.includes("title.length>120||body.length>4000||linkUrl.length>2048")],
+ ['announcement edit rejects over-limit title, body and link',updateAnnouncementRoute.includes("title.length>120")&&updateAnnouncementRoute.includes("body.length>4000")&&updateAnnouncementRoute.includes("linkUrl.length>2048")],
+ ['announcement create/edit never silently truncates submitted content',!/(title|body|linkUrl)\\.trim\\(\\)\\.slice\\(0,(120|4000|2048)\\)/.test(createAnnouncementRoute+updateAnnouncementRoute)],
  ['no hardcoded API secret exists',!/sk-[A-Za-z0-9_-]{20,}/.test(admin)]
 ];
 for(const [name,ok] of checks){if(!ok)throw new Error(`Stage 15H verification failed: ${name}`);console.log(`PASS: ${name}`);}

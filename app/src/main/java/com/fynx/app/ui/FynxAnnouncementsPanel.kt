@@ -28,10 +28,12 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refresh) {
+    var announcementsOffset by remember { mutableIntStateOf(0) }
+    var announcementsHasMore by remember { mutableStateOf(false) }
+    LaunchedEffect(refresh, announcementsOffset) {
         loading = true
-        FynxAdminClient.announcements(context)
-            .onSuccess { items = it; error = null }
+        FynxAdminClient.announcements(context, announcementsOffset)
+            .onSuccess { page -> items = page.items; announcementsHasMore = page.hasMore; error = null }
             .onFailure { error = it.message ?: "Unable to load announcements." }
         loading = false
     }
@@ -108,8 +110,8 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
                         tint = FynxDesign.AzureBlue, modifier = Modifier.size(36.dp))
-                    Text("No announcements yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Official FYNX updates will appear here when published.",
+                    Text(if (announcementsOffset == 0) "No announcements yet" else "No announcements on this page", style = MaterialTheme.typography.titleMedium)
+                    Text(if (announcementsOffset == 0) "Official FYNX updates will appear here when published." else "There are no more official updates at this page position.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -150,6 +152,15 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+            }
+        }
+        if (!loading && error == null && (announcementsOffset > 0 || announcementsHasMore)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(if (items.isEmpty()) "No updates on this page" else "Showing ${announcementsOffset + 1}–${announcementsOffset + items.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(enabled = announcementsOffset > 0, onClick = { announcementsOffset = (announcementsOffset - 50).coerceAtLeast(0) }) { Text("Previous updates") }
+                    TextButton(enabled = announcementsHasMore && announcementsOffset < 10000, onClick = { announcementsOffset = (announcementsOffset + 50).coerceAtMost(10000) }) { Text("Next updates") }
                 }
             }
         }
@@ -198,6 +209,8 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
     var announcementPriority by remember { mutableStateOf("NORMAL") }
     var announcementUploading by remember { mutableStateOf(false) }
     var adminAnnouncementItems by remember { mutableStateOf<List<FynxAdminClient.Announcement>>(emptyList()) }
+    var adminAnnouncementsOffset by remember { mutableIntStateOf(0) }
+    var adminAnnouncementsHasMore by remember { mutableStateOf(false) }
     var adminAnnouncementsLoading by remember { mutableStateOf(false) }
     var adminAnnouncementsError by remember { mutableStateOf<String?>(null) }
     var refreshAdminAnnouncements by remember { mutableIntStateOf(0) }
@@ -276,12 +289,12 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
         }
     }
 
-    LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection) {
+    LaunchedEffect(refreshAdminAnnouncements, dashboard?.role, activeSection, adminAnnouncementsOffset) {
         if (!previewMode && dashboard != null && activeSection == "Announcements") {
             adminAnnouncementsLoading = true
             adminAnnouncementsError = null
-            FynxAdminClient.adminAnnouncements(context)
-                .onSuccess { adminAnnouncementItems = it }
+            FynxAdminClient.adminAnnouncements(context, adminAnnouncementsOffset)
+                .onSuccess { page -> adminAnnouncementItems = page.items; adminAnnouncementsHasMore = page.hasMore }
                 .onFailure { adminAnnouncementsError = it.message ?: "Announcement management is unavailable." }
             adminAnnouncementsLoading = false
         }
@@ -963,7 +976,8 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                     border = BorderStroke(1.dp, FynxDesign.AzureBlue.copy(alpha = .18f))) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
-                            label = { Text("Announcement title") }, singleLine = true)
+                            label = { Text("Announcement title") }, singleLine = true,
+                            supportingText = { Text("${title.length}/120 characters") })
                         OutlinedTextField(body, { body = it }, Modifier.fillMaxWidth(),
                             label = { Text("Message to users") }, minLines = 4,
                             supportingText = { Text(body.length.toString() + "/4000 characters") })
@@ -973,7 +987,8 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("External link (optional)") },
                             placeholder = { Text("https://example.com") },
-                            singleLine = true
+                            singleLine = true,
+                            supportingText = { Text("${announcementLinkUrl.length}/2048 characters • HTTPS links only") }
                         )
                         OutlinedTextField(
                             value = announcementScheduleAt,
@@ -1020,7 +1035,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                         val isScheduled = announcementScheduleAt.isNotBlank()
                         Button(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = title.isNotBlank() && body.isNotBlank() && body.length <= 4000 && !announcementUploading,
+                            enabled = title.isNotBlank() && title.length <= 120 && body.isNotBlank() && body.length <= 4000 && announcementLinkUrl.length <= 2048 && !announcementUploading,
                             onClick = {
                                 requestAdminConfirmation(
                                     if (editingAnnouncementId != null) "Save announcement changes?" else if (isScheduled) "Schedule this official announcement?" else "Publish this official announcement?",
@@ -1048,6 +1063,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                                 announcementPriority = "NORMAL"
                                                 editingAnnouncementId = null
                                                 editingAnnouncementPublished = true
+                                                adminAnnouncementsOffset = 0
                                                 refreshAdminAnnouncements++
                                             }
                                             .onFailure { statusMessage = it.message ?: "Announcement could not be saved." }
@@ -1073,7 +1089,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                         Text(adminAnnouncementsError!!, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { refreshAdminAnnouncements++ }) { Text("Retry") }
                     }
-                    adminAnnouncementItems.isEmpty() -> Text("No announcements have been created yet.",
+                    adminAnnouncementItems.isEmpty() -> Text(if (adminAnnouncementsOffset == 0) "No announcements have been created yet." else "No announcements on this page.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else -> adminAnnouncementItems.forEach { item ->
                         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -1107,7 +1123,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                             ) {
                                                 scope.launch {
                                                     FynxAdminClient.setAnnouncementPublishing(context, item.id, false, null)
-                                                        .onSuccess { statusMessage = "Announcement unpublished."; refreshAdminAnnouncements++ }
+                                                        .onSuccess { statusMessage = "Announcement unpublished."; adminAnnouncementsOffset = 0; refreshAdminAnnouncements++ }
                                                         .onFailure { statusMessage = it.message ?: "Could not unpublish announcement." }
                                                 }
                                             }
@@ -1121,7 +1137,7 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                             ) {
                                                 scope.launch {
                                                     FynxAdminClient.setAnnouncementPublishing(context, item.id, true, null)
-                                                        .onSuccess { statusMessage = "Announcement published."; refreshAdminAnnouncements++ }
+                                                        .onSuccess { statusMessage = "Announcement published."; adminAnnouncementsOffset = 0; refreshAdminAnnouncements++ }
                                                         .onFailure { statusMessage = it.message ?: "Could not publish announcement." }
                                                 }
                                             }
@@ -1129,6 +1145,15 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+                if (!adminAnnouncementsLoading && adminAnnouncementsError == null && (adminAnnouncementsOffset > 0 || adminAnnouncementsHasMore)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (adminAnnouncementItems.isEmpty()) "Page ${adminAnnouncementsOffset / 50 + 1}" else "Showing ${adminAnnouncementsOffset + 1}–${adminAnnouncementsOffset + adminAnnouncementItems.size}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TextButton(enabled = adminAnnouncementsOffset > 0, onClick = { adminAnnouncementsOffset = (adminAnnouncementsOffset - 50).coerceAtLeast(0) }) { Text("Previous announcements") }
+                            TextButton(enabled = adminAnnouncementsHasMore && adminAnnouncementsOffset < 10000, onClick = { adminAnnouncementsOffset = (adminAnnouncementsOffset + 50).coerceAtMost(10000) }) { Text("Next announcements") }
                         }
                     }
                 }

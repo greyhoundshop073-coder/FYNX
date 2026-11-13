@@ -6,10 +6,13 @@ Before editing code, every contributor/chat/agent MUST read:
 1. [the single-APK integration policy](docs/SINGLE_APK_INTEGRATION_POLICY.md)
 2. [the mandatory development and platform compliance rules](docs/DEVELOPMENT_POLICY_COMPLIANCE.md)
 3. [the Google Play launch readiness plan](docs/GOOGLE_PLAY_READINESS.md)
+4. [the backend-ready development and reconnection policy](docs/BACKEND_READY_DEVELOPMENT_POLICY.md)
+
+**Backend-ready requirement:** Every contributor MUST follow `docs/BACKEND_READY_DEVELOPMENT_POLICY.md`. Build features so UI, typed API contracts, backend logic, storage/realtime/payment adapters, configuration, failure states and tests are ready even when production services are offline. Connect every safe/local capability now; document exact live-only blockers and reconnection steps. No fake production success, inert controls or undocumented disconnected features.
 
 Inspect the latest canonical branch head and open pull requests before starting.
 
-**Active Owner/Admin Control Center continuation:** For the remaining work tracked by PR #527, read and follow [docs/ADMIN_CONTROL_CENTER_CONTINUATION.md](docs/ADMIN_CONTROL_CENTER_CONTINUATION.md). Resume its existing branch and grouped work; do not restart or create a parallel implementation. Keep that handoff updated as grouped work is completed.
+**Active Owner/Admin Control Center continuation:** Continue the existing Admin/Owner implementation on [PR #536](https://github.com/greyhoundshop073-coder/FYNX/pull/536) and maintain [docs/ADMIN_CONTROL_CENTER_CONTINUATION.md](docs/ADMIN_CONTROL_CENTER_CONTINUATION.md). PR #527 has already merged; do not restart the Control Center or create a parallel implementation. Keep the handoff current after each grouped push.
 
 - Start every work branch from the latest `integration/fynx-single-apk-20261013`.
 - Every feature PR must use `integration/fynx-single-apk-20261013` as its base. Do not merge work into `main` or a competing APK branch as the delivery path.

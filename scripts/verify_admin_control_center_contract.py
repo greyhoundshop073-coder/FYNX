@@ -167,6 +167,16 @@ require("app.get('/api/admin/announcements'" in backend and "app.post('/api/admi
         "protected announcement management/list and create endpoints are missing")
 require("app.patch('/api/admin/announcements/:announcementId'" in backend,
         "announcement publish/unpublish/schedule endpoint is missing")
+announcement_public_route = backend[backend.index("app.get('/api/announcements'"):backend.index("app.get('/api/admin/dashboard'")]
+announcement_admin_route = backend[backend.index("app.get('/api/admin/announcements'"):backend.index("app.post('/api/admin/announcements'")]
+announcement_create_route = backend[backend.index("app.post('/api/admin/announcements'"):backend.index("app.patch('/api/admin/announcements/:announcementId'")]
+announcement_update_route = backend[backend.index("app.patch('/api/admin/announcements/:announcementId'"):backend.index("app.patch('/api/admin/accounts/:userId/status'")]
+require("isPositivePostgresBigint(announcementId)" in announcement_update_route, "announcement updates must reject IDs outside PostgreSQL BIGINT")
+require("res.set('Cache-Control','private, no-store')" in announcement_admin_route, "Admin announcement data must not be cached")
+require("id DESC LIMIT $1 OFFSET $2" in announcement_public_route and "const hasMore=result.rows.length>limit" in announcement_public_route, "public feed must use bounded stable pagination")
+require("id DESC LIMIT $1 OFFSET $2" in announcement_admin_route and "const hasMore=result.rows.length>limit" in announcement_admin_route, "Admin feed must use bounded stable pagination")
+require("title.length>120||body.length>4000||linkUrl.length>2048" in announcement_create_route and "title.length>120" in announcement_update_route and "body.length>4000" in announcement_update_route and "linkUrl.length>2048" in announcement_update_route, "announcement create/edit must reject over-limit inputs")
+require(".trim().slice(0,120)" not in announcement_create_route+announcement_update_route and ".trim().slice(0,4000)" not in announcement_create_route+announcement_update_route and ".trim().slice(0,2048)" not in announcement_create_route+announcement_update_route, "announcement create/edit must not silently truncate content")
 require("hasContent=['title','body','priority','mediaId','linkUrl']" in backend and
         "ANNOUNCEMENT_UPDATED" in backend and "UPDATE fynx_announcements SET title=$1,body=$2,priority=$3,media_id=$4,link_url=$5" in backend,
         "announcement edits must update validated content, image and link in the same audited transaction")
@@ -188,13 +198,15 @@ require("a.media_id = mm.id" in media_server and "a.published = TRUE" in media_s
         "published announcement images must be authorized by the protected media route")
 require("ActivityResultContracts.GetContent()" in source and "FynxProductionMessaging.uploadMedia(context, uri, mimeType)" in source,
         "announcement image attachment must use the existing authenticated media uploader")
-require("FynxAdminClient.adminAnnouncements(context)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source and
+require("FynxAdminClient.adminAnnouncements(context, adminAnnouncementsOffset)" in source and "FynxAdminClient.setAnnouncementPublishing(context" in source and
         "FynxAdminClient.updateAnnouncement(context" in source and "editingAnnouncementId = item.id" in source,
         "announcement admin queue must support listing, editing, publishing and cancellation")
 require("FynxAdminClient.publishAnnouncement(" in source and "announcementScheduleAt" in source and "announcementLinkUrl" in source,
         "announcement composer is missing image/link/scheduling controls")
 require("uriHandler.openUri(link)" in source and "Text(\"Open link\")" in source and "FynxRemoteMedia(" in source,
         "public announcements must render uploaded images and open validated links")
+require("suspend fun announcements(context: Context, offset: Int = 0, limit: Int = 50): Result<AdminPage<Announcement>>" in client and "suspend fun adminAnnouncements(context: Context, offset: Int = 0, limit: Int = 50): Result<AdminPage<Announcement>>" in client and "Previous updates" in source and "Next updates" in source and "Previous announcements" in source and "Next announcements" in source, "announcement paging UI contract")
+require("${title.length}/120 characters" in source and "${announcementLinkUrl.length}/2048 characters" in source and "title.length <= 120" in source and "announcementLinkUrl.length <= 2048" in source, "announcement composer counters contract")
 require('Text("YYYY-MM-DDTHH:mm:ss+01:00")' in source,
         "announcement schedule hint must remain timezone-aware without a stale fixed date")
 require("does not sign the user out or disable other FYNX features" in source,
