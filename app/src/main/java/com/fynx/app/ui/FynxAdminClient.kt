@@ -18,6 +18,7 @@ object FynxAdminClient {
     )
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
+    data class AdminUser(val id: String, val username: String, val displayName: String)
     data class MusicTrack(
         val id: String,
         val mediaId: String,
@@ -160,6 +161,17 @@ object FynxAdminClient {
                 }
             }
             RevenueReport(value.optString("role"), breakdown)
+        }
+
+    suspend fun searchUsers(context: Context, query: String): Result<List<AdminUser>> =
+        FynxBackendClient.get(context, "/api/admin/users?q=${encode(query.trim())}&limit=20").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("users") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(AdminUser(item.optString("id"), item.optString("username"), item.optString("displayName")))
+                }
+            }
         }
 
     suspend fun admins(context: Context): Result<List<Admin>> =
