@@ -14,33 +14,61 @@ adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
-  # Admin permissions and account queues require the live OWNER/ADMIN backend.
-  # Do not let an unrelated Marketplace/Wallet capture turn this Admin PR red,
-  # and never claim the Admin screen was runtime-certified without real role auth.
-  BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\/+$/,""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
+  # The actual server-authorized OWNER/ADMIN journey still requires the live backend.
+  # Separately capture the production Admin layout in a debug-only, read-only preview
+  # so the PR supplies genuine emulator pixels without inventing live account data.
+  BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\\/+$/,""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
   mkdir -p fynx-runtime-screenshots
+  if [ "${TEST_EXIT}" -eq 0 ]; then
+    printf '%s' '<map><boolean name="fynx_admin_visual_preview" value="true" /></map>' | adb shell run-as com.fynx.app sh -c 'cat > shared_prefs/fynx_preferences.xml'
+    adb shell am force-stop com.fynx.app
+    adb shell monkey -p com.fynx.app 1 >/dev/null
+    sleep 5
+    adb shell uiautomator dump /sdcard/fynx-admin-preview.xml >/dev/null
+    adb exec-out cat /sdcard/fynx-admin-preview.xml > fynx-runtime-screenshots/admin-control-center-overview.xml
+    adb exec-out screencap -p > fynx-runtime-screenshots/admin-control-center-overview.png
+    python3 - <<'PY'
+from pathlib import Path
+p=Path("fynx-runtime-screenshots/admin-control-center-overview.png")
+xml=Path("fynx-runtime-screenshots/admin-control-center-overview.xml").read_text(encoding="utf-8",errors="replace")
+assert p.is_file() and p.stat().st_size > 10000, "Admin emulator screenshot is missing or unexpectedly small"
+assert p.read_bytes().startswith(b"\\x89PNG\\r\\n\\x1a\\n"), "Admin screenshot is not a valid PNG"
+assert "FYNX CONTROL CENTER" in xml, "Admin Control Center was not visible in the emulator hierarchy"
+assert "LOCAL VISUAL PREVIEW" in xml, "Preview-only safety banner was not visible"
+print(f"ADMIN_PREVIEW_SCREENSHOT=CAPTURED ({p.stat().st_size} bytes)")
+PY
+    CAPTURE_STATUS=$?
+  else
+    CAPTURE_STATUS=1
+  fi
   {
     echo "# FYNX Admin Control Center runtime certification"
     echo
-    echo "- Scope: PR #527 Admin Control Center."
+    echo "- Scope: PR #536 Admin Control Center hardening."
     echo "- Android instrumentation exit code: ${TEST_EXIT}"
     echo "- Backend health HTTP status: ${BACKEND_STATUS}"
-    echo "- Admin UI runtime: BLOCKED until the backend is healthy and a real OWNER/ADMIN test session is available."
-    echo "- Marketplace, My Shop and Wallet visual capture: NOT RUN; these are separate workstreams and are not used to fail this Admin-only PR."
+    if [ "${CAPTURE_STATUS}" -eq 0 ]; then
+      echo "- Admin visual preview: CAPTURED from the running debug APK on the CI emulator."
+      echo "- Preview data: clearly labelled sample dashboard counts; no live user, report, appeal, revenue or moderation data is fabricated."
+      echo "- Screenshot: admin-control-center-overview.png"
+      echo "- UI hierarchy: admin-control-center-overview.xml"
+    else
+      echo "- Admin visual preview: FAILED; no screenshot is claimed."
+    fi
+    echo "- Live OWNER/ADMIN authorization: NOT CERTIFIED while backend health/auth is unavailable."
     echo "- No role, account, moderation, announcement or publishing mutation was performed."
     echo
-    if [ "${TEST_EXIT}" -eq 0 ]; then
-      echo "## Result: BUILD_AND_INSTRUMENTATION_GREEN; ADMIN_RUNTIME_BLOCKED"
+    if [ "${TEST_EXIT}" -eq 0 ] && [ "${CAPTURE_STATUS}" -eq 0 ]; then
+      echo "## Result: BUILD_AND_INSTRUMENTATION_GREEN; ADMIN_VISUAL_PREVIEW_CAPTURED; LIVE_ROLE_AUTH_BLOCKED"
     else
-      echo "## Result: RED (Android instrumentation failed)"
+      echo "## Result: RED (instrumentation or Admin visual capture failed)"
     fi
   } > fynx-runtime-screenshots/FYNX-admin-runtime-certification.md
-  if [ "${TEST_EXIT}" -ne 0 ]; then
-    echo "::error::Admin PR Android instrumentation failed; see instrumentation logs."
-  else
-    echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
+  if [ "${TEST_EXIT}" -ne 0 ] || [ "${CAPTURE_STATUS}" -ne 0 ]; then
+    echo "::error::Admin instrumentation or visual capture failed; see the runtime artifact."
+    exit 1
   fi
-  exit "${TEST_EXIT}"
+  exit 0
 fi
 
 if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
