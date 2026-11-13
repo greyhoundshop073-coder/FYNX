@@ -62,3 +62,8 @@ After certification, Chat is not reopened for theoretical feature comparisons. R
 The Members dialog previously changed membership and moderator roles locally without waiting for backend confirmation. The server already exposes authenticated add/promote/demote/remove endpoints and enforces group-role restrictions. The repaired dialog refreshes its roster from the server, calls those endpoints before changing the local cache, prevents self/owner removal, and refreshes account-level block state from the social API. The cache callback no longer sends a broad `syncGroup` request that could overwrite server-authoritative membership.
 
 This work still requires exact-commit CI and authenticated two-account runtime verification.
+
+
+## 2026-11-13 — Group full-history search
+
+The active Group search previously filtered only currently loaded local messages. The authenticated server history API now accepts a bounded query, runs parameterized PostgreSQL full-text search only after membership authorization, and uses a matching GIN index. Android sends the encoded query with the stable timestamp/ID cursor, debounces requests, loads older matching pages, reports empty/error states and explicitly falls back to loaded local messages while offline. PostgreSQL integration tests cover group isolation, cursor pagination, no-match and parameter binding.

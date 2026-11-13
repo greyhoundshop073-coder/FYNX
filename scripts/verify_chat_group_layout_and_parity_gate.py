@@ -108,6 +108,13 @@ require("Group remove action calls server endpoint and protects owner/self", "Fy
 require("Group block/unblock uses authenticated account social API", "FynxSocialClient.block(context, normalizedUsername)" in ACTIVE_GROUP and "FynxSocialClient.unblock(context, normalizedUsername)" in ACTIVE_GROUP)
 require("Membership callback does not full-sync local changes over server authority", "FynxGroupRemoteClient.syncGroup(context, updated)" not in ACTIVE_GROUP)
 require("Group client has authenticated promote/demote/remove wrappers", all(token in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") for token in ["suspend fun promoteMember", "suspend fun demoteMember", "suspend fun removeMember"]))
+
+require("active group search queries full authenticated history, not only the local page", "query = normalizedQuery" in ACTIVE_GROUP and "remoteGroupSearchResults" in ACTIVE_GROUP)
+require("group full-history search enforces 2-100 characters and debounces", "normalizedQuery.length < 2" in ACTIVE_GROUP and "if (it.length <= 100) searchQuery = it" in ACTIVE_GROUP and "delay(300L)" in ACTIVE_GROUP)
+require("group search supports cursor pagination and appends older matches", "remoteGroupSearchCursor" in ACTIVE_GROUP and "remoteGroupSearchHasMore" in ACTIVE_GROUP and "loadOlderGroupSearchResults()" in ACTIVE_GROUP and "distinctBy { it.id }.sortedBy { it.timestamp }" in ACTIVE_GROUP)
+require("group search exposes empty-result and offline-cache fallback states", "No matching messages found in this group." in ACTIVE_GROUP and "Offline: showing only messages already loaded on this device." in ACTIVE_GROUP)
+require("Android group-history client encodes q and preserves the timestamp/ID cursor", "query:String?=null" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "&q=${Uri.encode(it)}" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "beforeTimestamp" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:

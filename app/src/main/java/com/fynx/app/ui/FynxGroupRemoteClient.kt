@@ -77,10 +77,13 @@ object FynxGroupRemoteClient {
     suspend fun loadJoinRequests(context:Context,groupId:String):Result<List<RemoteJoinRequest>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/join-requests").getOrThrow()).optJSONArray("requests")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteJoinRequest(o.optString("username"),o.optLong("requestedAt")))}} }
     suspend fun approveJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/approve",JSONObject().toString()).getOrThrow();Unit}
     suspend fun rejectJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/reject",JSONObject().toString()).getOrThrow();Unit}
-    suspend fun loadMessagePage(context:Context,groupId:String,before:RemoteMessage?=null,limit:Int=50):Result<RemoteMessagePage> = runCatching {
+    suspend fun loadMessagePage(context:Context,groupId:String,before:RemoteMessage?=null,limit:Int=50,query:String?=null):Result<RemoteMessagePage> = runCatching {
         val safeLimit=limit.coerceIn(1,100)
+        val cleanQuery=query?.trim()?.replace(Regex("\\s+")," ")?.takeIf { it.isNotBlank() }
+        require(cleanQuery==null || cleanQuery.length in 2..100) { "Message search must contain between 2 and 100 characters." }
         val cursor=before?.let { "&beforeTimestamp=${it.timestamp}&beforeId=${Uri.encode(it.id)}" }.orEmpty()
-        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages?limit=$safeLimit$cursor").getOrThrow())
+        val search=cleanQuery?.let { "&q=${Uri.encode(it)}" }.orEmpty()
+        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages?limit=$safeLimit$cursor$search").getOrThrow())
         val a=root.optJSONArray("messages")?:JSONArray()
         val parsed=buildList {
             for(i in 0 until a.length()) {

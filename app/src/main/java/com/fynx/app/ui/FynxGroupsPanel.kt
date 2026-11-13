@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -358,8 +359,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var voiceRecordingStartedAt by remember { mutableLongStateOf(0L) }
     var voiceRecordingElapsed by remember { mutableLongStateOf(0L) }
     var voiceRecording by remember { mutableStateOf(false) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchOpen by remember(groupId) { mutableStateOf(false) }
+    var searchQuery by remember(groupId) { mutableStateOf("") }
+    var remoteGroupSearchResults by remember(groupId) { mutableStateOf<List<ChatMessage>?>(null) }
+    var remoteGroupSearchHasMore by remember(groupId) { mutableStateOf(false) }
+    var remoteGroupSearchCursor by remember(groupId) { mutableStateOf<FynxGroupRemoteClient.RemoteMessage?>(null) }
+    var remoteGroupSearchLoading by remember(groupId) { mutableStateOf(false) }
+    var remoteGroupSearchError by remember(groupId) { mutableStateOf<String?>(null) }
     val selectedGroup = currentGroup
     val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
     val isAdmin = myRole == FynxGroupRole.ADMIN
@@ -368,6 +374,77 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
     val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
     val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
+
+    LaunchedEffect(groupId, searchQuery, hasRemoteAccessToken) {
+        val normalizedQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        remoteGroupSearchResults = null
+        remoteGroupSearchHasMore = false
+        remoteGroupSearchCursor = null
+        remoteGroupSearchError = null
+        remoteGroupSearchLoading = false
+        if (normalizedQuery.isBlank()) return@LaunchedEffect
+        if (normalizedQuery.length < 2) {
+            remoteGroupSearchResults = emptyList()
+            remoteGroupSearchError = "Enter at least two characters to search group history."
+            return@LaunchedEffect
+        }
+        if (!hasRemoteAccessToken) {
+            remoteGroupSearchError = "Offline: showing only messages already loaded on this device."
+            return@LaunchedEffect
+        }
+        delay(300L)
+        remoteGroupSearchLoading = true
+        try {
+            FynxGroupRemoteClient.loadMessagePage(
+                context = context,
+                groupId = groupId,
+                limit = 50,
+                query = normalizedQuery
+            ).onSuccess { page ->
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    remoteGroupSearchResults = page.messages.map {
+                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+                    }
+                    remoteGroupSearchCursor = page.messages.firstOrNull()
+                    remoteGroupSearchHasMore = page.hasMore
+                }
+            }.onFailure {
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    remoteGroupSearchError = "Full group history search failed. Showing loaded messages; try again."
+                }
+            }
+        } finally {
+            remoteGroupSearchLoading = false
+        }
+    }
+
+    fun loadOlderGroupSearchResults() {
+        val normalizedQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        val before = remoteGroupSearchCursor ?: return
+        if (remoteGroupSearchLoading || normalizedQuery.length !in 2..100 || !hasRemoteAccessToken) return
+        remoteGroupSearchLoading = true
+        scope.launch {
+            FynxGroupRemoteClient.loadMessagePage(
+                context = context,
+                groupId = groupId,
+                before = before,
+                limit = 50,
+                query = normalizedQuery
+            ).onSuccess { page ->
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    val older = page.messages.map {
+                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+                    }
+                    remoteGroupSearchResults = (older + remoteGroupSearchResults.orEmpty()).distinctBy { it.id }.sortedBy { it.timestamp }
+                    remoteGroupSearchCursor = page.messages.firstOrNull() ?: before
+                    remoteGroupSearchHasMore = page.hasMore
+                }
+            }.onFailure {
+                remoteGroupSearchError = "More matching messages could not be loaded. Try again."
+            }
+            remoteGroupSearchLoading = false
+        }
+    }
 
     fun shareGroupTextMessage(content: String, replyTarget: String? = null) {
         val normalized = content.trim()
@@ -790,9 +867,27 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
             }
         }
-        val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
+        val normalizedGroupSearchQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        val visibleMessages = when {
+            normalizedGroupSearchQuery.isBlank() -> messages
+            normalizedGroupSearchQuery.length < 2 -> emptyList()
+            remoteGroupSearchResults != null -> remoteGroupSearchResults.orEmpty()
+            else -> messages.filter { it.text.contains(normalizedGroupSearchQuery, true) }
+        }
         val pinnedMessage = messages.lastOrNull { it.pinned }
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { if (it.length <= 100) searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            singleLine = true,
+            placeholder = { Text("Search full group history…") }
+        )
+        if (searchOpen && remoteGroupSearchError != null) {
+            Text(remoteGroupSearchError.orEmpty(), Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (searchOpen && remoteGroupSearchLoading && remoteGroupSearchResults == null) {
+            Text("Searching group history…", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -843,7 +938,28 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
-            if (hasMoreGroupHistory && searchQuery.isBlank()) {
+            if (normalizedGroupSearchQuery.isNotBlank() && remoteGroupSearchHasMore && remoteGroupSearchResults != null) {
+                item(key = "group-search-load-older") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        TextButton(enabled = !remoteGroupSearchLoading, onClick = { loadOlderGroupSearchResults() }) {
+                            Text(if (remoteGroupSearchLoading) "Loading more matches…" else "Load older matching messages")
+                        }
+                    }
+                }
+            }
+            if (normalizedGroupSearchQuery.isNotBlank() && visibleMessages.isEmpty() && !remoteGroupSearchLoading) {
+                item(key = "group-search-no-results") {
+                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (normalizedGroupSearchQuery.length < 2) "Enter at least two characters to search."
+                            else "No matching messages found in this group.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+            if (hasMoreGroupHistory && normalizedGroupSearchQuery.isBlank()) {
                 item(key = "group-load-older") {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         TextButton(
