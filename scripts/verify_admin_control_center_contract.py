@@ -128,7 +128,7 @@ require("account reports; content-report types are not presented as account repo
         "moderation queue must not misrepresent account reports as content reports")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
-require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
+require("executor = routePool" in backend, "audit helper cannot use a transaction-scoped executor")
 require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminActivity(req,'APPEAL_DECIDED'" in backend,
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
@@ -322,7 +322,7 @@ require("APP_APK=\"app/build/outputs/apk/debug/app-debug.apk\"" in runtime_runne
 
 
 # Harden the original five Admin findings without changing normal social search.
-require("createPlatformAdminRoleResolver(pool)" in backend and
+require("createPlatformAdminRoleResolver(routePool)" in backend and
         "CREATE TABLE IF NOT EXISTS fynx_platform_owner" in owner_role and
         "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in owner_role and
         "pg_advisory_xact_lock(hashtext('fynx_platform_owner_bootstrap'))" in owner_role and

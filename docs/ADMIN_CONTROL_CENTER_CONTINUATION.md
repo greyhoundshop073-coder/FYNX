@@ -360,3 +360,8 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The route test seam now preserves the canonical module-level `pool` binding and defaults the optional `databasePool` argument to that binding; route handlers use a scoped `routePool`. No separate pool is constructed.
 - Test review also found the audit test asserted `ANNOUNCEMENT_UPDATED` without a successful content-edit case. A successful edit is now committed before the forced audit-failure edit, and the rollback assertion checks that the last committed title remains unchanged.
 - Re-run the exact-head Backend, Android and Chat/Groups workflows. The route-level PostgreSQL test must be confirmed successful before claiming Group 6 complete.
+
+
+### Group 6 Android source-contract correction — 13 November 2026
+- Android's Admin Python verifier initially failed because it still searched for the old local variable name in two source assertions: `executor = pool` and `createPlatformAdminRoleResolver(pool)`. The route injection seam intentionally scopes the injected dependency as `routePool`.
+- Both checks now require `executor = routePool` and `createPlatformAdminRoleResolver(routePool)`. The assertions still verify transactional audit execution and shared Owner authorization; only the expected scoped variable name changed.
