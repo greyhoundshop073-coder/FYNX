@@ -284,6 +284,11 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         'replace(new RegExp("/+$"), "")' in runtime_runner,
         "Admin runtime must initialize the app preference directory, use a valid backend diagnostic, and capture a real emulator screenshot while clearly separating visual preview from live role authorization")
 
+require("name: Upload FYNX runtime screenshots and UI hierarchies" in workflow and
+        "if: \u0024{{ always() &&" in workflow and
+        "path: fynx-runtime-screenshots/" in workflow,
+        "Admin screenshot and UI hierarchy artifacts must upload even when runtime capture fails")
+
 
 # Harden the original five Admin findings without changing normal social search.
 require("CREATE TABLE IF NOT EXISTS fynx_platform_owner" in backend and
