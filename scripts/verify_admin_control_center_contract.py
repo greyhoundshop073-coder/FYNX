@@ -323,6 +323,21 @@ require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(conte
         "targets.take(5)" not in source,
         "Admin People UI must use the protected search and display the bounded server result set")
 
+people_search = backend[backend.index("app.get('/api/admin/users'"):backend.index("app.get('/api/admin/activity'")]
+require("createAdminAuthMiddleware" in backend and "SELECT session_version FROM users WHERE id=$1" in backend and
+        "session expired; sign in again" in backend and "authentication temporarily unavailable" in backend,
+        "Admin routes must reject password-reset-revoked sessions and fail closed when session verification is unavailable")
+require("POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0" in people_search and
+        "POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0" in people_search and
+        "ILIKE" not in people_search,
+        "Admin People search must treat percent and underscore as literal search characters")
+require("COALESCE(s.account_status,'ACTIVE') AS account_status" in people_search and
+        "accountStatus:user.account_status||'ACTIVE'" in people_search and
+        'val accountStatus: String = "ACTIVE"' in client and
+        "Current account status: ${user.accountStatus}" in source,
+        "Admin People results must display the current enforced account status")
+
+
 appShell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
 require("FYNX_ADMIN_VISUAL_PREVIEW_KEY" in appShell and "FLAG_DEBUGGABLE" in appShell and
         "getBoolean(FYNX_ADMIN_VISUAL_PREVIEW_KEY, false)" in appShell and

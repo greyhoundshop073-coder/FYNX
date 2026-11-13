@@ -188,3 +188,28 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-13 Admin runtime certification and Group 1 continuation
+
+### Exact-head runtime certification
+- PR #536 is the current Admin hardening PR; it supersedes the historical #527 handoff references above. It remains open and unmerged on `fix/admin-control-center-hardening-20261113`, targeting `integration/fynx-single-apk-20261013`.
+- At commit `55d961cadf09a27f646321b27952c36bb994d314`, the Android PR workflow, Backend CI and Chat/Groups parity/layout workflows all completed GREEN:
+  - Android run `43441597401`
+  - Backend run `43441597306`
+  - Chat/Groups run `43441597346`
+- Android instrumentation completed 58 tests with zero failures and one skipped; the Admin read-only visual preview was captured from the running emulator as a real 1080×1920 PNG, 167081 bytes. The uploaded artifact also contains its UI hierarchy, instrumentation logs and certification report.
+- Certification report records backend health HTTP 404 and explicitly marks live OWNER/ADMIN authorization NOT CERTIFIED. The preview uses sample counts and disables live data/actions. No production role, account, moderation, announcement or publishing mutation was performed.
+- No canonical APK was published from this PR branch; canonical APK production remains tied to the canonical integration branch after an approved merge.
+
+### Verified Group 1 findings now being addressed
+- The Admin route module had its own JWT middleware which verified signature/expiry but did not compare the token's `sv` claim with `users.session_version`. Password-reset completion increments that database version, and the shared backend auth checks it; Admin endpoints could otherwise accept a revoked token until expiry. This is now being hardened with a separately testable middleware and a focused behavioral test.
+- Admin People search returned only identity fields, forcing the operator to guess whether a target account is ACTIVE, LIMITED or LOCKED before choosing an action. The response and screen now expose the enforced `fynx_account_safety.account_status`.
+- Admin People search used `ILIKE '%query%'`, so `%` and `_` were interpreted as SQL wildcard operators rather than literal characters. It is being changed to bounded, parameterized literal substring matching with PostgreSQL `POSITION`.
+- The Chat/Groups route module also has a local token verifier without session-version checking. That file is owned by PR #535; preserve it and coordinate its correction with the Chat/Groups workstream rather than editing it in PR #536.
+- Content-report moderation is not part of the current account-only `/api/social/reports` flow. PRs #531 and #533 own the separate UGC report integration; do not duplicate or overwrite that work.
+
+### Remaining Group 1 verification
+- Run the new Admin auth behavioral tests, Stage 15H Admin verification, Python Admin source contract, full Android build/lint/unit/instrumentation and all three PR workflows on the final head.
+- Live OWNER/ADMIN/non-admin authorization, DB counts and state transitions still require a healthy backend and real test credentials. Current health probe is HTTP 404; no live authorization claim is permitted.
+- Verify report/appeal empty states, server limits, pagination and transactional decisions against a database-backed test environment. Preserve the content-report PRs and Chat/Groups PR #535.

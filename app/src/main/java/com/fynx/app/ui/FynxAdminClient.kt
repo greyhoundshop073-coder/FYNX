@@ -18,7 +18,7 @@ object FynxAdminClient {
     )
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
-    data class AdminUser(val id: String, val username: String, val displayName: String)
+    data class AdminUser(val id: String, val username: String, val displayName: String, val accountStatus: String = "ACTIVE")
     data class MusicTrack(
         val id: String,
         val mediaId: String,
@@ -169,7 +169,12 @@ object FynxAdminClient {
             buildList {
                 for (i in 0 until array.length()) {
                     val item = array.optJSONObject(i) ?: continue
-                    add(AdminUser(item.optString("id"), item.optString("username"), item.optString("displayName")))
+                    val status = when (item.optString("accountStatus", "ACTIVE").uppercase()) {
+                        "LIMITED" -> "LIMITED"
+                        "LOCKED" -> "LOCKED"
+                        else -> "ACTIVE"
+                    }
+                    add(AdminUser(item.optString("id"), item.optString("username"), item.optString("displayName"), status))
                 }
             }
         }

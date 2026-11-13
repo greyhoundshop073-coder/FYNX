@@ -247,7 +247,9 @@ jobs:
       - name: Run Stage 15G regression verification
         run: node verify-stage15g-regression.mjs
       - name: Run Stage 15H admin verification
-        run: node verify-stage15h-admin.mjs
+        run: |
+          node verify-stage15h-admin.mjs
+          node test-admin-auth-session-version.mjs
       - name: Run Marketplace Price Watch verification
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard

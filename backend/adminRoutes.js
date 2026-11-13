@@ -29,6 +29,31 @@ function parseFutureAnnouncementSchedule(value) {
   return { valid: true, date };
 }
 
+export function createAdminAuthMiddleware({ pool, jwt: jwtApi, jwtSecret }) {
+  return async (req,res,next) => {
+    const header=req.get('authorization')||'';
+    const token=header.startsWith('Bearer ')?header.slice(7).trim():'';
+    if(!token||!jwtSecret)return res.status(401).json({error:'authentication required'});
+    let claims;
+    try {
+      claims=jwtApi.verify(token,jwtSecret);
+    } catch {
+      return res.status(401).json({error:'invalid or expired token'});
+    }
+    if(!claims?.sub)return res.status(401).json({error:'invalid or expired token'});
+    try {
+      if(!pool)return res.status(503).json({error:'authentication temporarily unavailable'});
+      const current=await pool.query('SELECT session_version FROM users WHERE id=$1',[claims.sub]);
+      const currentVersion=current.rows?.[0]?Number(current.rows[0].session_version||0):-1;
+      if(currentVersion<0||currentVersion!==Number(claims.sv||0))return res.status(401).json({error:'session expired; sign in again'});
+      req.user=claims;
+      return next();
+    } catch {
+      return res.status(503).json({error:'authentication temporarily unavailable'});
+    }
+  };
+}
+
 export function registerAdminRoutes({ app }) {
   if (!pool) return;
   let schemaPromise;
@@ -89,7 +114,7 @@ export function registerAdminRoutes({ app }) {
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
-  const auth = (req,res,next) => { const header=req.get('authorization')||''; const token=header.startsWith('Bearer ')?header.slice(7).trim():''; if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'}); try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});} };
+  const auth = createAdminAuthMiddleware({ pool, jwt, jwtSecret: JWT_SECRET });
   const role = async userId => {
     // Preserve the legacy first-user owner on upgrade, then keep ownership stable.
     // RESTRICT prevents owner deletion from silently transferring platform control.
@@ -129,9 +154,17 @@ export function registerAdminRoutes({ app }) {
     if(query.length<2)return res.status(400).json({error:'search query must be at least 2 characters'});
     const limitValue=Number(req.query?.limit);
     const limit=Number.isInteger(limitValue)?Math.min(50,Math.max(1,limitValue)):20;
-    const result=await pool.query(`SELECT id,username,display_name FROM users WHERE id<>$3 AND (username ILIKE $1 OR display_name ILIKE $2) ORDER BY CASE WHEN lower(username)=lower($4) THEN 0 ELSE 1 END,username ASC,id ASC LIMIT $5`,[`%${query}%`,`%${query}%`,req.user.sub,query,limit]);
+    const result=await pool.query(`SELECT u.id,u.username,u.display_name,COALESCE(s.account_status,'ACTIVE') AS account_status
+      FROM users u
+      LEFT JOIN fynx_account_safety s ON s.user_id=u.id
+      WHERE u.id<>$2 AND (
+        POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0 OR
+        POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0
+      )
+      ORDER BY CASE WHEN lower(u.username)=lower($1) THEN 0 ELSE 1 END,u.username ASC,u.id ASC
+      LIMIT $3`,[query,req.user.sub,limit]);
     res.set('Cache-Control','private, no-store');
-    return res.json({users:result.rows.map(user=>({id:String(user.id),username:user.username||'',displayName:user.display_name||''})),limit});
+    return res.json({users:result.rows.map(user=>({id:String(user.id),username:user.username||'',displayName:user.display_name||'',accountStatus:user.account_status||'ACTIVE'})),limit});
   }catch(error){console.error('admin user search',error);return res.status(500).json({error:'admin user search failed'});}});
 
 

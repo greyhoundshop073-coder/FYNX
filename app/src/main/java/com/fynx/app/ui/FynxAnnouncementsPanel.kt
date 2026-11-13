@@ -740,6 +740,8 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                     Column(Modifier.padding(12.dp)) {
                         Text(user.displayName.ifBlank { "FYNX user" }, style = MaterialTheme.typography.titleMedium)
                         Text("@${user.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Current account status: ${user.accountStatus}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(onClick = {
                                 requestAdminConfirmation(
@@ -749,7 +751,10 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "LOCKED")
-                                            .onSuccess { statusMessage = "@${user.username} blocked from Marketplace purchases and group messaging." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "LOCKED") else target }
+                                                statusMessage = "@${user.username} blocked from Marketplace purchases and group messaging."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Action failed." }
                                     }
                                 }
@@ -762,7 +767,10 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "ACTIVE")
-                                            .onSuccess { statusMessage = "@${user.username} restored." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "ACTIVE") else target }
+                                                statusMessage = "@${user.username} restored."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Action failed." }
                                     }
                                 }
@@ -814,7 +822,10 @@ fun FynxAdminControlCenterPanel(previewMode: Boolean = false) {
                                 ) {
                                     scope.launch {
                                         FynxAdminClient.setAccountStatus(context, user.id, "LIMITED")
-                                            .onSuccess { statusMessage = "@${user.username} is now limited." }
+                                            .onSuccess {
+                                                targets = targets.map { target -> if (target.id == user.id) target.copy(accountStatus = "LIMITED") else target }
+                                                statusMessage = "@${user.username} is now limited."
+                                            }
                                             .onFailure { statusMessage = it.message ?: "Account restriction failed." }
                                     }
                                 }
