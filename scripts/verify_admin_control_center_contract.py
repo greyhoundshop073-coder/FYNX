@@ -280,6 +280,27 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
         "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
 
+
+# Harden the original five Admin findings without changing normal social search.
+require("CREATE TABLE IF NOT EXISTS fynx_platform_owner" in backend and
+        "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in backend and
+        "INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,id FROM users ORDER BY id ASC LIMIT 1 ON CONFLICT(singleton) DO NOTHING" in backend and
+        "fynx_platform_owner_bootstrap" in backend and
+        "SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE" in backend,
+        "platform OWNER must be persisted once, concurrency-safe, and protected from accidental deletion/transfer")
+require("isPositivePostgresBigint(targetId)" in backend and
+        "isPositivePostgresBigint(reportId)" in backend and
+        "isPositivePostgresBigint(appealId)" in backend,
+        "account, report and appeal route IDs must all reject values outside PostgreSQL BIGINT")
+require("app.get('/api/admin/users'" in backend and
+        "if(!(await requireAdmin(req,res)))return" in backend and
+        "FROM users WHERE id<>$3 AND (username ILIKE $1 OR display_name ILIKE $2)" in backend,
+        "Admin People search must use its own authenticated endpoint and include accounts hidden by social block filtering")
+require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(context, targetQuery)" in source and
+        "targets.forEach { user ->" in source and "FynxSocialClient.searchUsers(context, targetQuery)" not in source and
+        "targets.take(5)" not in source,
+        "Admin People UI must use the protected search and display the bounded server result set")
+
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
