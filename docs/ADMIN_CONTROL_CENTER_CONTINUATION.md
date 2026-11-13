@@ -312,3 +312,24 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Backend CI must run the new validator behavior test, existing Stage 15H Admin contract, PostgreSQL campaign schema test, and seasonal verifier.
 - Android and Chat/Groups checks remain separate required gates for the PR head.
 - Campaign HTTP create/edit/activate/deactivate/delete lifecycle, audit rollback, competing-overlap concurrency and media visibility still lack a dedicated route-level end-to-end test in this repository. Existing source contracts and PostgreSQL schema migration tests do not substitute for those checks.
+
+
+## Group 5 — Admin identity precision and PostgreSQL bounds — 13 November 2026
+
+### Five verified findings
+1. `POST /api/admin/admins` converted target IDs through JavaScript `Number`, rounding valid PostgreSQL BIGINT strings above `Number.MAX_SAFE_INTEGER`.
+2. `DELETE /api/admin/admins/:userId` repeated that conversion and could query or compare a rounded identity.
+3. Grant/revoke numeric coercion accepted non-canonical string forms such as exponent notation and leading-zero values rather than canonical decimal IDs.
+4. Admin JWT middleware accepted any non-empty `sub`, then queried PostgreSQL without enforcing the signed BIGINT maximum.
+5. Shared session-aware authentication and the Owner-role resolver enforced decimal syntax but not the PostgreSQL maximum, allowing out-of-range identities to reach SQL.
+
+### Group 5 corrections
+- Admin grant validates the original request value with `isPositivePostgresBigint` before converting it to a string; decimal-string IDs stay exact and unsafe numeric JSON values are rejected.
+- Admin revoke preserves its route parameter as a string and validates before SQL.
+- Admin JWT auth, shared Marketplace/session-aware auth and Owner-role resolution now use the same exact BIGINT validator and fail closed before database lookup.
+- Extended Owner resolver, Admin auth, Marketplace auth and Stage 15H source-contract tests. Existing large decimal-string identities remain supported.
+- No login flow, credential logic, session-version behavior or authentication shortcut was changed.
+
+### Verification required
+- Backend CI must pass `test-platform-admin-role.mjs`, `test-admin-auth-session-version.mjs`, `verify-marketplace-advertising-auth.mjs`, `verify-stage15h-admin.mjs`, and the shared PostgreSQL BIGINT boundary test.
+- Android and Chat/Groups remain required on the exact latest PR head.

@@ -1,3 +1,5 @@
+import { isPositivePostgresBigint } from "./postgresIds.js";
+
 export function createPlatformAdminRoleResolver(pool) {
   let schemaPromise;
   const ensureOwnerSchema = async () => {
@@ -28,9 +30,9 @@ export function createPlatformAdminRoleResolver(pool) {
 
   return async function resolvePlatformAdminRole(userId) {
     if (!pool) return null;
-    const id = String(userId ?? "").trim();
-    // Keep PostgreSQL BIGINT identities as strings; JavaScript Number is not exact for all BIGINTs.
-    if (!/^[1-9]\d*$/.test(id)) return null;
+    if (!isPositivePostgresBigint(userId)) return null;
+    // Preserve valid decimal strings exactly; never round PostgreSQL BIGINT IDs through Number.
+    const id = String(userId).trim();
 
     await ensureOwnerSchema();
     let owner = await pool.query(

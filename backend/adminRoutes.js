@@ -35,13 +35,14 @@ export function createAdminAuthMiddleware({ pool, jwt: jwtApi, jwtSecret }) {
     } catch {
       return res.status(401).json({error:'invalid or expired token'});
     }
-    if(!claims?.sub)return res.status(401).json({error:'invalid or expired token'});
+    if(!isPositivePostgresBigint(claims?.sub))return res.status(401).json({error:'invalid or expired token'});
+    const subject=String(claims.sub).trim();
     try {
       if(!pool)return res.status(503).json({error:'authentication temporarily unavailable'});
-      const current=await pool.query('SELECT session_version FROM users WHERE id=$1',[claims.sub]);
+      const current=await pool.query('SELECT session_version FROM users WHERE id=$1',[subject]);
       const currentVersion=current.rows?.[0]?Number(current.rows[0].session_version||0):-1;
       if(currentVersion<0||currentVersion!==Number(claims.sv||0))return res.status(401).json({error:'session expired; sign in again'});
-      req.user=claims;
+      req.user={...claims,sub:subject};
       return next();
     } catch {
       return res.status(503).json({error:'authentication temporarily unavailable'});
@@ -396,8 +397,9 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await role(req.user.sub);
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
     req.fynxAdminRole=actorRole;
-    const userId=Number(req.body?.userId);
-    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
+    const userIdInput=req.body?.userId;
+    if(!isPositivePostgresBigint(userIdInput))return res.status(400).json({error:'valid user id is required'});
+    const userId=String(userIdInput).trim();
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
@@ -416,8 +418,8 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await role(req.user.sub);
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
     req.fynxAdminRole=actorRole;
-    const userId=Number(req.params.userId);
-    if(!Number.isSafeInteger(userId)||userId<1)return res.status(400).json({error:'valid user id is required'});
+    const userId=String(req.params.userId??'').trim();
+    if(!isPositivePostgresBigint(userId))return res.status(400).json({error:'valid user id is required'});
     if(String(userId)===String(req.user.sub))return res.status(400).json({error:'owner role cannot be removed'});
     if(await role(userId)==='OWNER')return res.status(403).json({error:'owner role cannot be removed'});
     const client=await pool.connect();

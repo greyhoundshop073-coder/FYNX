@@ -1,3 +1,5 @@
+import { isPositivePostgresBigint } from "./postgresIds.js";
+
 export function createSessionAwareBearerAuthenticator({ pool, jwt, jwtSecret }) {
   return async function authenticate(req, res) {
     if (!jwtSecret) { res.status(503).json({ error: "service unavailable" }); return null; }
@@ -7,7 +9,7 @@ export function createSessionAwareBearerAuthenticator({ pool, jwt, jwtSecret }) 
     let claims;
     try {
       claims = jwt.verify(token, jwtSecret);
-      if (!claims?.sub || !/^[1-9]\d*$/.test(String(claims.sub))) throw new Error("invalid token subject");
+      if (!isPositivePostgresBigint(claims?.sub)) throw new Error("invalid token subject");
     } catch {
       res.status(401).json({ error: "authentication required" }); return null;
     }

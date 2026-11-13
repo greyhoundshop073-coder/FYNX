@@ -58,5 +58,10 @@ assert.equal(invalid.queryCount, 0);
 const missing = await invoke({ token: "" });
 assert.equal(missing.res.statusCode, 401, "missing bearer credentials must be rejected");
 assert.equal(missing.queryCount, 0);
+ 
+const outOfRange = await invoke({ claims: { sub: "9223372036854775808", sv: 4 } });
+assert.equal(outOfRange.res.statusCode, 401, "Admin auth must reject subjects outside PostgreSQL BIGINT");
+assert.equal(outOfRange.queryCount, 0, "out-of-range subjects must be rejected before SQL");
+assert.equal(outOfRange.nextCount, 0, "out-of-range subjects must never reach Admin handlers");
 
 console.log("ADMIN_AUTH_SESSION_VERSION=GREEN (current, revoked, deleted, invalid, missing and database-unavailable cases)");

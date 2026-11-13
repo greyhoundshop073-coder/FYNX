@@ -338,6 +338,23 @@ require('import { isPositivePostgresBigint } from "./postgresIds.js"' in backend
         "isPositivePostgresBigint(reportId)" in backend and
         "isPositivePostgresBigint(appealId)" in backend,
         "account, report and appeal route IDs must all reject values outside PostgreSQL BIGINT")
+require("isPositivePostgresBigint(claims?.sub)" in backend and
+        "const subject=String(claims.sub).trim()" in backend,
+        "Admin JWT subjects must be bounded to PostgreSQL BIGINT and normalized to exact strings before SQL")
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in owner_role and
+        "isPositivePostgresBigint(userId)" in owner_role,
+        "shared Owner resolver must reject PostgreSQL BIGINT overflow and unsafe numeric identities before SQL")
+require("isPositivePostgresBigint(claims?.sub)" in (ROOT / "backend/sessionAwareAuth.js").read_text(encoding="utf-8"),
+        "session-aware Marketplace authentication must share the exact PostgreSQL BIGINT subject validator")
+grant_route = backend[backend.index("app.post('/api/admin/admins'"):backend.index("app.delete('/api/admin/admins/:userId'")]
+revoke_route = backend[backend.index("app.delete('/api/admin/admins/:userId'"):]
+require("const userIdInput=req.body?.userId" in grant_route and
+        "isPositivePostgresBigint(userIdInput)" in grant_route and
+        "const userId=String(userIdInput).trim()" in grant_route and "Number(" not in grant_route,
+        "Admin grants must validate the original ID value and preserve exact decimal strings")
+require("const userId=String(req.params.userId??'').trim()" in revoke_route and
+        "isPositivePostgresBigint(userId)" in revoke_route and "Number(" not in revoke_route,
+        "Admin revocations must validate and preserve the exact route ID")
 require("app.get('/api/admin/users'" in backend and
         "if(!(await requireAdmin(req,res)))return" in backend and
         "FROM users u" in backend and

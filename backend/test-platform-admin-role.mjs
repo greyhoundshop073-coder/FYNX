@@ -44,6 +44,10 @@ assert.equal(await resolve("1"), null, "lowest account ID must not override a di
 assert.equal(await resolve("0"), null, "zero is not a valid user ID");
 assert.equal(await resolve("01"), null, "non-canonical numeric identities must be rejected");
 assert.equal(await resolve("9007199254740993 OR 1=1"), null, "malformed identities must be rejected before SQL");
+const queryCountBeforeInvalidIds = queries.length;
+assert.equal(await resolve("9223372036854775808"), null, "values above PostgreSQL BIGINT must be rejected before SQL");
+assert.equal(await resolve(9007199254740992), null, "unsafe JavaScript numeric identities must be rejected before SQL");
+assert.equal(queries.length, queryCountBeforeInvalidIds, "invalid and out-of-range IDs must never reach PostgreSQL");
 
 assert.equal(
   queries.filter(q => q.sql.includes("CREATE TABLE IF NOT EXISTS fynx_platform_owner")).length,
