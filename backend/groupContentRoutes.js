@@ -132,7 +132,7 @@ export function registerGroupContentRoutes({ app }) {
 
       const posts = (await pool.query(`
         SELECT p.id,p.text,p.marketplace_product_id,p.pinned,p.created_at,u.username,
-               po.poll_id,po.question,po.multiple_choice,po.closed
+               po.id AS poll_id,po.question,po.multiple_choice,po.closed
         FROM fynx_group_posts p
         JOIN users u ON u.id=p.author_id
         LEFT JOIN fynx_group_polls po ON po.post_id=p.id
