@@ -1578,26 +1578,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }, onMedia = { uri, type ->
             sendGroupAttachment(uri, type)
-        }, onStoryShare = {
-            if (!canSendMedia) {
-                syncMessage = "Media sharing is disabled in Group Settings."
-            } else {
-                val requestAccountKey = groupAccountKey
-                val requestToken = FynxBackendClient.accessToken(context)
-                val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false)
-                messages = next
-                FynxChatStore.save(context, "group_$groupId", next)
-                scope.launch {
-                    if (!isCurrentGroupAccount(requestAccountKey)) return@launch
-                    FynxGroupRemoteClient.sendMessage(context, groupId, next.last(), requestAccountKey, requestToken)
-                        .onSuccess { sent ->
-                            if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
-                            messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }
-                            FynxChatStore.save(context, "group_$groupId", messages)
-                        }
-                        .onFailure { if (isCurrentGroupAccount(requestAccountKey)) syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." }
-                }
-            }
         }, openContentInitially = showPollsDirectly)
         if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
             val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
