@@ -39,7 +39,8 @@ object FynxGroupRemoteClient {
                 }
                 val visibility=runCatching { FynxGroupVisibility.valueOf(item.optString("visibility","PRIVATE").uppercase()) }.getOrDefault(FynxGroupVisibility.PRIVATE)
                 val photo=item.optString("groupPhotoMediaId").takeIf { it.isNotBlank() && it!="null" }
-                val group=FynxGroup(item.optString("id"),item.optString("name"),item.optString("description"),visibility,item.optString("ownerUsername"),members,photo)
+                val description=item.optString("description").takeIf { it.trim().length >= 2 } ?: "A FYNX community"
+                val group=FynxGroup(item.optString("id"),item.optString("name"),description,visibility,item.optString("ownerUsername"),members,photo)
                 if(FynxGroupsBatch1.validate(group).isEmpty()) add(group)
             }
         }.distinctBy { it.id }
