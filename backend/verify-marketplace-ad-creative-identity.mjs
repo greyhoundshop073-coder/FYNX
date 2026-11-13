@@ -15,7 +15,7 @@ function check(name, ok) {
 check('all creative types use canonical numeric references',
   advertising.includes('CREATIVE_TYPES = new Set(["post", "product", "business"])') &&
   advertising.includes('typeof creativeRef !== "string" || !/^[0-9]+$/.test(creativeRef)') &&
-  advertising.includes('const referenceId = positiveInt(creativeRef)'));
+  advertising.includes('const referenceId = positivePostgresId(creativeRef)') && advertising.includes('function positivePostgresId(value)'));
 
 check('product creatives are tied to the advertiser-owned active listing',
   advertising.includes('FROM marketplace_listings WHERE id=$1 AND seller_id=$2 AND COALESCE(active,TRUE)=TRUE FOR SHARE'));
