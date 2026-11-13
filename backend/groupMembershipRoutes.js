@@ -261,18 +261,36 @@ export function registerGroupMembershipRoutes({ app }) {
   });
 
   app.post('/api/groups/:groupId/join-requests/:username/reject', auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
+      client = await pool.connect();
       const groupId = String(req.params?.groupId || '');
-      const actor = await member(groupId, req.user.sub);
-      if (!isAdmin(actor?.role)) return res.status(403).json({ error: 'group admin permission required' });
-      const requested = await targetJoinRequest(groupId, req.params?.username);
-      if (!requested) return res.status(404).json({ error: 'join request not found' });
-      await pool.query('DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2', [groupId, requested.user_id]);
+      await client.query('BEGIN');
+      const group = (await client.query('SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
+      if (!group) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'group not found' });
+      }
+      const actor = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!isAdmin(actor?.role)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group admin permission required' });
+      }
+      const requested = (await client.query('SELECT r.user_id,u.username FROM fynx_group_join_requests r JOIN users u ON u.id=r.user_id WHERE r.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1 FOR UPDATE OF r', [groupId, cleanUsername(req.params?.username)])).rows[0];
+      if (!requested) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'join request not found' });
+      }
+      await client.query('DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2', [groupId, requested.user_id]);
+      await client.query('COMMIT');
       return res.json({ rejected: true, username: requested.username });
     } catch (error) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error('group join request rejection', error);
       return res.status(500).json({ error: 'group join request rejection failed' });
+    } finally {
+      client?.release();
     }
   });
 
@@ -396,40 +414,82 @@ export function registerGroupMembershipRoutes({ app }) {
   });
 
   app.post('/api/groups/:groupId/leave', auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
+      client = await pool.connect();
       const groupId = String(req.params?.groupId || '');
-      const current = await member(groupId, req.user.sub);
-      if (!current) return res.status(403).json({ error: 'group membership required' });
-      const owner = (await pool.query('SELECT owner_id FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
-      if (!owner) return res.status(404).json({ error: 'group not found' });
-      if (String(owner.owner_id) === String(req.user.sub)) return res.status(409).json({ error: 'group owner must transfer ownership before leaving' });
-      await pool.query('DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id=$2', [groupId, req.user.sub]);
+      await client.query('BEGIN');
+      const group = (await client.query('SELECT owner_id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
+      if (!group) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'group not found' });
+      }
+      const current = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!current) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group membership required' });
+      }
+      if (String(group.owner_id) === String(req.user.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'group owner must transfer ownership before leaving' });
+      }
+      await client.query('DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id=$2', [groupId, req.user.sub]);
+      await client.query('COMMIT');
       return res.json({ left: true });
     } catch (error) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
       console.error('group leave', error);
       return res.status(500).json({ error: 'group leave failed' });
+    } finally {
+      client?.release();
     }
   });
 
   app.delete('/api/groups/:groupId/members/:username', auth, async (req, res) => {
+    let client;
     try {
       await ensureSchema();
+      client = await pool.connect();
       const groupId = String(req.params?.groupId || '');
-      const actor = await member(groupId, req.user.sub);
-      if (!actor || !isManager(actor.role)) return res.status(403).json({ error: 'group management permission required' });
-      const victim = await target(groupId, req.params?.username);
-      if (!victim) return res.status(404).json({ error: 'member not found' });
-      if (String(victim.user_id) === String(req.user.sub)) return res.status(400).json({ error: 'use leave endpoint to leave the group' });
-      const group = (await pool.query('SELECT owner_id FROM fynx_groups WHERE id=$1 LIMIT 1', [groupId])).rows[0];
-      if (!group) return res.status(404).json({ error: 'group not found' });
-      if (String(group.owner_id) === String(victim.user_id)) return res.status(403).json({ error: 'group owner cannot be removed' });
-      if (String(actor.role) === 'MODERATOR' && String(victim.role) !== 'MEMBER') return res.status(403).json({ error: 'moderators can only remove members' });
-      await pool.query('DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id=$2', [groupId, victim.user_id]);
+      await client.query('BEGIN');
+      const group = (await client.query('SELECT owner_id FROM fynx_groups WHERE id=$1 FOR UPDATE', [groupId])).rows[0];
+      if (!group) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'group not found' });
+      }
+      const actor = (await client.query('SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 FOR UPDATE', [groupId, req.user.sub])).rows[0];
+      if (!actor || !isManager(actor.role)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group management permission required' });
+      }
+      const victim = (await client.query('SELECT m.user_id,m.role,u.username FROM fynx_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1 AND lower(u.username)=lower($2) LIMIT 1 FOR UPDATE OF m', [groupId, String(req.params?.username || '').trim().replace(/^@+/, '')])).rows[0];
+      if (!victim) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'member not found' });
+      }
+      if (String(victim.user_id) === String(req.user.sub)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'use leave endpoint to leave the group' });
+      }
+      if (String(group.owner_id) === String(victim.user_id)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'group owner cannot be removed' });
+      }
+      if (String(actor.role) === 'MODERATOR' && String(victim.role) !== 'MEMBER') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'moderators can only remove members' });
+      }
+      await client.query('DELETE FROM fynx_group_members WHERE group_id=$1 AND user_id=$2', [groupId, victim.user_id]);
+      await client.query('COMMIT');
       return res.json({ removed: true, username: victim.username });
     } catch (error) {
-      console.error('group remove member', error);
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      console.error('group member removal', error);
       return res.status(500).json({ error: 'group member removal failed' });
+    } finally {
+      client?.release();
     }
   });
+
 }

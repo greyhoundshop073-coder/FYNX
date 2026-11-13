@@ -386,11 +386,24 @@ fun FynxRemoteAudio(mediaUrl: String, modifier: Modifier = Modifier, maxDuration
                             setDataSource(target.absolutePath)
                             setOnPreparedListener { durationMs = it.duration.toLong(); loading = false; player = it; it.start(); playing = true }
                             setOnCompletionListener { playing = false }
-                            setOnErrorListener { _, _, _ -> loading = false; error = "Audio unavailable"; true }
+                            setOnErrorListener { failedPlayer, _, _ ->
+                                runCatching { failedPlayer.release() }
+                                if (player === failedPlayer) player = null
+                                loading = false
+                                playing = false
+                                error = "Audio unavailable"
+                                true
+                            }
                             prepareAsync()
                         }
                         player = next
-                    } catch (t: Throwable) { loading = false; error = t.message ?: "Audio unavailable" }
+                    } catch (t: Throwable) {
+                        player?.let { runCatching { it.release() } }
+                        player = null
+                        loading = false
+                        playing = false
+                        error = t.message ?: "Audio unavailable"
+                    }
                 }
             }) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (playing) "Pause audio" else "Play audio") }
         }

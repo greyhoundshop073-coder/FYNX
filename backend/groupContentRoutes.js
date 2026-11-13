@@ -2,6 +2,7 @@ import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import { inspectTrustSafetyText } from './trustSafety.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -94,6 +95,34 @@ export function registerGroupContentRoutes({ app }) {
     return Boolean(settings?.send_messages);
   };
 
+  const groupContentSafetyFailure = async (userId, values) => {
+    const safety = (await pool.query(
+      'SELECT message_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1',
+      [userId]
+    )).rows[0] || { message_safety: true, account_status: 'ACTIVE' };
+    if (String(safety.account_status) === 'LOCKED') {
+      return { status: 403, body: { error: 'account is locked', code: 'ACCOUNT_LOCKED' } };
+    }
+    if (String(safety.account_status) === 'LIMITED') {
+      return { status: 403, body: { error: 'account is temporarily limited from creating group content', code: 'ACCOUNT_LIMITED' } };
+    }
+    const text = values.map(value => String(value || '').trim()).filter(Boolean).join('\n');
+    if (safety.message_safety && text) {
+      const result = inspectTrustSafetyText(text);
+      if (result.shouldBlock) {
+        return {
+          status: 422,
+          body: {
+            error: 'content blocked by safety protection',
+            code: 'SAFETY_BLOCK',
+            safety: { risk: result.risk, scamSignals: result.scamSignals, spamSignals: result.spamSignals }
+          }
+        };
+      }
+    }
+    return null;
+  };
+
   app.get('/api/groups/:groupId/content', auth, async (req, res) => {
     try {
       await ensureSchema();
@@ -183,6 +212,8 @@ export function registerGroupContentRoutes({ app }) {
       const text = String(req.body?.text || '').trim();
       const marketplaceProductId = String(req.body?.marketplaceProductId || '').trim() || null;
       if (!text && !marketplaceProductId) return res.status(400).json({ error: 'post content is required' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [text]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const id = String(req.body?.id || randomUUID());
       await pool.query(
         'INSERT INTO fynx_group_posts(id,group_id,author_id,text,marketplace_product_id) VALUES($1,$2,$3,$4,$5)',
@@ -207,6 +238,8 @@ export function registerGroupContentRoutes({ app }) {
       const rawOptions = Array.isArray(req.body?.options) ? req.body.options : [];
       const options = rawOptions.map(v => String(v || '').trim()).filter(Boolean).slice(0, 10);
       if (question.length < 2 || options.length < 2) return res.status(400).json({ error: 'A poll needs a question and at least two options.' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [question, ...options]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const postId = randomUUID();
       const pollId = randomUUID();
       await client.query('BEGIN');
@@ -288,11 +321,14 @@ export function registerGroupContentRoutes({ app }) {
       const groupId = String(req.params?.groupId || '');
       const actor = await member(groupId, req.user.sub);
       if (!actor || !canPost(actor.role)) return res.status(403).json({ error: 'group posting permission required' });
+      if (!(await canCreateGroupContent(groupId, actor.role))) return res.status(403).json({ error: 'group message sending is disabled', code: 'GROUP_SEND_MESSAGES_DISABLED' });
       const title = String(req.body?.title || '').trim();
       const startsAt = String(req.body?.startsAt || '').trim();
       const description = String(req.body?.description || '').trim();
       const location = String(req.body?.location || '').trim();
       if (title.length < 2 || !startsAt) return res.status(400).json({ error: 'Event title and start time are required.' });
+      const safetyFailure = await groupContentSafetyFailure(req.user.sub, [title, description, location]);
+      if (safetyFailure) return res.status(safetyFailure.status).json(safetyFailure.body);
       const parsed = new Date(startsAt);
       if (Number.isNaN(parsed.getTime())) return res.status(400).json({ error: 'Event start time is invalid.' });
       const rawEndsAt = typeof req.body?.endsAt === 'string' ? req.body.endsAt.trim() : '';
