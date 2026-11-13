@@ -96,7 +96,7 @@ require("chat attachment sheet gives each action its own recognizable color", '"
 # Active Group user-journey contracts.
 require("Group keyboard and send button share the server-backed text send helper", "shareGroupTextMessage(text, replyToId)" in ACTIVE_GROUP)
 require("Group optimistic sends never claim delivery or read before server acceptance", "delivered = true, read = true" not in ACTIVE_GROUP)
-require("Group UI does not show false per-member delivery/read ticks", 'Text(if (message.delivered) \"✓\" else \"◷\"' in ACTIVE_GROUP and '"✓✓"' not in ACTIVE_GROUP)
+require("Group UI shows per-member read state only when authenticated receipts exist", 'Text(if (message.readBy.isNotEmpty()) \\"✓✓\\" else if (message.delivered) \\"✓\\" else \\"◷\\"' in ACTIVE_GROUP and 'Seen by ${message.readBy.size}' in ACTIVE_GROUP)
 require("Active Group message menu exposes authenticated sender-only Edit", 'Text("Edit")' in ACTIVE_GROUP and "message.fromMe && message.text.isNotBlank() && !message.deleted" in ACTIVE_GROUP and "FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)" in ACTIVE_GROUP)
 require("Group edit mode exposes cancel and submits through one handler", 'Text("Editing message",' in ACTIVE_GROUP and "onClick = { editingMessageId = null; text = \"\" }" in ACTIVE_GROUP and "editingMessageId != null -> submitGroupEdit()" in ACTIVE_GROUP)
 
