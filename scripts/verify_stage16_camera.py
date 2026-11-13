@@ -20,6 +20,9 @@ video_caption_field_position = camera.find("value = videoCaptionText,")
 video_style_controls_position = camera.find('Text("Video styles", style = MaterialTheme.typography.labelLarge)')
 
 checks = [
+    ("camera and microphone permissions are refreshed when FYNX returns from Android Settings", "LifecycleEventObserver" in camera and "Lifecycle.Event.ON_RESUME" in camera and "hasAudio = audioGranted" in camera),
+    ("permanently denied camera access has an app-settings recovery route", "Settings.ACTION_APPLICATION_DETAILS_SETTINGS" in camera and "Open app settings" in camera),
+    ("camera orientation changes trigger a fresh CameraX bind", "cameraOrientation = LocalConfiguration.current.orientation" in camera and "cameraOrientation, faceAnalysisEnabled" in camera),
     ("post link input uses a URI keyboard with autocorrect disabled", "KeyboardType.Uri" in home and "autoCorrect = false" in home),
     ("video caption runtime check accepts a field aligned with the top of its scroll viewport without scrolling it away", runtime.count('bottom_margin=72, top_margin=0') >= 2),
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),

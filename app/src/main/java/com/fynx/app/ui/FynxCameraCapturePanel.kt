@@ -13,6 +13,8 @@ import android.view.Window
 import android.widget.FrameLayout
 import android.content.pm.PackageManager
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import androidx.compose.ui.res.painterResource
@@ -94,6 +96,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.unit.dp
@@ -550,6 +554,7 @@ fun FynxCameraCapturePanel(
     onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val cameraOrientation = LocalConfiguration.current.orientation
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraWindowView = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -643,6 +648,34 @@ fun FynxCameraCapturePanel(
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showEditorToolOptions by remember { mutableStateOf(true) }
     var showAdjustments by remember { mutableStateOf(false) }
+    // Permission changes made in Android Settings do not return through the
+    // ActivityResult callback. Re-read the OS grant state whenever FYNX resumes;
+    // a grant then changes hasCamera and re-runs the CameraX binding effect.
+    DisposableEffect(lifecycleOwner, context) {
+        val permissionObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val cameraGranted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.CAMERA
+                ) == PackageManager.PERMISSION_GRANTED
+                val audioGranted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                hasCamera = cameraGranted
+                hasAudio = audioGranted
+                if (!cameraGranted) {
+                    runCatching { cameraProvider?.unbindAll() }
+                    cameraReady = false
+                    torchEnabled = false
+                } else if (recording == null && pendingUri == null) {
+                    // Force a fresh provider bind after Settings/gallery/background return,
+                    // including cases where the permission was already granted.
+                    galleryRebindRequest += 1
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(permissionObserver)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(permissionObserver) }
+    }
     LaunchedEffect(videoStyle, videoCaptionText, cameraTextOverlays) {
         if (videoEditsApplied) {
             val renderedVideo = pendingUri
@@ -827,7 +860,7 @@ fun FynxCameraCapturePanel(
         }
     }
     // The self-timer uses one cancellable job so the visible countdown and shutter cannot drift apart.
-    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled, galleryRebindRequest, isPreparingInitialMedia) {
+    LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, cameraOrientation, faceAnalysisEnabled, galleryRebindRequest, isPreparingInitialMedia) {
         val generation = bindGeneration + 1; bindGeneration = generation
         cameraReady = false
         if (!hasCamera || pendingUri != null || isPreparingInitialMedia || initialMediaLoadFailed) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -1223,7 +1256,34 @@ fun FynxCameraCapturePanel(
         }
         return
     }
-    if (!hasCamera && initialMediaUri == null) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
+    if (!hasCamera && initialMediaUri == null) {
+        Box(
+            Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("FYNX needs camera access to capture photos and videos.")
+                Button(onClick = {
+                    permissionLauncher.launch(
+                        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
+                    )
+                }) { Text("Allow camera") }
+                TextButton(onClick = {
+                    val settingsIntent = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    runCatching { context.startActivity(settingsIntent) }
+                        .onFailure { error = "Open Android Settings and enable Camera permission for FYNX." }
+                }) { Text("Open app settings") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        }
+        return
+    }
     val previewUri=pendingUri; val previewType=pendingType
     val previewVideoView = remember(previewUri) { mutableStateOf<android.widget.VideoView?>(null) }
     var previewVideoPositionMs by remember(previewUri) { mutableLongStateOf(0L) }
