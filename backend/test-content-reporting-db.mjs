@@ -5,8 +5,11 @@ import { registerTrustSafetyRoutes } from "./trustSafety.js";
 const { Client } = pg;
 assert.ok(process.env.PGDATABASE, "CI PostgreSQL connection environment is required");
 const db = new Client();
+const secondDb = new Client();
 await db.connect();
+await secondDb.connect();
 const testSchema = `content_reporting_${process.pid}`;
+const secondTestSchema = `content_reporting_pool_isolation_${process.pid}`;
 
 const routes = new Map();
 const app = {
@@ -98,8 +101,22 @@ try {
   assert.equal(audit.rows[0].moderator_id, "4");
   assert.equal(audit.rows[0].new_status, "UNDER_REVIEW");
 
-  console.log("Content reporting PostgreSQL integration tests passed (10 route and persistence assertions).");
+  // A second pool/client must initialize its own schema; it must not reuse
+  // the first client's completed initialization promise.
+  const secondRoutes = new Map();
+  const secondApp = { get(path, ...handlers) { secondRoutes.set(`GET ${path}`, handlers.at(-1)); } };
+  await secondDb.query(`CREATE SCHEMA "${secondTestSchema}"; SET search_path TO "${secondTestSchema}"; CREATE TABLE users (id BIGINT PRIMARY KEY, username TEXT); INSERT INTO users(id,username) VALUES (7,'second-pool-user');`);
+  registerTrustSafetyRoutes({ app: secondApp, pool: secondDb, auth: (_req, _res, next) => next?.() });
+  const secondHistoryHandler = secondRoutes.get("GET /api/social/content-reports/mine");
+  assert.ok(secondHistoryHandler, "second pool history route registered");
+  const secondResponse = response();
+  await secondHistoryHandler({ user: { sub: "7" }, body: {}, query: {} }, secondResponse);
+  assert.equal(secondResponse.statusCode, 200, "a separate pool initializes its own reporting schema");
+  assert.deepEqual(secondResponse.body.reports, [], "second pool starts with an independent report table");
+  console.log("Content reporting PostgreSQL integration tests passed (pool isolation included).");
 } finally {
-  await db.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`);
+  await db.query(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`).catch(() => {});
+  await secondDb.query(`DROP SCHEMA IF EXISTS "${secondTestSchema}" CASCADE`).catch(() => {});
   await db.end();
+  await secondDb.end();
 }
