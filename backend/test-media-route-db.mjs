@@ -57,7 +57,7 @@ const sql = sqlTemplate
   .replace("${groupMessageMediaFlag}", groupMessageMediaFlag)
   .replace("${seasonalMediaAuthorization}", seasonalSqlFragment)
   .replace("${announcementMediaAuthorization}", announcementSqlFragment);
-assert.ok(!/\\$\\{(?:ownerMediaAuthorization|groupMessageAuthorization|groupMessageMediaFlag|seasonalMediaAuthorization|announcementMediaAuthorization)\\}/.test(sql), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
+assert.ok(!/\$\{(?:ownerMediaAuthorization|groupMessageAuthorization|groupMessageMediaFlag|seasonalMediaAuthorization|announcementMediaAuthorization)\}/.test(sql), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
 assert.ok(source.includes("to_regclass('public.marketplace_seasonal_promotions')"), "runtime media route must skip the optional campaign table until it exists");
 const db = new Client();
 await db.connect();
@@ -90,6 +90,8 @@ try {
   await db.query("INSERT INTO fynx_group_messages(group_id,attachment_media_id,deleted_at) VALUES ('group-1',124,NULL)");
   await db.query("INSERT INTO fynx_group_members(group_id,user_id) VALUES ('group-1',2)");
   const allowed = async (id, viewer) => (await db.query(sql,[id,viewer])).rows.length > 0;
+  const groupMemberMedia = (await db.query(sql,[124,2])).rows[0];
+  assert.equal(groupMemberMedia?.group_message_media,true,"current group membership must mark attachment as private group media");
   const cases = [
     [100,2,true,"seller-owned active listing"],
     [101,2,false,"foreign-owned image referenced by listing"],
