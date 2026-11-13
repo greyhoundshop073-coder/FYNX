@@ -279,8 +279,10 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         "admin-control-center-overview.png" in runtime_runner and
         "ADMIN_PREVIEW_SCREENSHOT=CAPTURED" in runtime_runner and
         "LIVE_ROLE_AUTH_BLOCKED" in runtime_runner and
-        "adb exec-out screencap -p" in runtime_runner,
-        "Admin runtime must capture a real emulator screenshot while clearly separating visual preview from live role authorization")
+        "adb exec-out screencap -p" in runtime_runner and
+        "mkdir -p shared_prefs && cat > shared_prefs/fynx_preferences.xml" in runtime_runner and
+        'replace(new RegExp("/+$"), "")' in runtime_runner,
+        "Admin runtime must initialize the app preference directory, use a valid backend diagnostic, and capture a real emulator screenshot while clearly separating visual preview from live role authorization")
 
 
 # Harden the original five Admin findings without changing normal social search.
