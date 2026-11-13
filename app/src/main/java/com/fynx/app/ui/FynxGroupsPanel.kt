@@ -7,6 +7,7 @@ import android.Manifest
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -1347,11 +1348,18 @@ private fun createGroupVoiceMediaRecorder(context: android.content.Context): Med
 
 
 private const val MAX_STAGED_GROUP_ATTACHMENT_BYTES = 12L * 1024 * 1024
-private const val MAX_STAGED_GROUP_IMAGE_BYTES = 64L * 1024 * 1024
+private const val MAX_STAGED_GROUP_IMAGE_BYTES = 12L * 1024 * 1024
 
 private suspend fun stagePendingGroupAttachment(context: android.content.Context, uri: Uri, type: String): Uri =
     withContext(Dispatchers.IO) {
-        val directory = File(context.filesDir, "fynx_group_pending_media").apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
+        val accountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+            ?: error("Sign in again before saving a group attachment.")
+        val accountSuffix = Base64.encodeToString(
+            accountKey.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val directory = File(context.filesDir, "fynx_group_pending_media_$accountSuffix")
+            .apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
         val originalName = runCatching {
             context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) cursor.getString(0) else null
@@ -1386,7 +1394,7 @@ private suspend fun stagePendingGroupAttachment(context: android.content.Context
                         if (read < 0) break
                         totalBytes += read
                         require(totalBytes <= maxBytes) {
-                            if (type == "image") "Image is too large to prepare safely. Maximum source size is 64 MB."
+                            if (type == "image") "Image is too large to send. Maximum size is 12 MB."
                             else "Attachment is too large. Maximum size is 12 MB."
                         }
                         output.write(buffer, 0, read)
