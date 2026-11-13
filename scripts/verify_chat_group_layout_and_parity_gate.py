@@ -100,6 +100,14 @@ require("Group UI does not show false per-member delivery/read ticks", 'Text(if 
 require("Active Group message menu exposes authenticated sender-only Edit", 'Text("Edit")' in ACTIVE_GROUP and "message.fromMe && message.text.isNotBlank() && !message.deleted" in ACTIVE_GROUP and "FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)" in ACTIVE_GROUP)
 require("Group edit mode exposes cancel and submits through one handler", 'Text("Editing message")' in ACTIVE_GROUP and "editingMessageId != null -> submitGroupEdit()" in ACTIVE_GROUP)
 
+
+require("Group Members dialog refreshes authoritative roster from backend", "FynxGroupRemoteClient.loadMembers(context, group.id)" in ACTIVE_GROUP and "hasServerAccess" in ACTIVE_GROUP)
+require("Group member addition uses authenticated dedicated endpoint", "FynxGroupRemoteClient.addMember(context, current.id, clean)" in ACTIVE_GROUP)
+require("Group promote and demote actions use server-authoritative endpoints", "FynxGroupRemoteClient.promoteMember(context, current.id, normalizedUsername)" in ACTIVE_GROUP and "FynxGroupRemoteClient.demoteMember(context, current.id, normalizedUsername)" in ACTIVE_GROUP)
+require("Group remove action calls server endpoint and protects owner/self", "FynxGroupRemoteClient.removeMember(context, current.id, normalizedUsername)" in ACTIVE_GROUP and "!isOwnerMember && !isSelfMember" in ACTIVE_GROUP)
+require("Group block/unblock uses authenticated account social API", "FynxSocialClient.block(context, normalizedUsername)" in ACTIVE_GROUP and "FynxSocialClient.unblock(context, normalizedUsername)" in ACTIVE_GROUP)
+require("Membership callback does not full-sync local changes over server authority", "FynxGroupRemoteClient.syncGroup(context, updated)" not in ACTIVE_GROUP)
+require("Group client has authenticated promote/demote/remove wrappers", all(token in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") for token in ["suspend fun promoteMember", "suspend fun demoteMember", "suspend fun removeMember"]))
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:

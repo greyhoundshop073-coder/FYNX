@@ -55,3 +55,10 @@ After certification, Chat is not reopened for theoretical feature comparisons. R
 **Verification on this exact head:** R5A Group verifier, Android unit tests, lint, APK compilation, Backend CI and Chat/Group parity/layout must be checked from this commit's own Actions runs.
 
 **Not certified:** no claim of live Railway/Neon poll persistence, two-account vote isolation, event RSVP cross-account behaviour or physical-device UX. Group membership/invite fixes already implemented in open PR #523 remain pending integration; do not duplicate them.
+
+
+## 2026-11-13 — Group membership authority repair
+
+The Members dialog previously changed membership and moderator roles locally without waiting for backend confirmation. The server already exposes authenticated add/promote/demote/remove endpoints and enforces group-role restrictions. The repaired dialog refreshes its roster from the server, calls those endpoints before changing the local cache, prevents self/owner removal, and refreshes account-level block state from the social API. The cache callback no longer sends a broad `syncGroup` request that could overwrite server-authoritative membership.
+
+This work still requires exact-commit CI and authenticated two-account runtime verification.
