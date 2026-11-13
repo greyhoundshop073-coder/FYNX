@@ -2181,10 +2181,13 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Scroll that panel itself so the manual field is genuinely visible before querying it.
     # A TextField can exist in UIAutomator while its bounds are clipped by the bottom
     # edge of its editor ScrollView. Existence alone is not proof it can receive a tap.
+    # This field is intentionally the first item in the viewport, so its top edge may
+    # align with the scroll viewport exactly; require full containment and lower tap
+    # clearance without swiping it upward out of view just to manufacture a top margin.
     # The old check tapped a clipped field, then Back dismissed the Camera dialog.
     caption_xml = dump_ui(f"{prefix}-camera-video-caption-initial-viewport.xml") or caption_xml
     for scroll_attempt in range(10):
-        if control_is_safely_revealed_in_scroll_view(caption_xml, ["Video captions"], bottom_margin=72):
+        if control_is_safely_revealed_in_scroll_view(caption_xml, ["Video captions"], bottom_margin=72, top_margin=0):
             break
         geometry = control_scroll_view_geometry(caption_xml, ["Video captions"])
         if not geometry:
@@ -2204,7 +2207,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
 
     manual_caption_field = find_control(caption_xml, ["Video captions"])
     if not manual_caption_field or not control_is_safely_revealed_in_scroll_view(
-        caption_xml, ["Video captions"], bottom_margin=72
+        caption_xml, ["Video captions"], bottom_margin=72, top_margin=0
     ):
         FAILURES.append(
             prefix + ": manual Video captions field was not fully exposed inside its scroll viewport; "

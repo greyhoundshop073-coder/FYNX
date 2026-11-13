@@ -10,6 +10,7 @@ camera = read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")
 home = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
 remote = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
+runtime = read("scripts/verify_authenticated_runtime_navigation.py")
 
 # Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
 # permits equivalent callback formatting, so do not require one exact source-string layout.
@@ -19,6 +20,8 @@ video_caption_field_position = camera.find("value = videoCaptionText,")
 video_style_controls_position = camera.find('Text("Video styles", style = MaterialTheme.typography.labelLarge)')
 
 checks = [
+    ("post link input uses a URI keyboard with autocorrect disabled", "KeyboardType.Uri" in home and "autoCorrect = false" in home),
+    ("video caption runtime check accepts a field aligned with the top of its scroll viewport without scrolling it away", runtime.count('bottom_margin=72, top_margin=0') >= 2),
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
     ("microphone permission", 'Manifest.permission.RECORD_AUDIO' in camera and 'android.permission.RECORD_AUDIO' in manifest),
     ("front/back camera switching", 'LENS_FACING_FRONT' in camera and 'LENS_FACING_BACK' in camera and 'Cameraswitch' in camera),
