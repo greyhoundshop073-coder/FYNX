@@ -101,7 +101,7 @@ require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynx
 require("recordAdminActivity(req,'ADMIN_GRANTED'" in backend and "recordAdminActivity(req,'ADMIN_REVOKED'" in backend and
         "RETURNING user_id" in backend and "await client.query('COMMIT')" in backend,
         "admin grant/revoke and their audit records must be committed atomically")
-require("owner already has owner access" in backend and "u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1)" in backend,
+require("owner already has owner access" in backend and "u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE)" in backend,
         "OWNER must not receive a duplicate ADMIN grant or appear in the admin roster")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
