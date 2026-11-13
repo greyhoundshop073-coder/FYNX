@@ -159,16 +159,20 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
             val group = FynxGroup(UUID.randomUUID().toString(), name.trim(), description.trim(), visibility, currentUsername, listOf(FynxGroupMember(currentUsername, FynxGroupRole.ADMIN)))
             scope.launch {
                 createError = null
-                val remote = FynxGroupRemoteClient.syncGroup(context, group)
-                remote.onSuccess {
-                    withContext(Dispatchers.IO) {
-                        FynxGroupsStore.add(context, group)
-                        FynxGroupsStore.load(context)
-                    }.also { refreshedGroups -> groups = refreshedGroups }
-                    showCreateDialog = false
-                }.onFailure {
-                    createError = "The group could not be created yet. Check your connection and try again."
+                val savedLocally = withContext(Dispatchers.IO) {
+                    val added = FynxGroupsStore.add(context, group)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id)
+                    added to FynxGroupsStore.load(context)
                 }
+                if (!savedLocally.first) {
+                    createError = "A group with this name already exists, or its details could not be saved."
+                    return@launch
+                }
+                groups = savedLocally.second
+                showCreateDialog = false
+                FynxGroupRemoteClient.syncGroup(context, group)
+                    .onSuccess { FynxGroupsStore.markSynced(context, group.id) }
+                    .onFailure { createError = "Group saved on this device. It will sync automatically when the connection returns." }
             }
         }
     }
