@@ -8,6 +8,7 @@ import org.json.JSONObject
 object FynxGroupsStore {
     private const val PREFS = "fynx_groups_store"
     private const val GROUPS_KEY_PREFIX = "groups_"
+    private const val PENDING_SYNC_PREFIX = "pending_sync_"
 
     private fun groupsKey(context: Context): String =
         GROUPS_KEY_PREFIX + (FynxAuthStore.accountStorageKey(context)?.let(::storageKey) ?: "signed_out")
@@ -32,6 +33,31 @@ object FynxGroupsStore {
                 .filter { it.id.isNotBlank() && FynxGroupsBatch1.validate(it).isEmpty() }
                 .distinctBy { it.id }
         }.getOrElse { emptyList() }
+    }
+
+    private fun pendingSyncKey(context: Context): String = PENDING_SYNC_PREFIX + groupsKey(context)
+
+    @Synchronized
+    fun markPendingSync(context: Context, groupId: String) {
+        if (groupId.isBlank()) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pending = prefs.getStringSet(pendingSyncKey(context), emptySet()).orEmpty().toMutableSet()
+        pending.add(groupId)
+        prefs.edit().putStringSet(pendingSyncKey(context), pending).apply()
+    }
+
+    @Synchronized
+    fun pendingSyncGroups(context: Context): Set<String> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getStringSet(pendingSyncKey(context), emptySet()).orEmpty().toSet()
+
+    @Synchronized
+    fun markSynced(context: Context, groupId: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = pendingSyncKey(context)
+        val pending = prefs.getStringSet(key, emptySet()).orEmpty().toMutableSet()
+        pending.remove(groupId)
+        prefs.edit().putStringSet(key, pending).apply()
     }
 
     fun save(context: Context, groups: List<FynxGroup>) {
