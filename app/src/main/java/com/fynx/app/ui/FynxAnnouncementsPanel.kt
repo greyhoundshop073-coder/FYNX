@@ -202,7 +202,7 @@ fun FynxAdminControlCenterPanel() {
     var adminAnnouncementsError by remember { mutableStateOf<String?>(null) }
     var refreshAdminAnnouncements by remember { mutableIntStateOf(0) }
     var targetQuery by remember { mutableStateOf("") }
-    var targets by remember { mutableStateOf<List<FynxSocialClient.User>>(emptyList()) }
+    var targets by remember { mutableStateOf<List<FynxAdminClient.AdminUser>>(emptyList()) }
     var targetMessage by remember { mutableStateOf<String?>(null) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var refreshAdmins by remember { mutableIntStateOf(0) }
@@ -725,8 +725,8 @@ fun FynxAdminControlCenterPanel() {
                     }
                 }
             }) { Text("Remove") } } } } }
-            Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxSocialClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            targets.take(5).forEach { user ->
+            Spacer(Modifier.height(20.dp)); Text("Manage an account", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(8.dp)); OutlinedTextField(targetQuery, { targetQuery = it }, Modifier.fillMaxWidth(), label = { Text("Search username") }, singleLine = true); Spacer(Modifier.height(6.dp)); Button(enabled = targetQuery.isNotBlank(), onClick = { targetMessage = "Searching..."; scope.launch { FynxAdminClient.searchUsers(context, targetQuery).onSuccess { targets = it; targetMessage = if (it.isEmpty()) "No users found." else null }.onFailure { targetMessage = it.message ?: "User search failed." } } }) { Text("Find user") }; targetMessage?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            targets.forEach { user ->
                 Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(user.displayName.ifBlank { "FYNX user" }, style = MaterialTheme.typography.titleMedium)
