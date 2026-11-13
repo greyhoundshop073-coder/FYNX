@@ -35,6 +35,13 @@ try {
  await client.query("INSERT INTO fynx_groups(id,owner_id,name) VALUES($1,$2,'Approval group'),($3,$2,'Capacity group')",[group,admin,capGroup]);
  await client.query("INSERT INTO fynx_group_members(group_id,user_id,role) VALUES($1,$2,'ADMIN'),($3,$2,'ADMIN')",[group,admin,capGroup]);
  registerGroupMembershipRoutes({app});
+ const initialPermissions=await call("GET","/api/groups/:groupId/permissions",{groupId:group},admin);
+ assert.equal(initialPermissions.statusCode,200);
+ assert.equal(initialPermissions.body.permissions.show_history_to_new_members,true,"new groups must preserve the existing show-history default");
+ const historyPolicy=await call("PATCH","/api/groups/:groupId/permissions",{groupId:group},admin,{showHistoryToNewMembers:false});
+ assert.equal(historyPolicy.statusCode,200);
+ assert.equal(historyPolicy.body.permissions.show_history_to_new_members,false,"group admins must be able to disable prior history for new members");
+ assert.equal((await call("PATCH","/api/groups/:groupId/permissions",{groupId:group},requester,{showHistoryToNewMembers:true})).statusCode,403,"non-admin members must not change new-member history visibility");
  const created=await call("POST","/api/groups/:groupId/invites",{groupId:group},admin);
  assert.equal(created.statusCode,201);
  const invite=created.body.token;
