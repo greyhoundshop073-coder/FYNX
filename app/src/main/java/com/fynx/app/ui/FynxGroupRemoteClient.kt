@@ -13,6 +13,7 @@ object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false,val readBy:List<String> = emptyList())
     data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean)
     private val sendMutex = Mutex()
+    private val rsvpMutex = Mutex()
     data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0)
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean)
@@ -139,6 +140,7 @@ object FynxGroupRemoteClient {
         }.getOrDefault(emptyMap())
     }
 
+    @Synchronized
     private fun savePendingRsvp(context:Context,groupId:String,eventId:String,response:String) {
         val prefs=contentPreferences(context,groupId)?:return
         val values=loadPendingRsvps(context,groupId).toMutableMap()
@@ -146,13 +148,16 @@ object FynxGroupRemoteClient {
         prefs.edit().putString("pending_rsvps",JSONObject(values).toString()).apply()
     }
 
-    private fun clearPendingRsvp(context:Context,groupId:String,eventId:String) {
-        val prefs=contentPreferences(context,groupId)?:return
+    @Synchronized
+    private fun clearPendingRsvp(context:Context,groupId:String,eventId:String,expectedResponse:String):Boolean {
+        val prefs=contentPreferences(context,groupId)?:return false
         val values=loadPendingRsvps(context,groupId).toMutableMap()
+        if(values[eventId]!=expectedResponse) return false
         values.remove(eventId)
         val edit=prefs.edit()
         if(values.isEmpty())edit.remove("pending_rsvps") else edit.putString("pending_rsvps",JSONObject(values).toString())
         edit.apply()
+        return true
     }
 
     private fun countRsvp(current:Int,old:String?,next:String?,bucket:String):Int =
@@ -181,13 +186,15 @@ object FynxGroupRemoteClient {
         var completed=0
         loadPendingRsvps(context,groupId).forEach { entry ->
             if(FynxAuthStore.accountStorageKey(context)!=account)return completed
-            val result=FynxBackendClient.postJson(
-                context,
-                "/api/groups/$groupId/events/${Uri.encode(entry.key)}/rsvp",
-                JSONObject().put("response",entry.value).toString()
-            )
-            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
-            if(result.isSuccess){clearPendingRsvp(context,groupId,entry.key);completed++}
+            rsvpMutex.withLock {
+                if(FynxAuthStore.accountStorageKey(context)!=account)return@withLock
+                if(loadPendingRsvps(context,groupId)[entry.key]!=entry.value)return@withLock
+                val result=FynxBackendClient.postJson(context,
+                    "/api/groups/" + groupId + "/events/" + Uri.encode(entry.key) + "/rsvp",
+                    JSONObject().put("response",entry.value).toString())
+                if(FynxAuthStore.accountStorageKey(context)!=account)return@withLock
+                if(result.isSuccess && clearPendingRsvp(context,groupId,entry.key,entry.value))completed++
+            }
         }
         return completed
     }
@@ -298,26 +305,25 @@ object FynxGroupRemoteClient {
     }
 
     suspend fun rsvpEvent(context:Context,groupId:String,eventId:String,response:String):Result<Boolean> = runCatching {
-        val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}
-            ?: throw IllegalStateException("Sign in before responding to a group event.")
-        val normalized=response.uppercase()
-        require(normalized in setOf("GOING","MAYBE","NOT_GOING")) { "Choose Going, Maybe, or Not going." }
-        val result=FynxBackendClient.postJson(
-            context,
-            "/api/groups/$groupId/events/${Uri.encode(eventId)}/rsvp",
-            JSONObject().put("response",normalized).toString()
-        )
-        if(FynxAuthStore.accountStorageKey(context)!=account)throw IllegalStateException("FYNX account changed while your event response was saving.")
-        if(result.isSuccess) {
-            clearPendingRsvp(context,groupId,eventId)
-            false
-        } else {
-            val failure=result.exceptionOrNull()?:IllegalStateException("Event response could not be saved.")
-            val status=Regex("(?:HTTP|status)[^0-9]*([0-9]{3})",RegexOption.IGNORE_CASE)
-                .find(failure.message.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
-            if(status!=null&&status in 400..499)throw failure
-            savePendingRsvp(context,groupId,eventId,normalized)
-            true
+        rsvpMutex.withLock {
+            val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}
+                ?: throw IllegalStateException("Sign in before responding to a group event.")
+            val normalized=response.uppercase()
+            require(normalized in setOf("GOING","MAYBE","NOT_GOING")) { "Choose Going, Maybe, or Not going." }
+            val result=FynxBackendClient.postJson(context,
+                "/api/groups/" + groupId + "/events/" + Uri.encode(eventId) + "/rsvp",
+                JSONObject().put("response",normalized).toString())
+            if(FynxAuthStore.accountStorageKey(context)!=account)throw IllegalStateException("FYNX account changed while your event response was saving.")
+            if(result.isSuccess) {
+                clearPendingRsvp(context,groupId,eventId,normalized)
+                false
+            } else {
+                val failure=result.exceptionOrNull()?:IllegalStateException("Event response could not be saved.")
+                val status=Regex("(?:HTTP|status)[^0-9]*([0-9]{3})",RegexOption.IGNORE_CASE).find(failure.message.orEmpty())?.groupValues?.getOrNull(1)?.toIntOrNull()
+                if(status!=null&&status in 400..499)throw failure
+                savePendingRsvp(context,groupId,eventId,normalized)
+                true
+            }
         }
     }
 

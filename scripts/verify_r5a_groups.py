@@ -91,6 +91,8 @@ check('single-choice poll votes are serialized against the poll row in a transac
 check('closed polls are visibly closed and their vote actions are disabled', 'poll.closed' in group_social and 'enabled = !poll.closed' in group_social and 'Voting is closed.' in group_social)
 check('poll vote failures are shown to the member instead of silently discarded', 'Your vote could not be saved.' in group_social and '.onFailure { error = it.message' in group_social)
 check('group post pin failures are surfaced to the member', 'This group post could not be updated.' in group_social)
+check('group content UI renders the full backend post page instead of hiding posts after eight', 'current?.posts?.forEach' in group_social and 'current?.posts?.take(8)' not in group_social)
+check('group RSVP retries serialize against newer choices and clear only the acknowledged response', 'private val rsvpMutex = Mutex()' in group_remote_client and 'loadPendingRsvps(context,groupId)[entry.key]!=entry.value' in group_remote_client and 'clearPendingRsvp(context,groupId,entry.key,entry.value)' in group_remote_client and 'clearPendingRsvp(context,groupId,eventId,normalized)' in group_remote_client)
 check('group event end-time input is validated and must follow the start time', 'Event end time is invalid.' in content_routes and 'Event end time must be after its start time.' in content_routes and 'parsedEnd.getTime() <= parsed.getTime()' in content_routes)
 check('group social content creation respects server message permissions and trust-safety checks', 'canCreateGroupContent(groupId, actor.role)' in content_routes and 'groupContentSafetyFailure' in content_routes and 'SAFETY_BLOCK' in content_routes)
 

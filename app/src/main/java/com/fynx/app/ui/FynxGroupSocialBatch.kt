@@ -230,7 +230,7 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
             if (!loading && current != null && current.posts.isEmpty() && current.events.isEmpty()) {
                 Text("Nothing shared here yet. Start with a poll or an event.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            current?.posts?.take(8)?.forEach { post ->
+            current?.posts?.forEach { post ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
