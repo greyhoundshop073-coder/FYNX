@@ -20,6 +20,7 @@ if not SOURCE.is_file():
 source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
+trust_safety = (ROOT / "backend/trustSafety.js").read_text(encoding="utf-8")
 owner_role = OWNER_ROLE.read_text(encoding="utf-8") if OWNER_ROLE.is_file() else ""
 postgres_ids = POSTGRES_IDS.read_text(encoding="utf-8") if POSTGRES_IDS.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
@@ -359,6 +360,12 @@ workflow_file = (ROOT / ".github/workflows/fynx-backend-ci.yml").read_text(encod
 require("databasePool = pool" in backend and "jwtApi = jwt" in backend and
         "jwtSecret = JWT_SECRET" in backend and "const routePool = databasePool" in backend,
         "Admin route registration must permit isolated test dependencies while preserving production defaults")
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in trust_safety and
+        'isPositivePostgresBigint(rawReportId)' in trust_safety and
+        'reportId=String(rawReportId).trim()' in trust_safety and 'Number(rawReportId)' not in trust_safety,
+        "user appeal submission must preserve exact PostgreSQL BIGINT report IDs without Number coercion")
+require("node test-admin-reports-appeals-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin reports and appeals route lifecycle test")
 require("node test-admin-account-safety-db.mjs" in workflow_file,
         "Backend CI must execute the PostgreSQL-backed Admin account-safety route test")
 require("node test-admin-announcements-db.mjs" in workflow_file,

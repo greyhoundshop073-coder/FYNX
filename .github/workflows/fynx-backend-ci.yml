@@ -258,6 +258,8 @@ jobs:
         run: node test-admin-announcements-db.mjs
       - name: Run Admin account-safety PostgreSQL route integration tests
         run: node test-admin-account-safety-db.mjs
+      - name: Run Admin reports and appeals PostgreSQL route integration tests
+        run: node test-admin-reports-appeals-db.mjs
       - name: Run Marketplace Price Watch verification
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard

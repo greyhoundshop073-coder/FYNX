@@ -385,3 +385,9 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 ### Safety boundary
 - LOCKED/LIMITED are not global logout switches. The user-facing UI promises Marketplace purchase and group-send restrictions, so no login or session invalidation behavior is changed here.
 - Production Owner/Admin testing and handset interaction still need separate live/device certification; PostgreSQL CI proves backend route behavior in the isolated test schema only.
+
+
+### Group 8 additional correction — user appeal BIGINT round-trip — 13 November 2026
+- `POST /api/safety/appeals` parsed report IDs through `Number()` and `Number.isSafeInteger()`, rejecting legitimate PostgreSQL BIGINT string IDs above `Number.MAX_SAFE_INTEGER`.
+- It now uses `isPositivePostgresBigint` on the original input and retains the validated ID as an exact decimal string for ownership lookup and insert.
+- The reports/appeals PostgreSQL route test includes a report ID of `9007199254740993`, asserts exact appeal round-trip, and rejects `9223372036854775808`.
