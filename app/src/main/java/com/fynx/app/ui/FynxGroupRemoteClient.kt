@@ -102,7 +102,7 @@ object FynxGroupRemoteClient {
                     val o=a.getJSONObject(i)
                     val rawId=o.optString("id").trim()
                     val safeId=rawId.ifBlank { "group-remote-$i-" + o.optLong("timestamp") }
-                    RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
+                    return RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
