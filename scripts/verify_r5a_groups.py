@@ -23,6 +23,7 @@ client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
 active_group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
 app_navigation = read('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
 group_remote_client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
+group_settings_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt')
 group_social = read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt')
 conversation_preferences = read('app/src/main/java/com/fynx/app/ui/FynxConversationPreferences.kt')
 firebase_messaging = read('app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt')
@@ -81,6 +82,8 @@ check('group event RSVP retry rechecks account identity after the server respons
 check('group content response is cached only for the account that initiated the request', 'FYNX account changed while group content was loading.' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)throw' in group_remote_client)
 
 
+check('new-member history visibility is an admin-controlled server policy', 'show_history_to_new_members' in membership and 'showHistoryToNewMembers' in group_remote_client and 'Show previous messages to new members' in group_settings_panel and 'isAdmin&&FynxBackendClient.hasAccessToken(context)' in group_settings_panel)
+check('new-member history cutoff is enforced for message pages, read receipts, replies, actions and media attachments', 'const memberHistory = async' in group and 'm.created_at >= $6' in group and 'message.created_at >= $4' in group and 'm.created_at >= gm.created_at' in group and 'parent.created_at >= gm.created_at' in group and 'gm.created_at >= gmem.created_at' in server)
 check('group read receipts are persisted per message and member with membership-scoped writes', 'CREATE TABLE IF NOT EXISTS fynx_group_message_reads' in group and "app.post('/api/groups/:groupId/read'" in group and 'message.sender_id<>$3' in group and 'ON CONFLICT(message_id,user_id) DO NOTHING' in group)
 check('group message history and realtime payloads expose reader usernames', 'AS read_by' in group and 'readBy:Array.isArray(row.read_by)?row.read_by:[]' in group)
 check('active group chat marks incoming history and realtime messages read without crossing accounts', 'FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingIds)' in active_group_panel and 'FynxGroupRemoteClient.markMessagesRead(context, groupId, listOf(incoming.id))' in active_group_panel and 'if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess' in active_group_panel)

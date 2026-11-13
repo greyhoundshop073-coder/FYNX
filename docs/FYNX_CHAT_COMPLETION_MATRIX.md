@@ -83,3 +83,10 @@ Local chat persistence now round-trips message deletion state, pin state, sender
 **Verification added:** the PostgreSQL group-history test now exercises per-member receipt uniqueness, idempotent repeats, sender exclusion and group isolation. Source contracts cover the authenticated route, receipt payload, account-bound history/realtime handling, older-page marking and local persistence. Exact-head Android and parity checks are required before certification; live two-account receipt visibility still requires runtime verification.
 
 **Still not implemented:** group voice/video calling. The current call transport models one caller and one callee with a single remote peer connection; adding group calling requires a proper multi-participant room/signaling and media architecture, not a decorative call button. Automatic gallery saving and configurable new-member history visibility also remain outstanding.
+
+
+## 2026-11-13 — New-member group history privacy
+
+The group service already stored an admin-controlled `show_history_to_new_members` permission but had not connected it to the active chat history, search, read-receipt, message-action or attachment authorization paths. The active Group settings now expose the switch. When disabled, a newly joined member can only load messages sent from their membership start time onward; the same cutoff is enforced for read receipts, replies, edits/reactions/pins/deletes and protected group-media retrieval. Existing groups retain the prior default of showing history to new members.
+
+The PostgreSQL history test now verifies both policy states and confirms that a hidden old attachment cannot bypass the setting. CI source contracts cover the settings UI/API and each protected access path. Runtime verification with two real group accounts remains required before certification.

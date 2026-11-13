@@ -53,7 +53,20 @@ async function run(){
   assert(secondReader.rows.length===1,"each group member must have an independent read receipt");
   const receiptCount=await client.query("SELECT COUNT(*)::int AS count FROM group_message_receipt_fixture WHERE message_id='receipt-a-0002'");
   assert(receiptCount.rows[0].count===2,"the message must retain one read receipt per distinct reader");
-  console.log("GROUP MESSAGE SEARCH + READ RECEIPTS POSTGRESQL: GREEN (full-text, group isolation, cursor stability, idempotent per-member receipts, sender exclusion)");
+  await client.query(`CREATE TEMP TABLE group_history_policy_groups(id TEXT PRIMARY KEY,show_history_to_new_members BOOLEAN NOT NULL) ON COMMIT PRESERVE ROWS`);
+  await client.query(`CREATE TEMP TABLE group_history_policy_members(group_id TEXT NOT NULL,user_id BIGINT NOT NULL,joined_at TIMESTAMPTZ NOT NULL,PRIMARY KEY(group_id,user_id)) ON COMMIT PRESERVE ROWS`);
+  await client.query(`CREATE TEMP TABLE group_history_policy_messages(id TEXT PRIMARY KEY,group_id TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL,media_id BIGINT) ON COMMIT PRESERVE ROWS`);
+  await client.query("INSERT INTO group_history_policy_groups(id,show_history_to_new_members) VALUES ('history-hidden',FALSE),('history-visible',TRUE)");
+  await client.query("INSERT INTO group_history_policy_members(group_id,user_id,joined_at) VALUES ('history-hidden',31,'2026-11-13T10:00:00Z'),('history-visible',32,'2026-11-13T10:00:00Z')");
+  await client.query("INSERT INTO group_history_policy_messages(id,group_id,created_at,media_id) VALUES ('history-old-hidden','history-hidden','2026-11-13T09:00:00Z',701),('history-new-hidden','history-hidden','2026-11-13T11:00:00Z',702),('history-old-visible','history-visible','2026-11-13T09:00:00Z',703),('history-new-visible','history-visible','2026-11-13T11:00:00Z',704)");
+  const visibleHistory=async(groupId,userId)=>client.query(`SELECT message.id FROM group_history_policy_messages message JOIN group_history_policy_members member ON member.group_id=message.group_id AND member.user_id=$2 JOIN group_history_policy_groups settings ON settings.id=message.group_id WHERE message.group_id=$1 AND (settings.show_history_to_new_members IS DISTINCT FROM FALSE OR message.created_at >= member.joined_at) ORDER BY message.created_at,message.id`,[groupId,userId]);
+  const hiddenHistory=await visibleHistory("history-hidden",31);
+  assert(hiddenHistory.rows.map(row=>row.id).join(",")==="history-new-hidden","disabled history visibility must hide messages sent before the member joined");
+  const visibleOldHistory=await visibleHistory("history-visible",32);
+  assert(visibleOldHistory.rows.map(row=>row.id).join(",")==="history-old-visible,history-new-visible","enabled history visibility must preserve access to earlier messages");
+  const oldAttachment=await client.query(`SELECT EXISTS(SELECT 1 FROM group_history_policy_messages message JOIN group_history_policy_members member ON member.group_id=message.group_id AND member.user_id=$2 JOIN group_history_policy_groups settings ON settings.id=message.group_id WHERE message.media_id=$1 AND (settings.show_history_to_new_members IS DISTINCT FROM FALSE OR message.created_at >= member.joined_at)) AS allowed`,[701,31]);
+  assert(oldAttachment.rows[0].allowed===false,"hidden message attachments must not bypass the history policy");
+  console.log("GROUP MESSAGE SEARCH + READ RECEIPTS + NEW-MEMBER HISTORY POSTGRESQL: GREEN (full-text, group isolation, cursor stability, idempotent per-member receipts, sender exclusion)");
  }finally{client.release();}
 }
 run().catch(error=>{console.error("GROUP MESSAGE SEARCH POSTGRESQL: RED",error);process.exitCode=1;}).finally(async()=>{await pool.end();});

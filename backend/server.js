@@ -596,16 +596,21 @@ app.get("/api/media/:id", auth, async (req, res) => {
     let groupMessageMediaFlag = "FALSE AS group_message_media";
     let ownerMediaAuthorization = "mm.owner_id = $2";
     const groupMediaSchema = await pool.query(
-      "SELECT to_regclass('public.fynx_group_messages') AS messages, to_regclass('public.fynx_group_members') AS members"
+      "SELECT to_regclass('public.fynx_group_messages') AS messages, to_regclass('public.fynx_group_members') AS members, to_regclass('public.fynx_groups') AS groups, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='fynx_groups' AND column_name='show_history_to_new_members') AS has_history_visibility"
     );
     if (groupMediaSchema.rows[0]?.messages && groupMediaSchema.rows[0]?.members) {
+      const groupHistoryVisibility = groupMediaSchema.rows[0]?.has_history_visibility
+        ? 'AND (group_settings.show_history_to_new_members IS DISTINCT FROM FALSE OR gm.created_at >= gmem.created_at)'
+        : '';
       const groupMessageAccess = `EXISTS (
         SELECT 1
         FROM fynx_group_messages gm
         JOIN fynx_group_members gmem ON gmem.group_id = gm.group_id
+        JOIN fynx_groups group_settings ON group_settings.id = gm.group_id
         WHERE gm.attachment_media_id = mm.id
           AND gm.deleted_at IS NULL
           AND gmem.user_id = $2
+          ${groupHistoryVisibility}
       )`;
       groupMessageAuthorization = `OR ${groupMessageAccess}`;
       groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`;
