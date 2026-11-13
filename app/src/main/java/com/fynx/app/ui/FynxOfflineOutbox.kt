@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import android.util.Base64
 import org.json.JSONArray
@@ -15,6 +16,13 @@ object FynxOfflineOutbox {
     private const val PREFS_PREFIX = "fynx_offline_outbox_"
     private const val KEY = "items"
     private const val MAX_ATTACHMENT_BYTES = 12L * 1024L * 1024L
+
+    /** Notifies the active conversation when its durable outbox changes. */
+    val updates = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
+    private fun notifyRecipient(recipient: String) {
+        updates.tryEmit(recipient.trim().removePrefix("@").lowercase())
+    }
 
     data class Item(
         val id: String,
@@ -29,7 +37,8 @@ object FynxOfflineOutbox {
         val messageType: String = "text",
         val messagePayload: Map<String, String> = emptyMap(),
         val localMediaPath: String? = null,
-        val localMediaMimeType: String? = null
+        val localMediaMimeType: String? = null,
+        val marketplaceListingId: String? = null
     )
 
     private fun preferencesName(context: Context): String? {
@@ -47,6 +56,7 @@ object FynxOfflineOutbox {
         val current = load(context).filterNot { it.id == item.id }.toMutableList()
         current += item
         save(context, name, current)
+        notifyRecipient(item.recipient)
         return true
     }
 
@@ -54,14 +64,18 @@ object FynxOfflineOutbox {
     fun remove(context: Context, id: String) {
         val name = preferencesName(context) ?: return
         val current = load(context)
-        current.firstOrNull { it.id == id }?.localMediaPath?.let { path -> runCatching { File(path).delete() } }
+        val removed = current.firstOrNull { it.id == id }
+        removed?.localMediaPath?.let { path -> runCatching { File(path).delete() } }
         save(context, name, current.filterNot { it.id == id })
+        removed?.let { notifyRecipient(it.recipient) }
     }
 
     @Synchronized
     fun updateMediaId(context: Context, id: String, mediaId: String) {
         val name = preferencesName(context) ?: return
-        save(context, name, load(context).map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })
+        val current = load(context)
+        save(context, name, current.map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })
+        current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
     }
 
     suspend fun enqueueAttachment(context: Context, item: Item, sourceUri: Uri, mimeType: String): String? = withContext(Dispatchers.IO) {
@@ -147,7 +161,8 @@ object FynxOfflineOutbox {
                             messageType = o.optString("messageType").ifBlank { "text" },
                             messagePayload = payload,
                             localMediaPath = o.optString("localMediaPath").takeIf { it.isNotBlank() && it != "null" },
-                            localMediaMimeType = o.optString("localMediaMimeType").takeIf { it.isNotBlank() && it != "null" }
+                            localMediaMimeType = o.optString("localMediaMimeType").takeIf { it.isNotBlank() && it != "null" },
+                            marketplaceListingId = o.optString("marketplaceListingId").takeIf { it.isNotBlank() && it != "null" }
                         )
                     )
                 }
@@ -164,6 +179,7 @@ object FynxOfflineOutbox {
                 put("mediaType", item.mediaType ?: JSONObject.NULL); put("voiceDurationMs", item.voiceDurationMs); put("createdAt", item.createdAt)
                 put("messageType", item.messageType); put("messagePayload", JSONObject(item.messagePayload))
                 put("localMediaPath", item.localMediaPath ?: JSONObject.NULL); put("localMediaMimeType", item.localMediaMimeType ?: JSONObject.NULL)
+                put("marketplaceListingId", item.marketplaceListingId ?: JSONObject.NULL)
             })
         }
         context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
