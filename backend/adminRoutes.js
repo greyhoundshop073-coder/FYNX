@@ -1,6 +1,7 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -115,18 +116,7 @@ export function registerAdminRoutes({ app }) {
     return schemaPromise;
   };
   const auth = createAdminAuthMiddleware({ pool, jwt, jwtSecret: JWT_SECRET });
-  const role = async userId => {
-    // Preserve the legacy first-user owner on upgrade, then keep ownership stable.
-    // RESTRICT prevents owner deletion from silently transferring platform control.
-    let owner=(await pool.query('SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE')).rows[0];
-    if(!owner){
-      const bootstrap=await pool.query("WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('fynx_platform_owner_bootstrap'))), candidate AS (SELECT id FROM users ORDER BY id ASC LIMIT 1), inserted AS (INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,candidate.id FROM candidate,lock ON CONFLICT(singleton) DO NOTHING RETURNING owner_user_id) SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE");
-      owner=bootstrap.rows[0];
-    }
-    if(owner && String(owner.owner_user_id)===String(userId)) return 'OWNER';
-    const admin=(await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',[userId])).rowCount;
-    return admin ? 'ADMIN' : null;
-  };
+  const role = createPlatformAdminRoleResolver(pool);
   const requireAdmin = async (req,res) => { const value=await role(req.user.sub); if(!value){res.status(403).json({error:'administrator access required',code:'ADMIN_REQUIRED'});return null;} req.fynxAdminRole=value; return value; };
   // Accept a transaction-scoped executor so state changes and their audit row commit atomically.
   const recordAdminActivity = async (req, action, targetType = '', targetId = '', summary = '', metadata = {}, executor = pool) => {

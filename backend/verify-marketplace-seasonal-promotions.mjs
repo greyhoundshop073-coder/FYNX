@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const advertising = await readFile(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
+const socialRoutes = await readFile(new URL("./socialRoutes.js", import.meta.url), "utf8");
+const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url), "utf8");
+const platformAdminRole = await readFile(new URL("./platformAdminRole.js", import.meta.url), "utf8");
 const mediaPrivacy = await readFile(new URL("./mediaPrivacy.js", import.meta.url), "utf8");
 const banner = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt", import.meta.url), "utf8");
 const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt", import.meta.url), "utf8");
@@ -51,6 +54,11 @@ const checks = [
   ["scheduler uploads optional celebration artwork to authenticated FYNX media storage", adminUi.includes("Choose photo") && adminUi.includes("uploadArtwork(context, artworkUri!!)") && client.includes("FynxProductionMessaging.uploadMedia")],
   ["seasonal schedules are independent of Best Seller scoring", seasonalFeedRoute.length > 0 && !seasonalFeedRoute.includes("marketplace_ad_metrics") && banner.includes("BEST SELLER OF THE WEEK")],
   ["campaign destinations persist across fresh schema creation and legacy database upgrades", advertising.includes("destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE'") && advertising.includes("ADD COLUMN IF NOT EXISTS destination_type TEXT NOT NULL DEFAULT 'MARKETPLACE'") && advertising.includes("ADD COLUMN IF NOT EXISTS destination_value TEXT")],
+  ["Marketplace, Music and Admin Control Center share persisted Owner resolver", advertising.includes("createPlatformAdminRoleResolver") && socialRoutes.includes("createPlatformAdminRoleResolver") && adminRoutes.includes("createPlatformAdminRoleResolver") && platformAdminRole.includes("SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE") && !advertising.includes("SELECT id FROM users ORDER BY id ASC LIMIT 1") && !socialRoutes.slice(socialRoutes.indexOf("async function fynxMusicAdminRole(userId)"),socialRoutes.indexOf("async function recordMusicAdminActivity")).includes("SELECT id FROM users ORDER BY id ASC LIMIT 1")],
+  ["Owner resolver preserves PostgreSQL BIGINT identity", platformAdminRole.includes("Number cannot represent every PostgreSQL BIGINT") && platformAdminRole.includes("String(userId ??")],
+  ["Admin seasonal list disables shared caching", advertising.includes('res.set("Cache-Control", "private, no-store")') && advertising.includes('app.get("/api/admin/marketplace/seasonal-promotions"')],
+  ["Owner-only Music Library list disables shared caching", socialRoutes.includes('res.set("Cache-Control", "private, no-store")') && socialRoutes.includes("app.get('/api/admin/social/music/catalogue'")],
+  ["Marketplace advertising auth compares current session version", advertising.includes("createSessionAwareBearerAuthenticator") && advertising.includes("await authenticate(req, res)") && !advertising.includes("return { userId: Number(payload.sub) }")],
   ["campaign destinations are constrained to supported in-app targets by PostgreSQL", advertising.includes("marketplace_seasonal_promotions_destination_type_check") && advertising.includes("CHECK (destination_type IN ('NONE', 'MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP'))")],
   ["campaign category destinations exactly match the live Marketplace category taxonomy", advertising.includes("MARKETPLACE_CAMPAIGN_CATEGORIES") && advertising.includes("MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY") && advertising.includes('const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase())') && advertising.includes("destinationValue = canonicalCategory")],
   ["Owner/Admin campaign endpoint validates destination types and non-empty target values", advertising.includes('["NONE", "MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)') && advertising.includes("the selected campaign destination requires a matching destination value")],

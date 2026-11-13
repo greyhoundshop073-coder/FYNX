@@ -1,60 +1,37 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-
-const advertising = await readFile(new URL("./marketplaceAdvertising.js", import.meta.url), "utf8");
-const helperMatch = advertising.match(/function authenticate\(req, res\) \{[\s\S]*?\n\}/);
-assert.ok(helperMatch, "Marketplace advertising must expose its local auth helper");
-
-// Execute the exact helper source with a controlled JWT verifier and a minimal
-// Express response double. No network, database or real credentials are used.
-const createAuthenticate = new Function("jwt", "JWT_SECRET", `${helperMatch[0]}\nreturn authenticate;`);
-const jwt = {
-  verify(token) {
-    if (token === "valid-test-token") return { sub: "314" };
-    throw new Error("invalid test token");
-  }
-};
-function responseDouble() {
-  return {
-    statusCode: null,
-    body: null,
-    sends: 0,
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; this.sends += 1; return this; }
-  };
-}
-
+import { createSessionAwareBearerAuthenticator } from "./sessionAwareAuth.js";
+const advertising=await readFile(new URL("./marketplaceAdvertising.js",import.meta.url),"utf8");
+const response=()=>({statusCode:null,body:null,sends:0,status(code){this.statusCode=code;return this;},json(body){this.body=body;this.sends++;return this;}});
+const jwt={verify(token){const all={"valid-current":{sub:"9007199254740993",sv:2},"revoked-session":{sub:"314",sv:4},"deleted-account":{sub:"999",sv:0}};if(!all[token])throw Error("invalid token");return all[token];}};
+const run=async({token,pool,secret="test-secret"})=>{const res=response();const authenticate=createSessionAwareBearerAuthenticator({pool,jwt,jwtSecret:secret});const value=await authenticate({headers:token?{authorization:"Bearer "+token}:{}},res);return {value,res};};
 {
-  const res = responseDouble();
-  const authenticate = createAuthenticate(jwt, "");
-  assert.equal(authenticate({ headers: {} }, res), null, "missing JWT configuration must stop the route");
-  assert.equal(res.statusCode, 503);
-  assert.equal(res.sends, 1, "missing JWT configuration sends exactly one response");
+ const {value,res}=await run({token:"valid-current",secret:""});assert.equal(value,null);assert.equal(res.statusCode,503);assert.equal(res.sends,1);
 }
 {
-  const res = responseDouble();
-  const authenticate = createAuthenticate(jwt, "test-secret");
-  assert.equal(authenticate({ headers: {} }, res), null, "missing bearer token must stop the route");
-  assert.equal(res.statusCode, 401);
-  assert.equal(res.sends, 1, "missing bearer token sends exactly one response");
+ const {value,res}=await run({pool:{query:async()=>({rows:[]})}});assert.equal(value,null);assert.equal(res.statusCode,401);assert.equal(res.sends,1);
 }
 {
-  const res = responseDouble();
-  const authenticate = createAuthenticate(jwt, "test-secret");
-  assert.equal(authenticate({ headers: { authorization: "Bearer invalid-test-token" } }, res), null, "invalid bearer token must stop the route");
-  assert.equal(res.statusCode, 401);
-  assert.equal(res.sends, 1, "invalid bearer token sends exactly one response");
+ const {value,res}=await run({token:"invalid",pool:{query:async()=>({rows:[]})}});assert.equal(value,null);assert.equal(res.statusCode,401);assert.equal(res.sends,1);
 }
 {
-  const res = responseDouble();
-  const authenticate = createAuthenticate(jwt, "test-secret");
-  assert.deepEqual(authenticate({ headers: { authorization: "Bearer valid-test-token" } }, res), { userId: 314 });
-  assert.equal(res.sends, 0, "valid authentication does not send an early response");
+ let id;const {value,res}=await run({token:"valid-current",pool:{query:async(_s,p)=>{id=p[0];return {rows:[{session_version:2}]};}}});assert.deepEqual(value,{userId:"9007199254740993"});assert.equal(id,"9007199254740993");assert.equal(res.sends,0);
 }
-
-const authCallSites = advertising.match(/const auth = authenticate\(req, res\);/g) || [];
-const guardedCallSites = advertising.match(/const auth = authenticate\(req, res\);\s*if \(!auth\) return;/g) || [];
-assert.ok(authCallSites.length > 0, "advertising routes must continue to use the shared auth helper");
-assert.equal(guardedCallSites.length, authCallSites.length, "every route must stop when authentication returns null");
-
-console.log("Marketplace advertising auth failure isolation passed: missing configuration, missing token, invalid token, valid token, and all route guards.");
+{
+ const {value,res}=await run({token:"revoked-session",pool:{query:async()=>({rows:[{session_version:5}]})}});assert.equal(value,null);assert.equal(res.statusCode,401);assert.equal(res.body.error,"session expired; sign in again");
+}
+{
+ const {value,res}=await run({token:"deleted-account",pool:{query:async()=>({rows:[]})}});assert.equal(value,null);assert.equal(res.statusCode,401);
+}
+{
+ const {value,res}=await run({token:"valid-current",pool:{query:async()=>{throw Error("DB down");}}});assert.equal(value,null);assert.equal(res.statusCode,503);
+}
+{
+ const {value,res}=await run({token:"valid-current",pool:null});assert.equal(value,null);assert.equal(res.statusCode,503);
+}
+const awaited=advertising.match(/const auth = await authenticate\(req, res\);/g)||[];
+const unawaited=advertising.match(/const auth = authenticate\(req, res\);/g)||[];
+const calls=advertising.match(/authenticate\(req, res\)/g)||[];
+assert.ok(awaited.length>0);assert.equal(unawaited.length,0);assert.equal(awaited.length,calls.length);
+assert.ok(advertising.includes("createSessionAwareBearerAuthenticator"));
+console.log("Marketplace advertising auth passed: current/revoked/deleted sessions, missing/invalid credentials, database outage, BIGINT and awaited route guards.");

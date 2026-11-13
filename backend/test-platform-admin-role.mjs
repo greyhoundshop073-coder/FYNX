@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
+const ownerId="9007199254740993", adminId="17", queries=[];
+const pool={async query(sql,params=[]){
+  queries.push({sql,params});
+  if(sql.includes("CREATE TABLE IF NOT EXISTS fynx_platform_owner")) return {rows:[],rowCount:0};
+  if(sql.includes("WITH lock AS")&&sql.includes("fynx_platform_owner_bootstrap")) return {rows:[],rowCount:0};
+  if(sql.includes("SELECT owner_user_id FROM fynx_platform_owner")) return {rows:[{owner_user_id:ownerId}],rowCount:1};
+  if(sql.includes("SELECT 1 FROM fynx_admin_roles")) return params[0]===adminId?{rows:[{}],rowCount:1}:{rows:[],rowCount:0};
+  throw new Error("Unexpected role-resolver SQL: "+sql);
+}};
+const resolve=createPlatformAdminRoleResolver(pool);
+assert.equal(await resolve(ownerId),"OWNER");
+assert.equal(await resolve(adminId),"ADMIN");
+assert.equal(await resolve("18"),null);
+assert.equal(await resolve("1"),null,"lowest account ID must not override persisted Owner");
+assert.equal(await resolve("0"),null);
+assert.equal(await resolve("01"),null);
+assert.equal(await resolve("9007199254740993 OR 1=1"),null);
+assert.equal(queries.filter(q=>q.sql.includes("CREATE TABLE IF NOT EXISTS fynx_platform_owner")||q.sql.includes("fynx_platform_owner_bootstrap")).length,2);
+assert.equal(queries.filter(q=>q.sql.includes("SELECT owner_user_id FROM fynx_platform_owner")).length,4);
+console.log("Platform Owner resolver passed: persisted identity, BIGINT-safe IDs, Admin/non-admin membership and one-time bootstrap.");

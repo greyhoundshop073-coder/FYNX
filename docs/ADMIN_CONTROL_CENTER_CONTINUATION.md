@@ -250,3 +250,34 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 5. OWNER-only direct API and UI for Music Library upload/publish/hide/restore/remove; preserve current music contribution.
 
 ---
+
+---
+
+## Group 3 Admin identity, session and protected-list hardening — 13 November 2026
+
+### Prior-stage evidence
+- PR #536 head: `93c13cc1a4ff65e184f4815fefdcf6c9aff840aa`; canonical integration base: `c8d0777dfe06089552fdaecc4cc888ea33bd6cbe`.
+- Android Build `43454383887`, Backend CI `43454384063`, and Chat/Groups `43454384222` all passed on that head.
+- Android instrumentation: 57 tests, zero failures, one skipped. Admin preview captured (166110 bytes); artifact: https://github.com/greyhoundshop073-coder/FYNX/actions/runs/43454383887/artifacts/14052959544
+- Preview used read-only sample data. Live backend probes and PR APK upload were skipped; no canonical APK was published.
+
+### Five verified Group 3 findings
+1. Marketplace seasonal-promotion authorization inferred OWNER from lowest user ID rather than persisted `fynx_platform_owner`.
+2. Music Library authorization independently repeated the lowest-user-ID OWNER lookup.
+3. Marketplace advertising JWT verification did not compare `claims.sv` with `users.session_version`; reset-password-revoked sessions could remain valid until token expiry.
+4. Admin seasonal-promotion history lacked an explicit `private, no-store` cache policy.
+5. OWNER-only Music Library history lacked an explicit `private, no-store` cache policy.
+
+### Grouped corrections
+- Added a shared platform role resolver backed by the persisted Owner singleton; a locked one-time legacy bootstrap runs only when no Owner row exists. BIGINT IDs remain strings.
+- Routed Admin Control Center, Marketplace seasonal promotion and Music Library authorization through the shared resolver. Existing OWNER-only Music mutation rules remain unchanged.
+- Replaced Marketplace advertising's signature-only auth with session-version-aware auth; all 17 advertising route callsites await verification, and database outages fail closed with HTTP 503.
+- Added `Cache-Control: private, no-store` to both protected Admin lists.
+- Added behavioral tests for Owner/Admin/non-admin roles, BIGINT IDs, revoked/deleted sessions, missing/invalid tokens and database outages. Existing campaign schedule, overlap, artwork ownership and audit-transaction code was preserved.
+- No login flow, UI, Chat/Groups, Camera, Home/Feed, Status, Wallet, Marketplace UI, Music UI or APK code was modified. PR #436's changed files were not edited.
+
+### Verification required on the new head
+- Backend CI must run the new role resolver behavior test, expanded advertising session-auth test, existing seasonal-promotion verifier and PostgreSQL schema migration test.
+- Android Build and Chat/Groups parity must pass on the updated PR #536 head.
+- Live Owner/Admin/non-admin calls, production artwork retrieval and full campaign lifecycle remain unverified until production backend and credentialed test accounts are reachable. A skipped reachability probe is not a pass.
+- Keep PR #536 open/unmerged pending explicit approval. Keep PR #436 untouched. Only build/publish the canonical APK from the canonical integration branch after approved integration.
