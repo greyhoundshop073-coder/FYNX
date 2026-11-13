@@ -138,6 +138,10 @@ object FynxConversationPreferences {
     fun groupMuted(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("mute", false)
 
+    fun setGroupMuted(context: Context, groupId: String, muted: Boolean) {
+        group(context, groupId).edit().putBoolean("mute", muted).apply()
+    }
+
     fun groupMembersCanSendMessages(context: Context, groupId: String): Boolean =
         group(context, groupId).getBoolean("send_messages", true)
 
