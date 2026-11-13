@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Send
@@ -346,6 +347,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showAttachmentMenu by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
+    var editingMessageId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var syncMessage by remember { mutableStateOf<String?>(null) }
     var remotePermissions by remember(groupId) { mutableStateOf<FynxGroupRemoteClient.RemotePermissions?>(null) }
@@ -367,11 +369,17 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
     val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
 
-    fun shareGroupTextMessage(content: String) {
+    fun shareGroupTextMessage(content: String, replyTarget: String? = null) {
+        val normalized = content.trim()
         if (!canSendMessages) { syncMessage = "Sending messages is disabled in Group Settings."; return }
-        val message = ChatMessage(content, true, UUID.randomUUID().toString(), delivered = false, read = false)
-        messages = messages + message
-        FynxChatStore.save(context, "group_$groupId", messages)
+        if (normalized.isBlank() || sending || selectedGroup == null) return
+        val message = ChatMessage(normalized, true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyTarget)
+        val updatedMessages = messages + message
+        messages = updatedMessages
+        FynxChatStore.save(context, "group_$groupId", updatedMessages)
+        text = ""
+        replyToId = null
+        sending = true
         scope.launch {
             FynxGroupRemoteClient.sendMessage(context, groupId, message)
                 .onSuccess { remote ->
@@ -380,11 +388,33 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = null
                 }
-                .onFailure { error ->
+                .onFailure {
                     messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                 }
+            sending = false
+        }
+    }
+
+    fun submitGroupEdit() {
+        val messageId = editingMessageId ?: return
+        val updatedText = text.trim()
+        if (updatedText.isBlank()) { syncMessage = "Edited message cannot be empty."; return }
+        if (sending) return
+        sending = true
+        scope.launch {
+            FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)
+                .onSuccess { remote ->
+                    val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                    messages = messages.map { if (it.id == mapped.id) mapped else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    text = ""
+                    editingMessageId = null
+                    syncMessage = null
+                }
+                .onFailure { syncMessage = "Message edit could not be saved. Your text is still here; try again." }
+            sending = false
         }
     }
     fun sendGroupAttachment(uri: android.net.Uri, type: String) {
@@ -945,7 +975,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp)
                                 Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
-                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
+                                    if (message.fromMe) {
+                                        Spacer(Modifier.width(4.dp))
+                                        // Group history has no per-member delivery/read receipts.
+                                        Text(if (message.delivered) "✓" else "◷", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                    }
                                 }
                                 }
                             }
@@ -964,7 +998,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; editingMessageId = null; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                if (message.fromMe && message.text.isNotBlank() && !message.deleted) {
+                                    DropdownMenuItem(text = { Text("Edit") }, onClick = {
+                                        editingMessageId = message.id
+                                        replyToId = null
+                                        text = message.text
+                                        reactionMessageId = null
+                                    }, leadingIcon = { Icon(Icons.Default.Edit, null) })
+                                }
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = {
                                     val clip = android.content.ClipData.newPlainText("FYNX message", message.text)
                                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
@@ -1080,6 +1122,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                     }
                 }
+                if (editingMessageId != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Editing message", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = glassPalette.doodleSecondary)
+                        TextButton(enabled = !sending, onClick = { editingMessageId = null; text = "" }) { Text("Cancel") }
+                    }
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1113,27 +1164,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         ),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
-                            if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyToId)
-                                messages = messages + optimistic
-                                FynxChatStore.save(context, "group_$groupId", messages)
-                                text = ""; replyToId = null; sending = true
-                                scope.launch {
-                                    FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                        .onSuccess { remote ->
-                                            val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                            messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                            FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = null
-                                        }
-                                        .onFailure { error ->
-                                            messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
-                                            FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
-                                        }
-                                    sending = false
-                                }
-                            }
+                            if (editingMessageId != null) submitGroupEdit()
+                            else shareGroupTextMessage(text, replyToId)
                         })
                     )
                     Spacer(Modifier.width(6.dp))
@@ -1146,34 +1178,29 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             onClick = {
                                 when {
                                     voiceRecording -> finishGroupVoiceRecording()
-                                    text.isNotBlank() && !sending && selectedGroup != null -> {
-                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                                        messages = messages + optimistic
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        text = ""; replyToId = null; sending = true
-                                        scope.launch {
-                                            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                                .onSuccess { remote ->
-                                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                                    messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = null
-                                                }
-                                                .onFailure { error ->
-                                                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
-                                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
-                                                }
-                                            sending = false
-                                        }
-                                    }
+                                    editingMessageId != null -> submitGroupEdit()
+                                    text.isNotBlank() -> shareGroupTextMessage(text, replyToId)
                                     !canSendMedia -> syncMessage = "Sending voice messages is disabled in Group Settings."
                                     else -> groupVoicePermission.launch(Manifest.permission.RECORD_AUDIO)
                                 }
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(if (voiceRecording) Icons.Default.Stop else Icons.Default.Mic, if (voiceRecording) "Stop recording and send" else "Record voice message", modifier = Modifier.size(23.dp), tint = Color.White)
+                            Icon(
+                                when {
+                                    voiceRecording -> Icons.Default.Stop
+                                    editingMessageId != null || text.isNotBlank() -> Icons.Default.Send
+                                    else -> Icons.Default.Mic
+                                },
+                                when {
+                                    voiceRecording -> "Stop recording and send"
+                                    editingMessageId != null -> "Save edited message"
+                                    text.isNotBlank() -> "Send group message"
+                                    else -> "Record voice message"
+                                },
+                                modifier = Modifier.size(23.dp),
+                                tint = Color.White
+                            )
                         }
                     }
                 }
