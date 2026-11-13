@@ -316,8 +316,10 @@ require("isPositivePostgresBigint(targetId)" in backend and
         "account, report and appeal route IDs must all reject values outside PostgreSQL BIGINT")
 require("app.get('/api/admin/users'" in backend and
         "if(!(await requireAdmin(req,res)))return" in backend and
-        "FROM users WHERE id<>$3 AND (username ILIKE $1 OR display_name ILIKE $2)" in backend,
-        "Admin People search must use its own authenticated endpoint and include accounts hidden by social block filtering")
+        "FROM users u" in backend and
+        "LEFT JOIN fynx_account_safety s ON s.user_id=u.id" in backend and
+        "POSITION(LOWER($1) IN LOWER(COALESCE(u.username,'')))>0" in backend,
+        "Admin People search must use its own authenticated endpoint, include accounts hidden by social block filtering, and read the enforced account state")
 require("data class AdminUser(" in client and "FynxAdminClient.searchUsers(context, targetQuery)" in source and
         "targets.forEach { user ->" in source and "FynxSocialClient.searchUsers(context, targetQuery)" not in source and
         "targets.take(5)" not in source,
