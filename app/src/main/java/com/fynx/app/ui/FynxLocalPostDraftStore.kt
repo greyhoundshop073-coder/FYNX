@@ -100,6 +100,12 @@ object FynxLocalPostDraftStore {
                     val alignedEditSources = validMedia.map { it.third.first }
                     val alignedEditStates = validMedia.map { it.third.second }
                     val friendIds = item.optJSONArray("selectedAudienceIds") ?: JSONArray()
+                    // Legacy Home music picks have no catalogue row ID (0L), but the
+                    // authenticated media ID is still sufficient to restore the selection.
+                    val savedMusicMediaId = item.optLong("musicMediaId").takeIf { it > 0L }
+                    val savedMusicId = savedMusicMediaId?.let {
+                        item.optLong("musicId").coerceAtLeast(0L)
+                    }
                     add(
                         FynxLocalPostDraft(
                             id = item.optString("id"),
@@ -113,8 +119,8 @@ object FynxLocalPostDraftStore {
                             mediaTypes = alignedTypes,
                             mediaEditSourcePaths = alignedEditSources,
                             mediaEditStates = alignedEditStates,
-                            musicId = item.optLong("musicId").takeIf { it > 0L },
-                            musicMediaId = item.optLong("musicMediaId").takeIf { it > 0L },
+                            musicId = savedMusicId,
+                            musicMediaId = savedMusicMediaId,
                             musicTitle = item.optString("musicTitle").takeIf { it.isNotBlank() },
                             musicArtist = item.optString("musicArtist").takeIf { it.isNotBlank() },
                             musicDurationMs = item.optLong("musicDurationMs").coerceAtLeast(0L),

@@ -179,6 +179,53 @@ class CameraTextOverlayInstrumentationTest {
     }
 
     @Test
+    fun localPostDraftRestoresLegacyMusicWhenOnlyMediaIdIsKnown() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyTrack = FynxMusicCatalogueTrack(
+            id = 0L,
+            mediaId = 987654321L,
+            title = "Legacy music selection",
+            artist = "FYNX",
+            durationMs = 12_400L
+        )
+        var draftId: String? = null
+        try {
+            val saved = FynxLocalPostDraftStore.save(
+                context = context,
+                existingId = null,
+                caption = "",
+                visibility = FynxPostVisibility.FRIENDS_ONLY,
+                audience = FynxPostAudience.FRIENDS,
+                selectedAudienceIds = emptySet(),
+                location = null,
+                textBackground = null,
+                media = emptyList(),
+                music = legacyTrack
+            ).getOrThrow()
+            draftId = saved.id
+
+            val reopened = FynxLocalPostDraftStore.list(context).firstOrNull { it.id == saved.id }
+                ?: error("The music-only post draft could not be reopened")
+            assertEquals("Unknown catalogue ID must remain the explicit legacy sentinel", 0L, reopened.musicId ?: -1L)
+            assertEquals(legacyTrack.mediaId, reopened.musicMediaId)
+            assertEquals(legacyTrack.title, reopened.musicTitle)
+            assertEquals(legacyTrack.artist, reopened.musicArtist)
+            assertEquals(legacyTrack.durationMs, reopened.musicDurationMs)
+
+            val restoredTrack = FynxMusicCatalogueTrack(
+                id = reopened.musicId ?: error("The legacy music ID sentinel was lost"),
+                mediaId = reopened.musicMediaId ?: error("The legacy music media ID was lost"),
+                title = reopened.musicTitle.orEmpty(),
+                artist = reopened.musicArtist.orEmpty(),
+                durationMs = reopened.musicDurationMs
+            )
+            assertEquals(legacyTrack, restoredTrack)
+        } finally {
+            draftId?.let { FynxLocalPostDraftStore.delete(context, it) }
+        }
+    }
+
+    @Test
     fun photoTextOverlayIsRenderedAtEachSelectedPositionAndKeepsSourceDimensions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val source = File(context.cacheDir, "fynx-text-overlay-source-${System.currentTimeMillis()}.jpg")

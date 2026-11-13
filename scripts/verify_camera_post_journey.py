@@ -510,6 +510,12 @@ checks.extend([
      and "onCapturedWithTextEdits" in camera
      and "mediaDraftCodecPreservesEveryEditableTextOverlayProperty" in overlay_test
      and "localPostDraftKeepsEditableMediaSourceAndOverlayStateUntilDelete" in overlay_test),
+    ("Legacy music-only drafts restore by media ID even when the catalogue ID sentinel is zero",
+     "val savedMusicMediaId = item.optLong(\"musicMediaId\").takeIf { it > 0L }" in draft_store
+     and "val savedMusicId = savedMusicMediaId?.let" in draft_store
+     and "localPostDraftRestoresLegacyMusicWhenOnlyMediaIdIsKnown" in overlay_test
+     and "Unknown catalogue ID must remain the explicit legacy sentinel" in overlay_test
+     and "id = draft.musicId" in home),
     ("Video export validation checks every overlay at its own selected time and media position",
      "verifyFynxVideoEditOutput(source, output, videoStyle, visibleText)" in camera
      and "selected video text has no visible interval" in video_effects
