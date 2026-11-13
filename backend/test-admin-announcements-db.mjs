@@ -245,6 +245,15 @@ try {
   const publicAfterUnpublish = await invoke("GET", "/api/announcements", { token: "regular" });
   assert.ok(!publicAfterUnpublish.body.announcements.some(item => item.id === scheduledId));
 
+  const successfulEdit = await invoke("PATCH", "/api/admin/announcements/:announcementId", {
+    token: "admin",
+    params: { announcementId: imageAnnouncementId },
+    body: { title: "Announcement with artwork updated", published: true }
+  });
+  assert.equal(successfulEdit.statusCode, 200, "Admin must be able to edit an existing announcement");
+  const editedRow = await db.query("SELECT title FROM fynx_announcements WHERE id=$1", [imageAnnouncementId]);
+  assert.equal(editedRow.rows[0].title, "Announcement with artwork updated");
+
   // Force audit failure: the announcement mutation and its audit row must roll back together.
   await db.query(`
     CREATE FUNCTION reject_admin_audit() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -270,7 +279,7 @@ try {
   });
   assert.equal(failedEdit.statusCode, 500, "audit failure must abort announcement edits");
   const unchanged = await db.query("SELECT title FROM fynx_announcements WHERE id=$1", [imageAnnouncementId]);
-  assert.equal(unchanged.rows[0].title, "Announcement with artwork", "failed edit must restore the original content");
+  assert.equal(unchanged.rows[0].title, "Announcement with artwork updated", "failed edit must restore the last committed content");
   await db.query("DROP TRIGGER reject_admin_audit_trigger ON fynx_admin_activity; DROP FUNCTION reject_admin_audit();");
 
   // Exercise both pages against a real PostgreSQL dataset larger than one Admin page.

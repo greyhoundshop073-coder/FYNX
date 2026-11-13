@@ -353,3 +353,10 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 ### External verification
 - The test uses the CI PostgreSQL service and does not require live production credentials, providers or device access.
 - Physical-device Admin interaction and actual production Owner/Admin authorization remain separate certification requirements; emulator visual capture is not a substitute for live backend authorization.
+
+
+### Group 6 CI review correction — 13 November 2026
+- The first Backend CI run failed in the repository's shared-pool contract because the test seam renamed the required module-level declaration from `const pool = getFynxDatabasePool()` to `defaultPool`. That violated an existing architectural guard even though it still called the shared factory.
+- The route test seam now preserves the canonical module-level `pool` binding and defaults the optional `databasePool` argument to that binding; route handlers use a scoped `routePool`. No separate pool is constructed.
+- Test review also found the audit test asserted `ANNOUNCEMENT_UPDATED` without a successful content-edit case. A successful edit is now committed before the forced audit-failure edit, and the rollback assertion checks that the last committed title remains unchanged.
+- Re-run the exact-head Backend, Android and Chat/Groups workflows. The route-level PostgreSQL test must be confirmed successful before claiming Group 6 complete.
