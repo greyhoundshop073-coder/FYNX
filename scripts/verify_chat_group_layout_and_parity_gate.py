@@ -21,7 +21,7 @@ require("active group conversation has bottom content padding", "contentPadding 
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
-require("active group conversation loads authenticated remote history", "FynxGroupRemoteClient.loadMessages(context, groupId)" in ACTIVE_GROUP)
+require("active group conversation loads authenticated paginated remote history", "FynxGroupRemoteClient.loadMessagePage(context, groupId)" in ACTIVE_GROUP)
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
