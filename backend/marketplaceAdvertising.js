@@ -314,9 +314,18 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
     try {
       const role = await requireMarketplaceAdmin(req, res, auth);
       if (!role) return;
-      const result = await pool.query("SELECT * FROM marketplace_seasonal_promotions ORDER BY starts_at DESC, id DESC LIMIT 100");
+      const limitValue = Number(req.query?.limit);
+      const limit = Number.isInteger(limitValue) ? Math.min(100, Math.max(1, limitValue)) : 50;
+      const offsetValue = Number(req.query?.offset);
+      const offset = Number.isInteger(offsetValue) ? Math.min(10000, Math.max(0, offsetValue)) : 0;
+      const result = await pool.query(
+        "SELECT * FROM marketplace_seasonal_promotions ORDER BY starts_at DESC, id DESC LIMIT $1 OFFSET $2",
+        [limit + 1, offset]
+      );
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
       res.set("Cache-Control", "private, no-store");
-      return res.json({ promotions: result.rows.map(seasonalPromotionPayload) });
+      return res.json({ promotions: rows.map(seasonalPromotionPayload), offset, limit, hasMore });
     } catch (error) {
       console.error("[fynx-ads] seasonal admin list unavailable", error);
       return res.status(500).json({ error: "seasonal promotion list unavailable" });
