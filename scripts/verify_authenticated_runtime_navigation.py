@@ -2179,91 +2179,97 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # This tests the user-controlled path independently of the emulator's ASR model support.
     # The video editor keeps its style and caption controls in a scrollable bottom panel.
     # Scroll that panel itself so the manual field is genuinely visible before querying it.
-    # The editor panel is a bottom-anchored ScrollView. Read its actual bounds
-    # from UIAutomator and keep the full swipe inside that viewport; screen-relative
-    # swipes can start in the footer and finish above the panel without scrolling it.
-    vertical_viewports = []
-    for node in nodes(caption_xml):
-        if node.attrib.get("class") != "android.widget.ScrollView":
-            continue
-        if node.attrib.get("scrollable", "false").lower() != "true":
-            continue
-        bounds = node.attrib.get("bounds", "")
-        try:
-            left_top, right_bottom = bounds.split("][", 1)
-            left, top = map(int, left_top.strip("[]").split(","))
-            right, bottom = map(int, right_bottom.strip("[]").split(","))
-        except (ValueError, IndexError):
-            continue
-        if right > left and bottom - top >= 80:
-            vertical_viewports.append((left, top, right, bottom))
-
-    if vertical_viewports:
-        left, top, right, bottom = max(
-            vertical_viewports, key=lambda viewport: viewport[3] - viewport[1]
-        )
-        scroll_x = str((left + right) // 2)
-        inset = max(24, min(48, (bottom - top) // 10))
-        scroll_from = str(bottom - inset)
-        scroll_to = str(top + inset)
-        for scroll_attempt in range(8):
-            if find_control(caption_xml, ["Video captions"]):
-                break
-            run("adb", "shell", "input", "swipe", scroll_x, scroll_from, scroll_x, scroll_to, "450")
-            time.sleep(0.45)
-            caption_xml = dump_ui(
-                f"{prefix}-camera-video-manual-caption-scroll-{scroll_attempt + 1}.xml"
-            ) or caption_xml
-    else:
-        FAILURES.append(prefix + ": video editor did not expose a vertical scroll viewport for manual captions")
+    # A TextField can exist in UIAutomator while its bounds are clipped by the bottom
+    # edge of its editor ScrollView. Existence alone is not proof it can receive a tap.
+    # The old check tapped a clipped field, then Back dismissed the Camera dialog.
+    caption_xml = dump_ui(f"{prefix}-camera-video-caption-initial-viewport.xml") or caption_xml
+    for scroll_attempt in range(10):
+        if control_is_safely_revealed_in_scroll_view(caption_xml, ["Video captions"], bottom_margin=72):
+            break
+        geometry = control_scroll_view_geometry(caption_xml, ["Video captions"])
+        if not geometry:
+            break
+        _, viewport = geometry
+        left, top, right, bottom = viewport
+        scroll_x = (left + right) // 2
+        inset = max(32, min(56, (bottom - top) // 9))
+        scroll_from, scroll_to = bottom - inset, top + inset
+        if scroll_from <= scroll_to:
+            break
+        run("adb", "shell", "input", "swipe", str(scroll_x), str(scroll_from), str(scroll_x), str(scroll_to), "450")
+        time.sleep(0.45)
+        caption_xml = dump_ui(
+            f"{prefix}-camera-video-manual-caption-scroll-{scroll_attempt + 1}.xml"
+        ) or caption_xml
 
     manual_caption_field = find_control(caption_xml, ["Video captions"])
-    if not manual_caption_field:
-        FAILURES.append(prefix + ": manual Video captions field was not visible in the video editor")
-    else:
-        report.append("- PASS manual Video captions field became visible inside the scrolled video-editor viewport")
-        _, field_x, field_y = manual_caption_field
-        run("adb", "shell", "input", "tap", str(field_x), str(field_y))
-        time.sleep(1.0)
-        input_text_slowly("FYNXcap")
-        time.sleep(0.4)
-        manual_keyboard_xml = ""
-        caption_deadline = time.monotonic() + 6.0
-        while time.monotonic() < caption_deadline:
-            time.sleep(0.4)
-            manual_keyboard_xml = dump_ui(f"{prefix}-camera-video-manual-caption-keyboard.xml") or manual_keyboard_xml
-            if "FYNXcap" in manual_keyboard_xml:
-                break
-        screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
+    if not manual_caption_field or not control_is_safely_revealed_in_scroll_view(
+        caption_xml, ["Video captions"], bottom_margin=72
+    ):
+        FAILURES.append(
+            prefix + ": manual Video captions field was not fully exposed inside its scroll viewport; "
+            + visible_marker_summary(caption_xml)
+        )
+        screenshot(f"{prefix}-camera-video-manual-caption-not-revealed.png")
+        return camera_return_to_home(caption_xml, prefix + "-caption-field-not-revealed")
+    report.append("- PASS manual Video captions field is safely inside its scroll viewport with a clear lower tap margin")
+    (ROOT / f"{prefix}-camera-video-caption-field-revealed.xml").write_text(
+        caption_xml + chr(10), encoding="utf-8"
+    )
+    _, field_x, field_y = manual_caption_field
+    run("adb", "shell", "input", "tap", str(field_x), str(field_y))
+    time.sleep(0.8)
+    input_text_slowly("FYNXcap")
+    time.sleep(0.4)
+    manual_keyboard_xml = ""
+    caption_deadline = time.monotonic() + 8.0
+    while time.monotonic() < caption_deadline:
+        manual_keyboard_xml = dump_ui(
+            f"{prefix}-camera-video-manual-caption-keyboard.xml"
+        ) or manual_keyboard_xml
         if "FYNXcap" in manual_keyboard_xml:
-            report.append("- PASS video editor exposes the entered caption while the keyboard is open")
-        else:
-            # Gboard can own the accessibility root while visible and omit the app EditText node.
-            # The authoritative field-value assertion runs after the keyboard is dismissed below.
-            report.append("- NOTE Gboard owned the keyboard-open accessibility hierarchy; caption value will be verified after keyboard dismissal.")
-        keyboard_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
-        if "mInputShown=true" in keyboard_state or "isInputViewShown=true" in keyboard_state:
-            report.append("- PASS video caption field opens the keyboard for editing")
-        else:
-            report.append("- NOTE keyboard visibility could not be independently read from the input-method service")
+            break
+        time.sleep(0.4)
+    screenshot(f"{prefix}-camera-video-manual-caption-keyboard.png")
+    keyboard_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
+    ime_visible = (
+        "mInputShown=true" in keyboard_state
+        or "isInputViewShown=true" in keyboard_state
+    )
+    caption_value_entered = "FYNXcap" in manual_keyboard_xml
+    if caption_value_entered:
+        report.append("- PASS video editor accepts the typed manual caption")
+    if ime_visible:
+        report.append("- PASS video caption field exposes an active keyboard/input state")
         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(0.5)
         caption_xml = ""
-        caption_deadline = time.monotonic() + 5.0
+        caption_deadline = time.monotonic() + 7.0
         while time.monotonic() < caption_deadline:
-            # KEYCODE_BACK can dismiss a transient editor overlay before Gboard finishes
-            # hiding. Wait for the app hierarchy to return and read the persisted field value.
             run("adb", "get-state", timeout=8)
-            caption_xml = dump_ui(f"{prefix}-camera-video-manual-caption-dismissed.xml") or caption_xml
+            caption_xml = dump_ui(
+                f"{prefix}-camera-video-manual-caption-dismissed.xml"
+            ) or caption_xml
             if "FYNXcap" in caption_xml:
+                break
+            # Never send a second Back key: once the IME is gone it would close Camera.
+            current_input_state = run("adb", "shell", "dumpsys", "input_method").stdout or ""
+            if not ("mInputShown=true" in current_input_state or "isInputViewShown=true" in current_input_state):
                 break
             time.sleep(0.5)
         if "FYNXcap" in caption_xml:
             report.append("- PASS manually entered video caption survives keyboard dismissal")
         else:
-            FAILURES.append(prefix + ": video caption text was lost after dismissing the keyboard")
+            FAILURES.append(prefix + ": video caption text was not present after dismissing the verified keyboard")
         screenshot(f"{prefix}-camera-video-captions.png")
         editor = caption_xml
+    else:
+        if not caption_value_entered:
+            FAILURES.append(prefix + ": safely revealed Video captions field neither opened the keyboard nor accepted text")
+        else:
+            report.append("- NOTE the emulator accepted caption text but did not expose a verifiable IME; no Back key was sent")
+        # Preserve the editor for subsequent diagnostics; Back here would dismiss Camera.
+        editor = dump_ui(f"{prefix}-camera-video-caption-focus-failed.xml") or manual_keyboard_xml or caption_xml
 
     # Timing is available only after a text overlay is created and selected. The
     # previous verifier searched for the timing title before selecting any overlay.
@@ -3398,6 +3404,55 @@ def _node_bounds(node):
         return left, top, right, bottom
     except (ValueError, IndexError):
         return None
+
+def control_scroll_view_geometry(xml_text: str, labels: list[str]):
+    """Return a matched control's bounds and its smallest containing scroll viewport."""
+    if not xml_text:
+        return None
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    target = _find_control_node(root, [label.casefold() for label in labels])
+    target_bounds = _node_bounds(target) if target is not None else None
+    if not target_bounds:
+        return None
+    center_x = (target_bounds[0] + target_bounds[2]) // 2
+    center_y = (target_bounds[1] + target_bounds[3]) // 2
+    containers = []
+    for node in root.iter("node"):
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        if node.attrib.get("class") != "android.widget.ScrollView":
+            continue
+        viewport = _node_bounds(node)
+        if not viewport:
+            continue
+        left, top, right, bottom = viewport
+        if left <= center_x <= right and top <= center_y <= bottom and right > left and bottom > top:
+            containers.append(((right - left) * (bottom - top), viewport))
+    if not containers:
+        return None
+    _, viewport = min(containers, key=lambda item: item[0])
+    return target_bounds, viewport
+
+
+def control_is_safely_revealed_in_scroll_view(
+    xml_text: str, labels: list[str], *, bottom_margin: int = 72, top_margin: int = 12
+) -> bool:
+    """Require the whole target inside its scroll viewport with room below for a reliable tap."""
+    geometry = control_scroll_view_geometry(xml_text, labels)
+    if not geometry:
+        return False
+    target, viewport = geometry
+    return (
+        target[0] >= viewport[0]
+        and target[2] <= viewport[2]
+        and target[1] >= viewport[1] + top_margin
+        and target[3] <= viewport[3] - bottom_margin
+    )
+
+
 
 
 def verify_camera_controls_fit_safe_area(xml_text: str, labels: list[str], prefix: str) -> bool:

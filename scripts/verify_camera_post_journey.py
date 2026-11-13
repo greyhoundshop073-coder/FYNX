@@ -56,10 +56,13 @@ checks = [
      and "videoCaptionMessage?.let { message ->" in camera
      and "message,\n                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)," in camera
      and "style = MaterialTheme.typography.bodySmall" in camera),
-    ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
-     'find_control(caption_xml, ["Video captions"])' in runtime
+    ("Runtime fully reveals the video caption field before tapping and only dismisses a verified IME",
+     'control_is_safely_revealed_in_scroll_view(caption_xml, ["Video captions"]' in runtime
+     and 'control_scroll_view_geometry(caption_xml, ["Video captions"])' in runtime
+     and "bottom_margin=72" in runtime
+     and "safely revealed Video captions field neither opened the keyboard nor accepted text" in runtime
+     and "Never send a second Back key" in runtime
      and 'input_text_slowly("FYNXcap")' in runtime
-     and "FYNXcap" in runtime
      and "manually entered video caption survives keyboard dismissal" in runtime),
     ("On-device captions transcode supported device audio formats to PCM16 WAV before speech recognition",
      'fynx_caption_audio_" + System.currentTimeMillis() + ".wav"' in video_effects
