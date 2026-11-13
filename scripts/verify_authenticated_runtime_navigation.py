@@ -3215,8 +3215,8 @@ if CHAT_GROUPS_VISUALS_ONLY:
     report.append("- Focused Chat and Groups visual mode: captures the installed production Chat list, private ConversationPanel, Groups list and group ConversationPanel. It uses the disposable emulator's explicit debug-local entry when backend health is unavailable; this is UI evidence, not server authentication.")
     if error:
         report += ["", "## Result: BLOCKED", "- Chat/Groups UI entry could not reach Home: " + error]
-        (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
-        print("\\n".join(report))
+        (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
         raise SystemExit(2)
 
     night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
@@ -3230,7 +3230,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         FAILURES.append("Home -> Chat did not reach the real Chat and Groups surface")
     else:
         screenshot("authenticated-chat.png")
-        (ROOT/"authenticated-chat.xml").write_text(chat_xml+"\\n", encoding="utf-8")
+        (ROOT/"authenticated-chat.xml").write_text(chat_xml+"\n", encoding="utf-8")
         report.append("- PASS: captured the actual Chat list surface from the installed APK.")
 
         # Open an existing conversation where available; otherwise use the account's
@@ -3249,7 +3249,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
             or find_control(private_xml, ["No messages here yet"])
         ):
             screenshot("private-chat-inside.png")
-            (ROOT/"private-chat-inside.xml").write_text(private_xml+"\\n", encoding="utf-8")
+            (ROOT/"private-chat-inside.xml").write_text(private_xml+"\n", encoding="utf-8")
             report.append("- PASS: captured the real private ConversationPanel.")
         else:
             FAILURES.append("Chat list and account deep link did not expose the real private ConversationPanel.")
@@ -3265,7 +3265,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         FAILURES.append("Chat -> Groups did not expose the real Groups list.")
     else:
         screenshot("authenticated-groups.png")
-        (ROOT/"authenticated-groups.xml").write_text(groups_xml+"\\n", encoding="utf-8")
+        (ROOT/"authenticated-groups.xml").write_text(groups_xml+"\n", encoding="utf-8")
         report.append("- PASS: captured the actual Groups list surface from the installed APK.")
         group_xml = tap_first_real_chat_or_group_if_present(groups_xml, "group-chat-entry")
         if not group_xml:
@@ -3280,7 +3280,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
             or find_control(group_xml, ["Messaging is restricted", "No messages here yet", "Group unavailable"])
         ):
             screenshot("group-chat-inside.png")
-            (ROOT/"group-chat-inside.xml").write_text(group_xml+"\\n", encoding="utf-8")
+            (ROOT/"group-chat-inside.xml").write_text(group_xml+"\n", encoding="utf-8")
             if find_control(group_xml, ["Group unavailable"]):
                 report.append("- LIMITATION: group ConversationPanel route rendered its explicit unavailable state; no group record was fabricated.")
             else:
@@ -3301,8 +3301,8 @@ if CHAT_GROUPS_VISUALS_ONLY:
                "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
-    (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
-    print("\\n".join(report))
+    (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+    print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 
 if MUSIC_VISUALS_ONLY:
