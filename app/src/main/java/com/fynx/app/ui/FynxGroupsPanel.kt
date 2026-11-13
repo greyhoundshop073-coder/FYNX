@@ -858,7 +858,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!message.fromMe) {
-                            FynxRemoteProfileAvatar(mediaId = null, contentDescription = message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Group member", modifier = Modifier.size(32.dp), ownerUsername = message.senderUsername)
+                            FynxAvatar(message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Group member", Modifier.size(32.dp), ownerUsername = message.senderUsername)
                         }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe) {
