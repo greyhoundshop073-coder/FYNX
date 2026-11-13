@@ -21,9 +21,18 @@ backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_te
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
-    'requiresAuthentication = !isPublicAuthPath(path)',
+    'val requestToken = if (isPublicAuthPath(path)) null else accessToken(context)',
+    'val requestToken = accessToken(context)',
+    'internal fun shouldClearRejectedAccessToken',
+    'shouldClearRejectedAccessToken(requestToken, accessToken(context))',
+    'shouldClearRejectedAccessToken(token, accessToken(context))',
+    'executeRequest(context, root, method, path, body, requestToken)',
+    'executeStreamingRequest(context, root, path, body, requestToken, onEvent)',
+    'downloadOnce(context, target, temporary, maxBytes, requestToken)',
     'FynxSecureTokenStore',
 ]
+if backend.count("shouldClearRejectedAccessToken(") != 4:
+    violations.append("all three authenticated transport paths must compare the rejected token with the current session before clearing it")
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
