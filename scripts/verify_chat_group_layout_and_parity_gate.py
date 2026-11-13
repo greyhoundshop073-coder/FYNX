@@ -18,7 +18,8 @@ def require(label, condition):
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
-require("Pure Black Glass uses only true black gradient stops, so its screen and header cannot turn navy", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in GLASS_THEME and "Color(0xFF080B18)" not in GLASS_THEME and "Color(0xFF182B52)" not in GLASS_THEME)
+PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
+require("Pure Black Glass uses only true black background gradient stops while preserving other themes", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in PURE_BLACK_PALETTE and "Color(0xFF080B18)" not in PURE_BLACK_PALETTE and "Color(0xFF182B52)" not in PURE_BLACK_PALETTE and "FynxGlassThemeId.AURORA" in GLASS_THEME and "FynxGlassThemeId.EMERALD" in GLASS_THEME)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
