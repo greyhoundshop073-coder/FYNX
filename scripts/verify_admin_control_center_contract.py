@@ -355,6 +355,12 @@ require("const userIdInput=req.body?.userId" in grant_route and
 require("const userId=String(req.params.userId??'').trim()" in revoke_route and
         "isPositivePostgresBigint(userId)" in revoke_route and "Number(" not in revoke_route,
         "Admin revocations must validate and preserve the exact route ID")
+workflow_file = (ROOT / ".github/workflows/fynx-backend-ci.yml").read_text(encoding="utf-8")
+require("databasePool = defaultPool" in backend and "jwtApi = jwt" in backend and
+        "jwtSecret = JWT_SECRET" in backend,
+        "Admin route registration must permit isolated test dependencies while preserving production defaults")
+require("node test-admin-announcements-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin announcement route lifecycle test")
 require("app.get('/api/admin/users'" in backend and
         "if(!(await requireAdmin(req,res)))return" in backend and
         "FROM users u" in backend and

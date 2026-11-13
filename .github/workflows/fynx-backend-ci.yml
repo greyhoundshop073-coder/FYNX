@@ -254,6 +254,8 @@ jobs:
         run: |
           node verify-stage15h-admin.mjs
           node test-admin-auth-session-version.mjs
+      - name: Run Admin announcement PostgreSQL route integration tests
+        run: node test-admin-announcements-db.mjs
       - name: Run Marketplace Price Watch verification
         run: node verify-marketplace-price-watch.mjs
       - name: Run marketplace financial reconciliation guard

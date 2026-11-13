@@ -333,3 +333,23 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 ### Verification required
 - Backend CI must pass `test-platform-admin-role.mjs`, `test-admin-auth-session-version.mjs`, `verify-marketplace-advertising-auth.mjs`, `verify-stage15h-admin.mjs`, and the shared PostgreSQL BIGINT boundary test.
 - Android and Chat/Groups remain required on the exact latest PR head.
+
+
+## Group 6 — Admin announcement route-level PostgreSQL verification — 13 November 2026
+
+### Five verified coverage gaps
+1. Admin announcement creation and its audit row were only checked with source assertions; no test invoked the registered HTTP route against PostgreSQL.
+2. Owner/Admin denial, normal-user denial, and password-reset-revoked Admin sessions were tested in separate middleware/source checks, not through the real announcements route.
+3. Scheduled announcement visibility had no route-level DB test proving that a future item appears in Admin history but not in the public feed until published immediately or its schedule arrives.
+4. Announcement artwork ownership/MIME restrictions and HTTPS-link validation were source-tested, not exercised with actual route requests and stored media rows.
+5. The production routes pass the transaction client to audit logging, but no integration test deliberately failed the audit insert to prove create/edit mutations roll back.
+
+### Group 6 grouped correction
+- Added an optional test dependency seam to registerAdminRoutes: databasePool, jwtApi, and jwtSecret. Production defaults remain the existing shared pool, JWT library and configured secret; no production auth behavior or login flow changes.
+- Added backend/test-admin-announcements-db.mjs, a PostgreSQL-backed route test using a unique schema and the actual registered Admin handlers.
+- Coverage includes Owner/Admin/regular-user access, stale Admin session rejection, exact large-ID grant/revoke behavior, future schedule visibility, impossible dates, HTTPS-only links, artwork owner/MIME checks, publish/unpublish, private no-store Admin history, pagination beyond 50 entries, and rollback of create/edit when audit insertion fails.
+- Wired the new DB route test into Backend CI and added source-contract assertions for the test seam and CI step.
+
+### External verification
+- The test uses the CI PostgreSQL service and does not require live production credentials, providers or device access.
+- Physical-device Admin interaction and actual production Owner/Admin authorization remain separate certification requirements; emulator visual capture is not a substitute for live backend authorization.

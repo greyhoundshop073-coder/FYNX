@@ -6,7 +6,7 @@ import { isPositivePostgresBigint } from "./postgresIds.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const pool = getFynxDatabasePool();
+const defaultPool = getFynxDatabasePool();
 
 // Validate calendar fields before Date.parse, which normalizes impossible dates.
 function parseFutureAnnouncementSchedule(value) {
@@ -50,7 +50,8 @@ export function createAdminAuthMiddleware({ pool, jwt: jwtApi, jwtSecret }) {
   };
 }
 
-export function registerAdminRoutes({ app }) {
+export function registerAdminRoutes({ app, databasePool = defaultPool, jwtApi = jwt, jwtSecret = JWT_SECRET }) {
+  const pool = databasePool;
   if (!pool) return;
   let schemaPromise;
   const ensureSchema = async () => {
@@ -110,7 +111,7 @@ export function registerAdminRoutes({ app }) {
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
-  const auth = createAdminAuthMiddleware({ pool, jwt, jwtSecret: JWT_SECRET });
+  const auth = createAdminAuthMiddleware({ pool, jwt: jwtApi, jwtSecret });
   const role = createPlatformAdminRoleResolver(pool);
   const requireAdmin = async (req,res) => { const value=await role(req.user.sub); if(!value){res.status(403).json({error:'administrator access required',code:'ADMIN_REQUIRED'});return null;} req.fynxAdminRole=value; return value; };
   // Accept a transaction-scoped executor so state changes and their audit row commit atomically.

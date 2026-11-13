@@ -4,6 +4,7 @@ const scalability=fs.readFileSync(new URL('./scalability.js',import.meta.url),'u
 const sessionAware=fs.readFileSync(new URL('./sessionAwareAuth.js',import.meta.url),'utf8');
 const platformRole=fs.readFileSync(new URL('./platformAdminRole.js',import.meta.url),'utf8');
 const postgresIds=fs.readFileSync(new URL('./postgresIds.js',import.meta.url),'utf8');
+const workflow=fs.readFileSync(new URL('../.github/workflows/fynx-backend-ci.yml',import.meta.url),'utf8');
 const publicAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/announcements'"),admin.indexOf("app.get('/api/admin/dashboard'"));
 const adminAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/admin/announcements'"),admin.indexOf("app.post('/api/admin/announcements'"));
 const createAnnouncementRoute=admin.slice(admin.indexOf("app.post('/api/admin/announcements'"),admin.indexOf("app.patch('/api/admin/announcements/:announcementId'"));
@@ -36,6 +37,10 @@ checks.push(
  ['Admin grant validates the original ID value and preserves exact decimal strings',grantAdminRoute.includes('const userIdInput=req.body?.userId')&&grantAdminRoute.includes('isPositivePostgresBigint(userIdInput)')&&grantAdminRoute.includes('const userId=String(userIdInput).trim()')&&!grantAdminRoute.includes('Number(')],
  ['Admin revoke validates and preserves its exact route ID',revokeAdminRoute.includes("const userId=String(req.params.userId??'').trim()")&&revokeAdminRoute.includes('isPositivePostgresBigint(userId)')&&!revokeAdminRoute.includes('Number(')],
  ['shared validator enforces PostgreSQL signed BIGINT maximum without unsafe numeric coercion',postgresIds.includes('9223372036854775807n')&&postgresIds.includes('Number.isSafeInteger(value)')&&postgresIds.includes('BigInt(raw) <= MAX_POSTGRES_BIGINT')]
+);
+checks.push(
+ ['Admin route registration permits injected test dependencies without changing production defaults',admin.includes('databasePool = defaultPool')&&admin.includes('jwtApi = jwt')&&admin.includes('jwtSecret = JWT_SECRET')],
+ ['Backend CI executes the PostgreSQL Admin announcement route integration test',workflow.includes('node test-admin-announcements-db.mjs')]
 );
 for(const [name,ok] of checks){if(!ok)throw new Error(`Stage 15H verification failed: ${name}`);console.log(`PASS: ${name}`);}
 console.log(`Stage 15H admin verification passed (${checks.length} checks)`);
