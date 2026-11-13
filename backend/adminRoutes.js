@@ -35,6 +35,8 @@ export function registerAdminRoutes({ app }) {
   const ensureSchema = async () => {
     if (!schemaPromise) schemaPromise = pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      CREATE TABLE IF NOT EXISTS fynx_platform_owner (singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK(singleton=TRUE), owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,id FROM users ORDER BY id ASC LIMIT 1 ON CONFLICT(singleton) DO NOTHING;
       CREATE TABLE IF NOT EXISTS fynx_announcements (id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'NORMAL' CHECK(priority IN ('NORMAL','IMPORTANT','URGENT')), published BOOLEAN NOT NULL DEFAULT TRUE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL;
       ALTER TABLE fynx_announcements ADD COLUMN IF NOT EXISTS link_url TEXT NOT NULL DEFAULT '';
@@ -89,8 +91,14 @@ export function registerAdminRoutes({ app }) {
   };
   const auth = (req,res,next) => { const header=req.get('authorization')||''; const token=header.startsWith('Bearer ')?header.slice(7).trim():''; if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'}); try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});} };
   const role = async userId => {
-    const first=(await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1')).rows[0];
-    if(first && String(first.id)===String(userId)) return 'OWNER';
+    // Preserve the legacy first-user owner on upgrade, then keep ownership stable.
+    // RESTRICT prevents owner deletion from silently transferring platform control.
+    let owner=(await pool.query('SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE')).rows[0];
+    if(!owner){
+      const bootstrap=await pool.query("WITH lock AS (SELECT pg_advisory_xact_lock(hashtext('fynx_platform_owner_bootstrap'))), candidate AS (SELECT id FROM users ORDER BY id ASC LIMIT 1), inserted AS (INSERT INTO fynx_platform_owner(singleton,owner_user_id) SELECT TRUE,candidate.id FROM candidate,lock ON CONFLICT(singleton) DO NOTHING RETURNING owner_user_id) SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE");
+      owner=bootstrap.rows[0];
+    }
+    if(owner && String(owner.owner_user_id)===String(userId)) return 'OWNER';
     const admin=(await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',[userId])).rowCount;
     return admin ? 'ADMIN' : null;
   };
@@ -139,7 +147,7 @@ export function registerAdminRoutes({ app }) {
     const actorRole=await requireAdmin(req,res);
     if(actorRole===null)return;
     if(actorRole!=='OWNER')return res.status(403).json({error:'owner access required',code:'OWNER_REQUIRED'});
-    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1) ORDER BY r.created_at ASC LIMIT 100`);
+    const result=await pool.query(`SELECT u.id,u.username,u.display_name,r.created_at FROM fynx_admin_roles r JOIN users u ON u.id=r.user_id WHERE r.role='ADMIN' AND u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE) ORDER BY r.created_at ASC LIMIT 100`);
     return res.json({admins:result.rows.map(a=>({id:String(a.id),username:a.username,displayName:a.display_name||'',grantedAt:a.created_at}))});
   }catch(error){console.error('admin list',error);return res.status(500).json({error:'admin list unavailable'});}});
 
@@ -237,7 +245,7 @@ export function registerAdminRoutes({ app }) {
     const targetId=String(req.params.userId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.note==='string'?req.body.note.trim().slice(0,500):'';
-    if(!/^[1-9]\d*$/.test(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
+    if(!isPositivePostgresBigint(targetId)||!['ACTIVE','LIMITED','LOCKED'].includes(status))return res.status(400).json({error:'valid user id and account status are required'});
     if(targetId===String(req.user.sub))return res.status(400).json({error:'administrators cannot change their own account status'});
     const client=await pool.connect();
     try{
@@ -272,7 +280,7 @@ export function registerAdminRoutes({ app }) {
     if(!(await requireAdmin(req,res)))return;
     const reportId=String(req.params.reportId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
-    if(!/^[1-9]\d*$/.test(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
+    if(!isPositivePostgresBigint(reportId)||!['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status))return res.status(400).json({error:'valid report id and review status are required'});
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
@@ -303,7 +311,7 @@ export function registerAdminRoutes({ app }) {
     const appealId=String(req.params.appealId||'');
     const status=typeof req.body?.status==='string'?req.body.status.trim().toUpperCase():'';
     const note=typeof req.body?.decisionNote==='string'?req.body.decisionNote.trim().slice(0,500):'';
-    if(!/^[1-9]\d*$/.test(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
+    if(!isPositivePostgresBigint(appealId)||!['UNDER_REVIEW','ACCEPTED','REJECTED'].includes(status))return res.status(400).json({error:'valid appeal id and decision are required'});
     const client=await pool.connect();
     try{
       await client.query('BEGIN');
