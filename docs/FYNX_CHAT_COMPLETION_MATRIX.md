@@ -67,3 +67,8 @@ This work still requires exact-commit CI and authenticated two-account runtime v
 ## 2026-11-13 — Group full-history search
 
 The active Group search previously filtered only currently loaded local messages. The authenticated server history API now accepts a bounded query, runs parameterized PostgreSQL full-text search only after membership authorization, and uses a matching GIN index. Android sends the encoded query with the stable timestamp/ID cursor, debounces requests, loads older matching pages, reports empty/error states and explicitly falls back to loaded local messages while offline. PostgreSQL integration tests cover group isolation, cursor pagination, no-match and parameter binding.
+
+
+## 2026-11-13 — Group leave and ownership journey
+
+The active Group More menu now exposes Leave group. Non-owners call the authenticated leave route and the local group/chat cache is cleared only after server success. Owners are required to choose another current member; ownership is transferred through the server transaction before the owner leaves. If transfer succeeds but leave fails, local roles are updated to the server-confirmed owner/moderator state and the user can retry leaving without re-transferring ownership. This still requires two-account live verification.

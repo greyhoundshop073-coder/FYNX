@@ -115,6 +115,11 @@ require("group search supports cursor pagination and appends older matches", "re
 require("group search exposes empty-result and offline-cache fallback states", "No matching messages found in this group." in ACTIVE_GROUP and "Offline: showing only messages already loaded on this device." in ACTIVE_GROUP)
 require("Android group-history client encodes q and preserves the timestamp/ID cursor", "query:String?=null" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "&q=${Uri.encode(it)}" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "beforeTimestamp" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 
+
+require("active Group More menu exposes Leave group or transfer ownership for owners", 'Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group")' in ACTIVE_GROUP and "showLeaveGroupDialog = true" in ACTIVE_GROUP)
+require("non-owner Leave group calls the authenticated backend leave endpoint before local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in ACTIVE_GROUP and "FynxGroupsStore.removeGroup(context, groupId)" in ACTIVE_GROUP and "onBack()" in ACTIVE_GROUP)
+require("group owner must transfer ownership to another current member before leaving", "FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)" in ACTIVE_GROUP and "transferCandidates" in ACTIVE_GROUP and "member.copy(role = FynxGroupRole.MODERATOR)" in ACTIVE_GROUP)
+require("Android group remote client wraps authenticated ownership and leave endpoints", "suspend fun transferOwnership" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "suspend fun leaveGroup" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:

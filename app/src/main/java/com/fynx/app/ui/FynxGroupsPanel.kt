@@ -339,6 +339,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showLocationShare by remember { mutableStateOf(false) }
     var showContactShare by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showLeaveGroupDialog by remember(groupId) { mutableStateOf(false) }
+    var leaveGroupBusy by remember(groupId) { mutableStateOf(false) }
+    var leaveGroupError by remember(groupId) { mutableStateOf<String?>(null) }
+    var transferTargetUsername by remember(groupId) { mutableStateOf("") }
+    var transferTargetsExpanded by remember(groupId) { mutableStateOf(false) }
     var showPulse by remember { mutableStateOf(false) }
     var showCatchMeUp by remember { mutableStateOf(false) }
     var showConversationMoments by remember { mutableStateOf(false) }
@@ -367,6 +372,10 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var remoteGroupSearchLoading by remember(groupId) { mutableStateOf(false) }
     var remoteGroupSearchError by remember(groupId) { mutableStateOf<String?>(null) }
     val selectedGroup = currentGroup
+    val isGroupOwner = selectedGroup?.ownerUsername?.removePrefix("@")?.equals(currentUsername.removePrefix("@"), true) == true
+    val transferCandidates = selectedGroup?.members?.filterNot {
+        it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)
+    }.orEmpty()
     val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val canManageGroup = FynxGroupsBatch3.canManage(myRole)
@@ -861,6 +870,16 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
                         DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
+                        DropdownMenuItem(
+                            text = { Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group") },
+                            onClick = {
+                                showMore = false
+                                leaveGroupError = null
+                                transferTargetUsername = ""
+                                showLeaveGroupDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.ExitToApp, null) }
+                        )
                         DropdownMenuItem(text = { Text(if (groupNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { groupNotificationsEnabled = !groupNotificationsEnabled; FynxConversationPreferences.setGroupNotifications(context, groupId, groupNotificationsEnabled); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                         DropdownMenuItem(text = { Text(if (groupMuted) "Unmute this group" else "Mute this group") }, onClick = { groupMuted = !groupMuted; FynxConversationPreferences.setGroupMuted(context, groupId, groupMuted); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                     }
@@ -1325,6 +1344,126 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
 
     }
+    if (showLeaveGroupDialog && selectedGroup != null) {
+        AlertDialog(
+            onDismissRequest = { if (!leaveGroupBusy) showLeaveGroupDialog = false },
+            title = { Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isGroupOwner) {
+                        Text("As the group owner, transfer ownership to another current member before leaving.")
+                        if (transferCandidates.isEmpty()) {
+                            Text("Add another member before leaving this group.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Box {
+                                OutlinedButton(
+                                    enabled = !leaveGroupBusy,
+                                    onClick = { transferTargetsExpanded = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(transferTargetUsername.ifBlank { "Choose the new owner" })
+                                }
+                                DropdownMenu(
+                                    expanded = transferTargetsExpanded,
+                                    onDismissRequest = { transferTargetsExpanded = false }
+                                ) {
+                                    transferCandidates.forEach { candidate ->
+                                        DropdownMenuItem(
+                                            text = { Text(candidate.username) },
+                                            onClick = {
+                                                transferTargetUsername = candidate.username.removePrefix("@")
+                                                transferTargetsExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("You will leave this group and it will be removed from your group list on this device.")
+                    }
+                    if (!hasRemoteAccessToken) {
+                        Text("Connect to FYNX before changing group membership.", color = MaterialTheme.colorScheme.error)
+                    }
+                    leaveGroupError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = hasRemoteAccessToken && !leaveGroupBusy &&
+                        (!isGroupOwner || transferCandidates.any { it.username.removePrefix("@").equals(transferTargetUsername.removePrefix("@"), true) }),
+                    onClick = {
+                        if (leaveGroupBusy) return@TextButton
+                        leaveGroupBusy = true
+                        leaveGroupError = null
+                        scope.launch {
+                            if (isGroupOwner) {
+                                FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)
+                                    .onSuccess { confirmedOwner ->
+                                        val updatedGroup = selectedGroup.copy(
+                                            ownerUsername = confirmedOwner,
+                                            members = selectedGroup.members.map { member ->
+                                                when {
+                                                    member.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true) ->
+                                                        member.copy(role = FynxGroupRole.MODERATOR)
+                                                    member.username.removePrefix("@").equals(confirmedOwner.removePrefix("@"), true) ->
+                                                        member.copy(role = FynxGroupRole.ADMIN)
+                                                    else -> member
+                                                }
+                                            }
+                                        )
+                                        currentGroup = updatedGroup
+                                        FynxGroupsStore.updateGroup(context, updatedGroup)
+                                        FynxGroupsStore.markSynced(context, groupId)
+                                        FynxGroupRemoteClient.leaveGroup(context, groupId)
+                                            .onSuccess {
+                                                FynxGroupsStore.removeGroup(context, groupId)
+                                                FynxGroupsStore.markSynced(context, groupId)
+                                                showLeaveGroupDialog = false
+                                                onBack()
+                                            }
+                                            .onFailure {
+                                                leaveGroupError = "Ownership transferred successfully, but leaving failed. You are now a moderator; tap Leave group to retry."
+                                            }
+                                    }
+                                    .onFailure { error ->
+                                        leaveGroupError = error.message ?: "Ownership could not be transferred. Please try again."
+                                    }
+                            } else {
+                                FynxGroupRemoteClient.leaveGroup(context, groupId)
+                                    .onSuccess {
+                                        FynxGroupsStore.removeGroup(context, groupId)
+                                        FynxGroupsStore.markSynced(context, groupId)
+                                        showLeaveGroupDialog = false
+                                        onBack()
+                                    }
+                                    .onFailure { error ->
+                                        leaveGroupError = error.message ?: "Could not leave this group. Please try again."
+                                    }
+                            }
+                            leaveGroupBusy = false
+                        }
+                    }
+                ) {
+                    Text(
+                        when {
+                            leaveGroupBusy -> "Working…"
+                            isGroupOwner -> "Transfer & leave"
+                            else -> "Leave group"
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !leaveGroupBusy, onClick = { showLeaveGroupDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     selectedGroup?.let { groupForDialogs ->
         if (showMembers) FynxGroupMembersDialog(
             group = groupForDialogs,
