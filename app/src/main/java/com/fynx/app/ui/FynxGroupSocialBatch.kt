@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -187,14 +189,31 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
     fun reload() {
         scope.launch {
             loading = true
-            FynxGroupRemoteClient.loadContent(context, groupId).onSuccess { content = it; error = null }.onFailure { error = it.message ?: "Group content could not be loaded." }
+            FynxGroupRemoteClient.loadContent(context, groupId)
+                .onSuccess { content = it; error = null }
+                .onFailure { error = if (content != null) "Showing saved group content. Reconnect to refresh." else it.message ?: "Group content could not be loaded." }
             loading = false
         }
     }
-    LaunchedEffect(groupId) { reload() }
+    LaunchedEffect(groupId) {
+        content = FynxGroupRemoteClient.loadCachedContent(context, groupId)
+        reload()
+    }
+
+    fun respondToEvent(event: FynxGroupRemoteClient.RemoteEvent, response: String) {
+        scope.launch {
+            FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, response)
+                .onSuccess { queued ->
+                    content = content?.let { FynxGroupRemoteClient.applyEventResponse(it, event.id, response, queued) }
+                    error = if (queued) "Your RSVP is saved on this device and will sync when the connection returns." else null
+                    if (!queued) reload()
+                }
+                .onFailure { error = it.message ?: "Your event response could not be saved." }
+        }
+    }
 
     AlertDialog(onDismissRequest = onClose, title = { Text("Group content") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Posts, polls and events stay with the group and sync across devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (canManage) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -229,15 +248,25 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
                     }
                 }
             }
-            current?.events?.take(6)?.forEach { event ->
+            current?.events?.take(50)?.forEach { event ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(event.title, style = MaterialTheme.typography.titleMedium)
                         if (event.description.isNotBlank()) Text(event.description)
                         Text("${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(event.startsAt))}${if (event.location.isBlank()) "" else " • ${event.location}"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(onClick = { scope.launch { FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, "GOING").onSuccess { reload() } } }) { Text("Going ${event.goingCount}") }
-                            TextButton(onClick = { scope.launch { FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, "MAYBE").onSuccess { reload() } } }) { Text("Maybe ${event.maybeCount}") }
+                        Text(
+                            if (event.myResponse.isNullOrBlank()) "You have not responded yet."
+                            else "Your response: ${event.myResponse.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (event.pendingResponse) {
+                            Text("Saved on this device · waiting to sync", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { respondToEvent(event, "GOING") }, enabled = event.myResponse != "GOING") { Text("Going ${event.goingCount}") }
+                            TextButton(onClick = { respondToEvent(event, "MAYBE") }, enabled = event.myResponse != "MAYBE") { Text("Maybe ${event.maybeCount}") }
+                            TextButton(onClick = { respondToEvent(event, "NOT_GOING") }, enabled = event.myResponse != "NOT_GOING") { Text("Not going ${event.notGoingCount}") }
                         }
                     }
                 }
