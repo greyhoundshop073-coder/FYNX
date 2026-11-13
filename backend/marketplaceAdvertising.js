@@ -3,6 +3,7 @@ import pg from "pg";
 import jwt from "jsonwebtoken";
 import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
 import { createSessionAwareBearerAuthenticator } from "./sessionAwareAuth.js";
+import { isPositivePostgresBigint } from "./postgresIds.js";
 import crypto from "crypto";
 import { ensureMarketplaceSchemaForPool } from "./marketplaceSchema.js";
 
@@ -348,7 +349,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
         destinationValue = canonicalCategory;
       }
-      if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) {
+      if (destinationType === "PRODUCT" && !isPositivePostgresBigint(destinationValue)) {
         return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
       }
       if (destinationType === "SHOP" && !/^[a-z0-9_]{3,32}$/i.test(destinationValue)) {
@@ -454,7 +455,7 @@ export function registerMarketplaceAdvertisingRoutes({ app }) {
         if (!canonicalCategory) return res.status(400).json({ error: "choose a category that exists in Marketplace" });
         destinationValue = canonicalCategory;
       }
-      if (destinationType === "PRODUCT" && !/^[1-9][0-9]{0,19}$/.test(destinationValue)) return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
+      if (destinationType === "PRODUCT" && !isPositivePostgresBigint(destinationValue)) return res.status(400).json({ error: "product destination must be a positive Marketplace listing ID" });
       if (destinationType === "SHOP" && !/^[a-z0-9_]{3,32}$/i.test(destinationValue)) return res.status(400).json({ error: "shop destination must be a valid FYNX username" });
       if (!/^[a-z0-9][a-z0-9_-]{1,59}$/.test(occasionKey)) return res.status(400).json({ error: "campaign key must use 2-60 letters, numbers, dashes or underscores" });
       if (headline.length < 3 || headline.length > 120 || body.length > 500 || actionLabel.length < 2 || actionLabel.length > 48) return res.status(400).json({ error: "headline, body or action label is outside the allowed length" });

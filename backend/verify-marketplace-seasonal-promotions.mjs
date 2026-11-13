@@ -5,6 +5,7 @@ const advertising = await readFile(new URL("./marketplaceAdvertising.js", import
 const socialRoutes = await readFile(new URL("./socialRoutes.js", import.meta.url), "utf8");
 const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url), "utf8");
 const platformAdminRole = await readFile(new URL("./platformAdminRole.js", import.meta.url), "utf8");
+const postgresIds = await readFile(new URL("./postgresIds.js", import.meta.url), "utf8");
 const mediaPrivacy = await readFile(new URL("./mediaPrivacy.js", import.meta.url), "utf8");
 const banner = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt", import.meta.url), "utf8");
 const panel = await readFile(new URL("../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt", import.meta.url), "utf8");
@@ -63,6 +64,7 @@ const checks = [
   ["campaign category destinations exactly match the live Marketplace category taxonomy", advertising.includes("MARKETPLACE_CAMPAIGN_CATEGORIES") && advertising.includes("MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY") && advertising.includes('const canonicalCategory = MARKETPLACE_CAMPAIGN_CATEGORY_BY_KEY.get(destinationValue.toLowerCase())') && advertising.includes("destinationValue = canonicalCategory")],
   ["Owner/Admin campaign endpoint validates destination types and non-empty target values", advertising.includes('["NONE", "MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP"].includes(destinationType)') && advertising.includes("the selected campaign destination requires a matching destination value")],
   ["campaign product destinations must resolve to active in-stock Marketplace listings", advertising.includes("destinationType === \"PRODUCT\"") && advertising.includes("COALESCE(active,TRUE)=TRUE AND GREATEST(0, quantity-COALESCE(reserved_quantity,0)) > 0")],
+  ["product destination IDs are bounded to PostgreSQL BIGINT for both create and edit", advertising.split("isPositivePostgresBigint(destinationValue)").length - 1 === 2 && advertising.includes('import { isPositivePostgresBigint } from "./postgresIds.js"') && postgresIds.includes("9223372036854775807n") && postgresIds.includes("Number.isSafeInteger(value)")],
   ["campaign shop destinations must resolve to a real FYNX username", advertising.includes("destinationType === \"SHOP\"") && advertising.includes("SELECT id FROM users WHERE LOWER(username)=LOWER($1)")],
   ["seasonal campaign payload and Android client preserve the selected destination", advertising.includes("destinationType: row.destination_type") && advertising.includes("destinationValue: row.destination_value") && client.includes('optString("destinationType", "MARKETPLACE")') && client.includes('put("destinationValue"')],
   ["Owner/Admin scheduler lets operators choose Marketplace, category, product or shop destinations", adminUi.includes('listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP")') && adminUi.includes("Button destination") && adminUi.includes("Product listing ID")],

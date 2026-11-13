@@ -184,6 +184,8 @@ jobs:
           node test-marketplace-advertising-schema-db.mjs
       - name: Verify persisted platform Owner and Admin role resolution
         run: node test-platform-admin-role.mjs
+      - name: Verify exact PostgreSQL BIGINT ID validation
+        run: node test-postgres-id-validation.mjs
       - name: Verify Marketplace advertising auth failure isolation
         run: node verify-marketplace-advertising-auth.mjs
       - name: Verify Marketplace CPC billing, deduplication and budget guards

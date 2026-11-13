@@ -2,17 +2,11 @@ import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
+import { isPositivePostgresBigint } from "./postgresIds.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const pool = getFynxDatabasePool();
-
-const MAX_POSTGRES_BIGINT = 9223372036854775807n;
-function isPositivePostgresBigint(value) {
-  const raw = String(value ?? '').trim();
-  if (!/^[1-9]\d*$/.test(raw)) return false;
-  try { return BigInt(raw) <= MAX_POSTGRES_BIGINT; } catch { return false; }
-}
 
 // Validate calendar fields before Date.parse, which normalizes impossible dates.
 function parseFutureAnnouncementSchedule(value) {

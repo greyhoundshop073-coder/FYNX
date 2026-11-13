@@ -9,6 +9,7 @@ SOURCE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt"
 CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt"
 BACKEND = ROOT / "backend/adminRoutes.js"
 OWNER_ROLE = ROOT / "backend/platformAdminRole.js"
+POSTGRES_IDS = ROOT / "backend/postgresIds.js"
 MEDIA_SERVER = ROOT / "backend/server.js"
 ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
 SOCIAL = ROOT / "backend/socialRoutes.js"
@@ -20,6 +21,7 @@ source = SOURCE.read_text(encoding="utf-8")
 client = CLIENT.read_text(encoding="utf-8") if CLIENT.is_file() else ""
 backend = BACKEND.read_text(encoding="utf-8") if BACKEND.is_file() else ""
 owner_role = OWNER_ROLE.read_text(encoding="utf-8") if OWNER_ROLE.is_file() else ""
+postgres_ids = POSTGRES_IDS.read_text(encoding="utf-8") if POSTGRES_IDS.is_file() else ""
 media_server = MEDIA_SERVER.read_text(encoding="utf-8") if MEDIA_SERVER.is_file() else ""
 advertising = ADVERTISING.read_text(encoding="utf-8") if ADVERTISING.is_file() else ""
 social = SOCIAL.read_text(encoding="utf-8") if SOCIAL.is_file() else ""
@@ -277,9 +279,11 @@ require("function parseCampaignTimestamp(value)" in advertising and
         "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
         "(Z|([+-])(\\d{2}):(\\d{2}))" in advertising,
         "seasonal promotion create/edit must require explicit timezone and validate calendar timestamps")
-require("MAX_POSTGRES_BIGINT" in backend and "function isPositivePostgresBigint(value)" in backend and
-        "isPositivePostgresBigint(mediaIdRaw)" in backend and "isPositivePostgresBigint(raw)" in backend,
-        "announcement image IDs must be bounded to positive PostgreSQL BIGINT before database access")
+require("isPositivePostgresBigint" in backend and "isPositivePostgresBigint(mediaIdRaw)" in backend and
+        "isPositivePostgresBigint(raw)" in backend and
+        "export const MAX_POSTGRES_BIGINT = 9223372036854775807n" in postgres_ids and
+        "Number.isSafeInteger(value)" in postgres_ids and "BigInt(raw) <= MAX_POSTGRES_BIGINT" in postgres_ids,
+        "announcement image IDs must use shared exact positive PostgreSQL BIGINT validation before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
 # OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
@@ -329,7 +333,8 @@ require("createPlatformAdminRoleResolver(pool)" in backend and
         "createPlatformAdminRoleResolver(pool)" in advertising and
         "createPlatformAdminRoleResolver(pool)" in social,
         "platform OWNER must use one persisted, concurrency-safe, BIGINT-safe resolver shared by Admin, Marketplace and Music; legacy bootstrap must be protected from accidental deletion/transfer")
-require("isPositivePostgresBigint(targetId)" in backend and
+require('import { isPositivePostgresBigint } from "./postgresIds.js"' in backend and
+        "isPositivePostgresBigint(targetId)" in backend and
         "isPositivePostgresBigint(reportId)" in backend and
         "isPositivePostgresBigint(appealId)" in backend,
         "account, report and appeal route IDs must all reject values outside PostgreSQL BIGINT")

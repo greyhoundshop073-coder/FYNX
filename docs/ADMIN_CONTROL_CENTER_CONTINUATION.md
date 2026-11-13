@@ -290,3 +290,25 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - This review also caught cold startup before any user exists. The persisted Owner seed now retries on later role checks while no Owner singleton exists, then stops after the first registered account is persisted. The behavioral test covers empty startup, first signup, exact BIGINT IDs, ADMIN and ordinary-user denial.
 - The concurrent seasonal-verifier corrections at `f47825b76a6ec70cf78af8eb5cd0724b4b7689be` and `40f6ad160893e7a0fc200b43d974470509a99662` are preserved.
 - Keep PR #536 open and unmerged. Re-query all three workflows on the exact new head; no green status is inferred from an intermediate run.
+
+
+## Group 4 — shared PostgreSQL BIGINT boundaries — 13 November 2026
+
+### Five verified issues / evidence
+1. Seasonal campaign creation accepted PRODUCT destination IDs with any 1–20 decimal digits; values above PostgreSQL BIGINT maximum `9223372036854775807` reached a BIGINT parameter query and could become HTTP 500 instead of a 400 validation response.
+2. Campaign editing repeated the same 20-digit-only regex, so fixing create alone would have left the edit route vulnerable to the same overflow.
+3. Owner/Admin account, report, appeal and announcement routes had an in-file BIGINT validator, while Marketplace product destinations had a separate, weaker validator. This split made the bounds inconsistent.
+4. The existing Admin helper converted all values to strings before testing; an unsafe JavaScript Number could already be rounded before it reached `BigInt()`. Route parameters normally arrive as strings, but the helper also accepts body values and should reject unsafe numeric values.
+5. Existing campaign verifier and Admin Python contract did not assert that PRODUCT IDs are within PostgreSQL BIGINT or that create and edit share the same exact bound. This allowed the 20-digit regex to pass CI.
+
+### Group 4 grouped correction
+- Added `backend/postgresIds.js` exporting one exact positive signed-BIGINT validator. String IDs stay strings; positive BigInt values are supported; numeric inputs are accepted only when `Number.isSafeInteger` is true; zero, leading zero, negative, decimal, exponent, malformed, overflow and unsafe Number values are rejected.
+- Reused the shared helper in Admin announcements/people/reports/appeals/media IDs and Marketplace seasonal create/edit PRODUCT destinations.
+- Added `test-postgres-id-validation.mjs` with valid max-BIGINT and >MAX_SAFE_INTEGER string cases plus invalid overflow, unsafe Number and malformed inputs. Wired it into Backend CI.
+- Updated seasonal source-contract and Admin Python verifier to inspect the shared helper and both destination paths.
+- Existing product lookup still verifies that a destination references an active listing with available stock. No feature, login, UI, or Marketplace buyer/seller behavior was changed.
+
+### Remaining independent verification
+- Backend CI must run the new validator behavior test, existing Stage 15H Admin contract, PostgreSQL campaign schema test, and seasonal verifier.
+- Android and Chat/Groups checks remain separate required gates for the PR head.
+- Campaign HTTP create/edit/activate/deactivate/delete lifecycle, audit rollback, competing-overlap concurrency and media visibility still lack a dedicated route-level end-to-end test in this repository. Existing source contracts and PostgreSQL schema migration tests do not substitute for those checks.
