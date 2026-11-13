@@ -21,6 +21,7 @@ realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
 group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
 active_group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+app_navigation = read('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
 group_remote_client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
 group_social = read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt')
 conversation_preferences = read('app/src/main/java/com/fynx/app/ui/FynxConversationPreferences.kt')
@@ -98,3 +99,10 @@ check('active group conversation state is keyed by authenticated account and cle
 check('group text, edit and media callbacks reject late results from another signed-in account', 'if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess' in active_group_panel and 'stagedUri == null || !isCurrentGroupAccount(requestAccountKey)' in active_group_panel)
 check('group realtime and history responses cannot overwrite another account conversation cache', 'isCurrentGroupAccount(groupAccountKey) && event is FynxRealtimeClient.Event.GroupMessage' in active_group_panel and 'if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save' in active_group_panel)
 check('group manager role lookup handles usernames with or without the @ prefix', 'normalizedFynxGroupUsername(it.username) == normalizedFynxGroupUsername(currentUsername)' in active_group_panel)
+
+chat_route_start = app_navigation.find('if (openChat != null)')
+chat_route_end = app_navigation.find('if (openGroup != null)', chat_route_start)
+group_route_start = chat_route_end
+group_route_end = app_navigation.find('FynxTheme(accent = accent', group_route_start)
+check('private conversation subtree is disposed and recreated when the signed-in account changes', chat_route_start >= 0 and chat_route_end > chat_route_start and 'key(authSession.username)' in app_navigation[chat_route_start:chat_route_end])
+check('group conversation subtree is disposed and recreated when the signed-in account changes', group_route_start >= 0 and group_route_end > group_route_start and 'key(authSession.username)' in app_navigation[group_route_start:group_route_end])
