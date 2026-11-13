@@ -5,6 +5,8 @@ const sessionAware=fs.readFileSync(new URL('./sessionAwareAuth.js',import.meta.u
 const platformRole=fs.readFileSync(new URL('./platformAdminRole.js',import.meta.url),'utf8');
 const postgresIds=fs.readFileSync(new URL('./postgresIds.js',import.meta.url),'utf8');
 const workflow=fs.readFileSync(new URL('../.github/workflows/fynx-backend-ci.yml',import.meta.url),'utf8');
+const marketplaceCheckout=fs.readFileSync(new URL('./marketplaceCheckout.js',import.meta.url),'utf8');
+const groupRoutes=fs.readFileSync(new URL('./groupRoutes.js',import.meta.url),'utf8');
 const publicAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/announcements'"),admin.indexOf("app.get('/api/admin/dashboard'"));
 const adminAnnouncementsRoute=admin.slice(admin.indexOf("app.get('/api/admin/announcements'"),admin.indexOf("app.post('/api/admin/announcements'"));
 const createAnnouncementRoute=admin.slice(admin.indexOf("app.post('/api/admin/announcements'"),admin.indexOf("app.patch('/api/admin/announcements/:announcementId'"));
@@ -37,6 +39,13 @@ checks.push(
  ['Admin grant validates the original ID value and preserves exact decimal strings',grantAdminRoute.includes('const userIdInput=req.body?.userId')&&grantAdminRoute.includes('isPositivePostgresBigint(userIdInput)')&&grantAdminRoute.includes('const userId=String(userIdInput).trim()')&&!grantAdminRoute.includes('Number(')],
  ['Admin revoke validates and preserves its exact route ID',revokeAdminRoute.includes("const userId=String(req.params.userId??'').trim()")&&revokeAdminRoute.includes('isPositivePostgresBigint(userId)')&&!revokeAdminRoute.includes('Number(')],
  ['shared validator enforces PostgreSQL signed BIGINT maximum without unsafe numeric coercion',postgresIds.includes('9223372036854775807n')&&postgresIds.includes('Number.isSafeInteger(value)')&&postgresIds.includes('BigInt(raw) <= MAX_POSTGRES_BIGINT')]
+);
+checks.push(
+ ['Admin account-status action validates the target, blocks self-management and protects the persisted OWNER',admin.includes("app.patch('/api/admin/accounts/:userId/status'")&&admin.includes("administrators cannot change their own account status")&&admin.includes("targetRole==='OWNER'&&req.fynxAdminRole!=='OWNER'")],
+ ['account status updates mirror LOCKED/LIMITED/ACTIVE into both safety stores within the same audited transaction',admin.includes("INSERT INTO fynx_account_safety(user_id,account_status,status_note)")&&admin.includes("INSERT INTO safety_settings(user_id,account_status,status_note)")&&admin.includes("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'")&&admin.includes("await client.query('COMMIT')")],
+ ['Marketplace purchase routes enforce account status from the canonical fynx_account_safety store',marketplaceCheckout.includes("SELECT marketplace_safety,account_status FROM fynx_account_safety")&&marketplaceCheckout.includes("ACCOUNT_LOCKED")&&marketplaceCheckout.includes("ACCOUNT_LIMITED")],
+ ['Group message sending enforces account status from the canonical fynx_account_safety store',groupRoutes.includes("SELECT message_safety,account_status FROM fynx_account_safety")&&groupRoutes.includes("ACCOUNT_LOCKED")&&groupRoutes.includes("ACCOUNT_LIMITED")],
+ ['CI executes PostgreSQL Admin account-safety route tests',workflow.includes("node test-admin-account-safety-db.mjs")]
 );
 checks.push(
  ['Admin route registration permits injected test dependencies without changing production defaults',admin.includes('databasePool = pool')&&admin.includes('jwtApi = jwt')&&admin.includes('jwtSecret = JWT_SECRET')&&admin.includes('const routePool = databasePool')],

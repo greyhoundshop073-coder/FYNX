@@ -365,3 +365,23 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 ### Group 6 Android source-contract correction — 13 November 2026
 - Android's Admin Python verifier initially failed because it still searched for the old local variable name in two source assertions: `executor = pool` and `createPlatformAdminRoleResolver(pool)`. The route injection seam intentionally scopes the injected dependency as `routePool`.
 - Both checks now require `executor = routePool` and `createPlatformAdminRoleResolver(routePool)`. The assertions still verify transactional audit execution and shared Owner authorization; only the expected scoped variable name changed.
+
+
+## Group 7 — Admin account-safety route certification — 13 November 2026
+
+### Five verified coverage gaps
+1. The Admin status route had source-contract coverage but no PostgreSQL-backed route invocation proving that only Owner/Admin roles can apply restrictions.
+2. The route's self-modification block and protection of the persisted Owner from non-Owner changes had no database-backed behavioral assertions.
+3. Status is mirrored into `fynx_account_safety` and legacy `safety_settings` within one transaction, but there was no test proving both tables stay synchronized across LOCKED, LIMITED, and ACTIVE transitions.
+4. The status route writes an audit event in the same transaction, but no test forced audit failure and proved that both mirrored state records roll back.
+5. The policy is intentionally scoped: LOCKED/LIMITED block Marketplace purchases and group-message sending, not all app access or existing sessions. The Admin UI explicitly tells the operator the feature scope, but no combined route test protects that behavior and session version remains unchanged.
+
+### Group 7 grouped correction
+- Added `backend/test-admin-account-safety-db.mjs` using a temporary PostgreSQL schema and actual registered Admin route. It covers regular-user denial, Admin self-lock denial, Admin protection of OWNER, invalid/out-of-range target IDs, Owner-applied LOCKED/LIMITED/ACTIVE transitions, mirrored notes/status, unchanged session version, audit rows, and forced audit-failure rollback.
+- The existing implementation already protects the persisted Owner, blocks self-modification, mirrors both safety tables, and writes the audit event transactionally; this group is closing behavioral coverage gaps, not broadening the lock policy.
+- Source contracts verify that Marketplace checkout and group-message sends both read the canonical `fynx_account_safety` status and emit the expected `ACCOUNT_LOCKED`/`ACCOUNT_LIMITED` guards.
+- CI will execute the new PostgreSQL route test.
+
+### Safety boundary
+- LOCKED/LIMITED are not global logout switches. The user-facing UI promises Marketplace purchase and group-send restrictions, so no login or session invalidation behavior is changed here.
+- Production Owner/Admin testing and handset interaction still need separate live/device certification; PostgreSQL CI proves backend route behavior in the isolated test schema only.

@@ -359,6 +359,8 @@ workflow_file = (ROOT / ".github/workflows/fynx-backend-ci.yml").read_text(encod
 require("databasePool = pool" in backend and "jwtApi = jwt" in backend and
         "jwtSecret = JWT_SECRET" in backend and "const routePool = databasePool" in backend,
         "Admin route registration must permit isolated test dependencies while preserving production defaults")
+require("node test-admin-account-safety-db.mjs" in workflow_file,
+        "Backend CI must execute the PostgreSQL-backed Admin account-safety route test")
 require("node test-admin-announcements-db.mjs" in workflow_file,
         "Backend CI must execute the PostgreSQL-backed Admin announcement route lifecycle test")
 require("app.get('/api/admin/users'" in backend and
