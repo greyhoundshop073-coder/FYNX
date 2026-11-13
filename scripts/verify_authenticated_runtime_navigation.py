@@ -1465,10 +1465,19 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                         status_close_xml, ["Open FYNX camera"], f"{prefix}-camera-post-camera-reopen",
                         ["Add description..."]
                     )
+                    post_options_view_xml = post_composer_xml
+                    if post_options_view_xml:
+                        for scroll_index in range(5):
+                            if find_control(post_options_view_xml, ["More options"]):
+                                break
+                            post_options_view_xml = swipe_vertical_scroll_container(
+                                post_options_view_xml,
+                                f"{prefix}-camera-post-camera-more-options-scroll-{scroll_index}"
+                            ) or post_options_view_xml
                     post_options_xml = tap_control(
-                        post_composer_xml, ["More options"], f"{prefix}-camera-post-camera-more-options",
+                        post_options_view_xml, ["More options"], f"{prefix}-camera-post-camera-more-options",
                         ["Take photo or video", "Add photo or video"]
-                    ) if post_composer_xml else ""
+                    ) if post_options_view_xml else ""
                     fresh_camera_xml = tap_control_permission_aware(
                         post_options_xml, ["Take photo or video"], f"{prefix}-camera-post-camera-reopen-action",
                         ["Switch front/back camera"]
@@ -2100,7 +2109,9 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
             right, bottom = map(int, right_bottom.strip("[]").split(","))
         except (ValueError, IndexError):
             continue
-        if right > left and bottom - top >= 120:
+        if right > left and bottom - top >= 80:
+            # A caption-error notice can leave a compact but real scroll viewport.
+            # The manual field remains scrollable/accessible in this 98px CI layout.
             vertical_viewports.append((left, top, right, bottom))
 
     if vertical_viewports:
@@ -2256,7 +2267,8 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
                 lt, rb = bounds.split("][", 1)
                 left, top = map(int, lt.strip("[]").split(","))
                 right, bottom = map(int, rb.strip("[]").split(","))
-                if right - left > 400 and bottom - top > 160:
+                if right - left > 400 and bottom - top > 80:
+                    # A caption notice can shrink the genuine editor viewport below 160px.
                     scroll_viewports.append((right-left, bottom-top, left, top, right, bottom))
             except (ValueError, IndexError):
                 continue
@@ -3251,9 +3263,30 @@ def verify_camera_system_bar_contrast(filename: str, prefix: str) -> bool:
         with Image.open(image_path) as captured:
             image = captured.convert("RGB")
             width, height = image.size
-            # Sample the central status-bar background, avoiding clock and notification icons.
+            # Sample only the real Android status-bar inset. A fixed 84px band
+            # extends into the live camera preview on the CI AVD and causes false failures.
+            window_dump = run("adb", "shell", "dumpsys", "window", "displays", timeout=10).stdout or ""
+            status_bar_height = 0
+            for pattern in (
+                r"type=statusBars\s+frame=\[0,0\]\[\d+,(\d+)\]",
+                r"type=statusBars.*?frame=\[0,0\]\[\d+,(\d+)\]",
+                r"mType=statusBars.*?mFrame=Rect\(0,\s*0\s*-\s*\d+,\s*(\d+)\)",
+            ):
+                match = re.search(pattern, window_dump, re.IGNORECASE | re.DOTALL)
+                if match:
+                    candidate = int(match.group(1))
+                    if 0 < candidate <= int(height * 0.10):
+                        status_bar_height = candidate
+                        break
+            if status_bar_height <= 0:
+                density_output = run("adb", "shell", "wm", "density").stdout or ""
+                density_match = re.search(r"(?:Physical|Override) density:\s*(\d+)", density_output)
+                if density_match:
+                    status_bar_height = round(24 * int(density_match.group(1)) / 160)
+            if status_bar_height <= 0 or status_bar_height > int(height * 0.10):
+                status_bar_height = max(1, round(height * 0.033))
             band = image.crop((
-                int(width * 0.20), 0, int(width * 0.80), min(height, 84)
+                int(width * 0.20), 0, int(width * 0.80), status_bar_height
             )).resize((48, 8))
             pixels = list(band.getdata())
             luminance = [

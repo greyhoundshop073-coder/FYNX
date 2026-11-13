@@ -432,6 +432,11 @@ checks.extend([
      "recordedVideoDurationFallbackMs = 0L" in camera
      and "recordedVideoDurationFallbackMs = 0L" in camera.split("fun retake()", 1)[1].split("fun rotatePhoto()", 1)[0]
      and "recordedVideoDurationFallbackMs = 0L" in camera.split("result.onSuccess { (working, original, selectedType) ->", 1)[1].split("}.onFailure", 1)[0]),
+    ("Compact video text toolbar receives captured duration and persists timing edits",
+     "compact = true" in camera
+     and "videoDurationMs = cameraVideoDurationMs" in camera
+     and "onTiming = { start, end ->" in camera
+     and "updateCameraTextOverlay(it.copy(startMs = start, endMs = end))" in camera),
     ("Retake explicitly releases and rebinds CameraX and gates the shutter on ready use cases",
      "Force a clean CameraX bind" in camera and "cameraReady = false" in camera
      and "galleryRebindRequest += 1" in camera

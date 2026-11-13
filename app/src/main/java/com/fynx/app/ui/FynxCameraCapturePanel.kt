@@ -656,7 +656,7 @@ fun FynxCameraCapturePanel(
             error = failure.message ?: "The selected media could not be prepared for editing."
         }
     }
-    LaunchedEffect(pendingUri, pendingType) {
+    LaunchedEffect(pendingUri, pendingType, recordedVideoDurationFallbackMs) {
         cameraVideoDurationMs = 0L
         cameraMediaAspectRatio = 9f / 16f
         val uri = pendingUri
@@ -1654,6 +1654,7 @@ fun FynxCameraCapturePanel(
                         overlayCount = cameraTextOverlays.size,
                         isVideo = previewType == "video" || previewType == "video_note",
                         compact = true,
+                        videoDurationMs = cameraVideoDurationMs,
                         onAdd = ::addCameraTextOverlay,
                         onColor = { color -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(color = color)) } },
                         onFont = { font -> selectedOverlay?.let { updateCameraTextOverlay(it.copy(font = font)) } },
@@ -1666,6 +1667,11 @@ fun FynxCameraCapturePanel(
                                 else -> "CENTER"
                             }))
                         } },
+                        onTiming = { start, end ->
+                            selectedOverlay?.let {
+                                updateCameraTextOverlay(it.copy(startMs = start, endMs = end))
+                            }
+                        },
                         onDelete = {
                             selectedOverlay?.let { removed ->
                                 cameraTextOverlays = cameraTextOverlays.filterNot { it.id == removed.id }
