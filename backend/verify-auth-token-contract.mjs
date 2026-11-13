@@ -37,7 +37,7 @@ assert.match(productionMessaging, /FynxBackendClient\.isRequestSessionCurrent\(e
   "media preparation must abort rather than transfer an in-flight upload to another account");
 assert.match(productionMessaging, /FynxBackendClient\.postJsonForSession\(context, "\/api\/messages", body\.toString\(\), requestToken\)/,
   "private text and structured message sends must use the initiating session token");
-assert.match(conversationPanel, /FynxProductionMessaging\.uploadMedia\([\s\S]*?requestAccountKey, requestToken\)/,
+assert.match(conversationPanel, /FynxProductionMessaging\.uploadMedia\([\s\S]*?requestAccountKey,\s*requestToken\s*\)/,
   "private voice retry must upload under the account and token captured before IO");
 assert.match(conversationPanel, /expectedAccountKey = requestAccountKey, requestToken = requestToken/,
   "private voice message creation must retain the upload's initiating session");
