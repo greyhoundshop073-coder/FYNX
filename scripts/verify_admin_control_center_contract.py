@@ -290,6 +290,17 @@ require("name: Upload FYNX runtime screenshots and UI hierarchies" in workflow a
         "Admin screenshot and UI hierarchy artifacts must upload even when runtime capture fails")
 
 
+# Instrumentation teardown removes the target APK; the visual preview must
+# reinstall the built debug APK before run-as writes preferences or launches it.
+install_at = runtime_runner.find('adb install -r "${APP_APK}"')
+preference_at = runtime_runner.find("fynx_admin_visual_preview", install_at)
+launch_at = runtime_runner.find("adb shell monkey -p com.fynx.app", preference_at)
+screenshot_at = runtime_runner.find("adb exec-out screencap -p", launch_at)
+require("APP_APK=\"app/build/outputs/apk/debug/app-debug.apk\"" in runtime_runner and
+        install_at >= 0 and preference_at > install_at and launch_at > preference_at and screenshot_at > launch_at,
+        "Admin preview must reinstall the debug APK after instrumentation teardown before configuring and capturing the screen")
+
+
 # Harden the original five Admin findings without changing normal social search.
 require("CREATE TABLE IF NOT EXISTS fynx_platform_owner" in backend and
         "owner_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT" in backend and
