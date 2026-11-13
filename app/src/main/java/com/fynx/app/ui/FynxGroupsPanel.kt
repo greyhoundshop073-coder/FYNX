@@ -321,6 +321,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showCatchMeUp by remember { mutableStateOf(false) }
     var showConversationMoments by remember { mutableStateOf(false) }
     var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
+    var groupMuted by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupMuted(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
@@ -605,36 +606,27 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             onMessage = {},
             onEvent = { event ->
                 if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == groupId) {
-                    scope.launch {
-                        FynxGroupRemoteClient.loadMessages(context, groupId)
-                            .onSuccess { remote ->
-                                val remoteMessages = remote.mapIndexedNotNull { index, item ->
-                                    runCatching {
-                                        FynxGroupRemoteClient.toChatMessage(
-                                            item,
-                                            currentUsername,
-                                            FynxBackendClient.baseUrl(context)
-                                        )
-                                    }.getOrNull()?.let { message ->
-                                        if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
-                                    }
-                                }
-                                val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                                val pendingLocal = latestMessages.filter { it.id !in remoteIds }
-                                val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
-                                messages = merged
-                                // Group history may contain years of chat JSON. Keep
-                                // local persistence off Main just like initial restoration.
-                                withContext(Dispatchers.IO) {
-                                    FynxChatStore.save(context, "group_$groupId", merged)
-                                }
-                                syncMessage = null
+                    val remote = FynxGroupRemoteClient.fromRealtimeMessage(event.messageJson)
+                    if (remote != null) {
+                        scope.launch {
+                            val incoming = FynxGroupRemoteClient.toChatMessage(
+                                remote,
+                                currentUsername,
+                                FynxBackendClient.baseUrl(context)
+                            )
+                            val isNewIncoming = !incoming.fromMe && latestMessages.none { it.id == incoming.id }
+                            val merged = (latestMessages.filterNot { it.id == incoming.id } + incoming)
+                                .distinctBy { it.id }
+                                .sortedBy { it.timestamp }
+                            messages = merged
+                            withContext(Dispatchers.IO) {
+                                FynxChatStore.save(context, "group_$groupId", merged)
                             }
-                            .onFailure {
-                                if (FynxBackendClient.hasAccessToken(context)) {
-                                    syncMessage = "New group messages could not refresh yet. Try again shortly."
-                                }
+                            if (isNewIncoming && groupNotificationsEnabled && !groupMuted) {
+                                FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
                             }
+                            syncMessage = null
+                        }
                     }
                 }
             }
@@ -746,6 +738,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
                         DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
                         DropdownMenuItem(text = { Text(if (groupNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { groupNotificationsEnabled = !groupNotificationsEnabled; FynxConversationPreferences.setGroupNotifications(context, groupId, groupNotificationsEnabled); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
+                        DropdownMenuItem(text = { Text(if (groupMuted) "Unmute this group" else "Mute this group") }, onClick = { groupMuted = !groupMuted; FynxConversationPreferences.setGroupMuted(context, groupId, groupMuted); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                     }
                 }
             }
