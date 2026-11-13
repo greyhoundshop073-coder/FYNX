@@ -86,8 +86,18 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     var createError by remember { mutableStateOf<String?>(null) }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
-    LaunchedEffect(Unit) {
-        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+    LaunchedEffect(currentUsername) {
+        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+        groups = localGroups
+        if (FynxBackendClient.hasAccessToken(context)) {
+            FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
+                val pendingIds = FynxGroupsStore.pendingSyncGroups(context)
+                val unsyncedLocalGroups = localGroups.filter { it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id } }
+                val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
+                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled) }
+                groups = reconciled
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
