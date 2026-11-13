@@ -848,7 +848,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             ) { Text(if (sending) "Sending voice message…" else "Retry voice message") }
         }
 
-        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
