@@ -79,7 +79,15 @@ check("APK upload fails when the expected file is missing", "if-no-files-found: 
 check("Push 9 investigation is recorded without adding a duplicate feature", (ROOT / "docs/FYNX_PROFILE_COVER_TAKEOVER_INVESTIGATION.md").is_file() and not cover_sources)
 check("final integration sweep includes the active marketplace panel", "FynxMarketplacePanel" in app)
 check("final integration sweep includes the real Status deep-link parameter", "statusOpenOwner" in app and "selected = \"Stories\"" in app)
-check("production app is not preview mode", "FYNX_PREVIEW_MODE = false" in app)
+app_build = read("app/build.gradle.kts")
+check(
+    "debug preview is restricted to debug builds and release requires sign-in",
+    "import com.fynx.app.BuildConfig" in app
+    and "private val FYNX_PREVIEW_MODE = BuildConfig.DEBUG" in app
+    and 'AuthSession(AuthState.SIGNED_IN, "preview")' in app
+    and "if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN)" in app
+    and "buildConfig = true" in app_build
+)
 check("no obvious fake production identity shortcut", not re.search(r"fakeUser|FakeUser|demoUser|DemoUser|mockUser|MockUser", home))
 
 failed = [name for name, ok in checks if not ok]
