@@ -391,3 +391,9 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - `POST /api/safety/appeals` parsed report IDs through `Number()` and `Number.isSafeInteger()`, rejecting legitimate PostgreSQL BIGINT string IDs above `Number.MAX_SAFE_INTEGER`.
 - It now uses `isPositivePostgresBigint` on the original input and retains the validated ID as an exact decimal string for ownership lookup and insert.
 - The reports/appeals PostgreSQL route test includes a report ID of `9007199254740993`, asserts exact appeal round-trip, and rejects `9223372036854775808`.
+
+
+### Group 8 Android verifier alignment — 13 November 2026
+- The first Android run failed in Large Badge #9 (Trust, Safety & Account Protection), not in the Admin source contract. Its old assertion still required `Number.isSafeInteger(reportId)` and the old `positive integer` message after the user-facing appeal route was upgraded to the shared PostgreSQL BIGINT validator.
+- The verifier now checks the shared `isPositivePostgresBigint` import/use, exact decimal-string preservation, absence of `Number(rawReportId)`, the PostgreSQL signed BIGINT maximum and rejection of unsafe numeric inputs. The behavioral test covers large, overflow, unsafe numeric and non-canonical string IDs.
+- Backend CI has passed the new reports/appeals PostgreSQL route test; Android and Chat/Groups must rerun on the verifier repair commit.
