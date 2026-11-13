@@ -44,7 +44,14 @@ const sharedModules = [
 for (const file of sharedModules) {
   const source = await readFile(path.join(directory, file), "utf8");
   assert.match(source, /import \{ getFynxDatabasePool \} from ["']\.\/databasePool\.js["'];/, file + " must use the shared database pool module");
-  assert.match(source, /const pool = getFynxDatabasePool\(\);/, file + " must use the shared pool instance");
+  if (file === "adminRoutes.js") {
+    // Admin routes accept an injected pool for isolated auth/moderation tests,
+    // but production must still fall back to the one application-wide pool.
+    assert.match(source, /const databasePool = injectedPool \|\| getFynxDatabasePool\(\);/,
+      "adminRoutes.js must use the shared pool by default while allowing test injection");
+  } else {
+    assert.match(source, /const pool = getFynxDatabasePool\(\);/, file + " must use the shared pool instance");
+  }
   assert.doesNotMatch(source, /const\s+pool\s*=\s*DATABASE_URL\s*\?\s*new\s+(?:pg\.)?Pool\(/, file + " must not create its own database pool");
   if (file !== "server.js") assert.doesNotMatch(source, /pool\.end\(\)/, file + " must not close the application-wide shared database pool");
 }
