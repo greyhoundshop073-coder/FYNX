@@ -75,7 +75,7 @@ drain_local_write = pending_group_drain.find('FynxChatStore.replaceMessage', dra
 check('group message retry rechecks account identity after the network request before writing local state', 0 <= drain_send < drain_account_guard < drain_local_write)
 pending_rsvp_sync = group_remote_client[group_remote_client.find('suspend fun syncPendingRsvps'):group_remote_client.find('suspend fun drainPendingWork')]
 rsvp_account_guard = pending_rsvp_sync.find('if(FynxAuthStore.accountStorageKey(context)!=account)return completed')
-rsvp_local_clear = pending_rsvp_sync.find('clearPendingRsvp(context,groupId,entry.key)')
+rsvp_local_clear = pending_rsvp_sync.find('clearPendingRsvp(context,groupId,entry.key,entry.value)')
 check('group event RSVP retry rechecks account identity after the server response before clearing local intent', 0 <= rsvp_account_guard < rsvp_local_clear)
 check('group content response is cached only for the account that initiated the request', 'FYNX account changed while group content was loading.' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)throw' in group_remote_client)
 
