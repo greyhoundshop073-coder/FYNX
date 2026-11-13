@@ -304,6 +304,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
     val glassThemeId = if (groupAppearance.equals("Light", true)) FynxGlassThemeId.LIGHT else FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
+    val screenWidthDp = context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density
+    val messageBubbleMaxWidth = (screenWidthDp.dp * 0.82f).coerceAtMost(360.dp)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
     val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, "group_$groupId")
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, "group_$groupId")
@@ -856,7 +858,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
                         if (!message.fromMe) {
-                            FynxAvatar(message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Member", Modifier.size(34.dp).padding(end = 6.dp))
+                            FynxRemoteProfileAvatar(mediaId = null, contentDescription = message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Group member", modifier = Modifier.size(32.dp), ownerUsername = message.senderUsername)
                         }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
                             if (!message.fromMe) {
@@ -878,7 +880,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 shape = if (mediaOnly) RoundedCornerShape(0.dp) else bubbleShape,
                                 border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
-                                modifier = Modifier.widthIn(max = 300.dp)
+                                modifier = Modifier.widthIn(max = messageBubbleMaxWidth)
                                     .offset { IntOffset((replySwipeOffsets[message.id] ?: 0f).roundToInt(), 0) }
                                     .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
                                     .pointerInput(message.id) {
