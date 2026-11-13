@@ -54,7 +54,8 @@ checks = [
      'videoCaptionMessage = "Captions are ready. Review the wording and timing before continuing."' in camera
      and 'error = "Captions are ready. Review the wording and timing before continuing."' not in camera
      and "videoCaptionMessage?.let { message ->" in camera
-     and 'Text(message, style = MaterialTheme.typography.bodySmall' in camera),
+     and "message,\n                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)," in camera
+     and "style = MaterialTheme.typography.bodySmall" in camera),
     ("Runtime types and preserves a real manual video caption when speech recognition is unavailable",
      'find_control(caption_xml, ["Video captions"])' in runtime
      and 'input_text_slowly("FYNXcap")' in runtime
