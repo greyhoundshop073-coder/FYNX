@@ -71,8 +71,8 @@ require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
 require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
         "existing owner announcement route parameter must remain compatible")
-require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
-        "music administration must be visible only to the verified owner")
+require('if (activeSection == "Overview" && d.role == "OWNER" && !previewMode)' in source,
+        "music administration must be visible only to the verified owner and excluded from the read-only preview")
 require('"/api/admin/accounts/${encode(userId)}/status"' in client,
         "account status client must call the backend status route")
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,
