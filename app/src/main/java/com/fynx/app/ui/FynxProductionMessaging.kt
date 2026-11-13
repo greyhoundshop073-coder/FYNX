@@ -111,6 +111,9 @@ object FynxProductionMessaging {
                 "Your account changed while preparing this attachment. Please choose it again."
             }
             val raw = FynxBackendClient.postJsonForSession(context, "/api/media", body.toString(), requestToken).getOrThrow()
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed while the attachment upload was completing. Reopen the original account to continue."
+            }
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -212,7 +215,10 @@ object FynxProductionMessaging {
         }
         val result = FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)
             .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
-        if (result.isSuccess) return result
+        if (result.isSuccess) {
+            return if (FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) result
+            else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
+        }
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
             val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
@@ -233,7 +239,7 @@ object FynxProductionMessaging {
                     createdAt = System.currentTimeMillis()
                 )
                 if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-                if (!FynxOfflineOutbox.enqueue(context, item)) return result
+                if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
                 return Result.success(
                     RemoteMessage(
                         id = localId,
@@ -325,7 +331,11 @@ object FynxProductionMessaging {
         }
         val result = FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)
             .mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
-        if (result.isSuccess || !FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context)) || !allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
+        if (result.isSuccess) {
+            return if (FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) result
+            else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
+        }
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context)) || !allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
 
         // Replaying this clientMessageId is idempotent on the backend.
         val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
@@ -345,7 +355,7 @@ object FynxProductionMessaging {
             messagePayload = normalizedPayload
         )
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-        if (!FynxOfflineOutbox.enqueue(context, item)) return result
+        if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
 
         return Result.success(
             RemoteMessage(

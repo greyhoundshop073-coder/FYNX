@@ -19,6 +19,7 @@ for path in ROOT.rglob("*.kt"):
 
 backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
 messaging = Path("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+outbox = Path("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt").read_text(encoding="utf-8")
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
@@ -41,6 +42,8 @@ for needle in required:
         violations.append(f"central transport invariant missing: {needle}")
 if 'FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)' not in messaging:
     violations.append("private chat send must preserve the initiating account token across attachment and voice upload workflows")
+if 'fun updateMediaId(context: Context, id: String, mediaId: String, expectedAccountKey: String? = null)' not in outbox:
+    violations.append("private media outbox updates must target the originating account namespace")
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")

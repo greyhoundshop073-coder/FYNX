@@ -31,23 +31,23 @@ object FynxOfflineSync {
         var completed = 0
         val items = FynxOfflineOutbox.load(context)
         for (item in items) {
-            if (FynxAuthStore.accountStorageKey(context) != accountKey) break
+            if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
             val acceptedMessageId = item.sentMessageId?.takeIf { it.isNotBlank() }
             if (acceptedMessageId != null) {
                 val linked = if (!item.marketplaceListingId.isNullOrBlank()) {
-                    FynxR6GIntegrationClient.attachListingToMessage(context, acceptedMessageId, item.marketplaceListingId)
+                    FynxR6GIntegrationClient.attachListingToMessage(context, acceptedMessageId, item.marketplaceListingId, expectedAccountKey = accountKey, requestToken = requestToken)
                 } else {
                     Result.success(Unit)
                 }
                 if (linked.isFailure) break
-                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
-                FynxOfflineOutbox.remove(context, item.id)
+                if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
+                FynxOfflineOutbox.remove(context, item.id, accountKey)
                 completed++
                 continue
             }
             var resolvedMediaId = item.mediaId
             if (resolvedMediaId.isNullOrBlank() && !item.localMediaPath.isNullOrBlank()) {
-                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
+                if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
                 val localFile = File(item.localMediaPath)
                 if (!localFile.isFile || localFile.length() !in 1..(12L * 1024L * 1024L)) break
                 val uploaded = FynxProductionMessaging.uploadMedia(
@@ -57,10 +57,11 @@ object FynxOfflineSync {
                     expectedAccountKey = accountKey,
                     requestToken = requestToken
                 ).getOrNull() ?: break
+                if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
                 resolvedMediaId = uploaded.id
-                FynxOfflineOutbox.updateMediaId(context, item.id, uploaded.id)
+                FynxOfflineOutbox.updateMediaId(context, item.id, uploaded.id, accountKey)
             }
-            if (FynxAuthStore.accountStorageKey(context) != accountKey) break
+            if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
             val payload = if (!resolvedMediaId.isNullOrBlank()) item.messagePayload + ("mediaId" to resolvedMediaId) else item.messagePayload
             val result = if (item.messageType == "text") {
                 FynxProductionMessaging.sendText(
@@ -93,26 +94,26 @@ object FynxOfflineSync {
             }
             if (result.isSuccess) {
                 val remote = result.getOrThrow()
+                if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
                 val currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
-                if (currentUserId.isNullOrBlank()) break
-                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
+                if (currentUserId.isNullOrBlank() || !FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
                 FynxChatStore.replaceMessage(
                     context,
                     conversationStoreKey(context, item),
                     item.id,
                     FynxProductionMessaging.toChatMessage(remote, currentUserId)
                 )
-                FynxOfflineOutbox.markSent(context, item.id, remote.id)
+                FynxOfflineOutbox.markSent(context, item.id, remote.id, accountKey)
                 // Keep this item until the attached listing context is also accepted.
                 // The stable requestId makes a retry safe if the message already exists.
                 if (!item.marketplaceListingId.isNullOrBlank()) {
                     val linked = FynxR6GIntegrationClient.attachListingToMessage(
-                        context, remote.id, item.marketplaceListingId
+                        context, remote.id, item.marketplaceListingId, expectedAccountKey = accountKey, requestToken = requestToken
                     )
                     if (linked.isFailure) break
                 }
-                if (FynxAuthStore.accountStorageKey(context) != accountKey) break
-                FynxOfflineOutbox.remove(context, item.id)
+                if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
+                FynxOfflineOutbox.remove(context, item.id, accountKey)
                 completed++
             } else {
                 // Keep the item durable. A later connectivity cycle can retry it.

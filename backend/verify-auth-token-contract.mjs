@@ -8,6 +8,8 @@ const productionMessaging = await read("app/src/main/java/com/fynx/app/ui/FynxPr
 const groupRemoteClient = await read("app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt");
 const conversationPanel = await read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt");
 const offlineSync = await read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt");
+const offlineOutbox = await read("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt");
+const r6gIntegration = await read("app/src/main/java/com/fynx/app/ui/FynxR6GIntegrationClient.kt");
 const authUi = await read("app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt");
 const remoteAuth = await read("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt");
 const server = await read("backend/server.js");
@@ -43,6 +45,12 @@ assert.match(conversationPanel, /expectedAccountKey = requestAccountKey, request
   "private voice message creation must retain the upload's initiating session");
 assert.match(offlineSync, /expectedAccountKey = accountKey,[\s\S]*?requestToken = requestToken/,
   "durable private message retries must retain the account and token captured at drain start");
+assert.match(offlineOutbox, /fun updateMediaId\(context: Context, id: String, mediaId: String, expectedAccountKey: String\? = null\)/,
+  "uploaded media IDs must update the originating account's outbox namespace even during account switches");
+assert.match(offlineOutbox, /fun remove\(context: Context, id: String, expectedAccountKey: String\? = null\)/,
+  "outbox removal must remain bound to the originating account namespace");
+assert.match(r6gIntegration, /FynxBackendClient\.postJsonForSession\(context, "\/api\/r6g\/messages\/\$message\/context",[\s\S]*?requestToken\)/,
+  "marketplace context attached to a queued chat message must keep its original session token");
 assert.match(groupRemoteClient, /FynxBackendClient\.isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore\.accountStorageKey\(context\), requestToken, FynxBackendClient\.accessToken\(context\)\)/,
   "group message creation and media upload must remain in the initiating account session");
 assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,

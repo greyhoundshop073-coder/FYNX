@@ -42,8 +42,8 @@ object FynxOfflineOutbox {
         val sentMessageId: String? = null
     )
 
-    private fun preferencesName(context: Context): String? {
-        val accountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() } ?: return null
+    private fun preferencesName(context: Context, expectedAccountKey: String? = null): String? {
+        val accountKey = (expectedAccountKey ?: FynxAuthStore.accountStorageKey(context))?.takeIf { it.isNotBlank() } ?: return null
         val encodedAccount = Base64.encodeToString(
             accountKey.toByteArray(Charsets.UTF_8),
             Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
@@ -51,8 +51,8 @@ object FynxOfflineOutbox {
         return PREFS_PREFIX + encodedAccount
     }
 
-    fun enqueue(context: Context, item: Item): Boolean {
-        val name = preferencesName(context) ?: return false
+    fun enqueue(context: Context, item: Item, expectedAccountKey: String? = null): Boolean {
+        val name = preferencesName(context, expectedAccountKey) ?: return false
         return enqueue(context, name, item)
     }
 
@@ -65,9 +65,9 @@ object FynxOfflineOutbox {
     }
 
     @Synchronized
-    fun remove(context: Context, id: String) {
-        val name = preferencesName(context) ?: return
-        val current = load(context)
+    fun remove(context: Context, id: String, expectedAccountKey: String? = null) {
+        val name = preferencesName(context, expectedAccountKey) ?: return
+        val current = loadForPreferences(context, name)
         val removed = current.firstOrNull { it.id == id }
         removed?.localMediaPath?.let { path -> runCatching { File(path).delete() } }
         save(context, name, current.filterNot { it.id == id })
@@ -75,19 +75,19 @@ object FynxOfflineOutbox {
     }
 
     @Synchronized
-    fun updateMediaId(context: Context, id: String, mediaId: String) {
-        val name = preferencesName(context) ?: return
-        val current = load(context)
+    fun updateMediaId(context: Context, id: String, mediaId: String, expectedAccountKey: String? = null) {
+        val name = preferencesName(context, expectedAccountKey) ?: return
+        val current = loadForPreferences(context, name)
         save(context, name, current.map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })
         current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
     }
 
     @Synchronized
-    fun markSent(context: Context, id: String, messageId: String) {
+    fun markSent(context: Context, id: String, messageId: String, expectedAccountKey: String? = null) {
         val cleanMessageId = messageId.trim()
         if (cleanMessageId.isBlank()) return
-        val name = preferencesName(context) ?: return
-        val current = load(context)
+        val name = preferencesName(context, expectedAccountKey) ?: return
+        val current = loadForPreferences(context, name)
         save(context, name, current.map { item ->
             if (item.id == id) item.copy(sentMessageId = cleanMessageId) else item
         })

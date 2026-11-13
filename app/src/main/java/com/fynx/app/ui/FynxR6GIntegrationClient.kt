@@ -61,13 +61,23 @@ object FynxR6GIntegrationClient {
         }.toString()).mapCatching { JSONObject(it).getString("postId") }
     }
 
-    suspend fun attachListingToMessage(context: Context, messageId: String, listingId: String, businessId: String? = null): Result<Unit> {
+    suspend fun attachListingToMessage(
+        context: Context,
+        messageId: String,
+        listingId: String,
+        businessId: String? = null,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<Unit> {
         val message = messageId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid message id"))
         val listing = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
-        return FynxBackendClient.postJson(context, "/api/r6g/messages/$message/context", JSONObject().apply {
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+            return Result.failure(IllegalStateException("Your account changed before attaching the listing context."))
+        }
+        return FynxBackendClient.postJsonForSession(context, "/api/r6g/messages/$message/context", JSONObject().apply {
             put("listingId", listing)
             if (!businessId.isNullOrBlank()) put("businessId", businessId.toLongOrNull() ?: JSONObject.NULL)
-        }.toString()).map { Unit }
+        }.toString(), requestToken).map { Unit }
     }
 
     suspend fun shareListingToGroup(context: Context, groupId: String, listingId: String, text: String = ""): Result<String> {
