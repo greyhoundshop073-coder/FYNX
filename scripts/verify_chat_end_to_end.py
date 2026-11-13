@@ -95,7 +95,7 @@ require(conversation, r"FynxOfflineSync\.drain\(context\)", "Private attachment 
 require(conversation, r"if \(queued\)[\s\S]{0,1800}attachment = null", "Successful durable staging must clear the composer attachment")
 require(conversation, r"Attachment could not be saved for retry", "Attachment staging failures must be visible to the user")
 require(conversation, r"restorePendingOutboxMessages\(\)", "Cold-start Chat must reconstruct bubbles from durable pending outbox records")
-require(conversation, r"item\.sentMessageId\.isNullOrBlank\(\)", "Already accepted server messages must not be reconstructed as unsent media")
+require(conversation, r"(?:it|item)\.sentMessageId\.isNullOrBlank\(\)", "Already accepted server messages must not be reconstructed as unsent media")
 
 # 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
 # both at send time and at the recorder itself, so the UI cannot continue recording past it.
