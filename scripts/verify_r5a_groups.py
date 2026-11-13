@@ -19,6 +19,13 @@ server = read('backend/server.js')
 realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
 group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
+active_group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+group_remote_client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
+group_social = read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt')
+conversation_preferences = read('app/src/main/java/com/fynx/app/ui/FynxConversationPreferences.kt')
+firebase_messaging = read('app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt')
+offline_sync = read('app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt')
+connection_manager = read('app/src/main/java/com/fynx/app/ui/FynxAppConnectionManager.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
 check('group membership is required to read messages', "group membership required" in group and "if(!(await member(groupId,req.user.sub)))" in group)
@@ -40,6 +47,14 @@ check('backend exposes an authenticated group realtime broadcast hub', 'app.loca
 check('group message send/action routes publish realtime updates', 'broadcastGroupMessage(groupId, message)' in group)
 check('realtime client accepts group message events', '"group_message" in realtime and "GroupMessage" in realtime')
 check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
+
+
+check('active group realtime events update messages directly without a duplicate REST history fetch', 'fromRealtimeMessage(event.messageJson)' in active_group_panel and 'FynxGroupRemoteClient.loadMessages(context, groupId)' not in active_group_panel[active_group_panel.find('if (event is FynxRealtimeClient.Event.GroupMessage'):active_group_panel.find('LaunchedEffect(messages.size', active_group_panel.find('if (event is FynxRealtimeClient.Event.GroupMessage'))])
+check('group message attachments require current membership and block removed uploader ownership bypass', 'groupMessageAuthorization' in server and 'gmem.user_id = $2' in server and 'ownerMediaAuthorization' in server and 'NOT EXISTS (\n        SELECT 1 FROM fynx_group_messages gm' in server)
+check('group content is cached per authenticated account for offline history', 'loadCachedContent(context, groupId)' in group_social and 'content_json' in group_remote_client and 'FynxAuthStore.accountStorageKey(context)' in group_remote_client)
+check('event RSVPs support Going Maybe and Not going with durable offline retry state', all(token in group_social for token in ['"GOING"','"MAYBE"','"NOT_GOING"','pendingResponse']) and 'pending_rsvps' in group_remote_client and 'syncPendingRsvps' in group_remote_client)
+check('group mute preference can be changed and is enforced for background notifications', 'fun setGroupMuted' in conversation_preferences and 'setGroupMuted(context, groupId, groupMuted)' in active_group_panel and 'FynxConversationPreferences.groupMuted(this, groupId)' in firebase_messaging and 'GROUPS_CHANNEL' in firebase_messaging)
+check('private offline outbox drains after authenticated backend reachability returns', 'FynxOfflineSync.drain(appContext)' in connection_manager and 'FynxOfflineOutbox.load(context)' in offline_sync and 'FynxOfflineOutbox.remove(context, item.id)' in offline_sync)
 
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
