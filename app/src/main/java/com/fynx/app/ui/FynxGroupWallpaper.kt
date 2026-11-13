@@ -44,7 +44,7 @@ fun FynxGroupWallpaperBackground(groupId:String,modifier:Modifier=Modifier,conte
         "Midnight"->Color(0xFF171A20)
         "Aurora"->Color(0xFF182323)
         "Sunrise"->Color(0xFF211D21)
-        else->Color(0xFF202326)
+        else->Color(0xFF000000)
     }
     Box(modifier.background(base)){
         if(name=="Classic") FynxGroupDoodlePattern()
