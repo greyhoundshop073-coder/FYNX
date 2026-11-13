@@ -148,7 +148,7 @@ object FynxGroupRemoteClient {
                 "Your account changed while the attachment was uploading. The message was not sent."
             }
             val body = JSONObject().apply {
-                put("id", message.id)
+                put("id",message.id)
                 put("text", message.text)
                 if (mediaId != null) put("attachmentMediaId", mediaId)
                 if (mediaType != null) put("attachmentType", mediaType)

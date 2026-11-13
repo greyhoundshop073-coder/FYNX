@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 const root = new URL("../", import.meta.url);
 const read = async (path) => readFile(new URL(path, root), "utf8");
 const backend = await read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt");
+const productionMessaging = await read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt");
+const groupRemoteClient = await read("app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt");
 const authUi = await read("app/src/main/java/com/fynx/app/ui/FynxAuthPanel.kt");
 const remoteAuth = await read("app/src/main/java/com/fynx/app/ui/FynxRemoteAuthClient.kt");
 const server = await read("backend/server.js");
@@ -27,8 +29,12 @@ assert.match(backend, /val requestToken = accessToken\(context\)/,
   "authenticated media downloads must capture authentication before dispatching to IO");
 assert.match(backend, /internal suspend fun postJsonForSession\(context: Context, path: String, body: String, sessionToken: String\?\): Result<String>/,
   "a multi-step send journey must be able to keep one captured token across upload and message creation");
-assert.match(backend, /isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore.accountStorageKey\(context\), requestToken, FynxBackendClient.accessToken\(context\)\)/,
-  "media and group-message staging must abort rather than transfer an in-flight action to another account");
+assert.match(backend, /internal fun isRequestSessionCurrent\(/,
+  "the backend client must expose a shared account-and-token identity guard");
+assert.match(productionMessaging, /FynxBackendClient\.isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore\.accountStorageKey\(context\), requestToken, FynxBackendClient\.accessToken\(context\)\)/,
+  "media preparation must abort rather than transfer an in-flight upload to another account");
+assert.match(groupRemoteClient, /FynxBackendClient\.isRequestSessionCurrent\(expectedAccountKey, FynxAuthStore\.accountStorageKey\(context\), requestToken, FynxBackendClient\.accessToken\(context\)\)/,
+  "group message creation and media upload must remain in the initiating account session");
 assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,
   "a 401 may clear the session only when the rejected token still belongs to the current session");
 assert.match(backend, /shouldClearRejectedAccessToken\(requestToken, accessToken\(context\)\)/,
