@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 
 enum class FynxGlassThemeId(val label: String) {
     PURE_BLACK("Pure Black Glass"),
@@ -29,11 +30,47 @@ data class FynxGlassThemePalette(
     val messageMuted: Color
 )
 
+fun fynxGlassMessageBubbleBrush(
+    palette: FynxGlassThemePalette,
+    fromMe: Boolean,
+    transparency: Float,
+    gradient: Float
+): Brush {
+    if (palette.id == FynxGlassThemeId.PURE_BLACK) {
+        return if (fromMe) {
+            Brush.horizontalGradient(
+                listOf(
+                    Color(0xFF007FFF).copy(alpha = transparency.coerceIn(0f, 1f)),
+                    Color(0xFF0066CC).copy(alpha = gradient.coerceIn(0f, 1f))
+                )
+            )
+        } else {
+            val charcoal = Color(0xFF242A33).copy(alpha = transparency.coerceIn(0f, 1f))
+            Brush.linearGradient(listOf(charcoal, charcoal))
+        }
+    }
+    return if (fromMe) {
+        Brush.horizontalGradient(
+            listOf(
+                palette.outgoingStart.copy(alpha = transparency.coerceIn(0f, 1f)),
+                palette.outgoingEnd.copy(alpha = gradient.coerceIn(0f, 1f))
+            )
+        )
+    } else {
+        Brush.linearGradient(
+            listOf(
+                palette.incomingGlass.copy(alpha = transparency.coerceIn(0f, 1f)),
+                palette.backgroundMid.copy(alpha = (0.55f + gradient * 0.4f).coerceIn(0.55f, 0.95f))
+            )
+        )
+    }
+}
+
 fun fynxGlassPalette(id: FynxGlassThemeId): FynxGlassThemePalette = when (id) {
     FynxGlassThemeId.PURE_BLACK -> FynxGlassThemePalette(
         id, Color(0xFF000000), Color(0xFF080B18), Color(0xFF182B52),
         Color(0xFF6F8CFF), Color(0xFF8B6DFF), Color(0xFF45D9FF),
-        Color(0xFF17202B), Color(0xFF163B70), Color(0xFF176A7D), Color(0xFF67DFFF),
+        Color(0xFF242A33), Color(0xFF007FFF), Color(0xFF0066CC), Color(0xFF60B5FF),
         Color(0xFFF7F9FF), Color(0xFFCBD4E6)
     )
     FynxGlassThemeId.AURORA -> FynxGlassThemePalette(

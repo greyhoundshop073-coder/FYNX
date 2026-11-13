@@ -874,11 +874,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         Box {
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(messageCornerRadius)
-                            val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
-                            } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
-                            }
+                            val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
@@ -921,7 +917,6 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
                                     Column(
                                         Modifier
-                                            .fillMaxWidth()
                                             .padding(bottom = 5.dp)
                                             .background(glassPalette.backgroundMid.copy(alpha = 0.32f), RoundedCornerShape(8.dp))
                                             .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -1050,7 +1045,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
                                 }

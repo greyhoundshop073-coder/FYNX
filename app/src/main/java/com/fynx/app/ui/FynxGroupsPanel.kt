@@ -868,11 +868,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             Box {
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(15.dp)
-                            val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
-                            } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
-                            }
+                            val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
@@ -907,7 +903,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         val replied = messages.firstOrNull { it.id == message.replyToId }
                                         Column(
                                             Modifier
-                                                .fillMaxWidth()
                                                 .padding(bottom = 5.dp)
                                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
                                                 .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -943,7 +938,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     } else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
                                 }
                                 if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
                                 }

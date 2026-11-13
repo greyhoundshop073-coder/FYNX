@@ -9,6 +9,7 @@ APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
+GLASS_THEME = (UI / "FynxGlassTheme.kt").read_text(encoding="utf-8")
 
 checks = []
 def require(label, condition):
@@ -46,6 +47,11 @@ require("active group voice recording is cleaned up when leaving the conversatio
 require("active group Location action opens a location-share dialog and sends a map link", "showLocationShare = true" in ACTIVE_GROUP and "https://maps.google.com/?q=$mapsQuery" in ACTIVE_GROUP and "FynxGroupLocationShareDialog" in ACTIVE_GROUP)
 require("active group Contact action collects and sends selected contact details", "showContactShare = true" in ACTIVE_GROUP and "FynxGroupContactShareDialog" in ACTIVE_GROUP and "Phone: $phone" in ACTIVE_GROUP)
 require("active group Poll action opens the existing group content panel directly", "showPollsDirectly = true" in ACTIVE_GROUP and "openContentInitially = showPollsDirectly" in ACTIVE_GROUP and "mutableStateOf(openContentInitially)" in (UI / "FynxGroupSocialBatch.kt").read_text(encoding="utf-8"))
+
+# Default FYNX glass appearance is shared by private and group conversations.
+require("primary Pure Black Glass palette uses a black surface with Azure Blue outgoing and charcoal incoming bubbles", "Color(0xFF000000)" in GLASS_THEME and "Color(0xFF007FFF)" in GLASS_THEME and "Color(0xFF242A33)" in GLASS_THEME)
+require("private and group conversations use the same theme-aware bubble brush helper", "fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)" in PRIVATE and "fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)" in ACTIVE_GROUP)
+require("text-only private and group message metadata does not force bubbles to full width", "Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End" in PRIVATE and "Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End" in ACTIVE_GROUP)
 
 # Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
