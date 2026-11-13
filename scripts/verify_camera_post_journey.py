@@ -163,7 +163,7 @@ checks = [
      and 'Text("Your Story",' in camera
      and "onShareToStatus(finalUri" in camera
      and "onCaptured(finalUri, mediaType)" in camera
-     and "showYourStoryAction = cameraEditingMediaUri == null" in home
+     and "showYourStoryAction = true" in home
      and "onShareToStatus = {" in home
      and "onOpenStatusWithMedia(uri, type)" in home),
     ("Your Story reuses the existing Status composer media hand-off without changing Status publishing",
@@ -355,7 +355,7 @@ checks = [
      and "showCaptureControls = true" in camera
      and "if(previewUri!=null && previewType!=null)" in camera
      and "if (showYourStoryAction && !statusCapture && !liveProofMode)" in camera
-     and "showYourStoryAction = cameraEditingMediaUri == null" in home
+     and "showYourStoryAction = true" in home
      and "onClick = { finishCameraMedia(toStatus = true) }" in camera
      and "onShareToStatus(finalUri" in camera),
     ("Status CTA checks the existing upload and video limits before opening the Status composer",
