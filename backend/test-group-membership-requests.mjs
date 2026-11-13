@@ -59,6 +59,8 @@ try {
  const bulk=await client.query("INSERT INTO users(id,username,password_hash) SELECT $1::bigint+g::bigint,'capacity_'||g||'_'||$2,'' FROM generate_series(1,499) AS series(g)",[base+100n,suffix.slice(0,8)]);
  assert.equal(bulk.rowCount,499);
  await client.query("INSERT INTO fynx_group_members(group_id,user_id,role) SELECT $1,id,'MEMBER' FROM users WHERE id BETWEEN $2 AND $3",[capGroup,base+101n,base+599n]);
+ const capacityMemberCount=await client.query("SELECT COUNT(*)::int AS count FROM fynx_group_members WHERE group_id=$1",[capGroup]);
+ assert.equal(capacityMemberCount.rows[0].count,500,"capacity fixture must contain the owner plus 499 members before approval");
  await client.query("UPDATE fynx_groups SET approve_new_members=TRUE WHERE id=$1",[capGroup]);
  const capInvite=await call("POST","/api/groups/:groupId/invites",{groupId:capGroup},admin);
  assert.equal((await call("POST","/api/groups/:groupId/invites/:token/request",{groupId:capGroup,token:capInvite.body.token},capacityRequester)).statusCode,202);
