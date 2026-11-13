@@ -230,6 +230,8 @@ object FynxProductionMessaging {
         return result
     }
 
+    fun canQueueOffline(error: Throwable?): Boolean = isAmbiguousTransportFailure(error)
+
     private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
         val message = error?.message.orEmpty().lowercase()
         return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
@@ -373,7 +375,7 @@ object FynxProductionMessaging {
 
     fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage {
         val mediaType = message.mediaType?.trim()?.lowercase()?.takeIf { it in VALID_MEDIA_TYPES }
-        val mediaUrl = message.mediaUrl?.trim()?.takeIf { it.isNotBlank() && mediaType != null && !message.mediaId.isNullOrBlank() }
+        val mediaUrl = message.mediaUrl?.trim()?.takeIf { it.isNotBlank() && mediaType != null && (!message.mediaId.isNullOrBlank() || it.startsWith("file://", ignoreCase = true)) }
         return ChatMessage(
             text = if (message.deleted) "Message deleted" else message.text,
             fromMe = message.senderId == currentUserId,
