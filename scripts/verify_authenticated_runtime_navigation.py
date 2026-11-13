@@ -15,8 +15,9 @@ PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
 MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
+CHAT_GROUPS_VISUALS_ONLY=os.environ.get("FYNX_CHAT_GROUPS_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -3210,6 +3211,100 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if CHAT_GROUPS_VISUALS_ONLY:
+    report.append("- Focused Chat and Groups visual mode: captures the installed production Chat list, private ConversationPanel, Groups list and group ConversationPanel. It uses the disposable emulator's explicit debug-local entry when backend health is unavailable; this is UI evidence, not server authentication.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Chat/Groups UI entry could not reach Home: " + error]
+        (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
+        print("\\n".join(report))
+        raise SystemExit(2)
+
+    night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
+    if night_mode.returncode == 0:
+        time.sleep(0.8)
+        xml = dismiss_runtime_permission_prompt() or dump_ui("chat-groups-dark-home.xml") or xml
+
+    home_xml = dump_ui("chat-groups-home-entry.xml") or xml
+    chat_xml = tap_control(home_xml, ["Chat"], "chat-groups-home-chat", ["Messages and groups in one place"])
+    if not chat_xml:
+        FAILURES.append("Home -> Chat did not reach the real Chat and Groups surface")
+    else:
+        screenshot("authenticated-chat.png")
+        (ROOT/"authenticated-chat.xml").write_text(chat_xml+"\\n", encoding="utf-8")
+        report.append("- PASS: captured the actual Chat list surface from the installed APK.")
+
+        # Open an existing conversation where available; otherwise use the account's
+        # own real ConversationPanel deep link. No fake participant or backend record is created.
+        private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
+        if not private_xml:
+            local_target = USERNAME.removeprefix("@").strip()
+            if local_target:
+                started = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
+                              "-d", "fynx://chat/" + local_target, PACKAGE, timeout=30)
+                private_xml = wait_for_conversation_ui("private-chat-inside.xml", timeout=16.0)
+                if started.returncode != 0:
+                    private_xml = ""
+        if private_xml and (
+            find_control(private_xml, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."])
+            or find_control(private_xml, ["No messages here yet"])
+        ):
+            screenshot("private-chat-inside.png")
+            (ROOT/"private-chat-inside.xml").write_text(private_xml+"\\n", encoding="utf-8")
+            report.append("- PASS: captured the real private ConversationPanel.")
+        else:
+            FAILURES.append("Chat list and account deep link did not expose the real private ConversationPanel.")
+
+    # Return through the app's Home route before entering Groups; do not reuse stale coordinates.
+    home_again = restore_home_after_restart("chat-groups-return-home")
+    if home_again:
+        chat_again = tap_control(home_again, ["Chat"], "chat-groups-reopen-chat", ["Messages and groups in one place"])
+    else:
+        chat_again = ""
+    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["New group", "Create group"])
+    if not groups_xml:
+        FAILURES.append("Chat -> Groups did not expose the real Groups list.")
+    else:
+        screenshot("authenticated-groups.png")
+        (ROOT/"authenticated-groups.xml").write_text(groups_xml+"\\n", encoding="utf-8")
+        report.append("- PASS: captured the actual Groups list surface from the installed APK.")
+        group_xml = tap_first_real_chat_or_group_if_present(groups_xml, "group-chat-entry")
+        if not group_xml:
+            # No real group exists in the local test account. Open the production
+            # Group ConversationPanel route with a deterministic, non-persisted ID.
+            # The explicit Group unavailable state is valid UI evidence, not a real group.
+            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
+                "-d", "fynx://group/ci-runtime-group", PACKAGE, timeout=30)
+            group_xml = wait_for_group_conversation_ui("group-chat-inside.xml", timeout=16.0)
+        if group_xml and (
+            find_control(group_xml, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."])
+            or find_control(group_xml, ["Messaging is restricted", "No messages here yet", "Group unavailable"])
+        ):
+            screenshot("group-chat-inside.png")
+            (ROOT/"group-chat-inside.xml").write_text(group_xml+"\\n", encoding="utf-8")
+            if find_control(group_xml, ["Group unavailable"]):
+                report.append("- LIMITATION: group ConversationPanel route rendered its explicit unavailable state; no group record was fabricated.")
+            else:
+                report.append("- PASS: captured the real FynxGroupConversationPanel.")
+        else:
+            FAILURES.append("Groups list and deterministic route did not expose FynxGroupConversationPanel.")
+
+    required_images = ["authenticated-chat.png", "private-chat-inside.png", "authenticated-groups.png", "group-chat-inside.png"]
+    missing = [name for name in required_images if not (ROOT/name).is_file() or (ROOT/name).stat().st_size < 12000]
+    if missing:
+        FAILURES.append("Chat/Groups screenshot evidence is missing or undersized: " + ", ".join(missing))
+    report += ["", "## Screenshot evidence"]
+    report += ["- " + name for name in required_images if (ROOT/name).is_file()]
+    report += ["", "## Evidence boundary",
+               "- Screenshots are genuine adb screencap images from the installed Android APK; no AI-generated or synthetic screen images are used.",
+               "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, delivery, FCM or backend data.",
+               "- No real user, group, message, payment or Marketplace record is created by this capture path.",
+               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
+    (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\\n".join(report)+"\\n", encoding="utf-8")
+    print("\\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
+
 if MUSIC_VISUALS_ONLY:
     report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
     if error:
