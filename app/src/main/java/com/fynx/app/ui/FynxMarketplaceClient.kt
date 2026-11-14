@@ -25,7 +25,11 @@ object FynxMarketplaceClient {
         val deliveryFee: Double?,
         val mediaIds: List<String>,
         val active: Boolean = true,
-        val mediaTypes: List<String> = emptyList()
+        val mediaTypes: List<String> = emptyList(),
+        val originalPrice: Double? = null,
+        val productAverageRating: Double = 0.0,
+        val productReviewCount: Int = 0,
+        val priceDrop: Boolean = false
     )
 
     data class ShippingSettings(
@@ -271,7 +275,11 @@ object FynxMarketplaceClient {
             } else {
                 marketplaceRequiredListingActive(null)
             },
-            mediaTypes = mediaTypes
+            mediaTypes = mediaTypes,
+            originalPrice = if (o.has("original_price") && !o.isNull("original_price")) o.optDouble("original_price", Double.NaN).takeIf { it.isFinite() && it > 0.0 } else null,
+            productAverageRating = o.optDouble("product_average_rating", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0,
+            productReviewCount = o.optInt("product_review_count", 0).coerceAtLeast(0),
+            priceDrop = o.optBoolean("price_drop", false)
         )
     }
 

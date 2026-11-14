@@ -42,12 +42,28 @@ internal fun MarketplaceReferenceProductSummary(
 ) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(listing.title, color = FynxMarketplaceReferenceStyle.text, fontWeight = FontWeight.Bold, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-        Text(
-            listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.price),
-            color = FynxMarketplaceReferenceStyle.primarySoft,
-            fontWeight = FontWeight.Bold,
-            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.price),
+                color = FynxMarketplaceReferenceStyle.primarySoft,
+                fontWeight = FontWeight.Bold,
+                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium
+            )
+            marketplaceDiscountPercent(listing.price, listing.originalPrice)?.let {
+                Text(
+                    listing.currency.uppercase(Locale.US) + " " + String.format(Locale.US, "%,.2f", listing.originalPrice) + "  •  $it% OFF",
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                )
+            }
+        }
+        if (listing.productReviewCount > 0 && listing.productAverageRating > 0.0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("★", color = androidx.compose.ui.graphics.Color(0xFFFFB72B), fontWeight = FontWeight.Bold)
+                Text(" " + String.format(Locale.US, "%.1f", listing.productAverageRating) + " (" + marketplaceReviewCountLabel(listing.productReviewCount) + " reviews)", color = FynxMarketplaceReferenceStyle.textMuted)
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (listing.condition.isNotBlank()) {
                 Surface(shape = RoundedCornerShape(10.dp), color = FynxMarketplaceReferenceStyle.surfaceRaised) {

@@ -23,6 +23,16 @@ class FynxMarketplaceProductCardPresentationTest {
     }
 
     @Test
+    fun discountPercentRequiresARealHigherOriginalPriceAndRoundsCorrectly() {
+        assertEquals(20, marketplaceDiscountPercent(80.0, 100.0))
+        assertEquals(15, marketplaceDiscountPercent(85.0, 100.0))
+        assertNull(marketplaceDiscountPercent(100.0, 100.0))
+        assertNull(marketplaceDiscountPercent(101.0, 100.0))
+        assertNull(marketplaceDiscountPercent(0.0, 100.0))
+        assertNull(marketplaceDiscountPercent(80.0, null))
+    }
+
+    @Test
     fun conditionLabelsOnlyRecognizeSupportedListingConditions() {
         assertEquals("New", marketplaceConditionLabel("NEW"))
         assertEquals("Used", marketplaceConditionLabel("used"))

@@ -45,7 +45,14 @@ try {
       mime_type TEXT NOT NULL
     );
     CREATE TABLE blocks (blocker_id BIGINT NOT NULL, blocked_id BIGINT NOT NULL);
-    CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY, title TEXT NOT NULL);
+    CREATE TABLE marketplace_listings (
+      id BIGINT PRIMARY KEY,
+      seller_id BIGINT NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '',
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE marketplace_orders (
       id UUID PRIMARY KEY,
       buyer_id BIGINT NOT NULL REFERENCES users(id),
@@ -62,7 +69,7 @@ try {
       (3,'outsider','Outside Buyer',903);
     INSERT INTO message_media(id,owner_id,mime_type) VALUES
       (101,1,'image/png'),(102,1,'image/jpeg'),(103,2,'image/png'),(104,1,'video/mp4');
-    INSERT INTO marketplace_listings(id,title) VALUES (501,'Test listing');
+    INSERT INTO marketplace_listings(id,seller_id,title,category) VALUES (501,1,'Test listing','Electronics');
   `);
 
   server = app.listen(0);
@@ -158,6 +165,31 @@ try {
   });
   assert.equal(response.status, 409, "the same buyer cannot review the same order twice");
 
+  response = await request("/api/marketplace/orders/" + completedOrder + "/product-review", 3, {
+    method: "POST", body: json({ rating: 5, comment: "Not the buyer" })
+  });
+  assert.equal(response.status, 403, "a non-buyer cannot submit a product review");
+  response = await request("/api/marketplace/orders/" + pendingOrder + "/product-review", 2, {
+    method: "POST", body: json({ rating: 5, comment: "Too early" })
+  });
+  assert.equal(response.status, 409, "an incomplete order cannot receive a product review");
+  response = await request("/api/marketplace/orders/" + completedOrder + "/product-review", 2, {
+    method: "POST", body: json({ rating: 4, comment: "Verified product purchase" })
+  });
+  assert.equal(response.status, 201, "a buyer can review the purchased product after completion");
+  const productReview = (await response.json()).review;
+  assert.equal(productReview.listingId, "501");
+  assert.equal(productReview.rating, 4);
+  response = await request("/api/marketplace/orders/" + completedOrder + "/product-review", 2, {
+    method: "POST", body: json({ rating: 5, comment: "Duplicate product review" })
+  });
+  assert.equal(response.status, 409, "a completed order cannot be reviewed for the product twice");
+  response = await request("/api/marketplace/listings/501/reviews?limit=1&offset=0", 3);
+  assert.equal(response.status, 200, "public product reviews can be loaded");
+  const productPage = await response.json();
+  assert.equal(productPage.reviewCount, 1);
+  assert.equal(productPage.averageRating, 4);
+  assert.equal(productPage.reviews[0].comment, "Verified product purchase");
   response = await request("/api/marketplace/sellers/sellerone/reviews?limit=1&offset=0", 3);
   assert.equal(response.status, 200, "public review list can be loaded");
   const reviewPage = await response.json();

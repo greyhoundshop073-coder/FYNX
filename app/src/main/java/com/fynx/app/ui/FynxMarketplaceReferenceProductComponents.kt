@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Reference-board product presentation. All values come from the real listing. */
 /**
@@ -53,6 +54,11 @@ internal fun marketplaceReviewCountLabel(reviewCount: Int): String {
         count >= 1_000 -> compact(count / 1_000.0) + "k"
         else -> count.toString()
     }
+}
+
+internal fun marketplaceDiscountPercent(currentPrice: Double, originalPrice: Double?): Int? {
+    if (originalPrice == null || !originalPrice.isFinite() || !currentPrice.isFinite() || originalPrice <= currentPrice || originalPrice <= 0.0 || currentPrice <= 0.0) return null
+    return (((originalPrice - currentPrice) / originalPrice) * 100.0).roundToInt().coerceAtLeast(1)
 }
 
 internal fun marketplaceCardPriceLabel(currency: String, price: Double): String {
@@ -153,18 +159,27 @@ internal fun MarketplaceReferenceProductCard(
     isSponsored: Boolean = false,
     isTrending: Boolean = false,
     isPopularNearYou: Boolean = false,
-    isNewArrival: Boolean = false
+    isNewArrival: Boolean = false,
+    isSpecialOffer: Boolean = false
 ) {
     val context = LocalContext.current
     val deliveryLabel = marketplaceDeliveryLabel(listing.deliveryAvailable, listing.deliveryFee)
     val stockLabel = marketplaceStockLabel(listing.quantity)
     val conditionLabel = marketplaceConditionLabel(listing.condition)
     val sellerHighlight = marketplaceSellerHighlight(sellerRating)
+    val discountPercent = marketplaceDiscountPercent(listing.price, listing.originalPrice)
+    val hasProductRating = listing.productReviewCount > 0 && listing.productAverageRating > 0.0
+    val isTopRatedProduct = listing.productReviewCount >= 5 && listing.productAverageRating >= 4.5
     val prominentBadges = buildList {
         if (listing.quantity <= 0) {
             add("Out of stock" to Color(0xFFDC143C))
         } else {
             if (isWeeklyBestSeller) add("Best Seller" to Color(0xFF007FFF))
+            if (isSpecialOffer) add("Special Offer" to Color(0xFFDB2777))
+            if (discountPercent != null && discountPercent >= 20) add("Hot Deal" to Color(0xFFDC143C))
+            else if (discountPercent != null) add("$discountPercent% OFF" to Color(0xFFDC143C))
+            if (listing.priceDrop) add("Price Drop" to Color(0xFFEA580C))
+            if (isTopRatedProduct) add("Top Rated" to Color(0xFF8B5CF6))
             marketplaceSponsoredBadge(isSponsored)?.let { add(it to Color(0xFF475569)) }
             marketplaceVerifiedSellerBadge(isVerifiedSeller)?.let { add(it to Color(0xFF007FFF)) }
             if (isTrending) add("Trending" to Color(0xFF2563EB))
@@ -262,24 +277,24 @@ internal fun MarketplaceReferenceProductCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                sellerRating?.takeIf { it.reviewCount > 0 }?.let { rating ->
+                if (hasProductRating) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.Star,
-                            contentDescription = "Seller rating",
+                            contentDescription = "Product rating",
                             modifier = Modifier.size(15.dp),
                             tint = Color(0xFFFFB72B)
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
-                            String.format(Locale.US, "%.1f", rating.averageRating.coerceIn(0.0, 5.0)),
+                            String.format(Locale.US, "%.1f", listing.productAverageRating.coerceIn(0.0, 5.0)),
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.SemiBold,
                             style = androidx.compose.material3.MaterialTheme.typography.labelMedium
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            "(" + marketplaceReviewCountLabel(rating.reviewCount) + " seller reviews)",
+                            "(" + marketplaceReviewCountLabel(listing.productReviewCount) + " reviews)",
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                             maxLines = 1,
@@ -329,7 +344,16 @@ internal fun MarketplaceReferenceProductCard(
                                         style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                                     )
                                 }
-                                sellerRating?.let { MarketplaceSellerTierBadge(it.tier) }
+                                sellerRating?.let { reputation ->
+                                    MarketplaceSellerTierBadge(reputation.tier)
+                                    if (reputation.reviewCount > 0) {
+                                        Text(
+                                            "Seller rating " + String.format(Locale.US, "%.1f", reputation.averageRating.coerceIn(0.0, 5.0)),
+                                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -371,7 +395,11 @@ internal fun MarketplaceReferenceProductCard(
                 val productMeta = buildList {
                     conditionLabel?.let { add(it) }
                     stockLabel?.let { if (it != "Out of stock") add(it) }
-                    deliveryLabel?.let { add(it) }
+                    if (listing.deliveryAvailable && listing.deliveryFee != null && listing.deliveryFee > 0.0) {
+                        add("Delivery • " + marketplaceCardPriceLabel(listing.currency, listing.deliveryFee))
+                    } else {
+                        deliveryLabel?.let { add(it) }
+                    }
                     if (listing.pickupAvailable) add("Local pickup")
                 }.distinct().take(3)
                 if (productMeta.isNotEmpty()) {
@@ -389,15 +417,25 @@ internal fun MarketplaceReferenceProductCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        marketplaceCardPriceLabel(listing.currency, listing.price),
-                        modifier = Modifier.weight(1f),
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            marketplaceCardPriceLabel(listing.currency, listing.price),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (discountPercent != null && listing.originalPrice != null) {
+                            Text(
+                                marketplaceCardPriceLabel(listing.currency, listing.originalPrice),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
+                                maxLines = 1
+                            )
+                        }
+                    }
                     if (onAddToCart != null && listing.quantity > 0) {
                         Surface(
                             onClick = onAddToCart,

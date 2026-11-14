@@ -70,13 +70,31 @@ fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient
         var comment by remember(order.id) { mutableStateOf("") }
         var busy by remember(order.id) { mutableStateOf(false) }
         var localError by remember(order.id) { mutableStateOf<String?>(null) }
+        var productRating by remember(order.id) { mutableIntStateOf(5) }
+        var productComment by remember(order.id) { mutableStateOf("") }
+        var productBusy by remember(order.id) { mutableStateOf(false) }
+        var productError by remember(order.id) { mutableStateOf<String?>(null) }
         AlertDialog(
             onDismissRequest = { if (!busy) selected = null },
             title = { Text("Review seller") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(order.productTitle.ifBlank { "FYNX order" }, style = MaterialTheme.typography.titleMedium)
-                    Text("Rating: $rating / 5")
+                    Text("Review the product", style = MaterialTheme.typography.titleSmall)
+                    Text("Product rating: $productRating / 5")
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        (1..5).forEach { value -> FilterChip(selected = productRating == value, onClick = { productRating = value }, label = { Text("$value ★") }, colors = fynxMarketplaceSelectedChipColors()) }
+                    }
+                    OutlinedTextField(value = productComment, onValueChange = { productComment = it.take(1000) }, label = { Text("Product comment (optional)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                    productError?.let {
+                        Text(
+                            it,
+                            color = if (it == "Product review submitted.") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Divider()
+                    Text("Review the seller", style = MaterialTheme.typography.titleSmall)
+                    Text("Seller rating: $rating / 5")
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         (1..5).forEach { value -> FilterChip(selected = rating == value, onClick = { rating = value }, label = { Text("$value ★") }, colors = fynxMarketplaceSelectedChipColors()) }
                     }
@@ -85,17 +103,32 @@ fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient
                 }
             },
             confirmButton = {
-                Button(enabled = !busy, onClick = {
-                    busy = true; localError = null
-                    scope.launch {
-                        submitMarketplaceReview(context, order.id, rating, comment)
-                            .onSuccess { selected = null; onChanged() }
-                            .onFailure { localError = marketplaceSafeError(it, "Review could not be submitted.") }
-                        busy = false
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(enabled = !productBusy && order.listingId.isNotBlank(), onClick = {
+                        productBusy = true; productError = null
+                        scope.launch {
+                            FynxRemoteSocialClient.reviewMarketplaceProduct(context, order.id, productRating, productComment)
+                                .onSuccess { productError = "Product review submitted."; onChanged() }
+                                .onFailure { productError = marketplaceSafeError(it, "Product review could not be submitted.") }
+                            productBusy = false
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        if (productBusy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit product review")
                     }
-                }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit review") }
+                    Button(enabled = !busy, onClick = {
+                        busy = true; localError = null
+                        scope.launch {
+                            submitMarketplaceReview(context, order.id, rating, comment)
+                                .onSuccess { selected = null; onChanged() }
+                                .onFailure { localError = marketplaceSafeError(it, "Seller review could not be submitted.") }
+                            busy = false
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Submit seller review")
+                    }
+                }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = { selected = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(enabled = !busy && !productBusy, onClick = { selected = null }) { Text("Cancel") } }
         )
     }
 }

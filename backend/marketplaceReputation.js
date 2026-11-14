@@ -345,6 +345,53 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     }
   });
 
+  app.get('/api/marketplace/listings/:id/reviews', auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchemaForPool(pool);
+      const listingId = String(req.params.id || '').trim();
+      if (!/^[0-9]{1,18}$/.test(listingId)) return res.status(400).json({ error: 'invalid listing id' });
+      const requestedLimit = Number.parseInt(String(req.query?.limit ?? '10'), 10);
+      const limit = Number.isFinite(requestedLimit) ? Math.min(20, Math.max(1, requestedLimit)) : 10;
+      const requestedOffset = Number.parseInt(String(req.query?.offset ?? '0'), 10);
+      const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(10000, requestedOffset)) : 0;
+      const result = await pool.query(`
+        SELECT r.id,r.rating,r.comment,r.created_at,buyer.username AS reviewer_username,buyer.display_name AS reviewer_display_name
+        FROM marketplace_product_reviews r JOIN users buyer ON buyer.id=r.buyer_id
+        JOIN marketplace_listings listing ON listing.id=r.listing_id
+        WHERE r.listing_id=$1
+          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=listing.seller_id) OR (b.blocked_id=$2 AND b.blocker_id=listing.seller_id))
+        ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4
+      `, [listingId, req.user.sub, limit, offset]);
+      const stats = await pool.query('SELECT COUNT(*)::INTEGER AS review_count,COALESCE(AVG(rating),0)::NUMERIC(4,2) AS average_rating FROM marketplace_product_reviews WHERE listing_id=$1', [listingId]);
+      return res.json({ reviews: result.rows.map(row => ({ id:String(row.id), rating:Number(row.rating), comment:row.comment || '', createdAt:row.created_at, reviewerUsername:row.reviewer_username, reviewerDisplayName:row.reviewer_display_name || row.reviewer_username })), reviewCount:Number(stats.rows[0]?.review_count || 0), averageRating:Number(stats.rows[0]?.average_rating || 0), limit, offset, hasMore:result.rows.length===limit });
+    } catch (error) {
+      console.error('marketplace product reviews', error);
+      return res.status(500).json({ error: 'product reviews could not be loaded' });
+    }
+  });
+
+  app.post('/api/marketplace/orders/:id/product-review', auth, async (req, res) => {
+    try {
+      await ensureMarketplaceSchemaForPool(pool);
+      const rating = Number(req.body?.rating);
+      const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim().slice(0, 1000) : '';
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
+      const orderResult = await pool.query('SELECT id,buyer_id,seller_id,listing_id,status FROM marketplace_orders WHERE id=$1', [req.params.id]);
+      const order = orderResult.rows[0];
+      if (!order) return res.status(404).json({ error: 'order not found' });
+      if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'only the buyer can review this product' });
+      if (order.status !== 'COMPLETED') return res.status(409).json({ error: 'only completed orders can be reviewed' });
+      if (order.listing_id == null) return res.status(409).json({ error: 'this order is not linked to a product listing' });
+      const id = crypto.randomUUID();
+      const result = await pool.query('INSERT INTO marketplace_product_reviews(id,listing_id,order_id,seller_id,buyer_id,rating,comment) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(order_id,buyer_id) DO NOTHING RETURNING id,rating,comment,created_at', [id, order.listing_id, order.id, order.seller_id, order.buyer_id, rating, comment]);
+      if (!result.rows[0]) return res.status(409).json({ error: 'this order has already received a product review' });
+      return res.status(201).json({ review: { id:String(result.rows[0].id), listingId:String(order.listing_id), rating:Number(result.rows[0].rating), comment:result.rows[0].comment || '', createdAt:result.rows[0].created_at } });
+    } catch (error) {
+      console.error('marketplace product review', error);
+      return res.status(500).json({ error: 'product review failed' });
+    }
+  });
+
   app.post('/api/marketplace/orders/:id/review', auth, async (req, res) => {
     try {
       await ensureSchema();

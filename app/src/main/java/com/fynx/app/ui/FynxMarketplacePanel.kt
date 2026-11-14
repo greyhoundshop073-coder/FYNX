@@ -932,6 +932,13 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     val sponsoredListingIds = remember(sponsoredPromotions) {
         sponsoredPromotions.map { it.listing.id }.toSet()
     }
+    val specialOfferListingIds = remember(seasonalPromotions) {
+        seasonalPromotions.asSequence()
+            .filter { it.active && it.promotionType == "OFFER" && it.destinationType == "PRODUCT" }
+            .map { it.destinationValue.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
 
     fun reloadOrders() {
         scope.launch {
@@ -1631,7 +1638,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 isSponsored = listing.id in sponsoredListingIds,
                                 isTrending = listing.id in trendingListingIds,
                                 isPopularNearYou = listing.id in popularNearYouListingIds,
-                                isNewArrival = listing.id in newArrivalListingIds
+                                isNewArrival = listing.id in newArrivalListingIds,
+                                isSpecialOffer = listing.id in specialOfferListingIds
                             )
                         }
                         if (loadingMoreListings) {
@@ -1727,7 +1735,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 isSponsored = listing.id in sponsoredListingIds,
                                 isTrending = listing.id in trendingListingIds,
                                 isPopularNearYou = listing.id in popularNearYouListingIds,
-                                isNewArrival = listing.id in newArrivalListingIds
+                                isNewArrival = listing.id in newArrivalListingIds,
+                                isSpecialOffer = listing.id in specialOfferListingIds
                                         )
                                     }
                                 }
@@ -1757,7 +1766,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 isSponsored = listing.id in sponsoredListingIds,
                                 isTrending = listing.id in trendingListingIds,
                                 isPopularNearYou = listing.id in popularNearYouListingIds,
-                                isNewArrival = listing.id in newArrivalListingIds
+                                isNewArrival = listing.id in newArrivalListingIds,
+                                isSpecialOffer = listing.id in specialOfferListingIds
                                     )
                                     }
                                 }
@@ -1796,7 +1806,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 isSponsored = listing.id in sponsoredListingIds,
                                 isTrending = listing.id in trendingListingIds,
                                 isPopularNearYou = listing.id in popularNearYouListingIds,
-                                isNewArrival = listing.id in newArrivalListingIds
+                                isNewArrival = listing.id in newArrivalListingIds,
+                                isSpecialOffer = listing.id in specialOfferListingIds
                                         )
                                     }
                                 }
@@ -2447,7 +2458,7 @@ private fun MarketplacePaymentDialog(
 
 @Composable
 private fun MarketplaceSellDialog(context: android.content.Context, onPublished: (String) -> Unit, onCancel: () -> Unit) {
-    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var subcategory by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }; var desc by remember { mutableStateOf("") }; var price by remember { mutableStateOf("") }; var originalPrice by remember { mutableStateOf("") }; var currency by remember { mutableStateOf(FynxMarketplaceSellerFlowSupport.DEFAULT_CURRENCY) }; var quantity by remember { mutableStateOf("1") }; var category by remember { mutableStateOf("Electronics") }; var subcategory by remember { mutableStateOf("") }; var condition by remember { mutableStateOf("NEW") }; var brand by remember { mutableStateOf("") }; var model by remember { mutableStateOf("") }; var size by remember { mutableStateOf("") }; var color by remember { mutableStateOf("") }; var material by remember { mutableStateOf("") }; var dimensions by remember { mutableStateOf("") }; var warranty by remember { mutableStateOf("") }; var vehicleYear by remember { mutableStateOf("") }; var mileage by remember { mutableStateOf("") }; var beautyDetails by remember { mutableStateOf("") }; var serviceDetails by remember { mutableStateOf("") }; var generalDetails by remember { mutableStateOf("") }; var location by remember { mutableStateOf("") }; var delivery by remember { mutableStateOf(false) }; var pickup by remember { mutableStateOf(true) }; var media by remember { mutableStateOf<List<Uri>>(emptyList()) }; var showCamera by remember { mutableStateOf(false) }; var busy by remember { mutableStateOf(false) }; var locationLoading by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }; val scope = rememberCoroutineScope()
     var listingCopyBusy by remember { mutableStateOf(false) }
     var listingCopyError by remember { mutableStateOf<String?>(null) }
     var listingCopySuggestion by remember { mutableStateOf<FynxMarketplaceAiListingCopySuggestion?>(null) }
@@ -2700,7 +2711,8 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Choose one currency for this listing. Buyers see the price exactly in the selected currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }, colors = selectedChipColors) } }
-        OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Price ($currency)") }, supportingText = { Text("Enter a positive amount.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(price, { price = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Selling price ($currency)") }, supportingText = { Text("This is the amount buyers pay at checkout.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(originalPrice, { originalPrice = it.filter { ch -> ch.isDigit() || ch == '.' }.take(14) }, label = { Text("Original price ($currency, optional)") }, supportingText = { Text("Enter a genuine higher previous price to show a discount. Leave blank when there is no markdown.") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(quantity, { quantity = it.filter(Char::isDigit).take(9) }, label = { Text("Available quantity") }, supportingText = { Text("How many units can you supply?") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("3. Details buyers care about", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("These optional fields are added to your product description so buyers can compare listings more confidently.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2867,7 +2879,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
         OutlinedButton(onClick = { useCurrentListingLocation() }, enabled = !busy && !locationLoading, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.LocationOn, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (locationLoading) "Finding your area..." else "Use my current area") }
         Text("FYNX uses a human-readable area for discovery; your exact GPS coordinates are not published with the listing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(delivery, { delivery = it }); Text("Delivery") }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(pickup, { pickup = it }); Text("Pickup") }; error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    } }, confirmButton = { Button(enabled = !busy && !listingCopyBusy && !photoReviewBusy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy && !listingCopyBusy && !photoReviewBusy) { Text("Cancel") } })
+    } }, confirmButton = { Button(enabled = !busy && !listingCopyBusy && !photoReviewBusy && location.trim().isNotBlank() && FynxMarketplaceSellerFlowSupport.validListing(title, listingDescription, price.toDoubleOrNull(), quantity.toIntOrNull(), media) && (originalPrice.isBlank() || (originalPrice.toDoubleOrNull()?.let { it.isFinite() && it > (price.toDoubleOrNull() ?: 0.0) } == true)) && FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency), onClick = { busy = true; error = null; scope.launch { FynxRemoteSocialClient.createMarketplaceListing(context, title, listingDescription, "", price.toDouble(), currency, category, condition, quantity.toIntOrNull() ?: 1, location, delivery, pickup, null, media, originalPrice.toDoubleOrNull()).onSuccess { listingId -> cleanupGeneratedPhotoFiles(); onPublished(listingId) }.onFailure { error = marketplaceSafeError(it, "Listing could not be published."); busy = false } } }) { if (busy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Publish") } }, dismissButton = { TextButton(onClick = { cleanupGeneratedPhotoFiles(); onCancel() }, enabled = !busy && !enhancementBusy && !listingCopyBusy && !photoReviewBusy) { Text("Cancel") } })
     if (showEnhancementPicker) {
         AlertDialog(
             onDismissRequest = { if (!enhancementBusy) showEnhancementPicker = false },
