@@ -23,5 +23,10 @@ jobs:
         run: python3 scripts/verify_chat_group_layout_and_parity_gate.py
       - name: Verify private Chat offline send and structured recovery
         run: python3 scripts/verify_offline_chat_send.py
+      - name: Set up supported JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Android regression build
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache --stacktrace
