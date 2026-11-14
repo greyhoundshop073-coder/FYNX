@@ -90,7 +90,7 @@ require(conversation, r"val queued = queuePrivateAttachment\(", "Attachment send
 require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Selected media must be copied to app-owned durable storage before network upload")
 require(offline_outbox, r"File\(context\.filesDir, \"fynx_chat_outbox_media_", "Private attachment outbox must use persistent app files, not cacheDir")
 require(offline_sync, r"FynxProductionMessaging\.uploadMedia\(", "Queued attachments must upload through production media during retry")
-require(offline_sync, r"FynxOfflineOutbox\.markSent\(context, item\.id, remote\.id\)", "Accepted server message ID must be persisted before Marketplace context retry")
+require(offline_sync, r"FynxOfflineOutbox\.markSent\(context, item\.id, remote\.id(?:, accountKey)?\)", "Accepted server message ID must be persisted before Marketplace context retry")
 require(conversation, r"FynxOfflineSync\.drain\(context\)", "Private attachment delivery must invoke the shared retry synchronizer")
 require(conversation, r"if \(queued\)[\s\S]{0,1800}attachment = null", "Successful durable staging must clear the composer attachment")
 require(conversation, r"Attachment could not be saved for retry", "Attachment staging failures must be visible to the user")
