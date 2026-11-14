@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feature/fish-audio-marketplace-voiceover
+      - feature/fynx-natural-marketplace-voiceover-laura
     paths:
       - ".github/workflows/fish-audio-marketplace-voiceover.yml"
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
             exit 1
           fi
 
-      - name: Generate MP3 with Fish Audio S2.1 Pro Free
+      - name: Generate natural female narration with Fish Audio Laura
         env:
           FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
         run: |
@@ -40,8 +40,8 @@ jobs:
             --data-binary @- \
             --output FYNX-Marketplace-Voiceover.mp3 <<'JSON'
           {
-            "text": "Every great business deserves to be seen! That's why there's F. Y. N. X.! Discover amazing products, meet trusted sellers, showcase what you offer, and connect with customers who are looking for exactly what you sell. Whatever your business, your next opportunity could be just one connection away. F. Y. N. X. — let the world discover you!",
-            "reference_id": "933563129e564b19a115bedd57b7406a",
+            "text": "Welcome to F. Y. N. X. — your marketplace, your business, your next opportunity. Discover products you will love. Find trusted sellers. Show the world what you have to offer. And connect with customers who are ready to buy. Whether you are shopping or building a business, F. Y. N. X. brings opportunity closer. F. Y. N. X. — discover more. Connect more. Grow more.",
+            "reference_id": "e3cd384158934cc9a01029cd7d278634",
             "format": "mp3"
           }
           JSON
