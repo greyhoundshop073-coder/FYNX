@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -65,6 +66,7 @@ class FynxMarketplaceProductCardComposeTest {
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                 ) {
+                    Text("FYNX TEST DATA — sample rating and review count only; no verified reviews")
                     MarketplaceReferenceProductCard(
                         listing = fixture,
                         onOpen = { opened++ },

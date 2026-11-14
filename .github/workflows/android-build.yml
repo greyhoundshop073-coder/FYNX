@@ -356,6 +356,7 @@ jobs:
             bash scripts/run_android_runtime_certification.sh
             runtime_status=$?
             mkdir -p fynx-runtime-screenshots/marketplace-test-fixtures
+            adb pull /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true
             adb pull /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true
             exit "$runtime_status"
         env:

@@ -390,15 +390,18 @@ internal fun MarketplaceReferenceProductCard(
                     }
                 }
 
+                // Keep delivery and pickup visible together when both are offered.
+                // Stock urgency is already represented by the card badge, so it must not
+                // displace a fulfilment option from the compact metadata row.
                 val productMeta = buildList {
-                    conditionLabel?.let { add(it) }
-                    stockLabel?.let { if (it != "Out of stock") add(it) }
                     if (listing.deliveryAvailable && listing.deliveryFee != null && listing.deliveryFee > 0.0) {
                         add("Delivery • " + marketplaceCardPriceLabel(listing.currency, listing.deliveryFee))
                     } else {
                         deliveryLabel?.let { add(it) }
                     }
                     if (listing.pickupAvailable) add("Local pickup")
+                    conditionLabel?.let { add(it) }
+                    stockLabel?.let { if (it != "Out of stock") add(it) }
                 }.distinct().take(3)
                 if (productMeta.isNotEmpty()) {
                     Text(

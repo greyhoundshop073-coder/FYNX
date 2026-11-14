@@ -61,14 +61,15 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         assertTrue(FynxMarketplaceIsolatedTestFixtures.sampleReviews.all { it.testOnly })
         assertEquals("fynx_test_buyer", FynxMarketplaceIsolatedTestFixtures.buyer.username)
         assertEquals("fynx_test_seller", FynxMarketplaceIsolatedTestFixtures.shop.ownerUsername)
-        assertTrue(FynxMarketplaceIsolatedTestFixtures.localBusiness.description.contains("test-only"))
+        assertTrue(FynxMarketplaceIsolatedTestFixtures.localBusiness.description.contains("test-only", ignoreCase = true))
     }
 
     @Test
     fun productionGreatDealsAndProductCardsRenderFixtureAndPreserveExactListingIdentity() {
-        val listings = FynxMarketplaceIsolatedTestFixtures.listings.take(6)
+        val dealListings = FynxMarketplaceIsolatedTestFixtures.listings.take(6)
+        val cardListings = FynxMarketplaceIsolatedTestFixtures.listings.drop(12).take(3)
         val candidates = selectMarketplaceAdvertisingCandidates(
-            listings.map { listing ->
+            dealListings.map { listing ->
                 MarketplaceAdvertisingCandidate(
                     id = listing.id,
                     sellerUsername = listing.sellerUsername,
@@ -99,7 +100,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                     Text("SHOP TEST DATA: ${FynxMarketplaceIsolatedTestFixtures.shop.name}")
                     Text("WALLET TEST MODE ONLY — no money is moved")
                     MarketplacePromotionalBanner(
-                        listings = listings,
+                        listings = dealListings,
                         sellerReputations = emptyMap(),
                         weeklySeller = null,
                         weeklySellerListing = null,
@@ -113,7 +114,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onOpenOrders = {},
                         onRefresh = {}
                     )
-                    listings.drop(12).take(3).forEach { listing ->
+                    cardListings.forEach { listing ->
                         MarketplaceReferenceProductCard(
                             listing = listing,
                             onOpen = { openedCardId = listing.id },
@@ -138,11 +139,11 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
-        compose.onNodeWithText("FYNX Test Product 13").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("FYNX Test Product 13").onFirst().performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-product-card.png")
-        compose.onNodeWithContentDescription("Save product").performScrollTo().performClick()
-        compose.onNodeWithText("Add to Cart").performScrollTo().performClick()
-        compose.onNodeWithText("FYNX Test Product 13").performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("Save product").onFirst().performScrollTo().performClick()
+        compose.onAllNodesWithText("Add to Cart").onFirst().performScrollTo().performClick()
+        compose.onAllNodesWithText("FYNX Test Product 13").onFirst().performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(1, favoriteActions)
             assertEquals(1, cartActions)
