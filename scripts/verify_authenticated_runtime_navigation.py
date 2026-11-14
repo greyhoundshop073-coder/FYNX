@@ -4569,7 +4569,7 @@ if not FAILURES:
                    "- authenticated-status-home.png", "- authenticated-status-create.png",
                    "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
         runtime_result = "RED" if FAILURES else ("PARTIAL — GROUP RUNTIME BLOCKED" if GROUP_RUNTIME_BLOCKED else "GREEN")
-report += ["", f"## Result: {runtime_result}"]
+        report += ["", f"## Result: {runtime_result}"]
         if FAILURES:
             report += ["", "Failures:"] + ["- " + item for item in FAILURES]
         (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
@@ -5118,7 +5118,8 @@ if missing_authenticated_surfaces:
     )
 report += ["", "## Captured authenticated surfaces"]
 report += [f"- {name}" for name in captured_authenticated_surfaces]
-report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+runtime_result = "RED" if FAILURES else ("PARTIAL — GROUP RUNTIME BLOCKED" if GROUP_RUNTIME_BLOCKED else "GREEN")
+report += ["", f"## Result: {runtime_result}"]
 if FAILURES: report += ["","Failures:"]+["- "+x for x in FAILURES]
 (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
 print("\n".join(report))
