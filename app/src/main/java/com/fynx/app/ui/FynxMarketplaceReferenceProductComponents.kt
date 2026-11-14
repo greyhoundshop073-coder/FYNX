@@ -344,15 +344,13 @@ internal fun MarketplaceReferenceProductCard(
                                         style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                                     )
                                 }
-                                sellerRating?.let { reputation ->
-                                    MarketplaceSellerTierBadge(reputation.tier)
-                                    if (reputation.reviewCount > 0) {
-                                        Text(
-                                            "Seller rating " + String.format(Locale.US, "%.1f", reputation.averageRating.coerceIn(0.0, 5.0)),
-                                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall
-                                        )
-                                    }
+                                sellerRating?.let { MarketplaceSellerTierBadge(it.tier) }
+                                sellerRating?.takeIf { it.reviewCount > 0 }?.let { reputation ->
+                                    Text(
+                                        "Seller rating " + String.format(Locale.US, "%.1f", reputation.averageRating.coerceIn(0.0, 5.0)),
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                                    )
                                 }
                             }
                         }

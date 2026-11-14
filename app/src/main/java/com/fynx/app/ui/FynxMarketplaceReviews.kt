@@ -120,7 +120,7 @@ fun FynxMarketplaceReviews(context: Context, orders: List<FynxRemoteSocialClient
                         scope.launch {
                             submitMarketplaceReview(context, order.id, rating, comment)
                                 .onSuccess { selected = null; onChanged() }
-                                .onFailure { localError = marketplaceSafeError(it, "Seller review could not be submitted.") }
+                                .onFailure { localError = marketplaceSafeError(it, "Review could not be submitted.") }
                             busy = false
                         }
                     }, modifier = Modifier.fillMaxWidth()) {
