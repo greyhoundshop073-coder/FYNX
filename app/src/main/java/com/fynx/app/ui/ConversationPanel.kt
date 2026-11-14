@@ -1039,11 +1039,11 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)
             ) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("\u0024{selectedMessageIds.size} selected", color = glassPalette.messageText, modifier = Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text("${selectedMessageIds.size} selected", color = glassPalette.messageText, modifier = Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
                     TextButton(onClick = {
                         val copied = visibleMessages.filter { it.id in selectedMessageIds && !it.deleted }
                             .sortedBy { it.timestamp }
-                            .joinToString("\\n") { it.text.ifBlank { "[Attachment]" } }
+                            .joinToString("\n") { it.text.ifBlank { "[Attachment]" } }
                         if (copied.isNotBlank()) clipboardManager.setText(AnnotatedString(copied))
                         selectedMessageIds = emptySet()
                     }) { Text("Copy") }
@@ -1265,7 +1265,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(messageCornerRadius)
                             val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
-                    val isSelected = message.id in selectedMessageIds
+                            val isSelected = message.id in selectedMessageIds
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
