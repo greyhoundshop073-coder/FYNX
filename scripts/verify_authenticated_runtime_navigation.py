@@ -3556,9 +3556,10 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # peer and two messages in the account-scoped store. Never accept an empty self-chat
         # as proof of the private-chat journey.
         private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
-        if not private_xml:
-            # The local visual account is created without FYNX_E2E_USERNAME;
-            # resolve the username from the actual signed-in emulator preferences.
+        if not private_xml and not (CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS):
+            # Non-focused fallback paths may inspect the signed-in account's own panel.
+            # The focused local Chat/Groups run must never substitute self-chat for
+            # the disposable two-user private-conversation fixture.
             local_target = emulator_signed_in_username().removeprefix("@").strip()
             if local_target:
                 started = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
