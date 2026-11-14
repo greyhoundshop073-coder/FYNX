@@ -5,6 +5,7 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.time.Instant
 import java.util.Locale
 
 object FynxRemoteSocialClient {
@@ -17,7 +18,7 @@ object FynxRemoteSocialClient {
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
     data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
-    data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList())
+    data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList(), val createdAtEpochMs: Long = 0L, val discoveryScore: Double = 0.0)
     data class MarketplaceListingEngagement(val listingId: String, val likeCount: Int, val likedByCurrentUser: Boolean)
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
     data class MarketplaceDriverAssignment(val orderId: String, val status: String, val fulfillmentStatus: String, val currency: String, val totalAmount: Double, val quantity: Int, val productTitle: String, val buyerName: String, val sellerUsername: String, val shippingAddress: JSONObject?, val trackingReference: String?, val acceptedAt: String?, val handoverAt: String?, val deliveredAt: String?, val evidence: JSONArray)
@@ -512,6 +513,14 @@ object FynxRemoteSocialClient {
     data class PostAudience(val visibility: FynxPostVisibility, val userIds: List<String>)
     suspend fun postAudience(context: Context, id: String): Result<PostAudience> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/audience").mapCatching { raw -> val o = JSONObject(raw); val visibility = runCatching { FynxPostVisibility.valueOf(o.optString("visibility", "PUBLIC")) }.getOrDefault(FynxPostVisibility.PUBLIC); val users = o.optJSONArray("userIds") ?: JSONArray(); PostAudience(visibility, buildList { for (i in 0 until users.length()) add(users.optString(i)) }) } }
     suspend fun updatePostAudience(context: Context, id: String, visibility: FynxPostVisibility, userIds: List<String>): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = JSONObject().apply { put("visibility", visibility.name); put("audienceUserIds", JSONArray().apply { userIds.distinct().take(100).forEach { put(it) } }) }; return FynxBackendClient.patchJson(context, "/api/social/posts/$numericId", body.toString()).map { Unit } }
+    internal fun marketplaceListingCreatedAtEpochMs(value: String?): Long {
+        val normalized = value?.trim().orEmpty()
+        if (normalized.isBlank() || normalized.equals("null", ignoreCase = true)) return 0L
+        return runCatching {
+            normalized.toLongOrNull() ?: Instant.parse(normalized).toEpochMilli()
+        }.getOrDefault(0L)
+    }
+
     private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing> {
         val array = JSONObject(raw).optJSONArray("listings")
             ?: throw IllegalStateException("Marketplace listing response was incomplete.")
@@ -565,7 +574,9 @@ object FynxRemoteSocialClient {
                         } else {
                             marketplaceRequiredListingActive(null)
                         },
-                        mediaTypes = mediaTypes
+                        mediaTypes = mediaTypes,
+                        createdAtEpochMs = marketplaceListingCreatedAtEpochMs(o.optString("created_at").takeIf { it.isNotBlank() }),
+                        discoveryScore = o.optDouble("discovery_score", 0.0).takeIf { it.isFinite() } ?: 0.0
                     )
                 )
             }

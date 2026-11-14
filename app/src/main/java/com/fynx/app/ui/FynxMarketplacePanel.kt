@@ -826,6 +826,22 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
     var multiPaymentListingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showCart by remember { mutableStateOf(false) }
+    fun addMarketplaceListingToCart(listing: FynxRemoteSocialClient.MarketplaceListing) {
+        if (!listing.active || listing.quantity <= 0) {
+            error = "This product is no longer available."
+            return
+        }
+        if (cart.any { it.id == listing.id }) {
+            showCart = true
+            return
+        }
+        if (cart.size >= 20) {
+            error = "Your FYNX cart can contain at most 20 different products."
+            return
+        }
+        cart = cart + listing
+        cartQuantities = cartQuantities + (listing.id to 1)
+    }
     var priceWatchListingId by remember { mutableStateOf<String?>(null) }
     var priceWatchBusy by remember { mutableStateOf(false) }
     var savedProductIds by remember(cartOwnerKey) { mutableStateOf<Set<String>>(emptySet()) }
@@ -893,10 +909,29 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     val categories = listOf("All") + MARKETPLACE_CAMPAIGN_CATEGORIES
     var sellerReputations by remember { mutableStateOf<Map<String, FynxMarketplaceClient.SellerReputation>>(emptyMap()) }
     var sellerPhotoIds by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var sellerVerifiedByUsername by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var weeklySeller by remember(currentUsername) { mutableStateOf<FynxMarketplaceWeeklySeller?>(null) }
     var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
     var seasonalPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
+    val discoveryHighlightIds = remember(listings) {
+        listings.mapIndexedNotNull { index, listing ->
+            listing.id.takeIf { marketplaceIsTrendingDiscoveryRank(index + 1, listing.discoveryScore) }
+        }.toSet()
+    }
+    val trendingListingIds = remember(discoveryHighlightIds, nearbyMode) {
+        if (nearbyMode) emptySet() else discoveryHighlightIds
+    }
+    val popularNearYouListingIds = remember(discoveryHighlightIds, nearbyMode) {
+        if (nearbyMode) discoveryHighlightIds else emptySet()
+    }
+    val newArrivalListingIds = remember(listings) {
+        val now = System.currentTimeMillis()
+        listings.filter { marketplaceIsNewArrival(it.createdAtEpochMs, now) }.map { it.id }.toSet()
+    }
+    val sponsoredListingIds = remember(sponsoredPromotions) {
+        sponsoredPromotions.map { it.listing.id }.toSet()
+    }
 
     fun reloadOrders() {
         scope.launch {
@@ -1152,10 +1187,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             .filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.US) }.take(12)
         val pending = sellers.filter { username ->
             val key = username.lowercase(Locale.US)
-            key !in sellerReputations || !sellerPhotoIds.containsKey(key)
+            key !in sellerReputations || !sellerPhotoIds.containsKey(key) || !sellerVerifiedByUsername.containsKey(key)
         }
         val reputationUpdates = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
         val photoUpdates = linkedMapOf<String, String?>()
+        val verifiedUpdates = linkedMapOf<String, Boolean>()
         // Fetch four sellers at a time; both seller endpoints run concurrently per seller.
         pending.chunked(4).forEach { batch ->
             val results = coroutineScope {
@@ -1174,12 +1210,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
             results.forEach { (key, reputation, profileResult) ->
                 if (reputation != null) reputationUpdates[key] = reputation
-                if (profileResult?.isSuccess == true) photoUpdates[key] = profileResult.getOrNull()?.profilePhotoMediaId
+                profileResult?.getOrNull()?.let { profile ->
+                    photoUpdates[key] = profile.profilePhotoMediaId
+                    verifiedUpdates[key] = profile.verified
+                }
             }
         }
         val visibleKeys = sellers.map { it.lowercase(Locale.US) }.toSet()
         sellerReputations = sellerReputations.filterKeys { it in visibleKeys } + reputationUpdates
         sellerPhotoIds = sellerPhotoIds.filterKeys { it in visibleKeys } + photoUpdates
+        sellerVerifiedByUsername = sellerVerifiedByUsername.filterKeys { it in visibleKeys } + verifiedUpdates
     }
 
     // Keep sellers discoverable even when their reputation request is unavailable.
@@ -1583,7 +1623,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                 onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
                                 isFavoriteBusy = listing.id in savedProductBusyIds,
-                                onFavorite = { toggleSavedProductFromCard(listing.id) }
+                                onFavorite = { toggleSavedProductFromCard(listing.id) },
+                                onAddToCart = if (listing.sellerUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) null else ({ addMarketplaceListingToCart(listing) }),
+                                isInCart = cart.any { it.id == listing.id },
+                                isWeeklyBestSeller = weeklySellerListing?.id == listing.id,
+                                isVerifiedSeller = sellerVerifiedByUsername[listing.sellerUsername.removePrefix("@").trim().lowercase()] == true,
+                                isSponsored = listing.id in sponsoredListingIds,
+                                isTrending = listing.id in trendingListingIds,
+                                isPopularNearYou = listing.id in popularNearYouListingIds,
+                                isNewArrival = listing.id in newArrivalListingIds
                             )
                         }
                         if (loadingMoreListings) {
@@ -1671,7 +1719,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
                                 isFavoriteBusy = listing.id in savedProductBusyIds,
-                                onFavorite = { toggleSavedProductFromCard(listing.id) }
+                                onFavorite = { toggleSavedProductFromCard(listing.id) },
+                                onAddToCart = if (listing.sellerUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) null else ({ addMarketplaceListingToCart(listing) }),
+                                isInCart = cart.any { it.id == listing.id },
+                                isWeeklyBestSeller = weeklySellerListing?.id == listing.id,
+                                isVerifiedSeller = sellerVerifiedByUsername[listing.sellerUsername.removePrefix("@").trim().lowercase()] == true,
+                                isSponsored = listing.id in sponsoredListingIds,
+                                isTrending = listing.id in trendingListingIds,
+                                isPopularNearYou = listing.id in popularNearYouListingIds,
+                                isNewArrival = listing.id in newArrivalListingIds
                                         )
                                     }
                                 }
@@ -1693,7 +1749,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                         onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
                                 isFavoriteBusy = listing.id in savedProductBusyIds,
-                                onFavorite = { toggleSavedProductFromCard(listing.id) }
+                                onFavorite = { toggleSavedProductFromCard(listing.id) },
+                                onAddToCart = if (listing.sellerUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) null else ({ addMarketplaceListingToCart(listing) }),
+                                isInCart = cart.any { it.id == listing.id },
+                                isWeeklyBestSeller = weeklySellerListing?.id == listing.id,
+                                isVerifiedSeller = sellerVerifiedByUsername[listing.sellerUsername.removePrefix("@").trim().lowercase()] == true,
+                                isSponsored = listing.id in sponsoredListingIds,
+                                isTrending = listing.id in trendingListingIds,
+                                isPopularNearYou = listing.id in popularNearYouListingIds,
+                                isNewArrival = listing.id in newArrivalListingIds
                                     )
                                     }
                                 }
@@ -1724,7 +1788,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             onContact = { contactSeller(listing.sellerUsername, listing.id) },
                                 isFavorite = listing.id in savedProductIds,
                                 isFavoriteBusy = listing.id in savedProductBusyIds,
-                                onFavorite = { toggleSavedProductFromCard(listing.id) }
+                                onFavorite = { toggleSavedProductFromCard(listing.id) },
+                                onAddToCart = if (listing.sellerUsername.removePrefix("@").trim().equals(currentUsername.removePrefix("@").trim(), ignoreCase = true)) null else ({ addMarketplaceListingToCart(listing) }),
+                                isInCart = cart.any { it.id == listing.id },
+                                isWeeklyBestSeller = weeklySellerListing?.id == listing.id,
+                                isVerifiedSeller = sellerVerifiedByUsername[listing.sellerUsername.removePrefix("@").trim().lowercase()] == true,
+                                isSponsored = listing.id in sponsoredListingIds,
+                                isTrending = listing.id in trendingListingIds,
+                                isPopularNearYou = listing.id in popularNearYouListingIds,
+                                isNewArrival = listing.id in newArrivalListingIds
                                         )
                                     }
                                 }
@@ -1820,7 +1892,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
-            onAddToCart = { if (cart.none { it.id == listing.id }) { if (cart.size >= 20) error = "Your FYNX cart can contain at most 20 different products." else { cart = cart + listing; cartQuantities = cartQuantities + (listing.id to 1) } }; selected = null },
+            onAddToCart = { addMarketplaceListingToCart(listing); selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title), onShareToStatus = onShareListingToStatus) },
             onShareToStatus = onShareListingToStatus,
             onLiveProof = { onLiveProof(listing.sellerUsername) },
