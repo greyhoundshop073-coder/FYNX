@@ -1,6 +1,10 @@
 package com.fynx.app.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -52,33 +56,41 @@ class FynxMarketplaceProductCardComposeTest {
 
         compose.setContent {
             MaterialTheme {
-                MarketplaceReferenceProductCard(
-                    listing = fixture,
-                    onOpen = { opened++ },
-                    onProfile = {},
-                    isFavorite = false,
-                    onFavorite = { favorited++ },
-                    onAddToCart = { addedToCart++ },
-                    isWeeklyBestSeller = true,
-                    isSpecialOffer = true
-                )
+                // The production card is taller than a phone viewport. Give the test host
+                // a real scroll container so off-screen metadata and actions can be exercised.
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    MarketplaceReferenceProductCard(
+                        listing = fixture,
+                        onOpen = { opened++ },
+                        onProfile = {},
+                        isFavorite = false,
+                        onFavorite = { favorited++ },
+                        onAddToCart = { addedToCart++ },
+                        isWeeklyBestSeller = true,
+                        isSpecialOffer = true
+                    )
+                }
             }
         }
 
-        compose.onNodeWithText("UI Test Wireless Headphones").assertIsDisplayed()
-        compose.onNodeWithText("₦80,000").assertIsDisplayed()
-        compose.onNodeWithText("₦100,000").assertIsDisplayed()
-        compose.onNodeWithText("4.7").assertIsDisplayed()
-        compose.onNodeWithText("(1.2k reviews)").assertIsDisplayed()
-        compose.onNodeWithText("FYNX UI Test Store").assertIsDisplayed()
-        compose.onNodeWithText("Port Harcourt, Rivers").assertIsDisplayed()
-        compose.onNodeWithText("Free Delivery", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Local pickup", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Best Seller").assertIsDisplayed()
-        compose.onNodeWithText("Special Offer").assertIsDisplayed()
+        compose.onNodeWithText("UI Test Wireless Headphones").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("₦80,000").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("₦100,000").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("4.7").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("(1.2k reviews)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX UI Test Store").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Port Harcourt, Rivers").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Free Delivery", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Local pickup", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Best Seller").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Special Offer").performScrollTo().assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Save product").performClick()
-        compose.onNodeWithText("Add to Cart").performClick()
+        compose.onNodeWithText("Add to Cart").performScrollTo().performClick()
         compose.onNodeWithText("UI Test Wireless Headphones").performClick()
 
         compose.runOnIdle {
