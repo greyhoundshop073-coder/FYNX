@@ -38,14 +38,14 @@ def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
     while time.monotonic()<deadline:
         latest=dump_ui(name)
         if latest and (
-            "Message..." in latest
-            or "Messaging is restricted" in latest
-            or "No messages here yet" in latest
-            or "Group unavailable" in latest
+            find_control(latest, ["Message...", "Message composer", "Chat message composer area"])
+            or find_control(latest, ["Messaging is restricted", "No messages here yet"])
         ):
             return latest
         time.sleep(.5)
-    return latest
+    if latest and find_control(latest, ["Group unavailable"]):
+        FAILURES.append(f"{name}: selected group rendered 'Group unavailable'; it is not a conversation destination.")
+    return ""
 
 def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
     """Poll the real accessibility tree until ConversationPanel is actually visible."""
@@ -1481,22 +1481,28 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not dialog:
         FAILURES.append("Groups -> New group did not open the real group creation dialog.")
         return ""
-    fields = find_edit_fields(dialog)
-    if len(fields) < 2:
-        FAILURES.append("The group creation dialog did not expose both name and description inputs.")
+    name_field = find_control(dialog, ["Group name input"], exact_only=True)
+    description_field = find_control(dialog, ["Description input"], exact_only=True)
+    if not name_field or not description_field:
+        FAILURES.append(
+            "The real group creation dialog did not expose distinct accessible Group name and Description inputs; "
+            "visible markers: " + visible_marker_summary(dialog)
+        )
+        screenshot("chat-groups-create-dialog-controls-missing.png")
         return ""
-    name_x, name_y = fields[-2]
+    _, name_x, name_y = name_field
     run("adb", "shell", "input", "tap", str(name_x), str(name_y))
     if input_text(group_name).returncode != 0:
         FAILURES.append("The group fixture name could not be entered through the app UI.")
         return ""
     time.sleep(0.35)
-    after_name = dump_ui("chat-groups-create-fixture-name.xml")
-    fields = find_edit_fields(after_name)
-    if len(fields) < 2:
-        FAILURES.append("The group creation dialog lost its description input after entering the name.")
+    after_name = dismiss_ime_if_visible("chat-groups-create-fixture-name.xml")
+    description_field = find_control(after_name, ["Description input"], exact_only=True)
+    if not description_field:
+        FAILURES.append("The group creation dialog lost its named Description input after entering the group name.")
+        screenshot("chat-groups-create-description-missing.png")
         return ""
-    description_x, description_y = fields[-1]
+    _, description_x, description_y = description_field
     run("adb", "shell", "input", "tap", str(description_x), str(description_y))
     if input_text("Disposable offline group runtime fixture").returncode != 0:
         FAILURES.append("The group fixture description could not be entered through the app UI.")
