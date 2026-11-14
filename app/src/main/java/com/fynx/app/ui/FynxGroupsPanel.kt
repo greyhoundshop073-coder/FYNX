@@ -112,15 +112,19 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
     LaunchedEffect(currentUsername) {
-        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+        val accountKey = FynxAuthStore.accountStorageKey(context)
+        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, accountKey) }
+        if (FynxAuthStore.accountStorageKey(context) != accountKey) return@LaunchedEffect
         groups = localGroups
         if (FynxBackendClient.hasAccessToken(context)) {
             FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
-                val pendingIds = FynxGroupsStore.pendingSyncGroups(context)
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) return@onSuccess
+                val pendingIds = FynxGroupsStore.pendingSyncGroups(context, accountKey)
                 val unsyncedLocalGroups = localGroups.filter { it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id } }
                 val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
-                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled) }
-                groups = reconciled
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) return@onSuccess
+                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled, accountKey) }
+                if (FynxAuthStore.accountStorageKey(context) == accountKey) groups = reconciled
             }
         }
     }
@@ -197,22 +201,39 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     if (showCreateDialog) {
         FynxCreateGroupDialog({ showCreateDialog = false }) { name, description, visibility ->
             val group = FynxGroup(UUID.randomUUID().toString(), name.trim(), description.trim(), visibility, currentUsername, listOf(FynxGroupMember(currentUsername, FynxGroupRole.ADMIN)))
+            val requestAccountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+            if (requestAccountKey == null) {
+                createError = "Sign in to create a group on your account."
+                return@FynxCreateGroupDialog
+            }
+            val requestToken = FynxBackendClient.accessToken(context)
+            fun sessionIsCurrent() = FynxBackendClient.isRequestSessionCurrent(
+                requestAccountKey,
+                FynxAuthStore.accountStorageKey(context),
+                requestToken,
+                FynxBackendClient.accessToken(context)
+            )
             scope.launch {
                 createError = null
                 val savedLocally = withContext(Dispatchers.IO) {
-                    val added = FynxGroupsStore.add(context, group)
-                    if (added) FynxGroupsStore.markPendingSync(context, group.id)
-                    added to FynxGroupsStore.load(context)
+                    val added = FynxGroupsStore.add(context, group, requestAccountKey)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id, requestAccountKey)
+                    added to FynxGroupsStore.load(context, requestAccountKey)
                 }
+                if (!sessionIsCurrent()) return@launch
                 if (!savedLocally.first) {
                     createError = "A group with this name already exists, or its details could not be saved."
                     return@launch
                 }
                 groups = savedLocally.second
                 showCreateDialog = false
-                FynxGroupRemoteClient.syncGroup(context, group)
-                    .onSuccess { FynxGroupsStore.markSynced(context, group.id) }
-                    .onFailure { createError = "Group saved on this device. It will sync automatically when the connection returns." }
+                FynxGroupRemoteClient.syncGroup(context, group, requestAccountKey, requestToken)
+                    .onSuccess {
+                        if (sessionIsCurrent()) FynxGroupsStore.markSynced(context, group.id, requestAccountKey)
+                    }
+                    .onFailure {
+                        if (sessionIsCurrent()) createError = "Group saved on this device. It will sync automatically when the connection returns."
+                    }
             }
         }
     }
@@ -229,8 +250,8 @@ private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, Stri
         title = { Text("Create group", style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next))
-                OutlinedTextField(description, { description = it }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
+                OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Group name input" }, label = { Text("Group name") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next))
+                OutlinedTextField(description, { description = it }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Description input" }, label = { Text("Description") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(visibility == FynxGroupVisibility.PRIVATE, { visibility = FynxGroupVisibility.PRIVATE }); Text("Private")
                     Spacer(Modifier.width(8.dp))
