@@ -21,12 +21,20 @@ backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_te
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
-    'requiresAuthentication = !isPublicAuthPath(path)',
+    'val requestToken = if (useRequestTokenOverride) requestTokenOverride else if (isPublicAuthPath(path)) null else accessToken(context)',
     'FynxSecureTokenStore',
 ]
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
+request_start = backend.find("private suspend fun request(")
+request_end = backend.find("internal fun shouldClearRejectedAccessToken", request_start)
+request_body = backend[request_start:request_end] if request_start >= 0 and request_end > request_start else ""
+if not request_body or request_body.find("val requestToken =") < 0 or request_body.find("val requestToken =") > request_body.find("return withContext(Dispatchers.IO)"):
+    violations.append("authenticated transport must snapshot the request token before IO dispatch")
+if "shouldClearRejectedAccessToken(requestToken, accessToken(context))" not in backend:
+    violations.append("a rejected stale token must not clear a newer signed-in session")
+
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")
