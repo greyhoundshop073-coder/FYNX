@@ -47,7 +47,38 @@ object FynxGroupRemoteClient {
         }.distinctBy { it.id }
     }
 
-    suspend fun syncGroup(context:Context,group:FynxGroup):Result<Unit> = runCatching { val body=JSONObject().apply{put("ownerUsername",group.ownerUsername.trim().removePrefix("@"));put("name",group.name);put("groupPhotoMediaId",group.groupPhotoMediaId ?: JSONObject.NULL);put("description",group.description);put("visibility",group.visibility.name);put("members",JSONArray().apply{group.members.forEach{member->put(JSONObject().apply{put("username",member.username.trim().removePrefix("@"));put("role",member.role.name)})}})};FynxBackendClient.postJson(context,"/api/groups/${group.id}/sync",body.toString()).getOrThrow();Unit }
+    suspend fun syncGroup(
+        context: Context,
+        group: FynxGroup,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<Unit> = runCatching {
+        fun sessionIsCurrent() = FynxBackendClient.isRequestSessionCurrent(
+            expectedAccountKey,
+            FynxAuthStore.accountStorageKey(context),
+            requestToken,
+            FynxBackendClient.accessToken(context)
+        )
+        check(sessionIsCurrent()) { "Your account changed before this group could sync." }
+        val body = JSONObject().apply {
+            put("ownerUsername", group.ownerUsername.trim().removePrefix("@"))
+            put("name", group.name)
+            put("groupPhotoMediaId", group.groupPhotoMediaId ?: JSONObject.NULL)
+            put("description", group.description)
+            put("visibility", group.visibility.name)
+            put("members", JSONArray().apply {
+                group.members.forEach { member ->
+                    put(JSONObject().apply {
+                        put("username", member.username.trim().removePrefix("@"))
+                        put("role", member.role.name)
+                    })
+                }
+            })
+        }
+        FynxBackendClient.postJsonForSession(context, "/api/groups/${group.id}/sync", body.toString(), requestToken).getOrThrow()
+        check(sessionIsCurrent()) { "Your account changed while this group was syncing." }
+        Unit
+    }
     suspend fun updateGroupPhoto(context:Context,groupId:String,mediaId:String?):Result<String?> = runCatching { val body=JSONObject().apply{put("mediaId",mediaId?.trim()?.takeIf{it.isNotBlank()}?:JSONObject.NULL)}; val o=JSONObject(FynxBackendClient.patchJson(context,"/api/groups/$groupId/photo",body.toString()).getOrThrow()); o.optString("groupPhotoMediaId").takeIf{it.isNotBlank()&&it!="null"} }
     suspend fun loadMembers(context:Context,groupId:String):Result<List<RemoteMember>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/members").getOrThrow()).optJSONArray("members")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteMember(o.optString("username"),o.optString("role","MEMBER"),o.optLong("joinedAt")))}} }
     suspend fun addMember(context:Context,groupId:String,username:String):Result<RemoteMember> = runCatching {
@@ -261,15 +292,19 @@ object FynxGroupRemoteClient {
 
     suspend fun drainPendingWork(context:Context):Int {
         val account=FynxAuthStore.accountStorageKey(context)?.takeIf{it.isNotBlank()}?:return 0
+        val requestToken = FynxBackendClient.accessToken(context)
+        fun sessionIsCurrent() = FynxBackendClient.isRequestSessionCurrent(
+            account, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context)
+        )
         var completed=0
-        val pendingGroupIds = FynxGroupsStore.pendingSyncGroups(context)
-        for(group in FynxGroupsStore.load(context)) {
-            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+        val pendingGroupIds = FynxGroupsStore.pendingSyncGroups(context, account)
+        for(group in FynxGroupsStore.load(context, account)) {
+            if(!sessionIsCurrent())return completed
             if (group.id in pendingGroupIds) {
-                val groupSync = syncGroup(context, group)
-                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+                val groupSync = syncGroup(context, group, account, requestToken)
+                if(!sessionIsCurrent())return completed
                 if (groupSync.isSuccess) {
-                    FynxGroupsStore.markSynced(context, group.id)
+                    FynxGroupsStore.markSynced(context, group.id, account)
                     completed++
                 } else {
                     continue
@@ -280,7 +315,7 @@ object FynxGroupRemoteClient {
                 .sortedBy { it.timestamp }
             for(message in pending) {
                 if(FynxAuthStore.accountStorageKey(context)!=account)return completed
-                val result=sendMessage(context,group.id,message)
+                val result=sendMessage(context,group.id,message,account,requestToken)
                 if(FynxAuthStore.accountStorageKey(context)!=account)return completed
                 if(result.isSuccess) {
                     val remote=result.getOrThrow()
