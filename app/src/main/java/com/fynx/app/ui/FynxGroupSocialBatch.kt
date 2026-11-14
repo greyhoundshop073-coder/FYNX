@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Poll
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -85,7 +84,7 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, currentUsername: String, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, currentUsername: String, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, openContentInitially: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
@@ -166,7 +165,6 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, currentUserna
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Share and organize things your group can come back to.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { showContent = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(8.dp)); Text("Posts, polls & events") }
-                OutlinedButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
                 OutlinedButton(onClick = { showFriends = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text("Invite friends") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group camera", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Video note", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context, videoNoteMode = true) { uri, type -> handleCaptured(uri, type) } }
