@@ -21,7 +21,7 @@ def require(label, condition):
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
 require("Chat & Groups root header is distinct from the active Chats or Groups section heading", '"Chats" -> "Chat & Groups"' in APP and 'Text(if (section == "Chats") "Chats" else "Groups"' in CHATS)
 require("Chat search control is not compressed below the standard 56dp field height", ".heightIn(min = 56.dp)" in CHATS and ".height(48.dp)" not in CHATS)
-require("Chat contacts action uses the app primary color instead of unrelated messaging-green", "containerColor = MaterialTheme.colorScheme.primary" in CHATS and "Color(0xFF25D366)" not in CHATS)
+require("Chat contacts floating action uses the app primary color", 'FloatingActionButton(\n            onClick = onOpenContacts,\n            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),\n            containerColor = MaterialTheme.colorScheme.primary,' in CHATS)
 require("runtime row picker skips editable search fields instead of treating them as conversations", 'ancestor.attrib.get("class") == "android.widget.EditText"' in NAVIGATION)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
