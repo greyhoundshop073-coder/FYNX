@@ -3361,7 +3361,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                "- Screenshots are genuine adb screencap images from the installed Android APK; no AI-generated or synthetic screen images are used.",
                "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, delivery, FCM or backend data.",
                "- No real user, group, message, payment or Marketplace record is created by this capture path.",
-               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+               "", f"## Result: {'RED' if FAILURES else ('PARTIAL — GROUP RUNTIME BLOCKED' if GROUP_RUNTIME_BLOCKED else 'GREEN')}"]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
     (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
