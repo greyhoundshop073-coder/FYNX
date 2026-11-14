@@ -32,19 +32,21 @@ def run(*args:str, timeout:int=30):
         return subprocess.CompletedProcess(args,124,output+"\nCOMMAND TIMEOUT")
 
 def wait_for_group_conversation_ui(name:str, timeout:float=12.0)->str:
-    """Poll until the real FynxGroupConversationPanel exposes its message surface."""
+    """Wait for a usable group composer; reject the unavailable fallback first."""
     deadline=time.monotonic()+timeout
     latest=""
     while time.monotonic()<deadline:
         latest=dump_ui(name)
-        if latest and (
-            find_control(latest, ["Message...", "Message composer", "Chat message composer area"])
-            or find_control(latest, ["Messaging is restricted", "No messages here yet"])
-        ):
+        # The unavailable fallback must never masquerade as a conversation
+        # through an empty-state label or a disabled input placeholder.
+        if latest and find_control(latest, ["Group unavailable"]):
+            FAILURES.append(f"{name}: selected group rendered 'Group unavailable'; it is not a conversation destination.")
+            screenshot("chat-groups-unavailable-state.png")
+            return ""
+        if latest and find_control(latest, ["Message...", "Message composer", "Chat message composer area"]):
             return latest
         time.sleep(.5)
-    if latest and find_control(latest, ["Group unavailable"]):
-        FAILURES.append(f"{name}: selected group rendered 'Group unavailable'; it is not a conversation destination.")
+    FAILURES.append(f"{name}: selected group never exposed a usable message composer.")
     return ""
 
 def wait_for_conversation_ui(name:str, timeout:float=12.0)->str:
