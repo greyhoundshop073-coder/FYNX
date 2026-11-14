@@ -180,7 +180,9 @@ DIAGNOSTIC_MARKERS = (
     "Chat message composer area", "No messages here yet", "Recent updates",
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
-    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password"
+    "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
+    "Your communities in one place", "Open create group dialog", "Create group dialog",
+    "Group name input", "Description input"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -1517,14 +1519,28 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not run_suffix:
         run_suffix = str(int(time.time()))
     group_name = "FYNX CI Group " + run_suffix
-    dialog = tap_control(
+    # ChatsPanel's Groups tab first opens the dedicated Groups manager. Its
+    # "New group" action is navigation, not the create dialog itself. Require
+    # the manager's unique subtitle before locating its separate create button.
+    manager_xml = tap_control(
         groups_xml,
         ["New group", "Create group"],
-        "chat-groups-create-local-fixture",
-        ["Create group"],
+        "chat-groups-open-groups-manager",
+        ["Your communities in one place"],
+    )
+    if not manager_xml:
+        FAILURES.append("Chat -> Groups -> New group did not open the dedicated Groups manager.")
+        return ""
+    # The manager's plus button is a second action. Its unique accessibility
+    # label prevents the underlying Groups list from satisfying the wait.
+    dialog = tap_control(
+        manager_xml,
+        ["Open create group dialog"],
+        "chat-groups-open-create-dialog",
+        ["Group name input"],
     )
     if not dialog:
-        FAILURES.append("Groups -> New group did not open the real group creation dialog.")
+        FAILURES.append("The dedicated Groups manager did not open its real create-group dialog.")
         return ""
     name_field = find_control(dialog, ["Group name input"], exact_only=True)
     description_field = find_control(dialog, ["Description input"], exact_only=True)
