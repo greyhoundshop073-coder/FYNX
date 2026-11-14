@@ -1467,6 +1467,7 @@ def local_group_fixture_is_persisted(group_name: str) -> bool:
     expected_owner = normalized_username(USERNAME)
     if not expected_owner:
         return False
+    group_matches = []
     for entry in root.findall("string"):
         if not entry.attrib.get("name", "").startswith("groups_"):
             continue
@@ -1474,20 +1475,32 @@ def local_group_fixture_is_persisted(group_name: str) -> bool:
             groups = json.loads(entry.text or "[]")
         except (TypeError, ValueError, json.JSONDecodeError):
             continue
-        for group in groups if isinstance(groups, list) else []:
-            if not isinstance(group, dict) or group.get("name") != group_name:
-                continue
-            group_id = str(group.get("id") or "").strip()
-            owner = normalized_username(group.get("ownerUsername"))
-            members = group.get("members") if isinstance(group.get("members"), list) else []
-            creator_admin = any(
-                isinstance(member, dict)
-                and normalized_username(member.get("username")) == expected_owner
-                and str(member.get("role") or "").upper() == "ADMIN"
-                for member in members
+        if isinstance(groups, list):
+            group_matches.extend(
+                group for group in groups
+                if isinstance(group, dict) and group.get("name") == group_name
             )
-            return bool(group_id and owner == expected_owner and creator_admin)
-    return False
+    if len(group_matches) != 1:
+        return False
+
+    group = group_matches[0]
+    group_id = str(group.get("id") or "").strip()
+    owner = normalized_username(group.get("ownerUsername"))
+    members = group.get("members") if isinstance(group.get("members"), list) else []
+    creator_admin = any(
+        isinstance(member, dict)
+        and normalized_username(member.get("username")) == expected_owner
+        and str(member.get("role") or "").upper() == "ADMIN"
+        for member in members
+    )
+    account_store_key = "".join(character if character.isalnum() else "_" for character in expected_owner)[:80] or "account"
+    pending_key = "pending_sync_groups_" + account_store_key
+    pending_entry = next((entry for entry in root.findall("set") if entry.attrib.get("name") == pending_key), None)
+    pending_ids = {
+        (item.text or "").strip()
+        for item in (pending_entry.findall("string") if pending_entry is not None else [])
+    }
+    return bool(group_id and owner == expected_owner and creator_admin and group_id in pending_ids)
 
 
 def set_emulator_network_enabled(enabled: bool) -> bool:
