@@ -138,6 +138,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var remoteSearchCursor by remember(chat.username) { mutableStateOf<String?>(null) }
     var remoteSearchLoading by remember(chat.username) { mutableStateOf(false) }
     var remoteSearchError by remember(chat.username) { mutableStateOf<String?>(null) }
+    var selectedMessageIds by remember(chat.username) { mutableStateOf<Set<String>>(emptySet()) }
     var hasOlderMessages by remember(chat.username) { mutableStateOf(false) }
     var olderMessagesCursor by remember(chat.username) { mutableStateOf<String?>(null) }
     var loadingOlderMessages by remember(chat.username) { mutableStateOf(false) }
@@ -949,6 +950,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         remoteSearchError != null -> localSearchMatches
         else -> remoteSearchMessages
     }
+    fun toggleMessageSelection(messageId: String) {
+        selectedMessageIds = if (messageId in selectedMessageIds) selectedMessageIds - messageId else selectedMessageIds + messageId
+    }
+
     val pinnedMessage = messages.lastOrNull { it.pinned }
     val messageListState = rememberLazyListState()
 
@@ -1023,6 +1028,26 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         DropdownMenuItem(text = { Text(if (searchOpen) "Close search" else "Search messages") }, onClick = { showChatMenu = false; searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, leadingIcon = { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, null) })
                         DropdownMenuItem(text = { Text("Send gift") }, onClick = { showChatMenu = false; showGifts = true }, leadingIcon = { Icon(Icons.Default.CardGiftcard, null) })
                     }
+                }
+            }
+        }
+
+        if (selectedMessageIds.isNotEmpty()) {
+            Surface(
+                color = glassPalette.backgroundMid.copy(alpha = 0.98f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("\u0024{selectedMessageIds.size} selected", color = glassPalette.messageText, modifier = Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    TextButton(onClick = {
+                        val copied = visibleMessages.filter { it.id in selectedMessageIds && !it.deleted }
+                            .sortedBy { it.timestamp }
+                            .joinToString("\\n") { it.text.ifBlank { "[Attachment]" } }
+                        if (copied.isNotBlank()) clipboardManager.setText(AnnotatedString(copied))
+                        selectedMessageIds = emptySet()
+                    }) { Text("Copy") }
+                    TextButton(onClick = { selectedMessageIds = emptySet() }) { Text("Cancel") }
                 }
             }
         }
@@ -1240,11 +1265,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(messageCornerRadius)
                             val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
+                    val isSelected = message.id in selectedMessageIds
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
                                 shape = if (mediaOnly) RoundedCornerShape(0.dp) else bubbleShape,
-                                border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
+                                border = if (mediaOnly) null else if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
                                 modifier = Modifier
                                     .widthIn(max = messageBubbleMaxWidth)
@@ -1268,7 +1294,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                             onDragCancel = { replySwipeOffsets[message.id] = 0f }
                                         )
                                     }
-                                    .combinedClickable(onClick = { menuMessageId = message.id }, onLongClick = { menuMessageId = message.id })
+                                    .combinedClickable(
+                                        onClick = {
+                                            if (selectedMessageIds.isNotEmpty()) toggleMessageSelection(message.id)
+                                            else if (!message.deleted) menuMessageId = message.id
+                                        },
+                                        onLongClick = { if (!message.deleted) toggleMessageSelection(message.id) }
+                                    )
                             ) {
                             Column(Modifier.padding(horizontal = if (mediaOnly) 0.dp else messageHorizontalPadding, vertical = if (mediaOnly) 0.dp else messageVerticalPadding)) {
                                 if (message.pinned) {
