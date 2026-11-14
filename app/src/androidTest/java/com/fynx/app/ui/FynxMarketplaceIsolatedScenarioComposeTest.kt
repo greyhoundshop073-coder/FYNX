@@ -141,11 +141,11 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
-        compose.onAllNodesWithText("FYNX Test Product 13").onFirst().performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-product-card.png")
-        compose.onAllNodesWithContentDescription("Save product").onFirst().performScrollTo().performClick()
-        compose.onAllNodesWithText("Add to Cart").onFirst().performScrollTo().performClick()
-        compose.onAllNodesWithText("FYNX Test Product 13").onFirst().performScrollTo().performClick()
+        compose.onAllNodesWithContentDescription("Save product")[0].performScrollTo().performClick()
+        compose.onAllNodesWithText("Add to Cart")[0].performScrollTo().performClick()
+        compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(1, favoriteActions)
             assertEquals(1, cartActions)
