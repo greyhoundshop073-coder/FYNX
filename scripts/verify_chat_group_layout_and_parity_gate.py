@@ -39,6 +39,8 @@ require("active group conversation protects top system inset", "statusBarsPaddin
 PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
 require("Pure Black Glass uses only true black background gradient stops while preserving other themes", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in PURE_BLACK_PALETTE and "Color(0xFF080B18)" not in PURE_BLACK_PALETTE and "Color(0xFF182B52)" not in PURE_BLACK_PALETTE and "FynxGlassThemeId.AURORA" in GLASS_THEME and "FynxGlassThemeId.EMERALD" in GLASS_THEME)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
+require("group list and conversation header use grammatically correct singular member counts", '${group.members.size} ${if (group.members.size == 1) "member" else "members"}' in ACTIVE_GROUP and '${selectedGroup?.members?.size ?: 0} ${if ((selectedGroup?.members?.size ?: 0) == 1) "member" else "members"}' in ACTIVE_GROUP)
+require("private and group voice-record actions use the approved Azure primary colour instead of purple", "MaterialTheme.colorScheme.primary" in PRIVATE and ".background(if (voiceMode) MaterialTheme.colorScheme.primary else glassPalette.outgoingStart)" in PRIVATE and ".background(MaterialTheme.colorScheme.primary)" in ACTIVE_GROUP and "Color(0xFF7C3AED)" not in PRIVATE and "Color(0xFF7C3AED)" not in ACTIVE_GROUP)
 require("active group conversation uses 48dp minimum touch targets", "Modifier.size(48.dp)" in ACTIVE_GROUP)
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
