@@ -1452,12 +1452,42 @@ def first_local_group_id()->str:
     return match.group(1) if match else ""
 
 def local_group_fixture_is_persisted(group_name: str) -> bool:
-    """Confirm the fixture is in the current account's actual local group store."""
+    """Confirm the fixture owner and ADMIN membership in this account's real group store."""
     result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_groups_store.xml")
     if result.returncode != 0:
         return False
-    raw = html.unescape(result.stdout or "")
-    return f'"name":"{group_name}"' in raw
+    try:
+        root = ET.fromstring(html.unescape(result.stdout or ""))
+    except ET.ParseError:
+        return False
+
+    def normalized_username(value: object) -> str:
+        return str(value or "").strip().lower().removeprefix("@")
+
+    expected_owner = normalized_username(USERNAME)
+    if not expected_owner:
+        return False
+    for entry in root.findall("string"):
+        if not entry.attrib.get("name", "").startswith("groups_"):
+            continue
+        try:
+            groups = json.loads(entry.text or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        for group in groups if isinstance(groups, list) else []:
+            if not isinstance(group, dict) or group.get("name") != group_name:
+                continue
+            group_id = str(group.get("id") or "").strip()
+            owner = normalized_username(group.get("ownerUsername"))
+            members = group.get("members") if isinstance(group.get("members"), list) else []
+            creator_admin = any(
+                isinstance(member, dict)
+                and normalized_username(member.get("username")) == expected_owner
+                and str(member.get("role") or "").upper() == "ADMIN"
+                for member in members
+            )
+            return bool(group_id and owner == expected_owner and creator_admin)
+    return False
 
 
 def set_emulator_network_enabled(enabled: bool) -> bool:
