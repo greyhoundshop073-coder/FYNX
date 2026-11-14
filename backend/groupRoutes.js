@@ -127,6 +127,8 @@ export function registerGroupRoutes({ app }) {
     const historyMember=await memberHistory(groupId,req.user.sub);
      if(!historyMember)return res.status(403).json({error:'group membership required'});
      const historyCutoff=historyMember.show_history_to_new_members?null:historyMember.joined_at;
+    // Stable marker for invalidating older pages if the administrator changes history visibility.
+    const historyScope=historyCutoff ? ('FROM:' + new Date(historyCutoff).getTime()) : 'ALL';
     const rawQuery=req.query?.q;
     const searchQuery=rawQuery===undefined?null:String(rawQuery).trim().replace(/\s+/g,' ');
     if(searchQuery!==null&&(searchQuery.length<2||searchQuery.length>100))return res.status(400).json({error:'message search must contain between 2 and 100 characters'});
@@ -155,7 +157,7 @@ export function registerGroupRoutes({ app }) {
     const oldest=pageRows[pageRows.length-1];
     const nextCursor=oldest?{timestamp:new Date(oldest.created_at).getTime(),id:String(oldest.id)}:null;
     res.set('Cache-Control','no-store');
-    return res.json({messages:pageRows.reverse().map(messageJson),hasMore,nextCursor});
+    return res.json({messages:pageRows.reverse().map(messageJson),hasMore,nextCursor,historyScope});
   }catch(error){console.error('group messages get',error);return res.status(500).json({error:'group messages lookup failed'});}});
   app.post('/api/groups/:groupId/read',auth,async(req,res)=>{try{
     await ensureSchema();

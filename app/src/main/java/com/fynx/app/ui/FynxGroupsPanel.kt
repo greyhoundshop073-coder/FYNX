@@ -353,6 +353,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId, groupAccountKey) { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var authorizedOlderGroupMessageIds by remember(groupId, groupAccountKey) { mutableStateOf<Set<String>>(emptySet()) }
+    var authorizedGroupHistoryScope by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
     var hasMoreGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     var loadingOlderGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     LaunchedEffect(groupId, groupAccountKey) {
@@ -737,6 +738,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 FynxGroupRemoteClient.loadMessagePage(context, groupId)
                     .onSuccess { page ->
                         if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                        val pageHistoryScope = page.historyScope
+                        val authorizedIdsForScope = if (
+                            authorizedGroupHistoryScope != null && pageHistoryScope != "UNKNOWN" &&
+                            authorizedGroupHistoryScope != pageHistoryScope
+                        ) emptySet() else latestAuthorizedOlderGroupMessageIds
+                        if (pageHistoryScope != "UNKNOWN") {
+                            authorizedGroupHistoryScope = pageHistoryScope
+                            authorizedOlderGroupMessageIds = authorizedIdsForScope
+                        }
                         hasMoreGroupHistory = page.hasMore
                         val remoteMessages = page.messages.mapIndexedNotNull { index, item ->
                             runCatching {
@@ -752,7 +762,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         val mergedMessages = mergeGroupMessageRefresh(
                             messages,
                             remoteMessages,
-                            latestAuthorizedOlderGroupMessageIds
+                            authorizedIdsForScope
                         )
                         messages = mergedMessages
                         val incomingIds = remoteMessages.filter { !it.fromMe }.map { it.id }.takeLast(100)
@@ -1092,7 +1102,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }).onSuccess { page ->
                                         if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                                         val older = page.messages.map { FynxGroupRemoteClient.toChatMessage(it,currentUsername,FynxBackendClient.baseUrl(context)) }
-                                        val nowAuthorized = latestAuthorizedOlderGroupMessageIds + older.map { it.id }
+                                        val pageHistoryScope = page.historyScope
+                                        val authorizedIdsForScope = if (
+                                            authorizedGroupHistoryScope != null && pageHistoryScope != "UNKNOWN" &&
+                                            authorizedGroupHistoryScope != pageHistoryScope
+                                        ) emptySet() else latestAuthorizedOlderGroupMessageIds
+                                        if (pageHistoryScope != "UNKNOWN") authorizedGroupHistoryScope = pageHistoryScope
+                                        val nowAuthorized = authorizedIdsForScope + older.map { it.id }
                                         authorizedOlderGroupMessageIds = nowAuthorized
                                         messages = mergeGroupMessageRefresh(messages, older, nowAuthorized)
                                         hasMoreGroupHistory = page.hasMore
