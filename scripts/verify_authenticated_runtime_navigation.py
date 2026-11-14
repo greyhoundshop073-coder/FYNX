@@ -1457,7 +1457,7 @@ def local_group_fixture_is_persisted(group_name: str) -> bool:
     if result.returncode != 0:
         return False
     try:
-        root = ET.fromstring(html.unescape(result.stdout or ""))
+        root = ET.fromstring(result.stdout or "")
     except ET.ParseError:
         return False
 
