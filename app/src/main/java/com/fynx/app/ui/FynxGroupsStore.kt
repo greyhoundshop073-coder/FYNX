@@ -93,6 +93,8 @@ object FynxGroupsStore {
         val groups = load(context, accountKey)
         if (groups.none { it.id == groupId }) return false
         save(context, groups.filterNot { it.id == groupId }, accountKey)
+        // A removed group must never be recreated by a later reconnect drain.
+        markSynced(context, groupId, accountKey)
         // The message store resolves its own account namespace; never clear the new
         // account's cache if a delayed removal completes after a session switch.
         if (FynxAuthStore.accountStorageKey(context) == accountKey) {
