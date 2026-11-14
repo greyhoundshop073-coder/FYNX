@@ -135,8 +135,13 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 Text("Groups", style = MaterialTheme.typography.headlineSmall)
                 Text("Your communities in one place", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            FilledIconButton(onClick = { createError = null; showCreateDialog = true }) {
-                Icon(Icons.Default.Add, "Create group")
+            FilledIconButton(
+                onClick = { createError = null; showCreateDialog = true },
+                modifier = Modifier.semantics {
+                    contentDescription = "Open create group dialog"
+                }
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -247,7 +252,13 @@ private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, Stri
     val canCreate = name.trim().length >= 2 && description.trim().length >= 2
     FynxPlainDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create group", style = MaterialTheme.typography.headlineSmall) },
+        title = {
+            Text(
+                "Create group",
+                modifier = Modifier.semantics { contentDescription = "Create group dialog" },
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Group name input" }, label = { Text("Group name") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next))
