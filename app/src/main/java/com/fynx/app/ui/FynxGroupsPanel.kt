@@ -337,7 +337,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         return active == expected
     }
     val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
-    val glassThemeId = if (groupAppearance.equals("Light", true)) FynxGlassThemeId.LIGHT else FynxGlassThemeId.PURE_BLACK
+    val glassThemeId = when (groupAppearance) {
+        "Light" -> FynxGlassThemeId.LIGHT
+        "Dark" -> FynxGlassThemeId.PURE_BLACK
+        else -> FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) }
+            ?: FynxGlassThemeId.PURE_BLACK
+    }
     val glassPalette = fynxGlassPalette(glassThemeId)
     val screenWidthDp = context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density
     val messageBubbleMaxWidth = (screenWidthDp.dp * 0.82f).coerceAtMost(360.dp)
