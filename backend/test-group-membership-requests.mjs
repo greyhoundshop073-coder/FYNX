@@ -61,6 +61,37 @@ try {
  assert.equal((await call("POST","/api/groups/:groupId/join-requests/:username/approve",{groupId:group,username:"requester_"+suffix.slice(0,12)},admin)).statusCode,200);
  assert.equal((await client.query("SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2",[group,requester])).rows[0].role,"MEMBER");
  assert.equal((await client.query("SELECT 1 FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2",[group,requester])).rowCount,0);
+
+ // Exercise the real authenticated report route with distinct member identities.
+ const memberReport=await call("POST","/api/groups/:groupId/reports",{groupId:group},requester,{
+   reason:"A member sent abusive messages.",
+   username:"owner_"+suffix.slice(0,12)
+ });
+ assert.equal(memberReport.statusCode,201,"an authenticated group member can report another member");
+ assert.ok(memberReport.body.reportId,"member report returns a stable report ID");
+ const storedMemberReport=(await client.query(
+   "SELECT reporter_id,target_user_id,reason FROM fynx_group_reports WHERE id=$1",[memberReport.body.reportId]
+ )).rows[0];
+ assert.equal(String(storedMemberReport.reporter_id),String(requester),"the authenticated member is recorded as reporter");
+ assert.equal(String(storedMemberReport.target_user_id),String(admin),"the selected group member is recorded as target");
+ assert.equal(storedMemberReport.reason,"A member sent abusive messages.");
+ assert.equal((await call("POST","/api/groups/:groupId/reports",{groupId:group},requester,{
+   reason:"This target is not in the group.",username:"second_"+suffix.slice(0,12)
+ })).statusCode,404,"a user outside the group cannot be selected as the reported member");
+ assert.equal((await call("POST","/api/groups/:groupId/reports",{groupId:group},requester,{reason:"   "}))
+   .statusCode,400,"a group report must contain a nonblank reason");
+ const groupReport=await call("POST","/api/groups/:groupId/reports",{groupId:group},admin,{
+   reason:"This group requires safety review."
+ });
+ assert.equal(groupReport.statusCode,201,"an authenticated group member can report the group");
+ const storedGroupReport=(await client.query(
+   "SELECT reporter_id,target_user_id,reason FROM fynx_group_reports WHERE id=$1",[groupReport.body.reportId]
+ )).rows[0];
+ assert.equal(String(storedGroupReport.reporter_id),String(admin));
+ assert.equal(storedGroupReport.target_user_id,null,"a group report must not invent a member target");
+ assert.equal((await call("POST","/api/groups/:groupId/reports",{groupId:group},second,{
+   reason:"I am not a member."
+ })).statusCode,403,"nonmembers cannot submit group or member reports");
  assert.equal((await call("POST","/api/groups/:groupId/invites/:token/join",{groupId:group,token:invite},second)).statusCode,202);
  assert.equal((await client.query("SELECT 1 FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2",[group,second])).rowCount,1);
  assert.equal((await call("POST","/api/groups/:groupId/join-requests/:username/reject",{groupId:group,username:"second_"+suffix.slice(0,12)},admin)).statusCode,200);
