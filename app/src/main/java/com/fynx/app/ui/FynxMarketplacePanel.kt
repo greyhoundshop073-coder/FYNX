@@ -1459,6 +1459,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             )
                         }
                     }
+                    // Selling is an app-side journey and must remain reachable even when
+                    // the live catalogue request is slow or the backend is temporarily offline.
+                    item(key = "marketplace-loading-sell") {
+                        OutlinedButton(
+                            onClick = { showSell = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Sell something")
+                        }
+                    }
                 }
                 listings.isEmpty() && error != null -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
