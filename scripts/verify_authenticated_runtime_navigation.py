@@ -3267,12 +3267,13 @@ if AI_VISUALS_ONLY:
                "- Screenshots render production Compose components in a debug-only host on the Android emulator.",
                "- Fixture text is local-only. No prompt, account data, or saved conversation is created.",
                "- Live read-aloud waveform levels are derived from realtime PCM audio deltas; the audit fixture uses static sample bars.",
-               "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+               "", f"## Result: {'RED' if FAILURES else ('PARTIAL — GROUP RUNTIME BLOCKED' if GROUP_RUNTIME_BLOCKED else 'GREEN')}"]
     (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
 if CHAT_GROUPS_VISUALS_ONLY:
+    GROUP_RUNTIME_BLOCKED = False
     report.append("- Focused Chat and Groups visual mode: captures the installed production Chat list, private ConversationPanel, Groups list and group ConversationPanel. It uses the disposable emulator's explicit debug-local entry when backend health is unavailable; this is UI evidence, not server authentication.")
     if error:
         report += ["", "## Result: BLOCKED", "- Chat/Groups UI entry could not reach Home: " + error]
@@ -3343,7 +3344,8 @@ if CHAT_GROUPS_VISUALS_ONLY:
             screenshot("group-chat-inside.png")
             (ROOT/"group-chat-inside.xml").write_text(group_xml+"\n", encoding="utf-8")
             if find_control(group_xml, ["Group unavailable"]):
-                report.append("- LIMITATION: group ConversationPanel route rendered its explicit unavailable state; no group record was fabricated.")
+                GROUP_RUNTIME_BLOCKED = True
+                report.append("- BLOCKED: group ConversationPanel route rendered its explicit unavailable state; no group record was fabricated, so group conversation runtime is not certified.")
             else:
                 report.append("- PASS: captured the real FynxGroupConversationPanel.")
         else:
