@@ -132,6 +132,12 @@ checks = [
      and "append(specificationSection)" in marketplace
      and "Up to $descriptionBodyLimit characters are available for this category." in marketplace),
     ("seller publishes selected condition and composed specifications through the existing listing path", 'title, listingDescription, "", price.toDouble(), currency, category, condition' in marketplace and 'validListing(title, listingDescription' in marketplace),
+    ("Marketplace seller form remains reachable while the initial empty catalogue is loading",
+     "item(key = \"marketplace-loading-sell\")" in marketplace
+     and "OutlinedButton(\n                            onClick = { showSell = true }" in marketplace
+     and 'Text("Sell something")' in marketplace
+     and marketplace.index("item(key = \"marketplace-loading-sell\")") > marketplace.index("loading && listings.isEmpty() ->")
+     and marketplace.index("item(key = \"marketplace-loading-sell\")") < marketplace.index("listings.isEmpty() && error != null ->")),
     ("active marketplace remains backend listing driven", "FynxRemoteSocialClient.listings" in marketplace),
     ("Marketplace discovery includes the signed-in seller own active products while the detail UI disables self-purchase and backend checkout rejects it", 'const params = [req.user.sub]' in discovery_routes and 'l.seller_id<>$1' not in discovery_routes and 'canPurchase = !isOwnListing' in marketplace and 'Buyers can see it in Marketplace, but you cannot buy your own product.' in marketplace and 'enabled = canPurchase && l.quantity > 0' in marketplace and "you cannot purchase your own listing" in marketplace_checkout_route),
     ("Marketplace discovery hides sellers blocked in either direction without hiding the signed-in seller own listings", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))" in discovery_routes and "l.seller_id<>$1" not in discovery_routes),
