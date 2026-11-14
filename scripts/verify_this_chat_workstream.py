@@ -133,7 +133,9 @@ group_store = read('app/src/main/java/com/fynx/app/ui/FynxGroupsStore.kt')
 check('offline group pending-sync IDs are read and written under the initiating account namespace', 'pendingSyncKey(context, accountKey)' in group_store and 'putStringSet(pendingSyncKey(context, accountKey), pending)' in group_store)
 group_unavailable_panel = groups_panel[groups_panel.index("if (!groupLoadComplete || selectedGroup == null)"):groups_panel.index("if (showPulse && selectedGroup != null)")]
 group_runtime_waiter = read('scripts/verify_authenticated_runtime_navigation.py').split('def wait_for_group_conversation_ui', 1)[1].split('def wait_for_conversation_ui', 1)[0]
-check('unavailable group state cannot masquerade as a usable conversation', 'This group is unavailable to this account.' in group_unavailable_panel and 'Message…' not in group_unavailable_panel and 'Group unavailable' in group_runtime_waiter and group_runtime_waiter.index('find_control(latest, ["Group unavailable"])') < group_runtime_waiter.index('find_control(latest, ["Message..."')) 
+check('unavailable group state cannot masquerade as a usable conversation', 'This group is unavailable to this account.' in group_unavailable_panel and 'Message…' not in group_unavailable_panel and 'Group unavailable' in group_runtime_waiter and group_runtime_waiter.index('find_control(latest, ["Group unavailable"])') < group_runtime_waiter.index('find_control(latest, ["Message..."'))
+check('group conversation reads, member changes, transfer and leave remain account-scoped', re.search(r'FynxGroupsStore\\.(?:load|updateGroup|removeGroup|markSynced)\\(context\\)', groups_panel) is None and 'FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" })' in groups_panel and 'FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })' in groups_panel)
+ 
 
 
 failed = [name for name, ok in checks if not ok]
