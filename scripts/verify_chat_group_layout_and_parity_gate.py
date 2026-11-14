@@ -142,6 +142,8 @@ require("Android group-history client encodes q and preserves the timestamp/ID c
 
 
 require("runtime certification never counts an unavailable group placeholder as a conversation pass", '"Group unavailable" not in group_destination' in NAVIGATION and "GROUP_RUNTIME_BLOCKED = True" in NAVIGATION and "PARTIAL — GROUP RUNTIME BLOCKED" in NAVIGATION)
+require("FYNX Default group appearance inherits the user's configured wallpaper theme", '"Dark" -> FynxGlassThemeId.PURE_BLACK' in ACTIVE_GROUP and "FynxPreferencesStore.loadChatWallpaper(context)" in ACTIVE_GROUP and "val glassThemeId = when (groupAppearance)" in ACTIVE_GROUP)
+require("resetting group settings also restores the separate group wallpaper store", 'FynxGroupWallpaperStore.save(context,groupId,"Classic")' in GROUP_SETTINGS)
 require("group member report is available to other members and submits the selected target through the authenticated group report client", 'Text("Report")' in ACTIVE_GROUP and "reportMemberUsername = normalizedUsername" in ACTIVE_GROUP and "FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target)" in ACTIVE_GROUP)
 require("group settings expose a working report-group flow", 'GroupActionRow("Report group"' in GROUP_SETTINGS and "FynxGroupRemoteClient.reportGroup(context, groupId, reportReason)" in GROUP_SETTINGS and "showReportDialog" in GROUP_SETTINGS)
 require("group report client sends a required bounded reason and optional target username to the existing endpoint", '"/api/groups/$groupId/reports"' in GROUP_CLIENT and 'put("reason", cleanReason)' in GROUP_CLIENT and 'put("username", it)' in GROUP_CLIENT)
