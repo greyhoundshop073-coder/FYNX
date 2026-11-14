@@ -1569,7 +1569,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         FynxGroupRemoteClient.leaveGroup(context, groupId)
                                             .onSuccess {
                                                 FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
-                                                FynxGroupsStore.markSynced(context, groupId)
+                                                FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                                 showLeaveGroupDialog = false
                                                 onBack()
                                             }
@@ -1583,8 +1583,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             } else {
                                 FynxGroupRemoteClient.leaveGroup(context, groupId)
                                     .onSuccess {
-                                        FynxGroupsStore.removeGroup(context, groupId)
-                                        FynxGroupsStore.markSynced(context, groupId)
+                                        FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                         showLeaveGroupDialog = false
                                         onBack()
                                     }
@@ -1641,7 +1641,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     val base = currentGroup ?: groupForDialogs
                     val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
                         else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
-                    if (FynxGroupsStore.updateGroup(context, updated)) currentGroup = updated
+                    if (FynxGroupsStore.updateGroup(context, updated, groupAccountKey.takeUnless { it == "signed_out" })) currentGroup = updated
                     else syncMessage = "Member was added on the server, but the local list could not refresh. Reopen the group."
                     Unit
                 }
