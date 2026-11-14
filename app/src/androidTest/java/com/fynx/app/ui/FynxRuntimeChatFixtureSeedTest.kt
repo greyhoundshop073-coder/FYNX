@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,20 +21,22 @@ class FynxRuntimeChatFixtureSeedTest {
     @Test
     fun seedDisposablePrivateConversationForLocalRuntimeCapture() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val username = "fynx_runtime_owner"
+        val username = "marketplace_visual_check"
         val peerUsername = "fynx_runtime_peer"
         val now = System.currentTimeMillis()
 
-        // This is a local visual-test identity, not an authenticated server account.
+        // Reserve the account-scoped store that the debug-local UI login will use,
+        // but leave the session signed out so the real login gate is exercised.
         val auth = context.getSharedPreferences("fynx_auth", Context.MODE_PRIVATE)
         assertTrue(
             auth.edit()
                 .putString("username", username)
                 .putString("display_name", "FYNX Runtime Owner")
-                .putBoolean("signed_in", true)
+                .putBoolean("signed_in", false)
                 .commit()
         )
         assertEquals(username, FynxAuthStore.accountStorageKey(context))
+        assertFalse("The fixture must not pre-authenticate the app before its debug-local login flow", auth.getBoolean("signed_in", false))
 
         val peerMessage = ChatMessage(
             text = "FYNX offline private fixture: hello from the test peer",
