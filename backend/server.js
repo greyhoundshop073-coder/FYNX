@@ -802,8 +802,41 @@ app.get("/api/messages/:username", auth, async (req, res) => {
     if (!other) return res.status(404).json({ error: "user not found" });
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
     if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
-    const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
-    return res.json({ messages: result.rows.map(rowToMessage) });
+    res.set("Cache-Control", "no-store");
+
+    // Keep the pre-pagination response for existing callers. New clients opt into the
+    // explicit bounded cursor contract by supplying limit, beforeId or q.
+    const hasPageContract = req.query?.limit != null || req.query?.beforeId != null || req.query?.q != null;
+    if (!hasPageContract) {
+      const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
+      return res.json({ messages: result.rows.map(rowToMessage) });
+    }
+
+    const requestedLimit = Number.parseInt(String(req.query?.limit || "50"), 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const beforeIdRaw = String(req.query?.beforeId || "").trim();
+    if (beforeIdRaw && !/^\d+$/.test(beforeIdRaw)) return res.status(400).json({ error: "invalid message cursor" });
+    const beforeId = beforeIdRaw || null;
+    const searchQuery = String(req.query?.q || "").trim().slice(0, 100);
+    if (searchQuery.length === 1) return res.status(400).json({ error: "search query must contain at least two characters" });
+
+    if (searchQuery.length >= 2) {
+      const searched = await pool.query(
+        `${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND m.deleted = FALSE AND strpos(lower(COALESCE(m.text, '')), lower($3)) > 0 AND ($4::bigint IS NULL OR m.id < $4::bigint) ORDER BY m.id DESC LIMIT $5`,
+        [req.user.sub, other.id, searchQuery, beforeId, limit + 1]
+      );
+      const hasMore = searched.rows.length > limit;
+      const page = searched.rows.slice(0, limit).reverse().map(rowToMessage);
+      return res.json({ messages: page, hasMore, nextBeforeId: page.length ? String(page[0].id) : null });
+    }
+
+    const result = await pool.query(
+      `${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND ($3::bigint IS NULL OR m.id < $3::bigint) ORDER BY m.id DESC LIMIT $4`,
+      [req.user.sub, other.id, beforeId, limit + 1]
+    );
+    const hasMore = result.rows.length > limit;
+    const page = result.rows.slice(0, limit).reverse().map(rowToMessage);
+    return res.json({ messages: page, hasMore, nextBeforeId: page.length ? String(page[0].id) : null });
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
 });
 

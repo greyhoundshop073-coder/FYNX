@@ -4,6 +4,8 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
+PRODUCTION_MESSAGING = (UI / "FynxProductionMessaging.kt").read_text(encoding="utf-8")
+PRIVATE_BACKEND = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
@@ -71,6 +73,12 @@ require("default group wallpaper is pure black while alternative group wallpaper
 
 # Shared private-chat and model contracts remain covered.
 require("private chat protects top system inset", "statusBarsPadding" in PRIVATE)
+require("private message search queries authenticated server history instead of filtering only the loaded page", "loadPrivateSearchPage" in PRIVATE and "FynxProductionMessaging.searchHistoryPage(" in PRIVATE and "remoteSearchMessages" in PRIVATE and "visibleMessages = when" in PRIVATE)
+require("private full-history search is debounced, bounded and cursor-paginated", "delay(350L)" in PRIVATE and "searchQuery = it.take(100)" in PRIVATE and "remoteSearchCursor" in PRIVATE and "remoteSearchHasMore" in PRIVATE and "load_more_private_search_results" in PRIVATE and "loadPrivateSearchPage(searchQuery.trim(), cursor, append = true)" in PRIVATE)
+require("private message history loads in bounded pages and retains older-history pagination", "FynxProductionMessaging.historyPage(" in PRIVATE and "hasOlderMessages" in PRIVATE and "olderMessagesCursor" in PRIVATE and "load_older_private_messages" in PRIVATE)
+require("private history/search client checks account and token identity before and after requests", "isMessageRequestSessionCurrent" in PRODUCTION_MESSAGING and "expectedAccountKey" in PRODUCTION_MESSAGING and "requestToken" in PRODUCTION_MESSAGING and "searchHistoryPage(" in PRODUCTION_MESSAGING)
+require("private search backend preserves legacy history while exposing bounded cursor search", "const hasPageContract = req.query?.limit != null || req.query?.beforeId != null || req.query?.q != null" in PRIVATE_BACKEND and "m.deleted = FALSE" in PRIVATE_BACKEND and "strpos(lower(COALESCE(m.text, '')), lower($3)) > 0" in PRIVATE_BACKEND and "nextBeforeId" in PRIVATE_BACKEND)
+require("private history backend constrains every page to the authenticated participant pair", "m.sender_id = $1 AND m.recipient_id = $2" in PRIVATE_BACKEND and "m.sender_id = $2 AND m.recipient_id = $1" in PRIVATE_BACKEND and "m.id < $3::bigint" in PRIVATE_BACKEND)
 require("message model supports audio attachments", "attachmentType: String?" in MODELS and "audio" in MODELS and "ChatMessage" in MODELS)
 
 require("group remote messages are not falsely marked read before a participant read receipt", "delivered=true,read=false" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "delivered=true,read=true" not in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))

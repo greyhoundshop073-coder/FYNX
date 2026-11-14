@@ -26,6 +26,7 @@ object FynxProductionMessaging {
     private val VALID_MEDIA_TYPES = setOf("image", "video", "video_note", "audio", "document")
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
+    data class RemoteMessagePage(val messages: List<RemoteMessage>, val hasMore: Boolean, val nextBeforeId: String?)
     data class RemoteMessage(
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
@@ -64,6 +65,67 @@ object FynxProductionMessaging {
                 }
             }.distinctBy { it.username.lowercase() }
         }
+
+
+    private fun isMessageRequestSessionCurrent(context: Context, expectedAccountKey: String?, requestToken: String?): Boolean =
+        FynxBackendClient.isRequestSessionCurrent(
+            expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+            requestToken, FynxBackendClient.accessToken(context)
+        )
+
+    suspend fun historyPage(
+        context: Context, username: String, beforeId: String? = null, limit: Int = 50,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessagePage> {
+        if (expectedAccountKey.isNullOrBlank() || !isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+            return Result.failure(IllegalStateException("Your account changed before message history could load."))
+        }
+        val query = "?limit=${limit.coerceIn(1, 100)}" +
+            (beforeId?.takeIf { it.isNotBlank() }?.let { "&beforeId=${Uri.encode(it)}" } ?: "")
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}$query").mapCatching { raw ->
+            check(isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+                "Your account changed while message history was loading."
+            }
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("messages") ?: JSONArray()
+            val pageMessages = buildList {
+                for (index in 0 until array.length()) {
+                    runCatching { fromJson(array.getJSONObject(index)) }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            RemoteMessagePage(pageMessages, root.optBoolean("hasMore", false),
+                root.optString("nextBeforeId").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
+
+    suspend fun searchHistoryPage(
+        context: Context, username: String, query: String, beforeId: String? = null, limit: Int = 40,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessagePage> {
+        val cleanQuery = query.trim().take(100)
+        if (cleanQuery.length < 2) return Result.failure(IllegalArgumentException("Enter at least two characters to search message history."))
+        if (expectedAccountKey.isNullOrBlank() || !isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+            return Result.failure(IllegalStateException("Your account changed before message search could start."))
+        }
+        val pageQuery = "?limit=${limit.coerceIn(1, 100)}&q=${Uri.encode(cleanQuery)}" +
+            (beforeId?.takeIf { it.isNotBlank() }?.let { "&beforeId=${Uri.encode(it)}" } ?: "")
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}$pageQuery").mapCatching { raw ->
+            check(isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+                "Your account changed while message search was running."
+            }
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("messages") ?: JSONArray()
+            val found = buildList {
+                for (index in 0 until array.length()) {
+                    runCatching { fromJson(array.getJSONObject(index)) }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            RemoteMessagePage(found, root.optBoolean("hasMore", false),
+                root.optString("nextBeforeId").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
         val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
