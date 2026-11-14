@@ -2161,6 +2161,29 @@ private fun MarketplaceDetails(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
+    val reviewScope = rememberCoroutineScope()
+    var productReviews by remember(l.id) { mutableStateOf(emptyList<FynxRemoteSocialClient.MarketplaceProductReview>()) }
+    var productReviewCount by remember(l.id) { mutableIntStateOf(l.productReviewCount) }
+    var productReviewAverage by remember(l.id) { mutableDoubleStateOf(l.productAverageRating) }
+    var productReviewsHasMore by remember(l.id) { mutableStateOf(false) }
+    var productReviewsOffset by remember(l.id) { mutableIntStateOf(0) }
+    var productReviewsLoading by remember(l.id) { mutableStateOf(true) }
+    var productReviewsError by remember(l.id) { mutableStateOf<String?>(null) }
+    var productReviewsReloadKey by remember(l.id) { mutableIntStateOf(0) }
+    LaunchedEffect(l.id, productReviewsReloadKey) {
+        productReviewsLoading = true
+        productReviewsError = null
+        FynxRemoteSocialClient.marketplaceProductReviews(context, l.id, limit = 5, offset = 0)
+            .onSuccess { page ->
+                productReviews = page.reviews
+                productReviewCount = page.reviewCount
+                productReviewAverage = page.averageRating
+                productReviewsHasMore = page.hasMore
+                productReviewsOffset = page.reviews.size
+            }
+            .onFailure { productReviewsError = marketplaceSafeError(it, "Product reviews could not be loaded.") }
+        productReviewsLoading = false
+    }
     AlertDialog(onDismissRequest = onClose, title = { Text("Product details", maxLines = 1) }, text = { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (l.mediaIds.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(l.mediaIds.take(12).mapIndexed { index, mediaId -> mediaId to l.mediaTypes.getOrNull(index) }) { (mediaId, mimeType) -> RemoteMarketMedia(LocalContext.current, mediaId, Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(4f / 3f).clip(RoundedCornerShape(12.dp)), mimeType) } }
         MarketplaceReferenceProductSummary(
@@ -2219,6 +2242,67 @@ private fun MarketplaceDetails(
                     )
                 }
                 TextButton(onClick = onContact) { Text("Contact seller") }
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Product reviews", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (productReviewCount > 0) {
+                        Text("★ " + String.format(Locale.US, "%.1f", productReviewAverage) + " · " + marketplaceReviewCountLabel(productReviewCount), color = Color(0xFFFFB72B), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                when {
+                    productReviewsLoading && productReviews.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text("Loading product reviews…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    productReviewsError != null && productReviews.isEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(productReviewsError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { productReviewsReloadKey += 1 }, enabled = !productReviewsLoading) { Text("Retry reviews") }
+                    }
+                    productReviews.isEmpty() -> Text("No verified buyer reviews yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    else -> {
+                        productReviews.forEach { review ->
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(review.reviewerDisplayName, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("★".repeat(review.rating), color = Color(0xFFFFB72B), style = MaterialTheme.typography.labelMedium)
+                                }
+                                if (review.comment.isNotBlank()) Text(review.comment, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                        if (productReviewsHasMore) {
+                            TextButton(
+                                enabled = !productReviewsLoading,
+                                onClick = {
+                                    reviewScope.launch {
+                                        productReviewsLoading = true
+                                        FynxRemoteSocialClient.marketplaceProductReviews(context, l.id, limit = 5, offset = productReviewsOffset)
+                                            .onSuccess { page ->
+                                                productReviews = productReviews + page.reviews
+                                                productReviewCount = page.reviewCount
+                                                productReviewAverage = page.averageRating
+                                                productReviewsHasMore = page.hasMore
+                                                productReviewsOffset += page.reviews.size
+                                                productReviewsError = null
+                                            }
+                                            .onFailure { productReviewsError = marketplaceSafeError(it, "More product reviews could not be loaded.") }
+                                        productReviewsLoading = false
+                                    }
+                                }
+                            ) { Text(if (productReviewsLoading) "Loading…" else "Load more reviews") }
+                        }
+                    }
+                }
+                if (productReviewsError != null && productReviews.isNotEmpty()) {
+                    Text(productReviewsError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         MarketplaceReferenceDescriptionCard(listing = l)

@@ -20,6 +20,8 @@ object FynxRemoteSocialClient {
     data class RemoteUser(val id: String, val username: String, val displayName: String)
     data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList(), val createdAtEpochMs: Long = 0L, val discoveryScore: Double = 0.0, val originalPrice: Double? = null, val productAverageRating: Double = 0.0, val productReviewCount: Int = 0, val priceDrop: Boolean = false)
     data class MarketplaceListingEngagement(val listingId: String, val likeCount: Int, val likedByCurrentUser: Boolean)
+    data class MarketplaceProductReview(val id: String, val rating: Int, val comment: String, val createdAt: String?, val reviewerUsername: String, val reviewerDisplayName: String)
+    data class MarketplaceProductReviewPage(val reviews: List<MarketplaceProductReview>, val reviewCount: Int, val averageRating: Double, val limit: Int, val offset: Int, val hasMore: Boolean)
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
     data class MarketplaceDriverAssignment(val orderId: String, val status: String, val fulfillmentStatus: String, val currency: String, val totalAmount: Double, val quantity: Int, val productTitle: String, val buyerName: String, val sellerUsername: String, val shippingAddress: JSONObject?, val trackingReference: String?, val acceptedAt: String?, val handoverAt: String?, val deliveredAt: String?, val evidence: JSONArray)
     data class SocialInteractionState(val saved: Boolean, val reposted: Boolean, val savedCount: Int, val repostCount: Int)
@@ -316,6 +318,38 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/evidence", JSONObject().put("kind", safeKind).put("value", safeValue).toString()).map { Unit }
     }
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
+    suspend fun marketplaceProductReviews(context: Context, listingId: String, limit: Int = 10, offset: Int = 0): Result<MarketplaceProductReviewPage> {
+        val numericId = listingId.trim().toLongOrNull()?.takeIf { it > 0L }
+            ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
+        val safeLimit = limit.coerceIn(1, 20)
+        val safeOffset = offset.coerceIn(0, 10_000)
+        return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/reviews?limit=$safeLimit&offset=$safeOffset").mapCatching { raw ->
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("reviews") ?: JSONArray()
+            val reviews = buildList {
+                for (index in 0 until array.length()) {
+                    val row = array.getJSONObject(index)
+                    val id = row.optString("id").trim()
+                    val rating = row.optInt("rating", 0)
+                    val username = row.optString("reviewerUsername").trim()
+                    if (id.isNotBlank() && rating in 1..5 && username.isNotBlank()) {
+                        add(MarketplaceProductReview(
+                            id = id,
+                            rating = rating,
+                            comment = row.optString("comment").take(1000),
+                            createdAt = row.optString("createdAt").takeIf { it.isNotBlank() && it != "null" },
+                            reviewerUsername = username,
+                            reviewerDisplayName = row.optString("reviewerDisplayName").trim().ifBlank { username }
+                        ))
+                    }
+                }
+            }
+            val count = root.optInt("reviewCount", 0).coerceAtLeast(0)
+            val average = root.optDouble("averageRating", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0
+            MarketplaceProductReviewPage(reviews, count, average, safeLimit, safeOffset, root.optBoolean("hasMore"))
+        }
+    }
+
     suspend fun reviewMarketplaceProduct(context: Context, orderId: String, rating: Int, comment: String): Result<Unit> {
         require(rating in 1..5) { "Rating must be between 1 and 5." }
         return FynxBackendClient.postJson(context, "/api/marketplace/orders/$orderId/product-review", JSONObject().apply {
