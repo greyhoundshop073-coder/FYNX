@@ -19,6 +19,7 @@ GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
 GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
 GROUP_MEMBERSHIP = (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8")
 NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+RUNTIME_SHELL = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 
 checks = []
 def require(label, condition):
@@ -142,6 +143,8 @@ require("group search exposes empty-result and offline-cache fallback states", "
 require("Android group-history client encodes q and preserves the timestamp/ID cursor", "query:String?=null" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "&q=${Uri.encode(it)}" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "beforeTimestamp" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 
 
+require("Chat/Groups runtime navigation does not run after Android instrumentation fails", 'if [ "${TEST_EXIT}" -ne 0 ]; then' in RUNTIME_SHELL and "navigation was not attempted" in RUNTIME_SHELL)
+require("Chat/Groups runtime uses server credentials only when backend health is ready and otherwise selects local-only UI", "FYNX_E2E_USERNAME" in RUNTIME_SHELL and "FYNX_E2E_PASSWORD" in RUNTIME_SHELL and "fynx-backend" in RUNTIME_SHELL and "FYNX_LOCAL_VISUALS_ONLY=1" in RUNTIME_SHELL)
 require("runtime certification never counts an unavailable group placeholder as a conversation pass", '"Group unavailable" not in group_destination' in NAVIGATION and "GROUP_RUNTIME_BLOCKED = True" in NAVIGATION and "PARTIAL — GROUP RUNTIME BLOCKED" in NAVIGATION)
 require("focused Chat/Groups visual run creates a real account-scoped group through the app UI", "def create_local_group_fixture_through_ui" in NAVIGATION and '["New group", "Create group"]' in NAVIGATION and "local_group_fixture_is_persisted(group_name)" in NAVIGATION)
 require("local Chat/Groups fixture is isolated from backend services", "def set_emulator_network_enabled(enabled: bool)" in NAVIGATION and "set_emulator_network_enabled(False)" in NAVIGATION and "refusing to create a CI fixture that might reach production" in NAVIGATION)
