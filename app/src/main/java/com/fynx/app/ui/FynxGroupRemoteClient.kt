@@ -314,9 +314,11 @@ object FynxGroupRemoteClient {
                 .filter { it.fromMe && !it.delivered }
                 .sortedBy { it.timestamp }
             for(message in pending) {
-                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+                if(!sessionIsCurrent())return completed
                 val result=sendMessage(context,group.id,message,account,requestToken)
-                if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+                // A token refresh or account switch while the request is in flight must
+                // not let this session update another account's local outbox row.
+                if(!sessionIsCurrent())return completed
                 if(result.isSuccess) {
                     val remote=result.getOrThrow()
                     FynxChatStore.replaceMessage(context,"group_${group.id}",message.id,
@@ -325,8 +327,9 @@ object FynxGroupRemoteClient {
                     completed++
                 } else break
             }
-            if(FynxAuthStore.accountStorageKey(context)!=account)return completed
+            if(!sessionIsCurrent())return completed
             completed+=syncPendingRsvps(context,group.id)
+            if(!sessionIsCurrent())return completed
         }
         return completed
     }
