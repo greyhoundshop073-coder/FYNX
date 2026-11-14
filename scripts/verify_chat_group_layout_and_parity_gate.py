@@ -99,6 +99,8 @@ require("private-chat debug-local fallback opens the actual signed-in local user
 require("group creation name and description expose separate stable accessibility controls", 'contentDescription = "Group name input"' in ACTIVE_GROUP and 'contentDescription = "Description input"' in ACTIVE_GROUP and 'find_control(dialog, ["Group name input"], exact_only=True)' in NAVIGATION and 'find_control(after_name, ["Description input"], exact_only=True)' in NAVIGATION)
 GROUP_FIXTURE_FLOW = NAVIGATION.split("def create_local_group_fixture_through_ui", 1)[1].split("def send_and_reopen_local_group_fixture", 1)[0]
 require("runtime group creation navigates from ChatsPanel into the dedicated Groups manager before opening the modal", '["Your communities in one place"]' in GROUP_FIXTURE_FLOW and '["Open create group dialog"]' in GROUP_FIXTURE_FLOW and '["Group name input"]' in GROUP_FIXTURE_FLOW and '["Create group"]' not in GROUP_FIXTURE_FLOW)
+require("offline group creation rejects an empty form and enables Create only after both valid fields are entered", 'if control_is_enabled(dialog, ["Create"]):' in GROUP_FIXTURE_FLOW and 'if not control_is_enabled(ready, ["Create"]):' in GROUP_FIXTURE_FLOW)
+require("offline group runtime evidence includes the real creation dialog and created group list", 'screenshot("chat-groups-create-dialog.png")' in GROUP_FIXTURE_FLOW and 'screenshot("chat-groups-created-fixture.png")' in GROUP_FIXTURE_FLOW and '"chat-groups-create-dialog.png"' in NAVIGATION and '"chat-groups-created-fixture.png"' in NAVIGATION)
 
 GROUP_UNAVAILABLE_REJECT = GROUP_WAIT.find('find_control(latest, ["Group unavailable"])')
 GROUP_COMPOSER_ACCEPT = GROUP_WAIT.find('find_control(latest, ["Message..."')
