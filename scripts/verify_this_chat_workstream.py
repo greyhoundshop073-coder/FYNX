@@ -131,6 +131,10 @@ check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z
 check('Chat list recent-conversation API is authenticated, account-scoped, and registered before the dynamic username route', 'app.get("/api/messages/recent", auth' in read('backend/server.js') and 'FynxBackendClient.get(context, "/api/messages/recent")' in production_messaging and read('backend/server.js').index('app.get("/api/messages/recent", auth') < read('backend/server.js').index('app.get("/api/messages/:username", auth') and 'WHERE NOT EXISTS' in read('backend/server.js')[read('backend/server.js').index('app.get("/api/messages/recent", auth'):read('backend/server.js').index('app.get("/api/messages/:username", auth')])
 group_store = read('app/src/main/java/com/fynx/app/ui/FynxGroupsStore.kt')
 check('offline group pending-sync IDs are read and written under the initiating account namespace', 'pendingSyncKey(context, accountKey)' in group_store and 'putStringSet(pendingSyncKey(context, accountKey), pending)' in group_store)
+group_unavailable_panel = groups_panel[groups_panel.index("if (!groupLoadComplete || selectedGroup == null)"):groups_panel.index("if (showPulse && selectedGroup != null)")]
+group_runtime_waiter = read('scripts/verify_authenticated_runtime_navigation.py').split('def wait_for_group_conversation_ui', 1)[1].split('def wait_for_conversation_ui', 1)[0]
+check('unavailable group state cannot masquerade as a usable conversation', 'This group is unavailable to this account.' in group_unavailable_panel and 'Message…' not in group_unavailable_panel and 'Group unavailable' in group_runtime_waiter and group_runtime_waiter.index('find_control(latest, ["Group unavailable"])') < group_runtime_waiter.index('find_control(latest, ["Message..."')) 
+
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
