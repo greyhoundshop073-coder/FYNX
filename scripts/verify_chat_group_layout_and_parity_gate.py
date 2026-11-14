@@ -16,6 +16,7 @@ CHATS = (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
 GROUP_SETTINGS = (UI / "FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
 GROUP_CLIENT = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
+GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
 GROUP_MEMBERSHIP = (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8")
 NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
