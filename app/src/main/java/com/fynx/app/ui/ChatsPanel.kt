@@ -148,7 +148,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text("Chats", style = MaterialTheme.typography.headlineSmall)
+                Text(if (section == "Chats") "Chats" else "Groups", style = MaterialTheme.typography.headlineSmall)
                 Text(if (showArchived) "Archived conversations" else "Messages and groups in one place", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { section = if (section == "Chats") "Groups" else "Chats" }) {
@@ -166,7 +166,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 onValueChange = { chatSearch = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .heightIn(min = 56.dp),
                 singleLine = true,
                 shape = FynxDesign.ControlShape,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search chats") },
@@ -382,7 +382,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         FloatingActionButton(
             onClick = onOpenContacts,
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),
-            containerColor = Color(0xFF25D366),
+            containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White
         ) {
             Icon(Icons.Default.Add, contentDescription = "Phone contacts")

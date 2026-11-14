@@ -10,6 +10,8 @@ CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
 GLASS_THEME = (UI / "FynxGlassTheme.kt").read_text(encoding="utf-8")
+CHATS = (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
+NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = []
 def require(label, condition):
@@ -17,6 +19,10 @@ def require(label, condition):
 
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
+require("Chat & Groups root header is distinct from the active Chats or Groups section heading", '"Chats" -> "Chat & Groups"' in APP and 'Text(if (section == "Chats") "Chats" else "Groups"' in CHATS)
+require("Chat search control is not compressed below the standard 56dp field height", ".heightIn(min = 56.dp)" in CHATS and ".height(48.dp)" not in CHATS)
+require("Chat contacts action uses the app primary color instead of unrelated messaging-green", "containerColor = MaterialTheme.colorScheme.primary" in CHATS and "Color(0xFF25D366)" not in CHATS)
+require("runtime row picker skips editable search fields instead of treating them as conversations", 'ancestor.attrib.get("class") == "android.widget.EditText"' in NAVIGATION)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
 require("Pure Black Glass uses only true black background gradient stops while preserving other themes", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in PURE_BLACK_PALETTE and "Color(0xFF080B18)" not in PURE_BLACK_PALETTE and "Color(0xFF182B52)" not in PURE_BLACK_PALETTE and "FynxGlassThemeId.AURORA" in GLASS_THEME and "FynxGlassThemeId.EMERALD" in GLASS_THEME)

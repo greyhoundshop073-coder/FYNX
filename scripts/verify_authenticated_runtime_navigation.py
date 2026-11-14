@@ -351,6 +351,10 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
         normalized=text.lower().replace("＋","").replace("+","").strip()
         if text and normalized not in excluded and not any(item in normalized for item in ("create group","phone contacts","search chats","archived","no groups found","your private conversations","start one with")) and node.attrib.get("visible-to-user","true").lower()!="false":
             for ancestor in reversed(path):
+                # A Compose search field exposes its placeholder as a child TextView.
+                # The EditText is clickable, but it is never a conversation row.
+                if ancestor.attrib.get("class") == "android.widget.EditText":
+                    break
                 if ancestor.attrib.get("clickable","false").lower()=="true" and _center(ancestor):
                     bounds=ancestor.attrib.get("bounds","")
                     try:

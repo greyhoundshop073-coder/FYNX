@@ -536,7 +536,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
                             when (selected) {
-                                "Chats" -> "Chats"
+                                "Chats" -> "Chat & Groups"
                                 "Marketplace" -> "Marketplace"
                                 "Features" -> "More"
                                 else -> selected
