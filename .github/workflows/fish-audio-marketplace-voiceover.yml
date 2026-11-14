@@ -1,0 +1,52 @@
+name: FYNX Marketplace Voiceover
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  generate-voiceover:
+    name: Generate marketplace narration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secret
+        env:
+          FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
+        run: |
+          if [ -z "$FISH_API_KEY" ]; then
+            echo "::error::Repository secret FISH_API_KEY is missing. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Generate MP3 with Fish Audio
+        env:
+          FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --location \
+            --retry 2 --max-time 180 \
+            --request POST "https://api.fish.audio/v1/tts" \
+            --header "Authorization: Bearer ${FISH_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --header "model: s2.1-pro-free" \
+            --data-binary @- \
+            --output FYNX-Marketplace-Voiceover.mp3 <<'JSON'
+          {
+            "text": "Every great business deserves to be seen! That's why there's F.Y.N.X.! Discover amazing products, meet trusted sellers, showcase what you offer and connect with customers who are looking for exactly what you sell. Whatever your business, your next opportunity could be just one connection away. F.Y.N.X. — let the world discover you!",
+            "reference_id": "933563129e564b19a115bedd57b7406a",
+            "format": "mp3"
+          }
+          JSON
+          test -s FYNX-Marketplace-Voiceover.mp3
+          file FYNX-Marketplace-Voiceover.mp3
+
+      - name: Upload generated narration
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-Marketplace-Voiceover
+          path: FYNX-Marketplace-Voiceover.mp3
+          if-no-files-found: error
+          retention-days: 14
