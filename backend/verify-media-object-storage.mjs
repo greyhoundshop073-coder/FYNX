@@ -32,7 +32,12 @@ assert.match(upload, /MAX_MEDIA_BYTES/);
 
 const primary = route(server, 'app.get("/api/media/:id"', "\nfunction messageProjection()");
 assert.match(primary, /auth/);
-assert.match(primary, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
+assert.ok(primary.includes("SELECT mm.mime_type, mm.storage_provider, mm.object_key, ${groupMessageMediaFlag}"));
+assert.match(primary, /let groupMessageMediaFlag = "FALSE AS group_message_media"/);
+assert.ok(primary.includes("groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`"));
+assert.match(primary, /JOIN fynx_group_members gmem ON gmem\.group_id = gm\.group_id/);
+assert.match(primary, /gmem\.user_id = \$2/);
+assert.match(primary, /ownerMediaAuthorization = .*mm\.owner_id = \$2 AND NOT EXISTS\s*\(/);
 assert.ok(primary.indexOf("if (!result.rows[0])") < primary.indexOf("redirectStoredMedia"));
 assert.match(primary, /redirectStoredMedia/);
 assert.match(primary, /getCachedMediaPayload/);

@@ -205,6 +205,8 @@ jobs:
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py
+      - name: Test private message history search, cursor paging and conversation isolation
+        run: node test-private-message-history.mjs
       - name: Run Chat Gate 2 message-actions certification
         working-directory: .
         run: python3 scripts/verify_chat_gate2_message_actions.py
@@ -322,6 +324,12 @@ jobs:
         run: node verify-marketplace-recovery-worker-safety.mjs
       - name: Verify group permission enforcement contract
         run: python3 ../scripts/verify_group_permissions_contract.py
+      - name: Test group message history search and stable cursor pagination
+        run: node test-group-message-search.mjs
+      - name: Test group invite approval and member-capacity lifecycle
+        run: node test-group-membership-requests.mjs
+      - name: Test group polls, event lifecycle and member authorization
+        run: node test-group-content-routes.mjs
       - name: Verify backend package metadata
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
       - name: Build and syntax-check Neon Functions runtime artifacts

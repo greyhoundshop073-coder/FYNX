@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
+import android.text.format.DateUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,12 +26,106 @@ object FynxProductionMessaging {
     private val VALID_MEDIA_TYPES = setOf("image", "video", "video_note", "audio", "document")
 
     data class RemoteMedia(val id: String, val mimeType: String, val byteSize: Int)
+    data class RemoteMessagePage(val messages: List<RemoteMessage>, val hasMore: Boolean, val nextBeforeId: String?)
     data class RemoteMessage(
         val id: String, val senderId: String, val senderUsername: String? = null, val senderDisplayName: String? = null,
         val recipientId: String, val recipientUsername: String? = null, val recipientDisplayName: String? = null,
         val text: String, val timestamp: Long, val delivered: Boolean, val read: Boolean, val edited: Boolean, val deleted: Boolean,
         val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
+
+    suspend fun recentConversations(context: Context): Result<List<ChatPreview>> =
+        FynxBackendClient.get(context, "/api/messages/recent").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("conversations") ?: JSONArray()
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val username = item.optString("username").trim().removePrefix("@")
+                    if (username.isBlank()) continue
+                    val displayName = item.optString("displayName").trim().ifBlank { username }
+                    val timestamp = item.optLong("lastMessageTimestamp", System.currentTimeMillis())
+                    val now = System.currentTimeMillis()
+                    val time = if (timestamp > 0L && now - timestamp < DateUtils.MINUTE_IN_MILLIS) "Now" else
+                        DateUtils.getRelativeTimeSpanString(
+                            timestamp,
+                            now,
+                            DateUtils.MINUTE_IN_MILLIS
+                        ).toString()
+                    val mediaId = item.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                    add(
+                        ChatPreview(
+                            name = displayName,
+                            username = "@$username",
+                            lastMessage = item.optString("lastMessage").ifBlank { "Message" },
+                            time = time,
+                            unreadCount = item.optInt("unreadCount").coerceAtLeast(0),
+                            avatarUri = mediaId?.let { "/api/media/$it" }
+                        )
+                    )
+                }
+            }.distinctBy { it.username.lowercase() }
+        }
+
+
+    private fun isMessageRequestSessionCurrent(context: Context, expectedAccountKey: String?, requestToken: String?): Boolean =
+        FynxBackendClient.isRequestSessionCurrent(
+            expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+            requestToken, FynxBackendClient.accessToken(context)
+        )
+
+    suspend fun historyPage(
+        context: Context, username: String, beforeId: String? = null, limit: Int = 50,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessagePage> {
+        if (expectedAccountKey.isNullOrBlank() || !isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+            return Result.failure(IllegalStateException("Your account changed before message history could load."))
+        }
+        val query = "?limit=${limit.coerceIn(1, 100)}" +
+            (beforeId?.takeIf { it.isNotBlank() }?.let { "&beforeId=${Uri.encode(it)}" } ?: "")
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}$query").mapCatching { raw ->
+            check(isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+                "Your account changed while message history was loading."
+            }
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("messages") ?: JSONArray()
+            val pageMessages = buildList {
+                for (index in 0 until array.length()) {
+                    runCatching { fromJson(array.getJSONObject(index)) }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            RemoteMessagePage(pageMessages, root.optBoolean("hasMore", false),
+                root.optString("nextBeforeId").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
+
+    suspend fun searchHistoryPage(
+        context: Context, username: String, query: String, beforeId: String? = null, limit: Int = 40,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessagePage> {
+        val cleanQuery = query.trim().take(100)
+        if (cleanQuery.length < 2) return Result.failure(IllegalArgumentException("Enter at least two characters to search message history."))
+        if (expectedAccountKey.isNullOrBlank() || !isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+            return Result.failure(IllegalStateException("Your account changed before message search could start."))
+        }
+        val pageQuery = "?limit=${limit.coerceIn(1, 100)}&q=${Uri.encode(cleanQuery)}" +
+            (beforeId?.takeIf { it.isNotBlank() }?.let { "&beforeId=${Uri.encode(it)}" } ?: "")
+        return FynxBackendClient.get(context, "/api/messages/${encodePathSegment(username)}$pageQuery").mapCatching { raw ->
+            check(isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+                "Your account changed while message search was running."
+            }
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("messages") ?: JSONArray()
+            val found = buildList {
+                for (index in 0 until array.length()) {
+                    runCatching { fromJson(array.getJSONObject(index)) }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            RemoteMessagePage(found, root.optBoolean("hasMore", false),
+                root.optString("nextBeforeId").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
 
     suspend fun history(context: Context, username: String): Result<List<RemoteMessage>> {
         val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
@@ -84,7 +179,13 @@ object FynxProductionMessaging {
         return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }
     }
 
-    suspend fun uploadMedia(context: Context, uri: Uri, mimeTypeOverride: String? = null): Result<RemoteMedia> = withContext(Dispatchers.IO) {
+    suspend fun uploadMedia(
+        context: Context,
+        uri: Uri,
+        mimeTypeOverride: String? = null,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMedia> = withContext(Dispatchers.IO) {
         try {
             val detectedMimeType = mimeTypeOverride?.trim()?.lowercase()
                 ?: context.contentResolver.getType(uri)?.trim()?.lowercase()
@@ -101,7 +202,13 @@ object FynxProductionMessaging {
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
             val body = JSONObject().apply { put("mimeType", effectiveMimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
-            val raw = FynxBackendClient.postJson(context, "/api/media", body.toString()).getOrThrow()
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed while preparing this attachment. Please choose it again."
+            }
+            val raw = FynxBackendClient.postJsonForSession(context, "/api/media", body.toString(), requestToken).getOrThrow()
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed while the attachment upload was completing. Reopen the original account to continue."
+            }
             val item = JSONObject(raw).getJSONObject("media")
             Result.success(RemoteMedia(item.getString("id"), item.getString("mimeType"), item.optInt("byteSize", bytes.size)))
         } catch (cancelled: CancellationException) { throw cancelled }
@@ -174,7 +281,19 @@ object FynxProductionMessaging {
         catch (error: Throwable) { Result.failure(error) }
     }
 
-    suspend fun sendText(context: Context, recipientUsername: String, text: String, replyToId: String? = null, mediaId: String? = null, mediaType: String? = null, voiceDurationMs: Long = 0L, allowOfflineQueue: Boolean = true, requestId: String = UUID.randomUUID().toString()): Result<RemoteMessage> {
+    suspend fun sendText(
+        context: Context,
+        recipientUsername: String,
+        text: String,
+        replyToId: String? = null,
+        mediaId: String? = null,
+        mediaType: String? = null,
+        voiceDurationMs: Long = 0L,
+        allowOfflineQueue: Boolean = true,
+        requestId: String = UUID.randomUUID().toString(),
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
         val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
         if (normalizedRecipient.isBlank()) return Result.failure(IllegalArgumentException("A recipient is required."))
@@ -186,12 +305,21 @@ object FynxProductionMessaging {
         if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val body = JSONObject().apply { put("clientMessageId", requestId); put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
-        val result = FynxBackendClient.postJson(context, "/api/messages", body.toString()).mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
-        if (result.isSuccess) return result
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+            return Result.failure(IllegalStateException("Your account changed before this message could be sent. Please retry from the active account."))
+        }
+        val result = FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)
+            .mapCatching { raw -> fromJson(JSONObject(raw).getJSONObject("message")) }
+        if (result.isSuccess) {
+            return if (FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) result
+            else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
+        }
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
         if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
             val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+            if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
             if (recovered != null) return Result.success(recovered)
-            if (allowOfflineQueue) {
+            if (allowOfflineQueue && FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
                 val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
                 val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
                 val item = FynxOfflineOutbox.Item(
@@ -205,7 +333,8 @@ object FynxProductionMessaging {
                     voiceDurationMs = voiceDurationMs,
                     createdAt = System.currentTimeMillis()
                 )
-                if (!FynxOfflineOutbox.enqueue(context, item)) return result
+                if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
+                if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
                 return Result.success(
                     RemoteMessage(
                         id = localId,
@@ -230,6 +359,8 @@ object FynxProductionMessaging {
         return result
     }
 
+    fun canQueueOffline(error: Throwable?): Boolean = isAmbiguousTransportFailure(error)
+
     private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
         val message = error?.message.orEmpty().lowercase()
         return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
@@ -249,7 +380,9 @@ object FynxProductionMessaging {
         mediaId: String? = null,
         mediaType: String? = null,
         allowOfflineQueue: Boolean = true,
-        requestId: String = UUID.randomUUID().toString()
+        requestId: String = UUID.randomUUID().toString(),
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
     ): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
         val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
@@ -288,9 +421,16 @@ object FynxProductionMessaging {
             put("messagePayload", JSONObject(normalizedPayload))
             put("clientMessageId", requestId)
         }
-        val result = FynxBackendClient.postJson(context, "/api/messages", body.toString())
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+            return Result.failure(IllegalStateException("Your account changed before this message could be sent. Please retry from the active account."))
+        }
+        val result = FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)
             .mapCatching { fromJson(JSONObject(it).getJSONObject("message")) }
-        if (result.isSuccess || !allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
+        if (result.isSuccess) {
+            return if (FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) result
+            else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
+        }
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context)) || !allowOfflineQueue || !isAmbiguousTransportFailure(result.exceptionOrNull())) return result
 
         // Replaying this clientMessageId is idempotent on the backend.
         val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
@@ -309,7 +449,8 @@ object FynxProductionMessaging {
             messageType = normalizedType,
             messagePayload = normalizedPayload
         )
-        if (!FynxOfflineOutbox.enqueue(context, item)) return result
+        if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
+        if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
 
         return Result.success(
             RemoteMessage(
@@ -373,7 +514,7 @@ object FynxProductionMessaging {
 
     fun toChatMessage(message: RemoteMessage, currentUserId: String): ChatMessage {
         val mediaType = message.mediaType?.trim()?.lowercase()?.takeIf { it in VALID_MEDIA_TYPES }
-        val mediaUrl = message.mediaUrl?.trim()?.takeIf { it.isNotBlank() && mediaType != null && !message.mediaId.isNullOrBlank() }
+        val mediaUrl = message.mediaUrl?.trim()?.takeIf { it.isNotBlank() && mediaType != null && (!message.mediaId.isNullOrBlank() || it.startsWith("file://", ignoreCase = true)) }
         return ChatMessage(
             text = if (message.deleted) "Message deleted" else message.text,
             fromMe = message.senderId == currentUserId,

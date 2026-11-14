@@ -131,6 +131,12 @@ object FynxChatStore {
                     put("mediaId", message.mediaId ?: "")
                     put("messageType", message.messageType)
                     put("messagePayload", JSONObject(message.messagePayload))
+                    put("senderName", message.senderName ?: "")
+                    put("senderUsername", message.senderUsername ?: "")
+                    put("senderAvatarUri", message.senderAvatarUri ?: "")
+                    put("pinned", message.pinned)
+                    put("deleted", message.deleted)
+                    put("readBy", JSONArray(message.readBy))
                 }
             )
         }
@@ -188,14 +194,16 @@ object FynxChatStore {
         }.getOrElse { emptyList() }
     }
 
-    fun savePreview(context: Context, preview: ChatPreview) {
-        val unreadCount = load(context, preview.username)
-            .count { !it.fromMe && !it.read }
-        val normalizedPreview = preview.copy(unreadCount = unreadCount)
-        val previews = loadPreviews(context).filterNot { it.username.equals(normalizedPreview.username, ignoreCase = true) }
-        val updated = listOf(normalizedPreview) + previews
+    /**
+     * Persist a complete preview snapshot without publishing previewUpdates.
+     *
+     * Remote list hydration uses this method from the preview-update collector.
+     * Emitting another event here would recursively trigger another network refresh.
+     */
+    @Synchronized
+    fun savePreviews(context: Context, previews: List<ChatPreview>) {
         val array = JSONArray()
-        updated.forEach { item ->
+        previews.forEach { item ->
             array.put(JSONObject().apply {
                 put("name", item.name)
                 put("username", item.username)
@@ -207,7 +215,19 @@ object FynxChatStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(previewKey(context), array.toString()).apply()
+            .edit()
+            .putString(previewKey(context), array.toString())
+            .apply()
+    }
+
+    @Synchronized
+    fun savePreview(context: Context, preview: ChatPreview) {
+        val unreadCount = load(context, preview.username)
+            .count { !it.fromMe && !it.read }
+        val normalizedPreview = preview.copy(unreadCount = unreadCount)
+        val previews = loadPreviews(context)
+            .filterNot { it.username.equals(normalizedPreview.username, ignoreCase = true) }
+        savePreviews(context, listOf(normalizedPreview) + previews)
         previewUpdates.tryEmit(normalizedPreview.username)
     }
 
@@ -261,7 +281,13 @@ object FynxChatStore {
                         messageType = item.optString("messageType").ifBlank { "text" },
                         messagePayload = item.optJSONObject("messagePayload")?.let { payload ->
                             payload.keys().asSequence().associateWith { key -> payload.optString(key) }
-                        }.orEmpty()
+                        }.orEmpty(),
+                        senderName = item.optString("senderName").takeIf { it.isNotBlank() },
+                        senderUsername = item.optString("senderUsername").takeIf { it.isNotBlank() },
+                        senderAvatarUri = item.optString("senderAvatarUri").takeIf { it.isNotBlank() },
+                        pinned = item.optBoolean("pinned"),
+                        deleted = item.optBoolean("deleted"),
+                        readBy = item.optJSONArray("readBy")?.let { values -> buildList { for (i in 0 until values.length()) values.optString(i).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList()
                     )
                 )
             }

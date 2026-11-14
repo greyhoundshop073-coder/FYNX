@@ -34,6 +34,8 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+offline_outbox = read("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt")
+offline_sync = read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt")
 backend = read("backend/server.js")
 isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
@@ -57,7 +59,7 @@ for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
 
 # 1. Android conversation entry and authenticated identity resolution.
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")
-require(conversation, r"FynxProductionMessaging\.history\(context,", "ConversationPanel must load production conversation history")
+require(conversation, r"FynxProductionMessaging\.(?:history|historyPage)\(\s*context,", "ConversationPanel must load production conversation history through the authenticated legacy or paginated API")
 require(conversation, r"realtimeClient\.connect\(\)", "ConversationPanel must connect its realtime transport")
 require(conversation, r"realtimeClient\.close\(\)", "ConversationPanel must close realtime transport on disposal")
 require(conversation, r"FynxProductionMessaging\.sendText\(context,", "ConversationPanel must send through production messaging")
@@ -83,12 +85,17 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 4. Attachment send must share the same completion/error path as text sends.
-require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
-require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
-require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
-require(conversation, r"sendResult\s*\.onSuccess[\s\S]{0,3000}\.onFailure", "Attachment send must surface failures from the shared failure path")
-require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
+# 4. Attachment send must use durable staging and one retryable delivery path.
+require(conversation, r"val queued = queuePrivateAttachment\(", "Attachment send must stage through the durable private-chat queue")
+require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Selected media must be copied to app-owned durable storage before network upload")
+require(offline_outbox, r"File\(context\.filesDir, \"fynx_chat_outbox_media_", "Private attachment outbox must use persistent app files, not cacheDir")
+require(offline_sync, r"FynxProductionMessaging\.uploadMedia\(", "Queued attachments must upload through production media during retry")
+require(offline_sync, r"FynxOfflineOutbox\.markSent\(context, item\.id, remote\.id(?:, accountKey)?\)", "Accepted server message ID must be persisted before Marketplace context retry")
+require(conversation, r"FynxOfflineSync\.drain\(context\)", "Private attachment delivery must invoke the shared retry synchronizer")
+require(conversation, r"if \(queued\)[\s\S]{0,1800}attachment = null", "Successful durable staging must clear the composer attachment")
+require(conversation, r"Attachment could not be saved for retry", "Attachment staging failures must be visible to the user")
+require(conversation, r"restorePendingOutboxMessages\(\)", "Cold-start Chat must reconstruct bubbles from durable pending outbox records")
+require(conversation, r"(?:it|item)\.sentMessageId\.isNullOrBlank\(\)", "Already accepted server messages must not be reconstructed as unsent media")
 
 # 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
 # both at send time and at the recorder itself, so the UI cannot continue recording past it.
@@ -152,7 +159,7 @@ print("CHAT END-TO-END VERIFICATION: GREEN")
 print("- Android ConversationPanel -> realtime + production messaging wiring present")
 print("- authenticated realtime -> typing/read/ack compatibility present")
 print("- backend messages -> persistence/delivery/broadcast wiring present")
-print("- attachment send -> shared success/failure completion path present")
+print("- attachment send -> durable staging, upload retry and server acknowledgement path present")
 print("- voice capture -> recorder-level 120-second enforcement present")
 print("- voice contract -> Android 120-second limit aligned with backend")
 print("- Render preload -> scalability + Chat compatibility chain present")

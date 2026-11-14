@@ -18,15 +18,32 @@ for path in ROOT.rglob("*.kt"):
         violations.append(f"direct WebSocket transport in {path}")
 
 backend = Path("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt").read_text(encoding="utf-8")
+messaging = Path("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+outbox = Path("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt").read_text(encoding="utf-8")
 currency = Path("app/src/main/java/com/fynx/app/ui/CurrencyConverterPanel.kt").read_text(encoding="utf-8")
 required = [
     'PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"',
-    'requiresAuthentication = !isPublicAuthPath(path)',
+    'val requestToken = if (isPublicAuthPath(path)) null else accessToken(context)',
+    'val requestToken = accessToken(context)',
+    'internal suspend fun postJsonForSession',
+    'internal fun isRequestSessionCurrent',
+    'internal fun shouldClearRejectedAccessToken',
+    'shouldClearRejectedAccessToken(requestToken, accessToken(context))',
+    'shouldClearRejectedAccessToken(token, accessToken(context))',
+    'executeRequest(context, root, method, path, body, requestToken)',
+    'executeStreamingRequest(context, root, path, body, requestToken, onEvent)',
+    'downloadOnce(context, target, temporary, maxBytes, requestToken)',
     'FynxSecureTokenStore',
 ]
+if backend.count("shouldClearRejectedAccessToken(") != 4:
+    violations.append("all three authenticated transport paths must compare the rejected token with the current session before clearing it")
 for needle in required:
     if needle not in backend:
         violations.append(f"central transport invariant missing: {needle}")
+if 'FynxBackendClient.postJsonForSession(context, "/api/messages", body.toString(), requestToken)' not in messaging:
+    violations.append("private chat send must preserve the initiating account token across attachment and voice upload workflows")
+if 'fun updateMediaId(context: Context, id: String, mediaId: String, expectedAccountKey: String? = null)' not in outbox:
+    violations.append("private media outbox updates must target the originating account namespace")
 for needle in ['FynxBackendClient.get(context, path)', '/api/money-planner/rates']:
     if needle not in currency:
         violations.append(f"currency backend routing invariant missing: {needle}")

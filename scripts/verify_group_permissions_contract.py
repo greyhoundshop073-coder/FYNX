@@ -5,9 +5,11 @@ group_routes = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
 membership_routes = (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 active = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
+social = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8")
 settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
+bootstrap = (ROOT / "backend/scalability.js").read_text(encoding="utf-8")
 
 checks = {
     "server blocks text sends when group send_messages is disabled": "GROUP_SEND_MESSAGES_DISABLED" in group_routes and "if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)" in normalized_group_routes,
@@ -22,8 +24,16 @@ checks = {
     "authenticated group actions fail closed until server permissions load": "val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMessages == true" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMedia == true" in active and "remotePermissions?.addMembers == true" in active and "permissionLoadError" in active,
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
-    "story shares are pending until the backend accepts them and remain retryable on failure": 'ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false)' in active and "Story not sent yet. Your share is saved" in active,
+    "unsupported story sharing is not advertised as a text-only group action": 'Text("Share a story to group")' not in social and "onStoryShare" not in social and 'ChatMessage("Story shared to' not in active,
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
+    "group history search is bounded and membership-scoped before querying": "const rawQuery=req.query?.q" in group_routes and "searchQuery.length<2||searchQuery.length>100" in group_routes and group_routes.find("const historyMember=await memberHistory(groupId,req.user.sub)") < group_routes.find("plainto_tsquery"),
+    "group full-text search is parameterized, backed by GIN and binds the member history cutoff": "to_tsvector('simple',COALESCE(m.text,'')) @@ plainto_tsquery('simple',$2)" in group_routes and "USING GIN (to_tsvector('simple',COALESCE(text,'')))" in group_routes and "[groupId,searchQuery,beforeTimestamp,beforeId,limit+1,historyCutoff]" in group_routes and "AND ($6::timestamptz IS NULL OR m.created_at >= $6)" in group_routes,
+    "invite preview rejects disabled invite links": "invite is invalid, revoked, or disabled" in membership_routes and "invite_links" in membership_routes,
+    "approval-required invite joins persist a durable request": "INSERT INTO fynx_group_join_requests(group_id,user_id)" in membership_routes and "approve_new_members" in membership_routes,
+    "join request listing is restricted to admins": "app.get('/api/groups/:groupId/join-requests'" in membership_routes and "group admin permission required" in membership_routes,
+    "approval locks the group and uses the bounded member-capacity insert": "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership_routes and "insertMemberIfCapacity(client, groupId, requested.user_id)" in membership_routes,
+    "rejection uses the same admin-only request lifecycle": "app.post('/api/groups/:groupId/join-requests/:username/reject'" in membership_routes and "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership_routes,
+    "invite lifecycle has one authoritative backend registration": "registerGroupInviteRoutes" not in bootstrap and "registerGroupMembershipRoutes({ app });" in bootstrap,
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():

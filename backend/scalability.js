@@ -17,7 +17,6 @@ import { registerProfileRoutes } from "./profileRoutes.js";
 import { registerFollowRoutes } from "./followRoutes.js";
 import { registerGroupRoutes } from "./groupRoutes.js";
 import { registerGroupMembershipRoutes } from "./groupMembershipRoutes.js";
-import { registerGroupInviteRoutes } from "./groupInviteRoutes.js";
 import { registerGroupContentRoutes } from "./groupContentRoutes.js";
 import { registerStatusManagementRoutes } from "./statusManagementRoutes.js";
 import { registerStatusInteractionRoutes } from "./statusInteractionRoutes.js";
@@ -84,7 +83,6 @@ http.createServer = function fynxCreateServer(...args) {
         registerFollowRoutes({ app });
         registerGroupRoutes({ app });
         registerGroupMembershipRoutes({ app });
-        registerGroupInviteRoutes({ app });
         registerGroupContentRoutes({ app });
         registerR6GIntegrationRoutes({ app });
         registerStatusManagementRoutes({ app });

@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,7 +17,6 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Poll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -83,7 +84,7 @@ fun FynxGroupCameraPicker(context: Context, videoNoteMode: Boolean = false, onMe
 }
 
 @Composable
-fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (String) -> Unit, onMedia: (Uri, String) -> Unit, onStoryShare: () -> Unit, openContentInitially: Boolean = false) {
+fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, currentUsername: String, onInvite: suspend (String) -> Result<Unit>, onMedia: (Uri, String) -> Unit, openContentInitially: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var showFriends by remember { mutableStateOf(false) }
@@ -134,7 +135,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                                             val stillFriend = friends.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
                                             if (stillFriend) {
                                                 onInvite(friend.username)
-                                                inviteMessage = "Invitation prepared for ${friend.username}"
+                                                    .onSuccess { inviteMessage = "@${friend.username.removePrefix("@")} was added to the group." }
+                                                    .onFailure { inviteMessage = it.message ?: "The member could not be added. Please try again." }
                                             } else {
                                                 inviteMessage = "This account is no longer on your accepted friends list."
                                             }
@@ -154,7 +156,8 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
             }
         }, confirmButton = { TextButton(onClick = { showFriends = false }) { Text("Done") } })
     } else if (showContent) {
-        FynxGroupContentPanel(groupId = group.id, canManage = group.members.any { it.role != FynxGroupRole.MEMBER && it.username.equals(group.ownerUsername, true) || it.role == FynxGroupRole.ADMIN }) {
+        val currentRole = group.members.firstOrNull { it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true) }?.role
+        FynxGroupContentPanel(groupId = group.id, canManage = currentRole == FynxGroupRole.ADMIN || currentRole == FynxGroupRole.MODERATOR) {
             showContent = false
         }
     } else {
@@ -163,7 +166,6 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
                 Text("Share and organize things your group can come back to.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { showContent = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Poll, null); Spacer(Modifier.width(8.dp)); Text("Posts, polls & events") }
                 OutlinedButton(onClick = { showFriends = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.PersonAdd, null); Spacer(Modifier.width(8.dp)); Text("Invite friends") }
-                OutlinedButton(onClick = onStoryShare, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Share, null); Spacer(Modifier.width(8.dp)); Text("Share a story to group") }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group camera", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Video note", modifier = Modifier.weight(1f)); FynxGroupCameraPicker(context, videoNoteMode = true) { uri, type -> handleCaptured(uri, type) } }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Group media", modifier = Modifier.weight(1f)); FynxGroupMediaPicker(context) { uri, type -> handleCaptured(uri, type) } }
@@ -183,18 +185,36 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
     var showPoll by remember { mutableStateOf(false) }
     var showEvent by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    var votingPollId by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
         scope.launch {
             loading = true
-            FynxGroupRemoteClient.loadContent(context, groupId).onSuccess { content = it; error = null }.onFailure { error = it.message ?: "Group content could not be loaded." }
+            FynxGroupRemoteClient.loadContent(context, groupId)
+                .onSuccess { content = it; error = null }
+                .onFailure { error = if (content != null) "Showing saved group content. Reconnect to refresh." else it.message ?: "Group content could not be loaded." }
             loading = false
         }
     }
-    LaunchedEffect(groupId) { reload() }
+    LaunchedEffect(groupId) {
+        content = FynxGroupRemoteClient.loadCachedContent(context, groupId)
+        reload()
+    }
+
+    fun respondToEvent(event: FynxGroupRemoteClient.RemoteEvent, response: String) {
+        scope.launch {
+            FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, response)
+                .onSuccess { queued ->
+                    content = content?.let { FynxGroupRemoteClient.applyEventResponse(it, event.id, response, queued) }
+                    error = if (queued) "Your RSVP is saved on this device and will sync when the connection returns." else null
+                    if (!queued) reload()
+                }
+                .onFailure { error = it.message ?: "Your event response could not be saved." }
+        }
+    }
 
     AlertDialog(onDismissRequest = onClose, title = { Text("Group content") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Posts, polls and events stay with the group and sync across devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (canManage) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -208,7 +228,7 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
             if (!loading && current != null && current.posts.isEmpty() && current.events.isEmpty()) {
                 Text("Nothing shared here yet. Start with a poll or an event.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            current?.posts?.take(8)?.forEach { post ->
+            current?.posts?.forEach { post ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -217,27 +237,59 @@ private fun FynxGroupContentPanel(groupId: String, canManage: Boolean, onClose: 
                         }
                         post.poll?.let { poll ->
                             Text(poll.question, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                when {
+                                    poll.closed -> "Voting is closed."
+                                    poll.multipleChoice -> "Choose all options that apply."
+                                    else -> "Choose one option."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             poll.options.forEach { option ->
-                                OutlinedButton(onClick = { scope.launch { FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id).onSuccess { reload() } } }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("${option.text}  •  ${option.voteCount}")
+                                OutlinedButton(
+                                    enabled = !poll.closed && votingPollId != poll.id,
+                                    onClick = {
+                                        scope.launch {
+                                            error = null
+                                            votingPollId = poll.id
+                                            FynxGroupRemoteClient.votePoll(context, groupId, poll.id, option.id)
+                                                .onSuccess { reload() }
+                                                .onFailure { error = it.message ?: "Your vote could not be saved." }
+                                            votingPollId = null
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("${if (option.selectedByMe) "✓ " else ""}${option.text}  •  ${option.voteCount}")
                                 }
                             }
                         }
                         if (post.text.isNotBlank()) Text(post.text)
                         if (post.marketplaceProductId != null) Text("Marketplace item shared in this group", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        if (canManage) TextButton(onClick = { scope.launch { FynxGroupRemoteClient.setGroupPostPinned(context, groupId, post.id, !post.pinned).onSuccess { reload() } } }) { Text(if (post.pinned) "Unpin" else "Pin") }
+                        if (canManage) TextButton(onClick = { scope.launch { FynxGroupRemoteClient.setGroupPostPinned(context, groupId, post.id, !post.pinned).onSuccess { reload() }.onFailure { error = it.message ?: "This group post could not be updated." } } }) { Text(if (post.pinned) "Unpin" else "Pin") }
                     }
                 }
             }
-            current?.events?.take(6)?.forEach { event ->
+            current?.events?.take(50)?.forEach { event ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text(event.title, style = MaterialTheme.typography.titleMedium)
                         if (event.description.isNotBlank()) Text(event.description)
                         Text("${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(event.startsAt))}${if (event.location.isBlank()) "" else " • ${event.location}"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TextButton(onClick = { scope.launch { FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, "GOING").onSuccess { reload() } } }) { Text("Going ${event.goingCount}") }
-                            TextButton(onClick = { scope.launch { FynxGroupRemoteClient.rsvpEvent(context, groupId, event.id, "MAYBE").onSuccess { reload() } } }) { Text("Maybe ${event.maybeCount}") }
+                        Text(
+                            if (event.myResponse.isNullOrBlank()) "You have not responded yet."
+                            else "Your response: ${event.myResponse.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (event.pendingResponse) {
+                            Text("Saved on this device · waiting to sync", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(onClick = { respondToEvent(event, "GOING") }, enabled = event.myResponse != "GOING") { Text("Going ${event.goingCount}") }
+                            TextButton(onClick = { respondToEvent(event, "MAYBE") }, enabled = event.myResponse != "MAYBE") { Text("Maybe ${event.maybeCount}") }
+                            TextButton(onClick = { respondToEvent(event, "NOT_GOING") }, enabled = event.myResponse != "NOT_GOING") { Text("Not going ${event.notGoingCount}") }
                         }
                     }
                 }

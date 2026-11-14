@@ -7,6 +7,7 @@ import android.Manifest
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Send
@@ -59,6 +61,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -70,8 +74,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+
+/**
+ * Merge an authenticated server page without reintroducing cached group history
+ * that the current member is no longer authorized to see. Only older pages loaded
+ * successfully in this signed-in session are retained; unsent local messages remain.
+ */
+internal fun mergeGroupMessageRefresh(
+    existing: List<ChatMessage>,
+    latestRemote: List<ChatMessage>,
+    authorizedOlderMessageIds: Set<String>
+): List<ChatMessage> {
+    val refreshedIds = latestRemote.asSequence().map { it.id }.toSet()
+    val retained = existing.filter {
+        it.id !in refreshedIds && (it.id in authorizedOlderMessageIds || !it.delivered)
+    }
+    return (retained + latestRemote).distinctBy { it.id }.sortedBy { it.timestamp }
+}
+
+private fun normalizedFynxGroupUsername(username: String): String =
+    username.trim().removePrefix("@").trim().lowercase()
 
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
@@ -85,8 +111,22 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     var createError by remember { mutableStateOf<String?>(null) }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
-    LaunchedEffect(Unit) {
-        groups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+    LaunchedEffect(currentUsername) {
+        val accountKey = FynxAuthStore.accountStorageKey(context)
+        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, accountKey) }
+        if (FynxAuthStore.accountStorageKey(context) != accountKey) return@LaunchedEffect
+        groups = localGroups
+        if (FynxBackendClient.hasAccessToken(context)) {
+            FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) return@onSuccess
+                val pendingIds = FynxGroupsStore.pendingSyncGroups(context, accountKey)
+                val unsyncedLocalGroups = localGroups.filter { it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id } }
+                val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
+                if (FynxAuthStore.accountStorageKey(context) != accountKey) return@onSuccess
+                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled, accountKey) }
+                if (FynxAuthStore.accountStorageKey(context) == accountKey) groups = reconciled
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize().background(FynxDesign.Background).padding(16.dp)) {
@@ -121,7 +161,12 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(visible, key = { it.id }) { group ->
-                    Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { onOpenGroup(group.id) },
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Open group ${group.name}"
+                        }
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(48.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                                 if (group.groupPhotoMediaId.isNullOrBlank()) {
@@ -156,18 +201,39 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     if (showCreateDialog) {
         FynxCreateGroupDialog({ showCreateDialog = false }) { name, description, visibility ->
             val group = FynxGroup(UUID.randomUUID().toString(), name.trim(), description.trim(), visibility, currentUsername, listOf(FynxGroupMember(currentUsername, FynxGroupRole.ADMIN)))
+            val requestAccountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+            if (requestAccountKey == null) {
+                createError = "Sign in to create a group on your account."
+                return@FynxCreateGroupDialog
+            }
+            val requestToken = FynxBackendClient.accessToken(context)
+            fun sessionIsCurrent() = FynxBackendClient.isRequestSessionCurrent(
+                requestAccountKey,
+                FynxAuthStore.accountStorageKey(context),
+                requestToken,
+                FynxBackendClient.accessToken(context)
+            )
             scope.launch {
                 createError = null
-                val remote = FynxGroupRemoteClient.syncGroup(context, group)
-                remote.onSuccess {
-                    withContext(Dispatchers.IO) {
-                        FynxGroupsStore.add(context, group)
-                        FynxGroupsStore.load(context)
-                    }.also { refreshedGroups -> groups = refreshedGroups }
-                    showCreateDialog = false
-                }.onFailure {
-                    createError = "The group could not be created yet. Check your connection and try again."
+                val savedLocally = withContext(Dispatchers.IO) {
+                    val added = FynxGroupsStore.add(context, group, requestAccountKey)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id, requestAccountKey)
+                    added to FynxGroupsStore.load(context, requestAccountKey)
                 }
+                if (!sessionIsCurrent()) return@launch
+                if (!savedLocally.first) {
+                    createError = "A group with this name already exists, or its details could not be saved."
+                    return@launch
+                }
+                groups = savedLocally.second
+                showCreateDialog = false
+                FynxGroupRemoteClient.syncGroup(context, group, requestAccountKey, requestToken)
+                    .onSuccess {
+                        if (sessionIsCurrent()) FynxGroupsStore.markSynced(context, group.id, requestAccountKey)
+                    }
+                    .onFailure {
+                        if (sessionIsCurrent()) createError = "Group saved on this device. It will sync automatically when the connection returns."
+                    }
             }
         }
     }
@@ -184,8 +250,8 @@ private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, Stri
         title = { Text("Create group", style = MaterialTheme.typography.headlineSmall) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next))
-                OutlinedTextField(description, { description = it }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth(), label = { Text("Description") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
+                OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Group name input" }, label = { Text("Group name") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Next))
+                OutlinedTextField(description, { description = it }, minLines = 2, maxLines = 4, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Description input" }, label = { Text("Description") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Default))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(visibility == FynxGroupVisibility.PRIVATE, { visibility = FynxGroupVisibility.PRIVATE }); Text("Private")
                     Spacer(Modifier.width(8.dp))
@@ -286,8 +352,21 @@ private fun FynxPulseStat(label: String, value: String, modifier: Modifier = Mod
 @Composable
 fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@preview", onBack: () -> Unit) {
     val context = LocalContext.current
-    val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
+    val groupAccountKey = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "signed_out"
+    fun isCurrentGroupAccount(expected: String): Boolean {
+        val active = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "signed_out"
+        return active == expected
+    }
+    val groupAppearance = FynxConversationPreferences.groupAppearance(context, groupId)
+    val glassThemeId = when (groupAppearance) {
+        "Light" -> FynxGlassThemeId.LIGHT
+        "Dark" -> FynxGlassThemeId.PURE_BLACK
+        else -> FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) }
+            ?: FynxGlassThemeId.PURE_BLACK
+    }
     val glassPalette = fynxGlassPalette(glassThemeId)
+    val screenWidthDp = context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density
+    val messageBubbleMaxWidth = (screenWidthDp.dp * 0.82f).coerceAtMost(360.dp)
     val messageTextSizeSp = FynxConversationPreferences.chatTextSizeSp(context, "group_$groupId")
     val bubbleTransparency = FynxConversationPreferences.chatBubbleTransparency(context, "group_$groupId")
     val bubbleLighting = FynxConversationPreferences.chatBubbleLighting(context, "group_$groupId")
@@ -295,21 +374,32 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     var mentionQuery by remember { mutableStateOf<String?>(null) }
-    var currentGroup by remember(groupId) { mutableStateOf<FynxGroup?>(null) }
-    var groupLoadComplete by remember(groupId) { mutableStateOf(false) }
+    var currentGroup by remember(groupId, groupAccountKey) { mutableStateOf<FynxGroup?>(null) }
+    var groupLoadComplete by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     val groupTitle = currentGroup?.name ?: "Group"
-    var messages by remember(groupId) { mutableStateOf<List<ChatMessage>>(emptyList()) }
-    LaunchedEffect(groupId) {
-        // Group and message stores grow over time; parse them away from the UI thread.
+    var messages by remember(groupId, groupAccountKey) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var authorizedOlderGroupMessageIds by remember(groupId, groupAccountKey) { mutableStateOf<Set<String>>(emptySet()) }
+    var authorizedGroupHistoryScope by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
+    var hasMoreGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var loadingOlderGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    LaunchedEffect(groupId, groupAccountKey) {
+        currentGroup = null
+        messages = emptyList()
+        groupLoadComplete = false
+        if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         val local = withContext(Dispatchers.IO) {
-            FynxGroupsStore.load(context).firstOrNull { it.id == groupId } to
+            FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" }).firstOrNull { it.id == groupId } to
                 FynxChatStore.load(context, "group_$groupId", null)
         }
+        if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         currentGroup = local.first
-        messages = local.second
+        // Cached delivered history is not trusted until the server authorizes it for
+        // this membership. Keep only the local unsent outbox while offline/reconnecting.
+        messages = local.second.filterNot { it.delivered }
         groupLoadComplete = true
     }
     val latestMessages by rememberUpdatedState(messages)
+    val latestAuthorizedOlderGroupMessageIds by rememberUpdatedState(authorizedOlderGroupMessageIds)
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
@@ -317,56 +407,182 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showLocationShare by remember { mutableStateOf(false) }
     var showContactShare by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showLeaveGroupDialog by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var leaveGroupBusy by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var leaveGroupError by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
+    var transferTargetUsername by remember(groupId, groupAccountKey) { mutableStateOf("") }
+    var transferTargetsExpanded by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     var showPulse by remember { mutableStateOf(false) }
     var showCatchMeUp by remember { mutableStateOf(false) }
     var showConversationMoments by remember { mutableStateOf(false) }
-    var groupNotificationsEnabled by remember(groupId) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
+    var groupNotificationsEnabled by remember(groupId, groupAccountKey) { mutableStateOf(FynxConversationPreferences.groupNotifications(context, groupId)) }
+    var groupMuted by remember(groupId, groupAccountKey) { mutableStateOf(FynxConversationPreferences.groupMuted(context, groupId)) }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var showAttachmentMenu by remember { mutableStateOf(false) }
     var reactionMessageId by remember { mutableStateOf<String?>(null) }
     var replyToId by remember { mutableStateOf<String?>(null) }
+    var editingMessageId by remember { mutableStateOf<String?>(null) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
     var syncMessage by remember { mutableStateOf<String?>(null) }
-    var remotePermissions by remember(groupId) { mutableStateOf<FynxGroupRemoteClient.RemotePermissions?>(null) }
-    var permissionLoadError by remember(groupId) { mutableStateOf<String?>(null) }
+    var remotePermissions by remember(groupId, groupAccountKey) { mutableStateOf<FynxGroupRemoteClient.RemotePermissions?>(null) }
+    var permissionLoadError by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var voiceRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
     var voiceFile by remember { mutableStateOf<File?>(null) }
     var voiceRecordingStartedAt by remember { mutableLongStateOf(0L) }
     var voiceRecordingElapsed by remember { mutableLongStateOf(0L) }
     var voiceRecording by remember { mutableStateOf(false) }
-    var searchOpen by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchOpen by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var searchQuery by remember(groupId, groupAccountKey) { mutableStateOf("") }
+    var remoteGroupSearchResults by remember(groupId, groupAccountKey) { mutableStateOf<List<ChatMessage>?>(null) }
+    var remoteGroupSearchHasMore by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var remoteGroupSearchCursor by remember(groupId, groupAccountKey) { mutableStateOf<FynxGroupRemoteClient.RemoteMessage?>(null) }
+    var remoteGroupSearchLoading by remember(groupId, groupAccountKey) { mutableStateOf(false) }
+    var remoteGroupSearchError by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
     val selectedGroup = currentGroup
-    val myRole = selectedGroup?.members?.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
+    val isGroupOwner = selectedGroup?.ownerUsername?.removePrefix("@")?.equals(currentUsername.removePrefix("@"), true) == true
+    val transferCandidates = selectedGroup?.members?.filterNot {
+        it.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true)
+    }.orEmpty()
+    val myRole = selectedGroup?.members?.firstOrNull { normalizedFynxGroupUsername(it.username) == normalizedFynxGroupUsername(currentUsername) }?.role ?: FynxGroupRole.MEMBER
     val isAdmin = myRole == FynxGroupRole.ADMIN
     val canManageGroup = FynxGroupsBatch3.canManage(myRole)
-    val prefs = remember(groupId) { FynxConversationPreferences.group(context, groupId) }
+    val prefs = remember(groupId, groupAccountKey) { FynxConversationPreferences.group(context, groupId) }
     val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)
     val canSendMessages = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMessages == true else prefs.getBoolean("send_messages", true)
     val canSendMedia = canManageGroup || if (hasRemoteAccessToken) remotePermissions?.sendMedia == true else prefs.getBoolean("send_media", true)
 
-    fun shareGroupTextMessage(content: String) {
-        if (!canSendMessages) { syncMessage = "Sending messages is disabled in Group Settings."; return }
-        val message = ChatMessage(content, true, UUID.randomUUID().toString(), delivered = false, read = false)
-        messages = messages + message
-        FynxChatStore.save(context, "group_$groupId", messages)
+    LaunchedEffect(groupId, groupAccountKey, searchQuery, hasRemoteAccessToken) {
+        val normalizedQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        remoteGroupSearchResults = null
+        remoteGroupSearchHasMore = false
+        remoteGroupSearchCursor = null
+        remoteGroupSearchError = null
+        remoteGroupSearchLoading = false
+        if (normalizedQuery.isBlank()) return@LaunchedEffect
+        if (normalizedQuery.length < 2) {
+            remoteGroupSearchResults = emptyList()
+            remoteGroupSearchError = "Enter at least two characters to search group history."
+            return@LaunchedEffect
+        }
+        if (!hasRemoteAccessToken) {
+            remoteGroupSearchError = "Offline: showing only messages already loaded on this device."
+            return@LaunchedEffect
+        }
+        delay(300L)
+        remoteGroupSearchLoading = true
+        try {
+            FynxGroupRemoteClient.loadMessagePage(
+                context = context,
+                groupId = groupId,
+                limit = 50,
+                query = normalizedQuery
+            ).onSuccess { page ->
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    remoteGroupSearchResults = page.messages.map {
+                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+                    }
+                    remoteGroupSearchCursor = page.messages.firstOrNull()
+                    remoteGroupSearchHasMore = page.hasMore
+                }
+            }.onFailure {
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    remoteGroupSearchError = "Full group history search failed. Showing loaded messages; try again."
+                }
+            }
+        } finally {
+            remoteGroupSearchLoading = false
+        }
+    }
+
+    fun loadOlderGroupSearchResults() {
+        val normalizedQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        val before = remoteGroupSearchCursor ?: return
+        if (remoteGroupSearchLoading || normalizedQuery.length !in 2..100 || !hasRemoteAccessToken) return
+        remoteGroupSearchLoading = true
         scope.launch {
-            FynxGroupRemoteClient.sendMessage(context, groupId, message)
+            FynxGroupRemoteClient.loadMessagePage(
+                context = context,
+                groupId = groupId,
+                before = before,
+                limit = 50,
+                query = normalizedQuery
+            ).onSuccess { page ->
+                if (searchQuery.trim().replace(Regex("\\s+")," ") == normalizedQuery) {
+                    val older = page.messages.map {
+                        FynxGroupRemoteClient.toChatMessage(it, currentUsername, FynxBackendClient.baseUrl(context))
+                    }
+                    remoteGroupSearchResults = (older + remoteGroupSearchResults.orEmpty()).distinctBy { it.id }.sortedBy { it.timestamp }
+                    remoteGroupSearchCursor = page.messages.firstOrNull() ?: before
+                    remoteGroupSearchHasMore = page.hasMore
+                }
+            }.onFailure {
+                remoteGroupSearchError = "More matching messages could not be loaded. Try again."
+            }
+            remoteGroupSearchLoading = false
+        }
+    }
+
+    fun shareGroupTextMessage(content: String, replyTarget: String? = null) {
+        val normalized = content.trim()
+        if (!canSendMessages) { syncMessage = "Sending messages is disabled in Group Settings."; return }
+        if (normalized.isBlank() || sending || selectedGroup == null) return
+        val requestAccountKey = groupAccountKey
+        val requestToken = FynxBackendClient.accessToken(context)
+        val message = ChatMessage(normalized, true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyTarget)
+        val updatedMessages = messages + message
+        messages = updatedMessages
+        FynxChatStore.save(context, "group_$groupId", updatedMessages)
+        text = ""
+        replyToId = null
+        sending = true
+        scope.launch {
+            if (!isCurrentGroupAccount(requestAccountKey)) return@launch
+            FynxGroupRemoteClient.sendMessage(context, groupId, message, requestAccountKey, requestToken)
                 .onSuccess { remote ->
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                     val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
                     messages = messages.map { if (it.id == message.id) serverMessage else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = null
                 }
-                .onFailure { error ->
+                .onFailure {
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onFailure
                     messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
                 }
+            if (isCurrentGroupAccount(requestAccountKey)) sending = false
+        }
+    }
+
+    fun submitGroupEdit() {
+        val messageId = editingMessageId ?: return
+        val updatedText = text.trim()
+        if (updatedText.isBlank()) { syncMessage = "Edited message cannot be empty."; return }
+        if (sending) return
+        val requestAccountKey = groupAccountKey
+        sending = true
+        scope.launch {
+            if (!isCurrentGroupAccount(requestAccountKey)) return@launch
+            FynxGroupRemoteClient.editMessage(context, groupId, messageId, updatedText)
+                .onSuccess { remote ->
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
+                    val mapped = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                    messages = messages.map { if (it.id == mapped.id) mapped else it }
+                    FynxChatStore.save(context, "group_$groupId", messages)
+                    text = ""
+                    editingMessageId = null
+                    syncMessage = null
+                }
+                .onFailure { if (isCurrentGroupAccount(requestAccountKey)) syncMessage = "Message edit could not be saved. Your text is still here; try again." }
+            if (isCurrentGroupAccount(requestAccountKey)) sending = false
         }
     }
     fun sendGroupAttachment(uri: android.net.Uri, type: String) {
+        val requestAccountKey = groupAccountKey
+        val requestToken = FynxBackendClient.accessToken(context)
+        if (!isCurrentGroupAccount(requestAccountKey)) return
         if (!canSendMedia) {
             syncMessage = "Sending media and files is disabled in Group Settings."
             return
@@ -384,22 +600,30 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         messages = next
         FynxChatStore.save(context, "group_$groupId", next)
         scope.launch {
+            if (!isCurrentGroupAccount(requestAccountKey)) return@launch
             var stagedUri: Uri? = null
             runCatching { stagePendingGroupAttachment(context, uri, type) }
                 .onSuccess { durableUri ->
                     stagedUri = durableUri
+                    if (!isCurrentGroupAccount(requestAccountKey)) {
+                        deletePendingGroupAttachment(context, durableUri.toString())
+                        return@onSuccess
+                    }
                     messages = messages.map { if (it.id == optimistic.id) it.copy(attachmentUri = durableUri.toString()) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                 }
-                .onFailure { error ->
-                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
+                .onFailure {
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onFailure
+                    // Do not leave an unsendable URI in the outbox when durable staging failed.
+                    messages = messages.filterNot { it.id == optimistic.id }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = "Attachment could not be saved for retry. Please choose it again."
                 }
-            if (stagedUri == null) return@launch
+            if (stagedUri == null || !isCurrentGroupAccount(requestAccountKey)) return@launch
             val stagedMessage = messages.firstOrNull { it.id == optimistic.id } ?: optimistic.copy(attachmentUri = stagedUri.toString())
-            FynxGroupRemoteClient.sendMessage(context, groupId, stagedMessage)
+            FynxGroupRemoteClient.sendMessage(context, groupId, stagedMessage, requestAccountKey, requestToken)
                 .onSuccess { remote ->
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                     val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
                     messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
@@ -408,6 +632,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     syncMessage = null
                 }
                 .onFailure { error ->
+                    if (!isCurrentGroupAccount(requestAccountKey)) return@onFailure
                     messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
                     FynxChatStore.save(context, "group_$groupId", messages)
                     syncMessage = "Attachment not sent yet. It is saved for retry; try again when the connection is ready."
@@ -502,23 +727,25 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     } else {
         prefs.getBoolean("add_members", true)
     }
-    LaunchedEffect(groupId, currentUsername) {
+    LaunchedEffect(groupId, groupAccountKey, currentUsername) {
         if (!FynxBackendClient.hasAccessToken(context)) {
             remotePermissions = null
             permissionLoadError = null
             return@LaunchedEffect
         }
+        val permissionsAccountKey = groupAccountKey
         FynxGroupRemoteClient.loadPermissions(context, groupId)
-            .onSuccess { remotePermissions = it; permissionLoadError = null }
+            .onSuccess { if (isCurrentGroupAccount(permissionsAccountKey)) { remotePermissions = it; permissionLoadError = null } }
             .onFailure {
+                if (!isCurrentGroupAccount(permissionsAccountKey)) return@onFailure
                 remotePermissions = null
                 permissionLoadError = "Group permissions could not be loaded. Reconnect and retry."
             }
     }
-    val senderAvatarUris = remember(groupId) { mutableStateMapOf<String, String?>() }
+    val senderAvatarUris = remember(groupId, groupAccountKey) { mutableStateMapOf<String, String?>() }
     val messageListState = rememberLazyListState()
     val senderUsernames = remember(messages) { messages.mapNotNull { it.senderUsername?.trim()?.takeIf { name -> name.isNotBlank() } }.distinct() }
-    LaunchedEffect(groupId, senderUsernames) {
+    LaunchedEffect(groupId, groupAccountKey, senderUsernames) {
         senderUsernames.forEach { username ->
             if (!senderAvatarUris.containsKey(username)) {
                 FynxProfileRemoteClient.get(context, username).onSuccess { profile ->
@@ -529,13 +756,25 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
     }
-    LaunchedEffect(groupId, currentGroup?.id) {
+    LaunchedEffect(groupId, groupAccountKey, currentGroup?.id) {
         val selected = currentGroup ?: return@LaunchedEffect
+        if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         runCatching {
             suspend fun refreshGroupMessages(showError: Boolean) {
-                FynxGroupRemoteClient.loadMessages(context, groupId)
-                    .onSuccess { remote ->
-                        val remoteMessages = remote.mapIndexedNotNull { index, item ->
+                FynxGroupRemoteClient.loadMessagePage(context, groupId)
+                    .onSuccess { page ->
+                        if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                        val pageHistoryScope = page.historyScope
+                        val authorizedIdsForScope = if (
+                            authorizedGroupHistoryScope != null && pageHistoryScope != "UNKNOWN" &&
+                            authorizedGroupHistoryScope != pageHistoryScope
+                        ) emptySet() else latestAuthorizedOlderGroupMessageIds
+                        if (pageHistoryScope != "UNKNOWN") {
+                            authorizedGroupHistoryScope = pageHistoryScope
+                            authorizedOlderGroupMessageIds = authorizedIdsForScope
+                        }
+                        hasMoreGroupHistory = page.hasMore
+                        val remoteMessages = page.messages.mapIndexedNotNull { index, item ->
                             runCatching {
                                 FynxGroupRemoteClient.toChatMessage(
                                     item,
@@ -543,19 +782,25 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     FynxBackendClient.baseUrl(context)
                                 )
                             }.getOrNull()?.let { message ->
-                                if (message.id.isBlank()) {
-                                    message.copy(id = "group-remote-" + index + "-" + message.timestamp)
-                                } else {
-                                    message
-                                }
+                                if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
                             }
                         }
-                        val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                        val pendingLocal = messages.filter { it.id !in remoteIds }
-                        val mergedMessages = (remoteMessages + pendingLocal)
-                            .distinctBy { it.id }
-                            .sortedBy { it.timestamp }
+                        val mergedMessages = mergeGroupMessageRefresh(
+                            messages,
+                            remoteMessages,
+                            authorizedIdsForScope
+                        )
                         messages = mergedMessages
+                        val incomingIds = remoteMessages.filter { !it.fromMe }.map { it.id }.takeLast(100)
+                        if (incomingIds.isNotEmpty()) {
+                            FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingIds).onSuccess { readUpdates ->
+                                if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                                val byId = readUpdates.associateBy { it.id }
+                                val withReceipts = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                messages = withReceipts
+                                withContext(Dispatchers.IO) { if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", withReceipts) }
+                            }
+                        }
                         if (showError) syncMessage = null
                         runCatching {
                             withContext(Dispatchers.IO) {
@@ -564,6 +809,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }.onFailure { if (showError) syncMessage = "Your group messages could not be saved locally. Please try again." }
                     }
                     .onFailure {
+                        if (!isCurrentGroupAccount(groupAccountKey)) return@onFailure
                         if (showError && FynxBackendClient.hasAccessToken(context)) {
                             syncMessage = "Group messages could not sync yet. Check your connection and retry."
                         }
@@ -598,43 +844,47 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
     // Realtime is the fast path; the periodic REST refresh above remains a recovery path.
-    LaunchedEffect(groupId, currentUsername) {
-        if (!FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
+    LaunchedEffect(groupId, groupAccountKey, currentUsername) {
+        if (!FynxBackendClient.hasAccessToken(context) || !isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         val realtime = FynxRealtimeClient(
             context = context,
             onMessage = {},
             onEvent = { event ->
-                if (event is FynxRealtimeClient.Event.GroupMessage && event.groupId == groupId) {
-                    scope.launch {
-                        FynxGroupRemoteClient.loadMessages(context, groupId)
-                            .onSuccess { remote ->
-                                val remoteMessages = remote.mapIndexedNotNull { index, item ->
-                                    runCatching {
-                                        FynxGroupRemoteClient.toChatMessage(
-                                            item,
-                                            currentUsername,
-                                            FynxBackendClient.baseUrl(context)
-                                        )
-                                    }.getOrNull()?.let { message ->
-                                        if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
-                                    }
-                                }
-                                val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                                val pendingLocal = latestMessages.filter { it.id !in remoteIds }
-                                val merged = (remoteMessages + pendingLocal).distinctBy { it.id }.sortedBy { it.timestamp }
-                                messages = merged
-                                // Group history may contain years of chat JSON. Keep
-                                // local persistence off Main just like initial restoration.
-                                withContext(Dispatchers.IO) {
-                                    FynxChatStore.save(context, "group_$groupId", merged)
-                                }
-                                syncMessage = null
+                if (isCurrentGroupAccount(groupAccountKey) && event is FynxRealtimeClient.Event.GroupMessage && event.groupId == groupId) {
+                    val remote = FynxGroupRemoteClient.fromRealtimeMessage(event.messageJson)
+                    if (remote != null) {
+                        scope.launch {
+                            if (!isCurrentGroupAccount(groupAccountKey)) return@launch
+                            val incoming = FynxGroupRemoteClient.toChatMessage(
+                                remote,
+                                currentUsername,
+                                FynxBackendClient.baseUrl(context)
+                            )
+                            val isNewIncoming = !incoming.fromMe && latestMessages.none { it.id == incoming.id }
+                            val merged = mergeGroupMessageRefresh(
+                                latestMessages,
+                                listOf(incoming),
+                                latestAuthorizedOlderGroupMessageIds
+                            )
+                            if (!isCurrentGroupAccount(groupAccountKey)) return@launch
+                            messages = merged
+                            withContext(Dispatchers.IO) {
+                                if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", merged)
                             }
-                            .onFailure {
-                                if (FynxBackendClient.hasAccessToken(context)) {
-                                    syncMessage = "New group messages could not refresh yet. Try again shortly."
+                            if (!incoming.fromMe) {
+                                FynxGroupRemoteClient.markMessagesRead(context, groupId, listOf(incoming.id)).onSuccess { readUpdates ->
+                                    if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
+                                    val byId = readUpdates.associateBy { it.id }
+                                    val withReceipts = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                    messages = withReceipts
+                                    withContext(Dispatchers.IO) { if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", withReceipts) }
                                 }
                             }
+                            if (isNewIncoming && groupNotificationsEnabled && !groupMuted) {
+                                FynxInteractionSound.play(context, FynxInteractionSound.Event.GROUP_MESSAGE_RECEIVED)
+                            }
+                            syncMessage = null
+                        }
                     }
                 }
             }
@@ -678,18 +928,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (!groupLoadComplete) "Loading group conversation…" else "No messages here yet",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-                if (groupLoadComplete) {
-                    OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Message…") },
-                        singleLine = true
+                        if (!groupLoadComplete) {
+                            "Loading group conversation…"
+                        } else {
+                            "This group is unavailable to this account. Return to Groups and check your membership."
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -706,8 +951,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
-    if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context).firstOrNull { it.id == groupId }; showSettings = false }); return }
-    FynxChatWallpaperBackground(modifier = Modifier.fillMaxSize(), settingsKey = "group_$groupId") {
+    if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" }).firstOrNull { it.id == groupId }; groupNotificationsEnabled = FynxConversationPreferences.groupNotifications(context, groupId); groupMuted = FynxConversationPreferences.groupMuted(context, groupId); showSettings = false }, onClearHistory = { messages = emptyList() }); return }
+    FynxGroupWallpaperBackground(groupId = groupId, modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Box(
             Modifier
@@ -719,11 +964,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(18.dp))
+                    .background(glassPalette.backgroundMid.copy(alpha = 0.98f), RoundedCornerShape(18.dp))
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp)) }
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = glassPalette.messageText, modifier = Modifier.size(24.dp)) }
                 Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                     if (selectedGroup?.groupPhotoMediaId.isNullOrBlank()) {
                         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(Icons.Default.Group, "Group", tint = MaterialTheme.colorScheme.primary) }
@@ -732,12 +977,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     }
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageText, maxLines = 1)
+                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, maxLines = 1)
                 }
-                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+                IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                 Box {
-                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp)) }
+                    IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                     DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
                         DropdownMenuItem(text = { Text("Catch Me Up") }, onClick = { showMore = false; showCatchMeUp = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
                         DropdownMenuItem(text = { Text("Conversation Moments") }, onClick = { showMore = false; showConversationMoments = true }, leadingIcon = { Icon(Icons.Default.AutoAwesome, null) })
@@ -745,14 +990,43 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         DropdownMenuItem(text = { Text("Members") }, onClick = { showMore = false; showMembers = true }, leadingIcon = { Icon(Icons.Default.Group, null) })
                         DropdownMenuItem(text = { Text("Group tools") }, onClick = { showMore = false; showTools = true }, leadingIcon = { Icon(Icons.Default.Build, null) })
                         DropdownMenuItem(text = { Text("Group settings") }, onClick = { showMore = false; showSettings = true }, leadingIcon = { Icon(Icons.Default.Settings, null) })
+                        DropdownMenuItem(
+                            text = { Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group") },
+                            onClick = {
+                                showMore = false
+                                leaveGroupError = null
+                                transferTargetUsername = ""
+                                showLeaveGroupDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.ArrowBack, null) }
+                        )
                         DropdownMenuItem(text = { Text(if (groupNotificationsEnabled) "Mute notifications" else "Turn on notifications") }, onClick = { groupNotificationsEnabled = !groupNotificationsEnabled; FynxConversationPreferences.setGroupNotifications(context, groupId, groupNotificationsEnabled); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
+                        DropdownMenuItem(text = { Text(if (groupMuted) "Unmute this group" else "Mute this group") }, onClick = { groupMuted = !groupMuted; FynxConversationPreferences.setGroupMuted(context, groupId, groupMuted); showMore = false }, leadingIcon = { Icon(Icons.Default.Notifications, null) })
                     }
                 }
             }
         }
-        val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, true) }
+        val normalizedGroupSearchQuery = searchQuery.trim().replace(Regex("\\s+")," ")
+        val visibleMessages = when {
+            normalizedGroupSearchQuery.isBlank() -> messages
+            normalizedGroupSearchQuery.length < 2 -> emptyList()
+            remoteGroupSearchResults != null -> remoteGroupSearchResults.orEmpty()
+            else -> messages.filter { it.text.contains(normalizedGroupSearchQuery, true) }
+        }
         val pinnedMessage = messages.lastOrNull { it.pinned }
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { if (it.length <= 100) searchQuery = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            singleLine = true,
+            placeholder = { Text("Search full group history…") }
+        )
+        if (searchOpen && remoteGroupSearchError != null) {
+            Text(remoteGroupSearchError.orEmpty(), Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (searchOpen && remoteGroupSearchLoading && remoteGroupSearchResults == null) {
+            Text("Searching group history…", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) scope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -780,21 +1054,27 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             val pendingMessages = messages.filter { it.fromMe && !it.delivered }
                             var failedCount = 0
                             var lastError: String? = null
+                            val requestAccountKey = groupAccountKey
+                            val requestToken = FynxBackendClient.accessToken(context)
                             for (failedMessage in pendingMessages) {
-                                FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage)
+                                if (!isCurrentGroupAccount(requestAccountKey)) break
+                                FynxGroupRemoteClient.sendMessage(context, groupId, failedMessage, requestAccountKey, requestToken)
                                     .onSuccess { remote ->
+                                        if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                                         val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
                                         messages = messages.map { if (it.id == failedMessage.id) serverMessage else it }
                                         FynxChatStore.save(context, "group_$groupId", messages)
                                         failedMessage.attachmentUri?.let { deletePendingGroupAttachment(context, it) }
                                     }
                                     .onFailure { error ->
+                                        if (!isCurrentGroupAccount(requestAccountKey)) return@onFailure
                                         failedCount += 1
                                         lastError = "Some messages could not be sent. Your saved messages are still here; reconnect and retry."
                                     }
                             }
+                            if (!isCurrentGroupAccount(requestAccountKey)) return@launch
                             syncMessage = if (failedCount == 0) null else
-                                lastError ?: "$failedCount group message(s) are still unsent. Check your connection and retry."
+                                lastError ?: "${failedCount} group message(s) are still unsent. Check your connection and retry."
                             sending = false
                         }
                     }
@@ -802,7 +1082,74 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             }
         }
         if (!canSendMessages) Text("Only admins can send messages in this group.", Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            if (normalizedGroupSearchQuery.isNotBlank() && remoteGroupSearchHasMore && remoteGroupSearchResults != null) {
+                item(key = "group-search-load-older") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        TextButton(enabled = !remoteGroupSearchLoading, onClick = { loadOlderGroupSearchResults() }) {
+                            Text(if (remoteGroupSearchLoading) "Loading more matches…" else "Load older matching messages")
+                        }
+                    }
+                }
+            }
+            if (normalizedGroupSearchQuery.isNotBlank() && visibleMessages.isEmpty() && !remoteGroupSearchLoading) {
+                item(key = "group-search-no-results") {
+                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (normalizedGroupSearchQuery.length < 2) "Enter at least two characters to search."
+                            else "No matching messages found in this group.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+            if (hasMoreGroupHistory && normalizedGroupSearchQuery.isBlank()) {
+                item(key = "group-load-older") {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        TextButton(
+                            enabled = !loadingOlderGroupHistory,
+                            onClick = {
+                                val oldest = messages.firstOrNull { it.delivered } ?: return@TextButton
+                                loadingOlderGroupHistory = true
+                                scope.launch {
+                                    val requestAccountKey = groupAccountKey
+                                    if (!isCurrentGroupAccount(requestAccountKey)) return@launch
+                                    FynxGroupRemoteClient.loadMessagePage(context, groupId, oldest.let {
+                                        FynxGroupRemoteClient.RemoteMessage(
+                                            it.id,it.text,it.senderUsername.orEmpty(),it.timestamp,it.mediaId,it.attachmentType,it.attachmentUri,
+                                            it.replyToId,it.reaction,it.edited,false,it.pinned
+                                        )
+                                    }).onSuccess { page ->
+                                        if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
+                                        val older = page.messages.map { FynxGroupRemoteClient.toChatMessage(it,currentUsername,FynxBackendClient.baseUrl(context)) }
+                                        val pageHistoryScope = page.historyScope
+                                        val authorizedIdsForScope = if (
+                                            authorizedGroupHistoryScope != null && pageHistoryScope != "UNKNOWN" &&
+                                            authorizedGroupHistoryScope != pageHistoryScope
+                                        ) emptySet() else latestAuthorizedOlderGroupMessageIds
+                                        if (pageHistoryScope != "UNKNOWN") authorizedGroupHistoryScope = pageHistoryScope
+                                        val nowAuthorized = authorizedIdsForScope + older.map { it.id }
+                                        authorizedOlderGroupMessageIds = nowAuthorized
+                                        messages = mergeGroupMessageRefresh(messages, older, nowAuthorized)
+                                        hasMoreGroupHistory = page.hasMore
+                                        val incomingOlderIds = older.filter { !it.fromMe }.map { it.id }.takeLast(100)
+                                        if (incomingOlderIds.isNotEmpty()) {
+                                            FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingOlderIds).onSuccess { readUpdates ->
+                                                if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
+                                                val byId = readUpdates.associateBy { it.id }
+                                                messages = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                            }
+                                        }
+                                        withContext(Dispatchers.IO) { if (isCurrentGroupAccount(requestAccountKey)) FynxChatStore.save(context,"group_$groupId",messages) }
+                                    }.onFailure { if (isCurrentGroupAccount(requestAccountKey)) syncMessage = "Older group messages could not load. Reconnect and try again." }
+                                    if (isCurrentGroupAccount(requestAccountKey)) loadingOlderGroupHistory = false
+                                }
+                            }
+                        ) { Text(if (loadingOlderGroupHistory) "Loading older messages…" else "Load older messages") }
+                    }
+                }
+            }
             if (visibleMessages.isEmpty() && searchQuery.isBlank()) {
                 item(key = "fynx-empty-group") {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -820,10 +1167,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             } else {
                 items(visibleMessages, key = { it.id }) { message ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromMe) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Bottom) {
+                        if (!message.fromMe) {
+                            FynxAvatar(message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername ?: "Group member", Modifier.size(32.dp), ownerUsername = message.senderUsername)
+                        }
                         Column(horizontalAlignment = if (message.fromMe) Alignment.End else Alignment.Start) {
-                            if (!message.fromMe && !message.senderUsername.isNullOrBlank()) {
+                            if (!message.fromMe) {
                                 Text(
-                                    "@${message.senderUsername.orEmpty().removePrefix("@")}",
+                                    message.senderName?.takeIf { it.isNotBlank() } ?: message.senderUsername?.let { "@${it.removePrefix("@")}" } ?: "Group member",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                                     color = glassPalette.messageMuted,
@@ -833,18 +1183,14 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             Box {
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(15.dp)
-                            val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
-                            } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
-                            }
+                            val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
                                 shape = if (mediaOnly) RoundedCornerShape(0.dp) else bubbleShape,
                                 border = if (mediaOnly) null else BorderStroke(0.7.dp, glassPalette.bubbleRim.copy(alpha = (bubbleLighting * bubbleTransparency).coerceIn(0f, 1f))),
                                 tonalElevation = 0.dp,
-                                modifier = Modifier.widthIn(max = 300.dp)
+                                modifier = Modifier.widthIn(max = messageBubbleMaxWidth)
                                     .offset { IntOffset((replySwipeOffsets[message.id] ?: 0f).roundToInt(), 0) }
                                     .then(if (mediaOnly) Modifier else Modifier.background(bubbleBrush, bubbleShape))
                                     .pointerInput(message.id) {
@@ -872,7 +1218,6 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         val replied = messages.firstOrNull { it.id == message.replyToId }
                                         Column(
                                             Modifier
-                                                .fillMaxWidth()
                                                 .padding(bottom = 5.dp)
                                                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.28f), RoundedCornerShape(8.dp))
                                                 .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -902,15 +1247,23 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     if (message.attachmentType == "audio") FynxRemoteAudio(message.attachmentUri, Modifier.fillMaxWidth())
                                     else if (message.attachmentType == "video_note") {
                                         Box(Modifier.size(170.dp).clip(CircleShape)) {
-                                            FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false)
+                                            FynxRemoteMedia(message.attachmentUri, "video", Modifier.fillMaxSize(), rounded = false, loopVideo = true, autoPlay = false, autoSaveToGallery = FynxConversationPreferences.groupSaveMedia(context, groupId) && !message.fromMe)
                                             Surface(color = Color.Black.copy(alpha = 0.46f), shape = CircleShape, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("Video note", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                                         }
-                                    } else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
+                                    } else FynxRemoteMedia(message.attachmentUri, message.attachmentType ?: "image", Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false, autoSaveToGallery = FynxConversationPreferences.groupSaveMedia(context, groupId) && !message.fromMe)
                                 }
                                 if (message.text.isNotBlank() && message.attachmentType != "audio") Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
-                                    if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
+                                    if (message.fromMe) {
+                                        Spacer(Modifier.width(4.dp))
+                                        // Group history has no per-member delivery/read receipts.
+                                        Text(if (message.readBy.isNotEmpty()) "✓✓" else if (message.delivered) "✓" else "◷", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                        if (message.readBy.isNotEmpty()) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Seen by ${message.readBy.size}", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
+                                        }
+                                    }
                                 }
                                 }
                             }
@@ -929,7 +1282,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                DropdownMenuItem(text = { Text("Reply") }, onClick = { replyToId = message.id; editingMessageId = null; reactionMessageId = null }, leadingIcon = { Icon(Icons.Default.Reply, null) })
+                                if (message.fromMe && message.text.isNotBlank() && !message.deleted) {
+                                    DropdownMenuItem(text = { Text("Edit") }, onClick = {
+                                        editingMessageId = message.id
+                                        replyToId = null
+                                        text = message.text
+                                        reactionMessageId = null
+                                    }, leadingIcon = { Icon(Icons.Default.Edit, null) })
+                                }
                                 DropdownMenuItem(text = { Text("Copy") }, enabled = message.text.isNotBlank(), onClick = {
                                     val clip = android.content.ClipData.newPlainText("FYNX message", message.text)
                                     (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
@@ -1045,6 +1406,15 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         }
                     }
                 }
+                if (editingMessageId != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Editing message", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = glassPalette.doodleSecondary)
+                        TextButton(enabled = !sending, onClick = { editingMessageId = null; text = "" }) { Text("Cancel") }
+                    }
+                }
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1078,27 +1448,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         ),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = {
-                            if (text.isNotBlank() && !sending && selectedGroup != null) {
-                                val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                                messages = messages + optimistic
-                                FynxChatStore.save(context, "group_$groupId", messages)
-                                text = ""; replyToId = null; sending = true
-                                scope.launch {
-                                    FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                        .onSuccess { remote ->
-                                            val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                            messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                            FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = null
-                                        }
-                                        .onFailure { error ->
-                                            messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
-                                            FynxChatStore.save(context, "group_$groupId", messages)
-                                            syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
-                                        }
-                                    sending = false
-                                }
-                            }
+                            if (editingMessageId != null) submitGroupEdit()
+                            else shareGroupTextMessage(text, replyToId)
                         })
                     )
                     Spacer(Modifier.width(6.dp))
@@ -1111,34 +1462,29 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             onClick = {
                                 when {
                                     voiceRecording -> finishGroupVoiceRecording()
-                                    text.isNotBlank() && !sending && selectedGroup != null -> {
-                                        val optimistic = ChatMessage(text.trim(), true, UUID.randomUUID().toString(), delivered = true, read = true, replyToId = replyToId)
-                                        messages = messages + optimistic
-                                        FynxChatStore.save(context, "group_$groupId", messages)
-                                        text = ""; replyToId = null; sending = true
-                                        scope.launch {
-                                            FynxGroupRemoteClient.sendMessage(context, groupId, optimistic)
-                                                .onSuccess { remote ->
-                                                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                                                    messages = messages.map { if (it.id == optimistic.id) serverMessage else it }
-                                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = null
-                                                }
-                                                .onFailure { error ->
-                                                    messages = messages.map { if (it.id == optimistic.id) it.copy(delivered = false, read = false) else it }
-                                                    FynxChatStore.save(context, "group_$groupId", messages)
-                                                    syncMessage = "Message not sent yet. Your message is saved; tap Retry when the connection is ready."
-                                                }
-                                            sending = false
-                                        }
-                                    }
+                                    editingMessageId != null -> submitGroupEdit()
+                                    text.isNotBlank() -> shareGroupTextMessage(text, replyToId)
                                     !canSendMedia -> syncMessage = "Sending voice messages is disabled in Group Settings."
                                     else -> groupVoicePermission.launch(Manifest.permission.RECORD_AUDIO)
                                 }
                             },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(if (voiceRecording) Icons.Default.Stop else Icons.Default.Mic, if (voiceRecording) "Stop recording and send" else "Record voice message", modifier = Modifier.size(23.dp), tint = Color.White)
+                            Icon(
+                                when {
+                                    voiceRecording -> Icons.Default.Stop
+                                    editingMessageId != null || text.isNotBlank() -> Icons.Default.Send
+                                    else -> Icons.Default.Mic
+                                },
+                                when {
+                                    voiceRecording -> "Stop recording and send"
+                                    editingMessageId != null -> "Save edited message"
+                                    text.isNotBlank() -> "Send group message"
+                                    else -> "Record voice message"
+                                },
+                                modifier = Modifier.size(23.dp),
+                                tint = Color.White
+                            )
                         }
                     }
                 }
@@ -1147,39 +1493,161 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     }
 
     }
+    if (showLeaveGroupDialog && selectedGroup != null) {
+        AlertDialog(
+            onDismissRequest = { if (!leaveGroupBusy) showLeaveGroupDialog = false },
+            title = { Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isGroupOwner) {
+                        Text("As the group owner, transfer ownership to another current member before leaving.")
+                        if (transferCandidates.isEmpty()) {
+                            Text("Add another member before leaving this group.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            Box {
+                                OutlinedButton(
+                                    enabled = !leaveGroupBusy,
+                                    onClick = { transferTargetsExpanded = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(transferTargetUsername.ifBlank { "Choose the new owner" })
+                                }
+                                DropdownMenu(
+                                    expanded = transferTargetsExpanded,
+                                    onDismissRequest = { transferTargetsExpanded = false }
+                                ) {
+                                    transferCandidates.forEach { candidate ->
+                                        DropdownMenuItem(
+                                            text = { Text(candidate.username) },
+                                            onClick = {
+                                                transferTargetUsername = candidate.username.removePrefix("@")
+                                                transferTargetsExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text("You will leave this group and it will be removed from your group list on this device.")
+                    }
+                    if (!hasRemoteAccessToken) {
+                        Text("Connect to FYNX before changing group membership.", color = MaterialTheme.colorScheme.error)
+                    }
+                    leaveGroupError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = hasRemoteAccessToken && !leaveGroupBusy &&
+                        (!isGroupOwner || transferCandidates.any { it.username.removePrefix("@").equals(transferTargetUsername.removePrefix("@"), true) }),
+                    onClick = {
+                        if (leaveGroupBusy) return@TextButton
+                        leaveGroupBusy = true
+                        leaveGroupError = null
+                        scope.launch {
+                            if (isGroupOwner) {
+                                FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)
+                                    .onSuccess { confirmedOwner ->
+                                        val updatedGroup = selectedGroup.copy(
+                                            ownerUsername = confirmedOwner,
+                                            members = selectedGroup.members.map { member ->
+                                                when {
+                                                    member.username.removePrefix("@").equals(currentUsername.removePrefix("@"), true) ->
+                                                        member.copy(role = FynxGroupRole.MODERATOR)
+                                                    member.username.removePrefix("@").equals(confirmedOwner.removePrefix("@"), true) ->
+                                                        member.copy(role = FynxGroupRole.ADMIN)
+                                                    else -> member
+                                                }
+                                            }
+                                        )
+                                        currentGroup = updatedGroup
+                                        FynxGroupsStore.updateGroup(context, updatedGroup, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupRemoteClient.leaveGroup(context, groupId)
+                                            .onSuccess {
+                                                FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                                FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                                showLeaveGroupDialog = false
+                                                onBack()
+                                            }
+                                            .onFailure {
+                                                leaveGroupError = "Ownership transferred successfully, but leaving failed. You are now a moderator; tap Leave group to retry."
+                                            }
+                                    }
+                                    .onFailure { error ->
+                                        leaveGroupError = error.message ?: "Ownership could not be transferred. Please try again."
+                                    }
+                            } else {
+                                FynxGroupRemoteClient.leaveGroup(context, groupId)
+                                    .onSuccess {
+                                        FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                        showLeaveGroupDialog = false
+                                        onBack()
+                                    }
+                                    .onFailure { error ->
+                                        leaveGroupError = error.message ?: "Could not leave this group. Please try again."
+                                    }
+                            }
+                            leaveGroupBusy = false
+                        }
+                    }
+                ) {
+                    Text(
+                        when {
+                            leaveGroupBusy -> "Working…"
+                            isGroupOwner -> "Transfer & leave"
+                            else -> "Leave group"
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !leaveGroupBusy, onClick = { showLeaveGroupDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     selectedGroup?.let { groupForDialogs ->
-        if (showMembers) FynxGroupMembersDialog(groupForDialogs, currentUsername, { showMembers = false }) { updated -> if (FynxGroupsStore.updateGroup(context, updated)) { currentGroup = updated; scope.launch { FynxGroupRemoteClient.syncGroup(context, updated).onFailure { syncMessage = "Group details could not sync yet. Check your connection and retry." } } } }
+        if (showMembers) FynxGroupMembersDialog(
+            group = groupForDialogs,
+            currentUsername = currentUsername,
+            canAddMembers = canAddMembers,
+            hasServerAccess = hasRemoteAccessToken,
+            onDismiss = { showMembers = false },
+            onGroupChanged = { updated ->
+                if (FynxGroupsStore.updateGroup(context, updated, groupAccountKey.takeUnless { it == "signed_out" })) {
+                    currentGroup = updated
+                    FynxGroupsStore.markSynced(context, updated.id, groupAccountKey.takeUnless { it == "signed_out" })
+                }
+            }
+        )
         if (showCatchMeUp) FynxCatchMeUpSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showCatchMeUp = false })
         if (showConversationMoments) FynxConversationMomentsSheet(messages = messages, title = groupForDialogs.name, onDismiss = { showConversationMoments = false })
-        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, onInvite = { username ->
+        if (showTools) FynxGroupSocialDialog(groupForDialogs, { showTools = false; showPollsDirectly = false }, currentUsername = currentUsername, onInvite = { username ->
             val cleanUsername = username.trim().removePrefix("@")
-            if (!canAddMembers) {
-                syncMessage = "Adding members is disabled in Group Settings."
-            } else if (groupForDialogs.members.any { it.username.equals(cleanUsername, true) }) {
-                syncMessage = "@$cleanUsername is already in this group."
-            } else if (!FynxBackendClient.hasAccessToken(context)) {
-                val updated = groupForDialogs.copy(members = groupForDialogs.members + FynxGroupMember(cleanUsername))
-                if (FynxGroupsBatch1.validate(updated).isEmpty()) {
-                    FynxGroupsStore.updateGroup(context, updated)
-                    currentGroup = updated
-                    syncMessage = "Member added locally; server sync is unavailable."
-                }
-            } else {
-                scope.launch {
-                    FynxGroupRemoteClient.addMember(context, groupId, cleanUsername).onSuccess { remoteMember ->
-                        val base = currentGroup ?: groupForDialogs
-                        val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
-                            else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
-                        FynxGroupsStore.updateGroup(context, updated)
-                        currentGroup = updated
-                        syncMessage = null
-                    }.onFailure { syncMessage = "This member could not be added. Check group permissions and try again." }
+            when {
+                !canAddMembers -> Result.failure(IllegalStateException("Adding members is disabled in Group Settings."))
+                groupForDialogs.members.any { it.username.equals(cleanUsername, true) } ->
+                    Result.failure(IllegalStateException("@$cleanUsername is already in this group."))
+                !FynxBackendClient.hasAccessToken(context) ->
+                    Result.failure(IllegalStateException("Connect to FYNX before inviting group members. Offline membership changes are not supported."))
+                else -> FynxGroupRemoteClient.addMember(context, groupId, cleanUsername).map { remoteMember ->
+                    val base = currentGroup ?: groupForDialogs
+                    val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
+                        else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
+                    if (FynxGroupsStore.updateGroup(context, updated, groupAccountKey.takeUnless { it == "signed_out" })) currentGroup = updated
+                    else syncMessage = "Member was added on the server, but the local list could not refresh. Reopen the group."
+                    Unit
                 }
             }
         }, onMedia = { uri, type ->
-            if (!canSendMedia) syncMessage = "Sending media and files is disabled in Group Settings." else { val next = messages + createGroupMediaMessage(uri, type); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onFailure { syncMessage = "Message not sent yet. It is saved for retry; check your connection." } } }
-        }, onStoryShare = {
-            if (!canSendMedia) syncMessage = "Media sharing is disabled in Group Settings." else { val next = messages + ChatMessage("Story shared to ${groupForDialogs.name}", true, UUID.randomUUID().toString(), delivered = false, read = false); messages = next; FynxChatStore.save(context, "group_$groupId", next); scope.launch { FynxGroupRemoteClient.sendMessage(context, groupId, next.last()).onSuccess { sent -> messages = messages.map { if (it.id == sent.id) FynxGroupRemoteClient.toChatMessage(sent, currentUsername, FynxBackendClient.baseUrl(context)) else it }; FynxChatStore.save(context, "group_$groupId", messages) }.onFailure { syncMessage = "Story not sent yet. Your share is saved; check your connection and retry." } } }
+            sendGroupAttachment(uri, type)
         }, openContentInitially = showPollsDirectly)
         if (showLocationShare) FynxGroupLocationShareDialog(onDismiss = { showLocationShare = false }) { label, details ->
             val mapsQuery = java.net.URLEncoder.encode(listOf(label, details).filter { it.isNotBlank() }.joinToString(" "), "UTF-8")
@@ -1199,18 +1667,53 @@ private fun formatMessageClock(timestamp: Long): String {
 }
 
 @Composable
-private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, onDismiss: () -> Unit, onGroupChanged: (FynxGroup) -> Unit) {
+private fun FynxGroupMembersDialog(
+    group: FynxGroup,
+    currentUsername: String,
+    canAddMembers: Boolean,
+    hasServerAccess: Boolean,
+    onDismiss: () -> Unit,
+    onGroupChanged: (FynxGroup) -> Unit
+) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var current by remember(group.id) { mutableStateOf(group) }
     val management = remember(group.id) { mutableStateOf(FynxGroupManagementStore.load(context, group.id)) }
     var username by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
-    val myRole = current.members.firstOrNull { it.username.equals(currentUsername, true) }?.role ?: FynxGroupRole.MEMBER
+    var busyMemberAction by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportMemberUsername by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportReason by remember(group.id) { mutableStateOf("") }
+    var reportBusy by remember(group.id) { mutableStateOf(false) }
+    val myRole = current.members.firstOrNull { normalizedFynxGroupUsername(it.username) == normalizedFynxGroupUsername(currentUsername) }?.role ?: FynxGroupRole.MEMBER
     val canManage = FynxGroupsBatch3.canManage(myRole)
     val isAdmin = myRole == FynxGroupRole.ADMIN
-    val prefs = remember(current.id) { FynxConversationPreferences.group(context, current.id) }
-    val canAddMembers = isAdmin || prefs.getBoolean("add_members", true)
     val memberPhotoIds = remember(current.members) { mutableStateMapOf<String, String?>() }
+    LaunchedEffect(group.id, hasServerAccess) {
+        if (hasServerAccess) {
+            FynxGroupRemoteClient.loadMembers(context, group.id).onSuccess { remoteMembers ->
+                val members = remoteMembers.map { remote ->
+                    val role = runCatching { FynxGroupRole.valueOf(remote.role.uppercase()) }.getOrDefault(FynxGroupRole.MEMBER)
+                    FynxGroupMember(remote.username, role)
+                }
+                val updated = current.copy(members = members)
+                if (FynxGroupsBatch1.validate(updated).isEmpty()) {
+                    current = updated
+                    onGroupChanged(updated)
+                } else {
+                    message = "The server member list could not be reconciled with this group."
+                }
+            }.onFailure {
+                message = "Could not refresh group members. Showing the last saved list."
+            }
+            FynxSocialClient.blocked(context).onSuccess { blockedUsers ->
+                val blockedNames = blockedUsers.map { it.username.removePrefix("@").trim().lowercase() }.toSet()
+                management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = blockedNames))
+            }.onFailure {
+                message = "Account block status could not be refreshed."
+            }
+        }
+    }
     LaunchedEffect(current.members.map { it.username }) {
         current.members.forEach { member ->
             val normalized = member.username.removePrefix("@").trim()
@@ -1221,21 +1724,56 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
     }
     FynxPlainDialog(onDismissRequest = onDismiss, title = { Text("Members • ${current.members.size}", style = MaterialTheme.typography.headlineSmall) }, text = {
         Column {
-            if (canManage && canAddMembers) Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = username, onValueChange = { username = it }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Username") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done))
-                IconButton(onClick = {
-                    val clean = username.trim()
-                    if (clean.isBlank() || current.members.any { it.username.equals(clean, true) }) message = "Enter a new username" else {
-                        val updated = current.copy(members = current.members + FynxGroupMember(clean))
-                        if (FynxGroupsBatch1.validate(updated).isEmpty()) { current = updated; onGroupChanged(updated); username = ""; message = "Member added" } else message = "Could not add member"
+            if (canManage && canAddMembers && hasServerAccess) Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    modifier = Modifier.weight(1f),
+                    enabled = busyMemberAction == null,
+                    singleLine = true,
+                    label = { Text("Username") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done)
+                )
+                IconButton(enabled = busyMemberAction == null, onClick = {
+                    val clean = username.trim().removePrefix("@")
+                    if (clean.isBlank() || current.members.any { it.username.equals(clean, true) }) {
+                        message = "Enter a new username"
+                    } else {
+                        busyMemberAction = "add"
+                        scope.launch {
+                            FynxGroupRemoteClient.addMember(context, current.id, clean)
+                                .onSuccess { remote ->
+                                    val role = runCatching { FynxGroupRole.valueOf(remote.role.uppercase()) }.getOrDefault(FynxGroupRole.MEMBER)
+                                    val updated = current.copy(
+                                        members = current.members.filterNot { it.username.equals(remote.username, true) } +
+                                            FynxGroupMember(remote.username, role)
+                                    )
+                                    current = updated
+                                    onGroupChanged(updated)
+                                    username = ""
+                                    message = "Member added to this group."
+                                }
+                                .onFailure { message = "Member could not be added. Check group permissions and try again." }
+                            busyMemberAction = null
+                        }
                     }
-                }) { Icon(Icons.Default.Add, "Add member") }
-            } else if (!canAddMembers) Text("Adding members is disabled in Group Settings.", style = MaterialTheme.typography.bodySmall)
+                }) {
+                    if (busyMemberAction == "add") CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Add, "Add member")
+                }
+            } else if (!hasServerAccess) {
+                Text("Connect to FYNX to manage group membership.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (!canAddMembers) {
+                Text("Adding members is disabled in Group Settings.", style = MaterialTheme.typography.bodySmall)
+            }
             if (message.isNotBlank()) Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             LazyColumn(modifier = Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(current.members, key = { it.username }) { member ->
-                    val blocked = management.value.state.blockedUsernames.contains(member.username)
+                    val normalizedUsername = member.username.removePrefix("@").trim()
+                    val blocked = management.value.state.blockedUsernames.contains(normalizedUsername.lowercase())
+                    val isOwnerMember = normalizedUsername.equals(current.ownerUsername.removePrefix("@").trim(), true)
+                    val isSelfMember = normalizedUsername.equals(currentUsername.removePrefix("@").trim(), true)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         FynxRemoteProfileAvatar(
                             mediaId = memberPhotoIds[member.username.removePrefix("@").trim()],
@@ -1245,31 +1783,117 @@ private fun FynxGroupMembersDialog(group: FynxGroup, currentUsername: String, on
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        if (canManage && member.username != current.ownerUsername) {
-                            TextButton(onClick = {
-                                val action = if (member.role == FynxGroupRole.MODERATOR) FynxGroupMemberAction.DEMOTE_MODERATOR else FynxGroupMemberAction.PROMOTE_MODERATOR
-                                val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
-                                if (nextState != null) {
-                                    management.value = management.value.copy(state = nextState); FynxGroupManagementStore.save(context, management.value)
-                                    val role = if (member.role == FynxGroupRole.MODERATOR) FynxGroupRole.MEMBER else FynxGroupRole.MODERATOR
-                                    val updated = current.copy(members = current.members.map { if (it.username == member.username) it.copy(role = role) else it }); current = updated; onGroupChanged(updated)
+                        if (!isSelfMember) {
+                            TextButton(
+                                enabled = hasServerAccess && busyMemberAction == null,
+                                onClick = { reportMemberUsername = normalizedUsername; reportReason = ""; message = "" }
+                            ) { Text("Report") }
+                        }
+                        if (canManage && !isOwnerMember && !isSelfMember) {
+                            if (isAdmin) {
+                                TextButton(enabled = busyMemberAction == null && hasServerAccess, onClick = {
+                                    val demoting = member.role == FynxGroupRole.MODERATOR
+                                    busyMemberAction = normalizedUsername
+                                    scope.launch {
+                                        val result = if (demoting) {
+                                            FynxGroupRemoteClient.demoteMember(context, current.id, normalizedUsername)
+                                        } else {
+                                            FynxGroupRemoteClient.promoteMember(context, current.id, normalizedUsername)
+                                        }
+                                        result.onSuccess {
+                                            val role = if (demoting) FynxGroupRole.MEMBER else FynxGroupRole.MODERATOR
+                                            val updated = current.copy(members = current.members.map {
+                                                if (it.username.equals(member.username, true)) it.copy(role = role) else it
+                                            })
+                                            current = updated
+                                            onGroupChanged(updated)
+                                            message = if (demoting) "Moderator role removed." else "Moderator role saved."
+                                        }.onFailure {
+                                            message = "Member role could not be updated. Please try again."
+                                        }
+                                        busyMemberAction = null
+                                    }
+                                }) {
+                                    Text(if (busyMemberAction == normalizedUsername) "Saving…" else if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod")
                                 }
-                            }) { Text(if (member.role == FynxGroupRole.MODERATOR) "Demote" else "Mod") }
-                            TextButton(onClick = {
-                                val action = if (blocked) FynxGroupMemberAction.UNBLOCK else FynxGroupMemberAction.BLOCK
-                                val nextState = FynxGroupsBatch3.applyAction(management.value.state, member.username, action)
-                                if (nextState != null) { management.value = management.value.copy(state = nextState); FynxGroupManagementStore.save(context, management.value) }
-                            }) { Text(if (blocked) "Unblock" else "Block") }
-                            TextButton(onClick = {
-                                val updated = current.copy(members = current.members.filterNot { it.username == member.username })
-                                if (FynxGroupsBatch1.validate(updated).isEmpty()) { current = updated; onGroupChanged(updated) } else message = "The group must keep one admin"
-                            }) { Text("Remove") }
+                            }
+                            TextButton(enabled = busyMemberAction == null && hasServerAccess, onClick = {
+                                busyMemberAction = normalizedUsername
+                                scope.launch {
+                                    val result = if (blocked) FynxSocialClient.unblock(context, normalizedUsername)
+                                        else FynxSocialClient.block(context, normalizedUsername)
+                                    result.onSuccess {
+                                        val blockedNames = if (blocked) management.value.state.blockedUsernames - normalizedUsername.lowercase()
+                                            else management.value.state.blockedUsernames + normalizedUsername.lowercase()
+                                        management.value = management.value.copy(state = management.value.state.copy(blockedUsernames = blockedNames))
+                                        message = if (blocked) "Account unblocked." else "Account blocked."
+                                    }.onFailure {
+                                        message = "Account block setting could not be saved. Please try again."
+                                    }
+                                    busyMemberAction = null
+                                }
+                            }) { Text(if (blocked) "Unblock account" else "Block account") }
+                            val canRemove = hasServerAccess && (isAdmin || member.role == FynxGroupRole.MEMBER)
+                            if (canRemove) TextButton(enabled = busyMemberAction == null, onClick = {
+                                busyMemberAction = normalizedUsername
+                                scope.launch {
+                                    FynxGroupRemoteClient.removeMember(context, current.id, normalizedUsername)
+                                        .onSuccess {
+                                            val updated = current.copy(members = current.members.filterNot {
+                                                it.username.equals(member.username, true)
+                                            })
+                                            current = updated
+                                            onGroupChanged(updated)
+                                            message = "Member removed from the group."
+                                        }
+                                        .onFailure {
+                                            message = "Member could not be removed. Please try again."
+                                        }
+                                    busyMemberAction = null
+                                }
+                            }) { Text(if (busyMemberAction == normalizedUsername) "Removing…" else "Remove") }
                         }
                     }
                 }
             }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+    if (reportMemberUsername != null) AlertDialog(
+        onDismissRequest = { if (!reportBusy) reportMemberUsername = null },
+        title = { Text("Report member") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Report @${reportMemberUsername?.removePrefix("@")} to FYNX for review.")
+                if (!hasServerAccess) Text("Connect to FYNX before submitting this report.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = reportReason,
+                    onValueChange = { reportReason = it.take(500) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 5,
+                    label = { Text("Reason") }
+                )
+                if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !reportBusy && hasServerAccess && reportReason.isNotBlank(), onClick = {
+                val target = reportMemberUsername ?: return@TextButton
+                reportBusy = true
+                scope.launch {
+                    FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target)
+                        .onSuccess {
+                            message = "Member report submitted to FYNX."
+                            reportMemberUsername = null
+                            reportReason = ""
+                        }
+                        .onFailure { message = "Member report could not be submitted. Check your connection and try again." }
+                    reportBusy = false
+                }
+            }) { Text(if (reportBusy) "Submitting…" else "Submit report") }
+        },
+        dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportMemberUsername = null }) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -1354,11 +1978,18 @@ private fun createGroupVoiceMediaRecorder(context: android.content.Context): Med
 
 
 private const val MAX_STAGED_GROUP_ATTACHMENT_BYTES = 12L * 1024 * 1024
-private const val MAX_STAGED_GROUP_IMAGE_BYTES = 64L * 1024 * 1024
+private const val MAX_STAGED_GROUP_IMAGE_BYTES = 12L * 1024 * 1024
 
 private suspend fun stagePendingGroupAttachment(context: android.content.Context, uri: Uri, type: String): Uri =
     withContext(Dispatchers.IO) {
-        val directory = File(context.filesDir, "fynx_group_pending_media").apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
+        val accountKey = FynxAuthStore.accountStorageKey(context)?.takeIf { it.isNotBlank() }
+            ?: error("Sign in again before saving a group attachment.")
+        val accountSuffix = Base64.encodeToString(
+            accountKey.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val directory = File(context.filesDir, "fynx_group_pending_media_$accountSuffix")
+            .apply { check(isDirectory || mkdirs()) { "Could not save attachment for retry." } }
         val originalName = runCatching {
             context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) cursor.getString(0) else null
@@ -1393,7 +2024,7 @@ private suspend fun stagePendingGroupAttachment(context: android.content.Context
                         if (read < 0) break
                         totalBytes += read
                         require(totalBytes <= maxBytes) {
-                            if (type == "image") "Image is too large to prepare safely. Maximum source size is 64 MB."
+                            if (type == "image") "Image is too large to send. Maximum size is 12 MB."
                             else "Attachment is too large. Maximum size is 12 MB."
                         }
                         output.write(buffer, 0, read)
@@ -1401,6 +2032,7 @@ private suspend fun stagePendingGroupAttachment(context: android.content.Context
                 }
             }
             if (destination.length() <= 0L) error("Attachment is empty. Choose it again.")
+            if(FynxAuthStore.accountStorageKey(context)!=accountKey) error("Your FYNX account changed while the attachment was being saved. Choose it again.")
             Uri.fromFile(destination)
         } catch (error: Throwable) {
             destination.delete()
@@ -1412,8 +2044,16 @@ private fun deletePendingGroupAttachment(context: android.content.Context, uriTe
     runCatching {
         val uri = Uri.parse(uriText)
         if (uri.scheme != "file") return@runCatching
-        val pendingDirectory = File(context.filesDir, "fynx_group_pending_media").canonicalFile
+        val filesDirectory = context.filesDir.canonicalFile
         val candidate = File(uri.path.orEmpty()).canonicalFile
-        if (candidate.parentFile == pendingDirectory) candidate.delete()
+        val accountScopedDirectory = candidate.parentFile ?: return@runCatching
+        // Staged files live in fynx_group_pending_media_<account-key>. Match the
+        // actual account-scoped directory while refusing paths outside filesDir.
+        if (accountScopedDirectory.parentFile == filesDirectory &&
+            accountScopedDirectory.name.startsWith("fynx_group_pending_media_") &&
+            candidate.isFile
+        ) {
+            candidate.delete()
+        }
     }
 }
