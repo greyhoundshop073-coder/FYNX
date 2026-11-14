@@ -70,6 +70,24 @@ assert.equal(socialRoutes.split(importLine).length - 1, 1,
 assert.ok(socialRoutes.includes(commentRouteMarker),
   "the top-level comment notification patch marker must match the actual social route implementation");
 
+const groupMarker = "res.status(201).json({message:messageJson(row)});";
+const groupReplacement = "const groupMembers=(await pool.query('SELECT gm.user_id,u.username FROM fynx_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND gm.user_id<>$2',[groupId,req.user.sub])).rows; const mentionedUsers=new Set((String(row.text||'').match(/@[A-Za-z0-9_.-]+/g)||[]).map(value=>value.slice(1).toLowerCase())); for(const member of groupMembers){const mentioned=mentionedUsers.has(String(member.username||'').replace(/^@/,'').toLowerCase());await queueFynxNotification(pool,{userId:member.user_id,type:'GROUP',title:mentioned?'You were mentioned in a group':'New group message',message:mentioned?'@'+(row.sender_username||'A member')+' mentioned you in a group.':'You have a new message in a FYNX group.',targetId:groupId,sourceUsername:row.sender_username,route:'fynx://group/'+encodeURIComponent(groupId),notificationId:'group-'+(mentioned?'mention':'message')+'-'+row.id+'-'+member.user_id});}"+groupMarker;
+const groupPatch = { marker: groupMarker, replacement: groupReplacement };
+const groupRouteFixture = "async function handler() { "+groupMarker+" }";
+const notifiedGroupRoute = applyNotificationBootstrapPatch(groupRouteFixture, groupPatch);
+assert.ok(notifiedGroupRoute.includes("mentionedUsers") && notifiedGroupRoute.includes("You were mentioned in a group"),
+  "a matching @mention must produce a targeted group notification");
+assert.ok(notifiedGroupRoute.includes("notificationId:'group-'+(mentioned?'mention':'message')"),
+  "group mentions and ordinary group messages use stable, distinct notification IDs");
+assert.ok(notifiedGroupRoute.includes("route:'fynx://group/'+encodeURIComponent(groupId)"),
+  "group notifications route back to the originating group");
+assert.equal(applyNotificationBootstrapPatch(notifiedGroupRoute, groupPatch), notifiedGroupRoute,
+  "the group mention notification insertion must be idempotent");
+assert.ok(bootstrap.includes("const mentionedUsers=new Set"),
+  "the live bootstrap includes recipient-aware @mention detection");
+assert.ok(bootstrap.includes("You were mentioned in a group"),
+  "the live bootstrap uses mention-specific notification copy");
+
 const realtimeBootstrap = await readFile(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
 const replyRouteMarker = "await client.query('COMMIT');\n      const row = inserted.rows[0];";
 assert.ok(realtimeBootstrap.includes(replyRouteMarker),
