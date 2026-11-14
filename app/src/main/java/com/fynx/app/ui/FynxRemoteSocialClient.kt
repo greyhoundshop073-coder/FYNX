@@ -5,6 +5,7 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.time.Instant
 import java.util.Locale
 
 object FynxRemoteSocialClient {
@@ -17,8 +18,10 @@ object FynxRemoteSocialClient {
     data class CommentPage(val comments: List<RemoteComment>, val nextCursor: String?)
     data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
-    data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList())
+    data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList(), val createdAtEpochMs: Long = 0L, val discoveryScore: Double = 0.0, val originalPrice: Double? = null, val productAverageRating: Double = 0.0, val productReviewCount: Int = 0, val priceDrop: Boolean = false)
     data class MarketplaceListingEngagement(val listingId: String, val likeCount: Int, val likedByCurrentUser: Boolean)
+    data class MarketplaceProductReview(val id: String, val rating: Int, val comment: String, val createdAt: String?, val reviewerUsername: String, val reviewerDisplayName: String)
+    data class MarketplaceProductReviewPage(val reviews: List<MarketplaceProductReview>, val reviewCount: Int, val averageRating: Double, val limit: Int, val offset: Int, val hasMore: Boolean)
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
     data class MarketplaceDriverAssignment(val orderId: String, val status: String, val fulfillmentStatus: String, val currency: String, val totalAmount: Double, val quantity: Int, val productTitle: String, val buyerName: String, val sellerUsername: String, val shippingAddress: JSONObject?, val trackingReference: String?, val acceptedAt: String?, val handoverAt: String?, val deliveredAt: String?, val evidence: JSONArray)
     data class SocialInteractionState(val saved: Boolean, val reposted: Boolean, val savedCount: Int, val repostCount: Int)
@@ -241,10 +244,10 @@ object FynxRemoteSocialClient {
     }
     suspend fun nearbyMarketplaceListings(context: Context, query: String = "", category: String = "All", location: String): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/discovery?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&limit=60&location=${URLEncoder.encode(location.trim(), "UTF-8")}").mapCatching(::parseListings)
     suspend fun myListings(context: Context): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/my-listings").mapCatching(::parseListings)
-    suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>): Result<String> = runCatching {
-        require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
+    suspend fun createMarketplaceListing(context: Context, title: String, description: String, storeName: String, price: Double, currency: String, category: String, condition: String, quantity: Int, location: String, deliveryAvailable: Boolean, pickupAvailable: Boolean, deliveryFee: Double?, mediaUris: List<Uri>, originalPrice: Double? = null): Result<String> = runCatching {
+        require(title.trim().length >= 2) { "Product name is required." }; require(description.trim().length >= 5) { "Add a product description." }; require(price.isFinite() && price > 0) { "Enter a valid product price." }; require(originalPrice == null || (originalPrice.isFinite() && originalPrice > price)) { "The original price must be greater than the current selling price." }; require(FynxMarketplaceSellerFlowSupport.isSupportedCurrency(currency)) { "Marketplace currently supports NGN and USD." }; require(quantity > 0) { "Product quantity must be at least 1." }; require(mediaUris.isNotEmpty()) { "Add at least one product photo or video." }
         val mediaIds = mediaUris.distinct().take(12).map { u -> val mime = mediaMimeType(context, u); require(mime.startsWith("image/") || mime.startsWith("video/")) { "Marketplace media must be an image or video." }; FynxProductionMessaging.uploadMedia(context, u, mime).getOrThrow().id }
-        val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
+        val raw = FynxBackendClient.postJson(context, "/api/marketplace/listings", JSONObject().apply { put("title", title.trim()); put("description", description.trim()); put("storeName", storeName.trim()); put("price", price); put("originalPrice", originalPrice ?: JSONObject.NULL); put("currency", currency.trim().uppercase()); put("category", category.trim()); put("condition", condition.trim().uppercase()); put("quantity", quantity); put("location", location.trim()); put("deliveryAvailable", deliveryAvailable); put("pickupAvailable", pickupAvailable); put("deliveryFee", deliveryFee ?: JSONObject.NULL); put("mediaIds", JSONArray(mediaIds)) }.toString()).getOrThrow()
         val id = JSONObject(raw).getJSONObject("listing").optString("id").trim()
         // The create response is authoritative. Do not make publish success depend on a second
         // request to owner inventory: that request can fail after the listing is already committed.
@@ -315,6 +318,45 @@ object FynxRemoteSocialClient {
         return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/evidence", JSONObject().put("kind", safeKind).put("value", safeValue).toString()).map { Unit }
     }
     suspend fun reviewMarketplaceOrder(context: Context, id: String, rating: Int, comment: String): Result<Unit> { require(rating in 1..5) { "Rating must be between 1 and 5." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/review", JSONObject().apply { put("rating", rating); put("comment", comment.trim().take(1000)) }.toString()).map { Unit } }
+    suspend fun marketplaceProductReviews(context: Context, listingId: String, limit: Int = 10, offset: Int = 0): Result<MarketplaceProductReviewPage> {
+        val numericId = listingId.trim().toLongOrNull()?.takeIf { it > 0L }
+            ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
+        val safeLimit = limit.coerceIn(1, 20)
+        val safeOffset = offset.coerceIn(0, 10_000)
+        return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/reviews?limit=$safeLimit&offset=$safeOffset").mapCatching { raw ->
+            val root = JSONObject(raw)
+            val array = root.optJSONArray("reviews") ?: JSONArray()
+            val reviews = buildList {
+                for (index in 0 until array.length()) {
+                    val row = array.getJSONObject(index)
+                    val id = row.optString("id").trim()
+                    val rating = row.optInt("rating", 0)
+                    val username = row.optString("reviewerUsername").trim()
+                    if (id.isNotBlank() && rating in 1..5 && username.isNotBlank()) {
+                        add(MarketplaceProductReview(
+                            id = id,
+                            rating = rating,
+                            comment = row.optString("comment").take(1000),
+                            createdAt = row.optString("createdAt").takeIf { it.isNotBlank() && it != "null" },
+                            reviewerUsername = username,
+                            reviewerDisplayName = row.optString("reviewerDisplayName").trim().ifBlank { username }
+                        ))
+                    }
+                }
+            }
+            val count = root.optInt("reviewCount", 0).coerceAtLeast(0)
+            val average = root.optDouble("averageRating", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0
+            MarketplaceProductReviewPage(reviews, count, average, safeLimit, safeOffset, root.optBoolean("hasMore"))
+        }
+    }
+
+    suspend fun reviewMarketplaceProduct(context: Context, orderId: String, rating: Int, comment: String): Result<Unit> {
+        require(rating in 1..5) { "Rating must be between 1 and 5." }
+        return FynxBackendClient.postJson(context, "/api/marketplace/orders/$orderId/product-review", JSONObject().apply {
+            put("rating", rating)
+            put("comment", comment.trim().take(1000))
+        }.toString()).map { Unit }
+    }
 
     suspend fun like(context: Context, id: String, desired: Boolean? = null): Result<Pair<Boolean, Int>> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = desired?.let { JSONObject().put("liked", it).toString() } ?: "{}"; return FynxBackendClient.postJson(context, "/api/social/posts/$numericId/like", body).mapCatching { val o = JSONObject(it); o.optBoolean("liked") to o.optInt("likeCount") } }
     suspend fun save(context: Context, id: String, saved: Boolean): Result<Pair<Boolean, Int>> {
@@ -512,6 +554,14 @@ object FynxRemoteSocialClient {
     data class PostAudience(val visibility: FynxPostVisibility, val userIds: List<String>)
     suspend fun postAudience(context: Context, id: String): Result<PostAudience> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); return FynxBackendClient.get(context, "/api/social/posts/$numericId/audience").mapCatching { raw -> val o = JSONObject(raw); val visibility = runCatching { FynxPostVisibility.valueOf(o.optString("visibility", "PUBLIC")) }.getOrDefault(FynxPostVisibility.PUBLIC); val users = o.optJSONArray("userIds") ?: JSONArray(); PostAudience(visibility, buildList { for (i in 0 until users.length()) add(users.optString(i)) }) } }
     suspend fun updatePostAudience(context: Context, id: String, visibility: FynxPostVisibility, userIds: List<String>): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid post id")); val body = JSONObject().apply { put("visibility", visibility.name); put("audienceUserIds", JSONArray().apply { userIds.distinct().take(100).forEach { put(it) } }) }; return FynxBackendClient.patchJson(context, "/api/social/posts/$numericId", body.toString()).map { Unit } }
+    internal fun marketplaceListingCreatedAtEpochMs(value: String?): Long {
+        val normalized = value?.trim().orEmpty()
+        if (normalized.isBlank() || normalized.equals("null", ignoreCase = true)) return 0L
+        return runCatching {
+            normalized.toLongOrNull() ?: Instant.parse(normalized).toEpochMilli()
+        }.getOrDefault(0L)
+    }
+
     private fun parseListings(raw: String, activeOmittedMeansActive: Boolean = false): List<MarketplaceListing> {
         val array = JSONObject(raw).optJSONArray("listings")
             ?: throw IllegalStateException("Marketplace listing response was incomplete.")
@@ -565,7 +615,13 @@ object FynxRemoteSocialClient {
                         } else {
                             marketplaceRequiredListingActive(null)
                         },
-                        mediaTypes = mediaTypes
+                        mediaTypes = mediaTypes,
+                        createdAtEpochMs = marketplaceListingCreatedAtEpochMs(o.optString("created_at").takeIf { it.isNotBlank() }),
+                        discoveryScore = o.optDouble("discovery_score", 0.0).takeIf { it.isFinite() } ?: 0.0,
+                        originalPrice = if (o.has("original_price") && !o.isNull("original_price")) o.optDouble("original_price", Double.NaN).takeIf { it.isFinite() && it > 0.0 } else null,
+                        productAverageRating = o.optDouble("product_average_rating", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0,
+                        productReviewCount = o.optInt("product_review_count", 0).coerceAtLeast(0),
+                        priceDrop = o.optBoolean("price_drop", false)
                     )
                 )
             }

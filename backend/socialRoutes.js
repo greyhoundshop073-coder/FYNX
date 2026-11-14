@@ -16,6 +16,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           title TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           price NUMERIC(14,2) NOT NULL CHECK (price > 0),
+          original_price NUMERIC(14,2),
           currency TEXT NOT NULL DEFAULT 'NGN',
           category TEXT NOT NULL,
           condition TEXT NOT NULL DEFAULT 'NEW' CHECK (condition IN ('NEW','USED','REFURBISHED')),
@@ -31,7 +32,22 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         );
         CREATE INDEX IF NOT EXISTS marketplace_listings_active_idx ON marketplace_listings (active, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_listings_seller_idx ON marketplace_listings (seller_id, active, created_at DESC);
+        ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS original_price NUMERIC(14,2);
         CREATE INDEX IF NOT EXISTS marketplace_listings_category_idx ON marketplace_listings (category, active, created_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_listing_price_history (
+          id BIGSERIAL PRIMARY KEY, listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+          previous_price NUMERIC(14,2) NOT NULL CHECK (previous_price > 0), current_price NUMERIC(14,2) NOT NULL CHECK (current_price > 0),
+          currency TEXT NOT NULL, changed_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), CHECK (previous_price <> current_price)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_listing_price_history_listing_idx ON marketplace_listing_price_history (listing_id, changed_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_product_reviews (
+          id UUID PRIMARY KEY, listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE, order_id UUID NOT NULL,
+          seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5), comment TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (order_id, buyer_id)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_product_reviews_listing_idx ON marketplace_product_reviews (listing_id, created_at DESC);
         CREATE TABLE IF NOT EXISTS marketplace_price_watches (
           user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
@@ -301,10 +317,14 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
       params.push(limit + 1, offset);
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT ${"${params.length - 1}"} OFFSET ${"${params.length}"}`, params);
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.original_price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at,
+        COALESCE((SELECT COUNT(*) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::INTEGER AS product_review_count,
+        COALESCE((SELECT AVG(pr.rating) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::NUMERIC(4,2) AS product_average_rating,
+        EXISTS (SELECT 1 FROM marketplace_listing_price_history ph WHERE ph.listing_id=l.id AND ph.current_price=l.price AND ph.previous_price>ph.current_price AND ph.changed_at>NOW()-INTERVAL '30 days') AS price_drop
+        FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT ${"${params.length - 1}"} OFFSET ${"${params.length}"}`, params);
       const hasMore = result.rows.length > limit;
       const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
-      return res.json({ listings: rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })), hasMore });
+      return res.json({ listings: rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), original_price: row.original_price == null ? null : Number(row.original_price), product_review_count: Number(row.product_review_count || 0), product_average_rating: Number(row.product_average_rating || 0), price_drop: Boolean(row.price_drop), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })), hasMore });
     } catch (error) { console.error("marketplace listings", error); return res.status(500).json({ error: "marketplace lookup failed" }); }
   });
 
@@ -312,8 +332,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     try {
       await ensureMarketplaceSchema();
       await ensureMarketplaceShopProfileSchema(pool);
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.original_price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at,
+        COALESCE((SELECT COUNT(*) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::INTEGER AS product_review_count,
+        COALESCE((SELECT AVG(pr.rating) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::NUMERIC(4,2) AS product_average_rating,
+        EXISTS (SELECT 1 FROM marketplace_listing_price_history ph WHERE ph.listing_id=l.id AND ph.current_price=l.price AND ph.previous_price>ph.current_price AND ph.changed_at>NOW()-INTERVAL '30 days') AS price_drop
+        FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE l.seller_id = $1 ORDER BY l.created_at DESC`, [req.user.sub]);
+      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), original_price: row.original_price == null ? null : Number(row.original_price), product_review_count: Number(row.product_review_count || 0), product_average_rating: Number(row.product_average_rating || 0), price_drop: Boolean(row.price_drop), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
     } catch (error) { console.error("my marketplace listings", error); return res.status(500).json({ error: "seller listings lookup failed" }); }
   });
 
@@ -329,16 +353,18 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const condition = typeof req.body?.condition === "string" ? req.body.condition.trim().toUpperCase() : "NEW";
       const currency = typeof req.body?.currency === "string" ? req.body.currency.trim().toUpperCase().slice(0, 8) : "NGN";
       const price = Number(req.body?.price);
+      const originalPriceInput = req.body?.originalPrice == null || req.body.originalPrice === "" ? null : Number(req.body.originalPrice);
+      const originalPrice = originalPriceInput != null && Number.isFinite(originalPriceInput) ? originalPriceInput : null;
       const quantity = Number(req.body?.quantity);
       const location = typeof req.body?.location === "string" ? req.body.location.trim().slice(0, 160) : "";
       const deliveryAvailable = Boolean(req.body?.deliveryAvailable);
       const pickupAvailable = req.body?.pickupAvailable == null ? true : Boolean(req.body.pickupAvailable);
       const deliveryFee = req.body?.deliveryFee == null || req.body.deliveryFee === "" ? null : Number(req.body.deliveryFee);
       const mediaIds = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 12) : [];
-      if (title.length < 2 || description.length < 5 || !category || !["NGN","USD"].includes(currency) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required" });
+      if (title.length < 2 || description.length < 5 || !category || !["NGN","USD"].includes(currency) || !Number.isFinite(price) || price <= 0 || (originalPriceInput != null && (!Number.isFinite(originalPriceInput) || originalPriceInput <= price)) || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details, a valid optional original price above the selling price, and at least one product photo or video are required" });
       const media = await pool.query("SELECT id FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2", [mediaIds, req.user.sub]);
       if (media.rowCount !== mediaIds.length) return res.status(403).json({ error: "one or more media files are not owned by this account" });
-      const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING id, created_at`, [req.user.sub, listingStoreName, title, description, price, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
+      const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, original_price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb) RETURNING id, created_at`, [req.user.sub, listingStoreName, title, description, price, originalPrice, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
       return res.status(201).json({ listing: { id: String(result.rows[0].id), createdAt: result.rows[0].created_at } });
     } catch (error) { console.error("create marketplace listing", error); return res.status(500).json({ error: "listing creation failed" }); }
   });
@@ -347,8 +373,12 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     try {
       await ensureMarketplaceSchema();
       await ensureMarketplaceShopProfileSchema(pool);
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at, sp.created_at AS saved_at FROM marketplace_saved_products sp JOIN marketplace_listings l ON l.id = sp.listing_id JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE sp.user_id = $1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id)) ORDER BY sp.created_at DESC LIMIT 200`, [req.user.sub]);
-      return res.json({ products: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.original_price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.active, l.created_at, sp.created_at AS saved_at,
+        COALESCE((SELECT COUNT(*) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::INTEGER AS product_review_count,
+        COALESCE((SELECT AVG(pr.rating) FROM marketplace_product_reviews pr WHERE pr.listing_id=l.id),0)::NUMERIC(4,2) AS product_average_rating,
+        EXISTS (SELECT 1 FROM marketplace_listing_price_history ph WHERE ph.listing_id=l.id AND ph.current_price=l.price AND ph.previous_price>ph.current_price AND ph.changed_at>NOW()-INTERVAL '30 days') AS price_drop
+        FROM marketplace_saved_products sp JOIN marketplace_listings l ON l.id = sp.listing_id JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE sp.user_id = $1 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id)) ORDER BY sp.created_at DESC LIMIT 200`, [req.user.sub]);
+      return res.json({ products: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), original_price: row.original_price == null ? null : Number(row.original_price), product_review_count: Number(row.product_review_count || 0), product_average_rating: Number(row.product_average_rating || 0), price_drop: Boolean(row.price_drop), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
     } catch (error) { console.error("marketplace saved products", error); return res.status(500).json({ error: "saved products lookup failed" }); }
   });
 
@@ -452,7 +482,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (title.length < 2 || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0) return res.status(400).json({ error: "valid product name, price and quantity are required" });
 
       await client.query("BEGIN");
-      const existing = (await client.query("SELECT id, seller_id, price, description, category, condition, location, reserved_quantity, media_ids FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
+      const existing = (await client.query("SELECT id, seller_id, price, original_price, currency, description, category, condition, location, reserved_quantity, media_ids FROM marketplace_listings WHERE id = $1 AND seller_id = $2 FOR UPDATE", [id, req.user.sub])).rows[0];
       if (!existing) { await client.query("ROLLBACK"); return res.status(404).json({ error: "listing not found" }); }
       const description = descriptionInput ?? String(existing.description || "");
       const category = categoryInput ?? String(existing.category || "");
@@ -482,11 +512,26 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         }
       }
       const oldPrice = Number(existing.price);
+      const originalPriceProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "originalPrice");
+      const originalPriceInput = originalPriceProvided
+        ? (req.body.originalPrice == null || req.body.originalPrice === "" ? null : Number(req.body.originalPrice))
+        : existing.original_price;
+      let originalPrice = originalPriceInput == null ? null : Number(originalPriceInput);
+      if (originalPriceProvided && originalPrice != null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "original price must be greater than the current selling price" });
+      }
+      if (!originalPriceProvided && originalPrice != null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
+        originalPrice = null;
+      }
       const updated = (await client.query(
-        "UPDATE marketplace_listings SET title = $1, price = $2, quantity = $3, description = $4, category = $5, condition = $6, location = $7, media_ids = COALESCE($8::jsonb, media_ids), updated_at = NOW() WHERE id = $9 AND seller_id = $10 RETURNING id, title, price, quantity, description, category, condition, location, media_ids",
-        [title, price, quantity, description, category, condition, location, replacementMediaIds == null ? null : JSON.stringify(replacementMediaIds), id, req.user.sub]
+        "UPDATE marketplace_listings SET title = $1, price = $2, original_price = $3, quantity = $4, description = $5, category = $6, condition = $7, location = $8, media_ids = COALESCE($9::jsonb, media_ids), updated_at = NOW() WHERE id = $10 AND seller_id = $11 RETURNING id, title, price, original_price, quantity, description, category, condition, location, media_ids",
+        [title, price, originalPrice, quantity, description, category, condition, location, replacementMediaIds == null ? null : JSON.stringify(replacementMediaIds), id, req.user.sub]
       )).rows[0];
       const priceChanged = oldPrice !== Number(updated.price);
+      if (priceChanged) {
+        await client.query("INSERT INTO marketplace_listing_price_history(listing_id,previous_price,current_price,currency,changed_by) VALUES($1,$2,$3,$4,$5)", [id, oldPrice, Number(updated.price), existing.currency || "NGN", req.user.sub]);
+      }
       const watchers = priceChanged ? (await client.query("SELECT w.user_id FROM marketplace_price_watches w WHERE w.listing_id = $1 AND w.user_id <> $2", [id, req.user.sub])).rows : [];
       await client.query("COMMIT");
 
@@ -504,7 +549,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           });
         }
       }
-      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), quantity: Number(updated.quantity), description: updated.description, category: updated.category, condition: updated.condition, location: updated.location, mediaIds: Array.isArray(updated.media_ids) ? updated.media_ids.map(String) : [] }, priceChanged, notifiedWatchers: watchers.length });
+      return res.json({ listing: { id: String(updated.id), title: updated.title, price: Number(updated.price), originalPrice: updated.original_price == null ? null : Number(updated.original_price), discountPercent: updated.original_price != null && Number(updated.original_price) > Number(updated.price) ? Math.round((1 - Number(updated.price) / Number(updated.original_price)) * 100) : 0, quantity: Number(updated.quantity), description: updated.description, category: updated.category, condition: updated.condition, location: updated.location, mediaIds: Array.isArray(updated.media_ids) ? updated.media_ids.map(String) : [] }, priceChanged, notifiedWatchers: watchers.length });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       console.error("marketplace listing update", error);

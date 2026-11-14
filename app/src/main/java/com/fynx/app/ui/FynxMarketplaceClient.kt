@@ -25,7 +25,11 @@ object FynxMarketplaceClient {
         val deliveryFee: Double?,
         val mediaIds: List<String>,
         val active: Boolean = true,
-        val mediaTypes: List<String> = emptyList()
+        val mediaTypes: List<String> = emptyList(),
+        val originalPrice: Double? = null,
+        val productAverageRating: Double = 0.0,
+        val productReviewCount: Int = 0,
+        val priceDrop: Boolean = false
     )
 
     data class ShippingSettings(
@@ -155,7 +159,8 @@ object FynxMarketplaceClient {
         location: String,
         price: Double,
         quantity: Int,
-        mediaIds: List<String>? = null
+        mediaIds: List<String>? = null,
+        originalPrice: Double? = null
     ): Result<Unit> {
         val id = listingId.trim().toLongOrNull()?.takeIf { it > 0 }
             ?: return Result.failure(IllegalArgumentException("Invalid listing id."))
@@ -170,6 +175,7 @@ object FynxMarketplaceClient {
         if (cleanCondition !in setOf("NEW", "USED", "REFURBISHED")) return Result.failure(IllegalArgumentException("Choose a supported product condition."))
         if (cleanLocation.isBlank()) return Result.failure(IllegalArgumentException("Product location is required."))
         if (!price.isFinite() || price <= 0.0) return Result.failure(IllegalArgumentException("Enter a valid product price."))
+        if (originalPrice != null && (!originalPrice.isFinite() || originalPrice <= price)) return Result.failure(IllegalArgumentException("Original price must be higher than the selling price."))
         if (quantity < 0) return Result.failure(IllegalArgumentException("Stock cannot be negative."))
         val payload = JSONObject()
             .put("title", cleanTitle.take(160))
@@ -178,6 +184,7 @@ object FynxMarketplaceClient {
             .put("condition", cleanCondition)
             .put("location", cleanLocation.take(160))
             .put("price", price)
+            .put("originalPrice", originalPrice ?: JSONObject.NULL)
             .put("quantity", quantity)
         if (mediaIds != null) {
             val cleanMediaIds = mediaIds.map { it.trim() }
@@ -271,7 +278,11 @@ object FynxMarketplaceClient {
             } else {
                 marketplaceRequiredListingActive(null)
             },
-            mediaTypes = mediaTypes
+            mediaTypes = mediaTypes,
+            originalPrice = if (o.has("original_price") && !o.isNull("original_price")) o.optDouble("original_price", Double.NaN).takeIf { it.isFinite() && it > 0.0 } else null,
+            productAverageRating = o.optDouble("product_average_rating", 0.0).takeIf { it.isFinite() }?.coerceIn(0.0, 5.0) ?: 0.0,
+            productReviewCount = o.optInt("product_review_count", 0).coerceAtLeast(0),
+            priceDrop = o.optBoolean("price_drop", false)
         )
     }
 

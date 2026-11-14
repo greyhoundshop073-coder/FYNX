@@ -170,6 +170,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var editCondition by rememberSaveable(sellerAccountKey) { mutableStateOf("NEW") }
     var editLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editPrice by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editOriginalPrice by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editQuantity by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var editError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
@@ -1088,6 +1089,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                     editCondition = listing.condition.uppercase(Locale.US)
                                     editLocation = listing.location
                                     editPrice = listing.price.toString()
+                                    editOriginalPrice = listing.originalPrice?.toString().orEmpty()
                                     editQuantity = listing.quantity.toString()
                                     editError = null
                                 }) { Icon(Icons.Default.Edit, "Edit listing") }
@@ -1161,6 +1163,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                 editCondition = listing.condition.uppercase(Locale.US)
                                 editLocation = listing.location
                                 editPrice = listing.price.toString()
+                                editOriginalPrice = listing.originalPrice?.toString().orEmpty()
                                 editQuantity = listing.quantity.toString()
                                 editError = null
                             }) { Icon(Icons.Default.Edit, "Edit archived listing") }
@@ -1364,7 +1367,16 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     OutlinedTextField(
                         value = editPrice,
                         onValueChange = { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                        label = { Text("Price (${selectedListing.currency})") },
+                        label = { Text("Selling price (${selectedListing.currency})") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editOriginalPrice,
+                        onValueChange = { editOriginalPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                        label = { Text("Original price (${selectedListing.currency}, optional)") },
+                        supportingText = { Text("Leave blank to remove the markdown. The original price must be above the selling price.") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
@@ -1390,6 +1402,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                         editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
                         editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
+                        (editOriginalPrice.isBlank() || (editOriginalPrice.toDoubleOrNull()?.let { it.isFinite() && it > (editPrice.toDoubleOrNull() ?: 0.0) } == true)) &&
                         editQuantity.toIntOrNull()?.let { it >= 0 } == true,
                     onClick = {
                         val price = editPrice.toDoubleOrNull() ?: return@Button
@@ -1420,7 +1433,8 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                     editLocation,
                                     price,
                                     quantity,
-                                    mediaIds = uploadedMedia?.map { it.id }
+                                    mediaIds = uploadedMedia?.map { it.id },
+                                    originalPrice = editOriginalPrice.toDoubleOrNull()
                                 ).getOrThrow()
                                 uploadedMedia
                             }.onSuccess { uploadedMedia ->
@@ -1434,6 +1448,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                         condition = editCondition.trim().uppercase(Locale.US),
                                         location = editLocation.trim(),
                                         price = price,
+                                        originalPrice = editOriginalPrice.toDoubleOrNull(),
                                         quantity = quantity,
                                         mediaIds = replacementIds ?: current.mediaIds,
                                         mediaTypes = replacementTypes ?: current.mediaTypes
@@ -1447,6 +1462,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                         condition = editCondition.trim().uppercase(Locale.US),
                                         location = editLocation.trim(),
                                         price = price,
+                                        originalPrice = editOriginalPrice.toDoubleOrNull(),
                                         quantity = quantity,
                                         mediaIds = replacementIds ?: current.mediaIds,
                                         mediaTypes = replacementTypes ?: current.mediaTypes
