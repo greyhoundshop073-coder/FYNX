@@ -116,7 +116,7 @@ object FynxGroupRemoteClient {
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
-        val historyScope=root.optString("historyScope","UNKNOWN").takeIf { it=="ALL" || it.startsWith("FROM:") } ?: "UNKNOWN"
+        val historyScope=root.optString("historyScope","UNKNOWN").takeIf { it.startsWith("ALL:") || it.startsWith("FROM:") } ?: "UNKNOWN"
         RemoteMessagePage(parsed,root.optBoolean("hasMore",false),historyScope)
     }
     suspend fun markMessagesRead(context:Context,groupId:String,messageIds:List<String>):Result<List<RemoteMessage>> = runCatching {

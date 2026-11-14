@@ -128,7 +128,7 @@ export function registerGroupRoutes({ app }) {
      if(!historyMember)return res.status(403).json({error:'group membership required'});
      const historyCutoff=historyMember.show_history_to_new_members?null:historyMember.joined_at;
     // Stable marker for invalidating older pages if the administrator changes history visibility.
-    const historyScope=historyCutoff ? ('FROM:' + new Date(historyCutoff).getTime()) : 'ALL';
+    const historyScope=(historyMember.show_history_to_new_members?'ALL:':'FROM:') + new Date(historyMember.joined_at).getTime();
     const rawQuery=req.query?.q;
     const searchQuery=rawQuery===undefined?null:String(rawQuery).trim().replace(/\s+/g,' ');
     if(searchQuery!==null&&(searchQuery.length<2||searchQuery.length>100))return res.status(400).json({error:'message search must contain between 2 and 100 characters'});
