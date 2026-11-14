@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -89,7 +90,7 @@ class FynxMarketplaceProductCardComposeTest {
         compose.onNodeWithText("Best Seller").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Special Offer").performScrollTo().assertIsDisplayed()
 
-        compose.onNodeWithContentDescription("Save product").performClick()
+        compose.onNodeWithContentDescription("Save product").performScrollTo().performClick()
         compose.onNodeWithText("Add to Cart").performScrollTo().performClick()
         compose.onNodeWithText("UI Test Wireless Headphones").performClick()
 
