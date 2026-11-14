@@ -1804,7 +1804,6 @@ private fun FynxGroupMembersDialog(
             }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
-}
 
     if (reportMemberUsername != null) AlertDialog(
         onDismissRequest = { if (!reportBusy) reportMemberUsername = null },
