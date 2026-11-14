@@ -129,6 +129,9 @@ client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / '
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
 
 check('Chat list recent-conversation API is authenticated, account-scoped, and registered before the dynamic username route', 'app.get("/api/messages/recent", auth' in read('backend/server.js') and 'FynxBackendClient.get(context, "/api/messages/recent")' in production_messaging and read('backend/server.js').index('app.get("/api/messages/recent", auth') < read('backend/server.js').index('app.get("/api/messages/:username", auth') and 'WHERE NOT EXISTS' in read('backend/server.js')[read('backend/server.js').index('app.get("/api/messages/recent", auth'):read('backend/server.js').index('app.get("/api/messages/:username", auth')])
+group_store = read('app/src/main/java/com/fynx/app/ui/FynxGroupsStore.kt')
+check('offline group pending-sync IDs are read and written under the initiating account namespace', 'pendingSyncKey(context, accountKey)' in group_store and 'putStringSet(pendingSyncKey(context, accountKey), pending)' in group_store)
+
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
     print(('PASS: ' if ok else 'FAIL: ') + name)
