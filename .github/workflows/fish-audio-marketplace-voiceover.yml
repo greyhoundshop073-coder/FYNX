@@ -1,6 +1,8 @@
 name: FYNX Marketplace Voiceover
 
 on:
+  push:
+    branches: ["feature/fish-audio-marketplace-voiceover"]
   workflow_dispatch:
 
 permissions:
