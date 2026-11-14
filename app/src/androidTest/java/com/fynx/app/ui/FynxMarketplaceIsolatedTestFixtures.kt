@@ -50,7 +50,7 @@ internal object FynxMarketplaceIsolatedTestFixtures {
     ) {
         fun isReconciled(): Boolean {
             val openingBalance = transactions.sumOf { it.availableBalanceDelta }
-            return kotlin.math.abs(openingBalance - (available + reserved + withdrawalPending)) < 0.005
+            return kotlin.math.abs(openingBalance - available) < 0.005
         }
     }
     data class CartLine(val listingId: String, val unitPrice: Double, val quantity: Int)
