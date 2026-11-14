@@ -112,7 +112,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onOpenOrders = {},
                         onRefresh = {}
                     )
-                    listings.take(3).forEach { listing ->
+                    listings.drop(12).take(3).forEach { listing ->
                         MarketplaceReferenceProductCard(
                             listing = listing,
                             onOpen = { openedCardId = listing.id },
@@ -137,15 +137,15 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
-        compose.onNodeWithText("FYNX Test Wireless Headphones").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX Test Product 13").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-product-card.png")
         compose.onNodeWithContentDescription("Save product").performScrollTo().performClick()
         compose.onNodeWithText("Add to Cart").performScrollTo().performClick()
-        compose.onNodeWithText("FYNX Test Wireless Headphones").performScrollTo().performClick()
+        compose.onNodeWithText("FYNX Test Product 13").performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(1, favoriteActions)
             assertEquals(1, cartActions)
-            assertEquals(FynxMarketplaceIsolatedTestFixtures.listings.first().id, openedCardId)
+            assertEquals(FynxMarketplaceIsolatedTestFixtures.listings[12].id, openedCardId)
         }
     }
 
