@@ -2,7 +2,7 @@ package com.fynx.app.ui
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -65,16 +65,17 @@ class FynxMarketplaceProductCardComposeTest {
             }
         }
 
-        compose.onNodeWithText("UI Test Wireless Headphones").assertExists()
-        compose.onNodeWithText("₦80,000").assertExists()
-        compose.onNodeWithText("₦100,000").assertExists()
-        compose.onNodeWithText("4.7").assertExists()
-        compose.onNodeWithText("(1.2k reviews)").assertExists()
-        compose.onNodeWithText("FYNX UI Test Store").assertExists()
-        compose.onNodeWithText("Port Harcourt, Rivers").assertExists()
-        compose.onNodeWithText("Free Delivery · Local pickup").assertExists()
-        compose.onNodeWithText("Best Seller").assertExists()
-        compose.onNodeWithText("Special Offer").assertExists()
+        compose.onNodeWithText("UI Test Wireless Headphones").assertIsDisplayed()
+        compose.onNodeWithText("₦80,000").assertIsDisplayed()
+        compose.onNodeWithText("₦100,000").assertIsDisplayed()
+        compose.onNodeWithText("4.7").assertIsDisplayed()
+        compose.onNodeWithText("(1.2k reviews)").assertIsDisplayed()
+        compose.onNodeWithText("FYNX UI Test Store").assertIsDisplayed()
+        compose.onNodeWithText("Port Harcourt, Rivers").assertIsDisplayed()
+        compose.onNodeWithText("Free Delivery", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Local pickup", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Best Seller").assertIsDisplayed()
+        compose.onNodeWithText("Special Offer").assertIsDisplayed()
 
         compose.onNodeWithContentDescription("Save product").performClick()
         compose.onNodeWithText("Add to Cart").performClick()
