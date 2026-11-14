@@ -1612,6 +1612,9 @@ private fun FynxGroupMembersDialog(
     var username by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var busyMemberAction by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportMemberUsername by remember(group.id) { mutableStateOf<String?>(null) }
+    var reportReason by remember(group.id) { mutableStateOf("") }
+    var reportBusy by remember(group.id) { mutableStateOf(false) }
     val myRole = current.members.firstOrNull { normalizedFynxGroupUsername(it.username) == normalizedFynxGroupUsername(currentUsername) }?.role ?: FynxGroupRole.MEMBER
     val canManage = FynxGroupsBatch3.canManage(myRole)
     val isAdmin = myRole == FynxGroupRole.ADMIN
@@ -1710,6 +1713,12 @@ private fun FynxGroupMembersDialog(
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) { Text(member.username, style = MaterialTheme.typography.titleSmall); Text(if (blocked) "Blocked" else member.role.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        if (!isSelfMember) {
+                            TextButton(
+                                enabled = hasServerAccess && busyMemberAction == null,
+                                onClick = { reportMemberUsername = normalizedUsername; reportReason = "" }
+                            ) { Text("Report") }
+                        }
                         if (canManage && !isOwnerMember && !isSelfMember) {
                             if (isAdmin) {
                                 TextButton(enabled = busyMemberAction == null && hasServerAccess, onClick = {
@@ -1779,6 +1788,42 @@ private fun FynxGroupMembersDialog(
             }
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+    if (reportMemberUsername != null) AlertDialog(
+        onDismissRequest = { if (!reportBusy) reportMemberUsername = null },
+        title = { Text("Report member") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Report @${reportMemberUsername?.removePrefix("@")} to FYNX for review.")
+                if (!hasServerAccess) Text("Connect to FYNX before submitting this report.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    value = reportReason,
+                    onValueChange = { reportReason = it.take(500) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    maxLines = 5,
+                    label = { Text("Reason") }
+                )
+                if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !reportBusy && hasServerAccess && reportReason.isNotBlank(), onClick = {
+                val target = reportMemberUsername ?: return@TextButton
+                reportBusy = true
+                scope.launch {
+                    FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target)
+                        .onSuccess {
+                            message = "Member report submitted to FYNX."
+                            reportMemberUsername = null
+                            reportReason = ""
+                        }
+                        .onFailure { message = it.message ?: "Member report could not be submitted. Please try again." }
+                    reportBusy = false
+                }
+            }) { Text(if (reportBusy) "Submitting…" else "Submit report") }
+        },
+        dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportMemberUsername = null }) { Text("Cancel") } }
+    )
 }
 
 @Composable

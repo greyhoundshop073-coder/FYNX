@@ -11,6 +11,9 @@ REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
 MODELS = (UI / "ChatModels.kt").read_text(encoding="utf-8")
 GLASS_THEME = (UI / "FynxGlassTheme.kt").read_text(encoding="utf-8")
 CHATS = (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
+GROUP_SETTINGS = (UI / "FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
+GROUP_CLIENT = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_MEMBERSHIP = (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8")
 NAVIGATION = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 
 checks = []
@@ -123,6 +126,10 @@ require("group search exposes empty-result and offline-cache fallback states", "
 require("Android group-history client encodes q and preserves the timestamp/ID cursor", "query:String?=null" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "&q=${Uri.encode(it)}" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "beforeTimestamp" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 
 
+require("group member report is available to other members and submits the selected target through the authenticated group report client", 'Text("Report")' in ACTIVE_GROUP and "reportMemberUsername = normalizedUsername" in ACTIVE_GROUP and "FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target)" in ACTIVE_GROUP)
+require("group settings expose a working report-group flow", 'GroupActionRow("Report group"' in GROUP_SETTINGS and "FynxGroupRemoteClient.reportGroup(context, groupId, reportReason)" in GROUP_SETTINGS and "showReportDialog" in GROUP_SETTINGS)
+require("group report client sends a required bounded reason and optional target username to the existing endpoint", '"/api/groups/$groupId/reports"' in GROUP_CLIENT and 'put("reason", cleanReason)' in GROUP_CLIENT and 'put("username", it)' in GROUP_CLIENT)
+require("group report backend requires membership and validates the reported user is a member", "group membership required" in GROUP_MEMBERSHIP and "reported group member not found" in GROUP_MEMBERSHIP and "target(groupId, req.body.username)" in GROUP_MEMBERSHIP)
 require("active Group More menu exposes Leave group or transfer ownership for owners", 'Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group")' in ACTIVE_GROUP and "showLeaveGroupDialog = true" in ACTIVE_GROUP)
 require("non-owner Leave group calls the authenticated backend leave endpoint before local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in ACTIVE_GROUP and "FynxGroupsStore.removeGroup(context, groupId)" in ACTIVE_GROUP and "onBack()" in ACTIVE_GROUP)
 require("group owner must transfer ownership to another current member before leaving", "FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)" in ACTIVE_GROUP and "transferCandidates" in ACTIVE_GROUP and "member.copy(role = FynxGroupRole.MODERATOR)" in ACTIVE_GROUP)
