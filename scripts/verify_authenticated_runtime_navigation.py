@@ -1449,6 +1449,142 @@ def first_local_group_id()->str:
     match=re.search(r'"id":"([^"]+)"', raw)
     return match.group(1) if match else ""
 
+def local_group_fixture_is_persisted(group_name: str) -> bool:
+    """Confirm the fixture is in the current account's actual local group store."""
+    result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_groups_store.xml")
+    if result.returncode != 0:
+        return False
+    raw = html.unescape(result.stdout or "")
+    return f'"name":"{group_name}"' in raw
+
+
+def set_emulator_network_enabled(enabled: bool) -> bool:
+    """Temporarily isolate local-only group UI coverage from production services."""
+    state = "enable" if enabled else "disable"
+    wifi = run("adb", "shell", "svc", "wifi", state)
+    data = run("adb", "shell", "svc", "data", state)
+    return wifi.returncode == 0 and data.returncode == 0
+
+
+def create_local_group_fixture_through_ui(groups_xml: str) -> str:
+    """Create a disposable group through the same UI used by an ordinary account."""
+    run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
+    if not run_suffix:
+        run_suffix = str(int(time.time()))
+    group_name = "FYNX CI Group " + run_suffix
+    dialog = tap_control(
+        groups_xml,
+        ["New group", "Create group"],
+        "chat-groups-create-local-fixture",
+        ["Create group"],
+    )
+    if not dialog:
+        FAILURES.append("Groups -> New group did not open the real group creation dialog.")
+        return ""
+    fields = find_edit_fields(dialog)
+    if len(fields) < 2:
+        FAILURES.append("The group creation dialog did not expose both name and description inputs.")
+        return ""
+    name_x, name_y = fields[-2]
+    run("adb", "shell", "input", "tap", str(name_x), str(name_y))
+    if input_text(group_name).returncode != 0:
+        FAILURES.append("The group fixture name could not be entered through the app UI.")
+        return ""
+    time.sleep(0.35)
+    after_name = dump_ui("chat-groups-create-fixture-name.xml")
+    fields = find_edit_fields(after_name)
+    if len(fields) < 2:
+        FAILURES.append("The group creation dialog lost its description input after entering the name.")
+        return ""
+    description_x, description_y = fields[-1]
+    run("adb", "shell", "input", "tap", str(description_x), str(description_y))
+    if input_text("Disposable offline group runtime fixture").returncode != 0:
+        FAILURES.append("The group fixture description could not be entered through the app UI.")
+        return ""
+    ready = dismiss_ime_if_visible("chat-groups-create-fixture-ready.xml")
+    create_button = find_control(ready, ["Create"], exact_only=True)
+    if not create_button:
+        FAILURES.append("The real Create button remained unavailable after valid group details were entered.")
+        return ""
+    _, create_x, create_y = create_button
+    run("adb", "shell", "input", "tap", str(create_x), str(create_y))
+    deadline = time.monotonic() + 15.0
+    latest = ""
+    while time.monotonic() < deadline:
+        latest = dump_ui("chat-groups-created-local-fixture.xml")
+        if find_control(latest, [f"Open group {group_name}"]):
+            break
+        time.sleep(0.4)
+    if not find_control(latest, [f"Open group {group_name}"]):
+        FAILURES.append("The app did not show the newly created group in its Groups list.")
+        return ""
+    if not local_group_fixture_is_persisted(group_name):
+        FAILURES.append("The created group was not found in the signed-in emulator account's persisted FynxGroupsStore.")
+        return ""
+    report.append("- PASS: created a disposable group through Groups -> New group; it is persisted in the emulator account's FynxGroupsStore with the creator as ADMIN.")
+    return group_name
+
+
+def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
+    """Send via the real group composer, then leave and reopen the persisted group."""
+    run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
+    if not run_suffix:
+        run_suffix = str(int(time.time()))
+    message_text = "FYNX CI offline group message " + run_suffix
+    if not find_control(group_xml, [group_name]) or not find_control(group_xml, ["Message..."]):
+        FAILURES.append("The persisted group did not open its active conversation with its own title and composer.")
+        return ""
+    composer = find_control(group_xml, ["Message..."])
+    if not composer:
+        FAILURES.append("The active group message composer could not be located.")
+        return ""
+    _, composer_x, composer_y = composer
+    run("adb", "shell", "input", "tap", str(composer_x), str(composer_y))
+    if input_text(message_text).returncode != 0:
+        FAILURES.append("The offline group test message could not be entered.")
+        return ""
+    typed_xml = dump_ui("chat-groups-offline-message-entered.xml")
+    if not find_control(typed_xml, ["Send group message"]):
+        FAILURES.append("The group composer did not expose its enabled Send group message action.")
+        return ""
+    sent_xml = tap_control(typed_xml, ["Send group message"], "chat-groups-offline-message-send", [message_text])
+    if not sent_xml or not find_control(sent_xml, [message_text]):
+        FAILURES.append("The group message did not appear after sending from the active group composer.")
+        return ""
+    report.append("- PASS: the active group composer accepted a message through the installed app UI.")
+    latest = dismiss_ime_if_visible("chat-groups-offline-message-ready-to-reopen.xml") or sent_xml
+    back_control = find_control(latest, ["Back"])
+    if not back_control:
+        FAILURES.append("The active group conversation did not expose its Back navigation action.")
+        return ""
+    _, back_x, back_y = back_control
+    run("adb", "shell", "input", "tap", str(back_x), str(back_y))
+    groups_again = ""
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        groups_again = dump_ui("chat-groups-groups-after-conversation.xml")
+        if find_control(groups_again, [f"Open group {group_name}"]):
+            break
+        time.sleep(0.4)
+    if not find_control(groups_again, [f"Open group {group_name}"]):
+        FAILURES.append("Back navigation did not return to the Groups list with the persisted fixture.")
+        return ""
+    reopened = tap_control(
+        groups_again,
+        [f"Open group {group_name}"],
+        "chat-groups-reopen-persisted-fixture",
+        [group_name, "Message..."],
+    )
+    if not reopened or not find_control(reopened, [message_text]):
+        FAILURES.append("The group message was not retained after leaving and reopening the persisted conversation.")
+        return ""
+    report.append("- PASS: the group message remained visible after leaving and reopening the persisted conversation.")
+    if find_control(reopened, ["Message not sent yet. It is saved; tap Retry to try again."]):
+        report.append("- PASS: offline group-send failure stayed visible as a saved, retryable message.")
+    else:
+        report.append("- NOTE: local message persistence passed; this visual run does not certify backend delivery or receipt by another account.")
+    return reopened
+
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
     run("adb","shell","am","force-stop",PACKAGE)
@@ -3274,7 +3410,7 @@ if AI_VISUALS_ONLY:
 xml,error=login()
 if CHAT_GROUPS_VISUALS_ONLY:
     GROUP_RUNTIME_BLOCKED = False
-    report.append("- Focused Chat and Groups visual mode: captures the installed production Chat list, private ConversationPanel, Groups list and group ConversationPanel. It uses the disposable emulator's explicit debug-local entry when backend health is unavailable; this is UI evidence, not server authentication.")
+    report.append("- Focused Chat and Groups visual mode: captures the installed production Chat list, private ConversationPanel, Groups list and a disposable group created through the app UI. Debug-local entry is UI evidence, not server authentication.")
     if error:
         report += ["", "## Result: BLOCKED", "- Chat/Groups UI entry could not reach Home: " + error]
         (ROOT/"FYNX-chat-groups-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
@@ -3316,7 +3452,6 @@ if CHAT_GROUPS_VISUALS_ONLY:
         else:
             FAILURES.append("Chat list and account deep link did not expose the real private ConversationPanel.")
 
-    # Return through the app's Home route before entering Groups; do not reuse stale coordinates.
     home_again = restore_home_after_restart("chat-groups-return-home")
     if home_again:
         chat_again = tap_control(home_again, ["Chat"], "chat-groups-reopen-chat", ["Messages and groups in one place"])
@@ -3329,27 +3464,36 @@ if CHAT_GROUPS_VISUALS_ONLY:
         screenshot("authenticated-groups.png")
         (ROOT/"authenticated-groups.xml").write_text(groups_xml+"\n", encoding="utf-8")
         report.append("- PASS: captured the actual Groups list surface from the installed APK.")
-        group_xml = tap_first_group_if_present(groups_xml, "group-chat-entry")
-        if not group_xml:
-            # No real group exists in the local test account. Open the production
-            # Group ConversationPanel route with a deterministic, non-persisted ID.
-            # The explicit Group unavailable state is valid UI evidence, not a real group.
-            run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
-                "-d", "fynx://group/ci-runtime-group", PACKAGE, timeout=30)
-            group_xml = wait_for_group_conversation_ui("group-chat-inside.xml", timeout=16.0)
-        if group_xml and (
-            find_control(group_xml, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."])
-            or find_control(group_xml, ["Messaging is restricted", "No messages here yet", "Group unavailable"])
-        ):
-            screenshot("group-chat-inside.png")
-            (ROOT/"group-chat-inside.xml").write_text(group_xml+"\n", encoding="utf-8")
-            if find_control(group_xml, ["Group unavailable"]):
-                GROUP_RUNTIME_BLOCKED = True
-                report.append("- BLOCKED: group ConversationPanel route rendered its explicit unavailable state; no group record was fabricated, so group conversation runtime is not certified.")
-            else:
-                report.append("- PASS: captured the real FynxGroupConversationPanel.")
+
+        # This test must never create or mutate a production group. Take the emulator
+        # offline before invoking the real app's create-group workflow.
+        if not set_emulator_network_enabled(False):
+            FAILURES.append("Could not isolate the emulator from backend services; refusing to create a CI fixture that might reach production.")
         else:
-            FAILURES.append("Groups list and deterministic route did not expose FynxGroupConversationPanel.")
+            try:
+                group_name = create_local_group_fixture_through_ui(groups_xml)
+                group_xml = ""
+                if group_name:
+                    created_groups_xml = dump_ui("chat-groups-created-fixture-list.xml")
+                    group_xml = tap_control(
+                        created_groups_xml,
+                        [f"Open group {group_name}"],
+                        "chat-groups-open-created-fixture",
+                        [group_name, "Message..."],
+                    )
+                if group_xml and find_control(group_xml, ["Group unavailable"]):
+                    GROUP_RUNTIME_BLOCKED = True
+                    report.append("- BLOCKED: the app-created persisted group still rendered its unavailable state; group conversation runtime is not certified.")
+                elif group_xml:
+                    group_xml = send_and_reopen_local_group_fixture(group_xml, group_name)
+                    if group_xml:
+                        screenshot("group-chat-inside.png")
+                        (ROOT/"group-chat-inside.xml").write_text(group_xml+"\n", encoding="utf-8")
+                        report.append("- PASS: captured the active FynxGroupConversationPanel for the persisted app-created fixture.")
+                elif group_name:
+                    FAILURES.append("The app-created persisted group did not expose an active FynxGroupConversationPanel.")
+            finally:
+                set_emulator_network_enabled(True)
 
     required_images = ["authenticated-chat.png", "private-chat-inside.png", "authenticated-groups.png", "group-chat-inside.png"]
     missing = [name for name in required_images if not (ROOT/name).is_file() or (ROOT/name).stat().st_size < 12000]
@@ -3359,8 +3503,10 @@ if CHAT_GROUPS_VISUALS_ONLY:
     report += ["- " + name for name in required_images if (ROOT/name).is_file()]
     report += ["", "## Evidence boundary",
                "- Screenshots are genuine adb screencap images from the installed Android APK; no AI-generated or synthetic screen images are used.",
-               "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, delivery, FCM or backend data.",
-               "- No real user, group, message, payment or Marketplace record is created by this capture path.",
+               "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, server delivery, FCM or backend data.",
+               "- The disposable group is created through the app UI while emulator Wi-Fi and mobile data are disabled, then verified in the emulator account's FynxGroupsStore; it is not inserted into the production backend.",
+               "- The fixture has only its creating account as a local ADMIN; it does not prove a second member, server membership or two-account delivery.",
+               "- No real production user, group, message, payment or Marketplace record is created by this capture path.",
                "", f"## Result: {'RED' if FAILURES else ('PARTIAL — GROUP RUNTIME BLOCKED' if GROUP_RUNTIME_BLOCKED else 'GREEN')}"]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
