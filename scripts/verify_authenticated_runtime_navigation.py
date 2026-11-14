@@ -1446,6 +1446,37 @@ def first_username_in_xml(xml_text:str)->str:
             return value
     return ""
 
+def emulator_signed_in_username() -> str:
+    """Read the account actually signed into this disposable emulator session.
+
+    The debug-local runtime path intentionally has no FYNX_E2E_USERNAME secret,
+    so UI fixture checks must not depend on that CI-only environment variable.
+    """
+    result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_auth.xml")
+    if result.returncode != 0:
+        return ""
+    try:
+        root = ET.fromstring(result.stdout or "")
+        stored_username = next(
+            (node.text or "").strip()
+            for node in root.findall("string")
+            if node.attrib.get("name") == "username"
+        )
+        signed_in = next(
+            node.attrib.get("value") == "true"
+            for node in root.findall("boolean")
+            if node.attrib.get("name") == "signed_in"
+        )
+    except (ET.ParseError, StopIteration):
+        return ""
+    if not signed_in or not stored_username:
+        return ""
+    requested_username = USERNAME.strip().lower().removeprefix("@")
+    if requested_username and stored_username.strip().lower().removeprefix("@") != requested_username:
+        return ""
+    return stored_username
+
+
 def first_local_group_id()->str:
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
     if result.returncode != 0: return ""
@@ -1466,7 +1497,7 @@ def local_group_fixture_is_persisted(group_name: str) -> bool:
     def normalized_username(value: object) -> str:
         return str(value or "").strip().lower().removeprefix("@")
 
-    expected_owner = normalized_username(USERNAME)
+    expected_owner = normalized_username(emulator_signed_in_username())
     if not expected_owner:
         return False
     group_matches = []
@@ -3502,7 +3533,9 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # own real ConversationPanel deep link. No fake participant or backend record is created.
         private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
         if not private_xml:
-            local_target = USERNAME.removeprefix("@").strip()
+            # The local visual account is created without FYNX_E2E_USERNAME;
+            # resolve the username from the actual signed-in emulator preferences.
+            local_target = emulator_signed_in_username().removeprefix("@").strip()
             if local_target:
                 started = run("adb", "shell", "am", "start", "-W", "-a", "android.intent.action.VIEW",
                               "-d", "fynx://chat/" + local_target, PACKAGE, timeout=30)
