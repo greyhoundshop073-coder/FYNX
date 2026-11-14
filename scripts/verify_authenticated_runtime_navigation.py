@@ -3571,10 +3571,12 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
         latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
         offline_wallet_ui_ready = (
             LOGIN_MODE == "debug-only local UI entry (not server-authenticated)"
-            and find_control(latest, ["FYNX Wallet"])
-            and find_control(latest, ["Balance unavailable until your connection is restored"])
-            and find_control(latest, ["Wallet unavailable"])
-            and find_control(latest, ["Wallet security & PIN"])
+            and all(has_accessibility_label(latest, [label]) for label in (
+                "FYNX Wallet",
+                "Balance unavailable until your connection is restored",
+                "Wallet unavailable",
+                "Wallet security & PIN",
+            ))
         )
         if (wallet_destination_ready(latest) or offline_wallet_ui_ready) and not any(marker in latest for marker in loading_markers):
             screenshot("authenticated-wallet-marketplace-shortcut.png")
@@ -3656,18 +3658,28 @@ def capture_wallet_from_features(prefix:str):
 
     wallet_xml=""
     wallet_shell_opened=False
+    offline_wallet_ui_ready=False
     wallet_settled=False
     wallet_loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
         wallet_shell_opened=wallet_destination_ready(wallet_xml)
+        offline_wallet_ui_ready = (
+            LOGIN_MODE == "debug-only local UI entry (not server-authenticated)"
+            and all(has_accessibility_label(wallet_xml, [label]) for label in (
+                "FYNX Wallet",
+                "Balance unavailable until your connection is restored",
+                "Wallet unavailable",
+                "Wallet security & PIN",
+            ))
+        )
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
-        if wallet_shell_opened and not wallet_still_loading:
+        if (wallet_shell_opened or offline_wallet_ui_ready) and not wallet_still_loading:
             wallet_settled=True
             break
 
-    wallet_opened=wallet_shell_opened and wallet_settled
+    wallet_opened=(wallet_shell_opened or offline_wallet_ui_ready) and wallet_settled
     authenticated_wallet_errors=[]
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         authenticated_wallet_error_markers=(
@@ -3686,7 +3698,10 @@ def capture_wallet_from_features(prefix:str):
     if wallet_opened:
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
-        result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
+        if offline_wallet_ui_ready:
+            result_message="Captured the real offline FYNX Wallet shell, explicit unavailable-balance/server state and security controls; live ledger and funding remain blocked until backend restoration."
+        else:
+            result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
     else:
         screenshot(prefix+"-wallet-destination-incomplete.png")
         (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
@@ -3697,8 +3712,8 @@ def capture_wallet_from_features(prefix:str):
         else:
             result_message="Wallet result opened, but its title and visible balance-detail cards did not appear."
 
-    action_screens_captured = False
-    if wallet_opened:
+    action_screens_captured = bool(offline_wallet_ui_ready and wallet_settled)
+    if wallet_opened and not offline_wallet_ui_ready:
         # Capture the real Add Money screen and provider-generated account state.
         add_money_xml = tap_control(
             wallet_xml, ["Add money"], "wallet-add-money",
