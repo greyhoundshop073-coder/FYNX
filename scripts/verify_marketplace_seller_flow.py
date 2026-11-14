@@ -254,7 +254,7 @@ checks = [
        and 'listOf("NEW", "USED", "REFURBISHED")' in seller_center
        and 'label = { Text("Product location") }' in seller_center
        and "verticalScroll(rememberScrollState())" in seller_center
-    ) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
+    ) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('original_price = $3, quantity = $4, description = $5, category = $6, condition = $7, location = $8', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)', 'marketplace_listing_price_history'))),
     ("My Shop listing cards display the first uploaded product image and an explicit fallback when no media exists", 'FynxRemoteMedia(' in seller_center and 'FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())' in seller_center and 'Product image unavailable' in seller_center),
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
     ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Seller earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
@@ -532,7 +532,8 @@ checks.extend([
      and "rawMediaIds.length < 1 || rawMediaIds.length > 12" in social_routes
      and "new Set(replacementMediaIds).size !== replacementMediaIds.length" in social_routes
      and "SELECT id, mime_type FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2" in social_routes
-     and "media_ids = COALESCE($8::jsonb, media_ids)" in social_routes
+     and "media_ids = COALESCE($9::jsonb, media_ids)" in social_routes
+     and "original_price = $3" in social_routes
      and "Marketplace listing media must be images or videos" in social_routes),
 ])
 publish_flow_start = marketplace.index("if (showSell) MarketplaceSellDialog")

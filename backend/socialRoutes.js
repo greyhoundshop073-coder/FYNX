@@ -501,11 +501,16 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       }
       const oldPrice = Number(existing.price);
       const originalPriceProvided = Object.prototype.hasOwnProperty.call(req.body || {}, "originalPrice");
-      const originalPriceInput = originalPriceProvided ? (req.body.originalPrice == null || req.body.originalPrice === "" ? null : Number(req.body.originalPrice)) : existing.original_price;
-      const originalPrice = originalPriceInput == null ? null : Number(originalPriceInput);
-      if (originalPrice != null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
+      const originalPriceInput = originalPriceProvided
+        ? (req.body.originalPrice == null || req.body.originalPrice === "" ? null : Number(req.body.originalPrice))
+        : existing.original_price;
+      let originalPrice = originalPriceInput == null ? null : Number(originalPriceInput);
+      if (originalPriceProvided && originalPrice != null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: "original price must be greater than the current selling price" });
+      }
+      if (!originalPriceProvided && originalPrice != null && (!Number.isFinite(originalPrice) || originalPrice <= price)) {
+        originalPrice = null;
       }
       const updated = (await client.query(
         "UPDATE marketplace_listings SET title = $1, price = $2, original_price = $3, quantity = $4, description = $5, category = $6, condition = $7, location = $8, media_ids = COALESCE($9::jsonb, media_ids), updated_at = NOW() WHERE id = $10 AND seller_id = $11 RETURNING id, title, price, original_price, quantity, description, category, condition, location, media_ids",
