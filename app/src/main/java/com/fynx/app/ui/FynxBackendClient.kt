@@ -45,6 +45,11 @@ object FynxBackendClient {
     private val weakRequestSemaphore = Semaphore(MAX_WEAK_CONCURRENT_REQUESTS)
     data class DownloadedMedia(val contentType: String?, val byteCount: Long)
 
+    fun isAccessDeniedOrMissing(error: Throwable): Boolean {
+        val httpError = generateSequence(error) { it.cause }.filterIsInstance<FynxHttpException>().firstOrNull()
+        return httpError?.status == 403 || httpError?.status == 404
+    }
+
     fun availability(context: Context): FynxBackendAvailability = if (baseUrl(context).isBlank()) FynxBackendAvailability.DISABLED else FynxBackendAvailability.CONFIGURED
     fun baseUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
