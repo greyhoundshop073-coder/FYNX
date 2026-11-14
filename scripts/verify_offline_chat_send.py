@@ -24,6 +24,10 @@ if structured_start < 0 or structured_end < 0:
     raise SystemExit("FAIL: structured-message send boundary is missing")
 structured = production[structured_start:structured_end]
 
+successful_send_start = sync.find("if (result.isSuccess)")
+successful_send_end = sync.find("\\n            } else {", successful_send_start)
+successful_send = sync[successful_send_start:successful_send_end] if successful_send_start >= 0 and successful_send_end > successful_send_start else ""
+
 checks = [
     ("ordinary text/media sends retain the existing offline queue", "allowOfflineQueue: Boolean = true" in production and "FynxOfflineOutbox.enqueue" in production),
     ("ordinary outbox entries retain reply and media fields", all(token in production for token in ["replyToId = replyToId", "mediaId = mediaId", "mediaType = mediaType"])),
@@ -38,7 +42,7 @@ checks = [
     ("queued structured previews preserve type and payload", "messageType = normalizedType" in structured and "messagePayload = normalizedPayload" in structured),
     ("sync retries structured messages with original request ID", 'if (item.messageType == "text")' in sync and "sendStructuredMessage(" in sync and "requestId = item.requestId" in sync),
     ("sync never recursively queues failed retries", "allowOfflineQueue = false" in sync),
-    ("successful sync replaces the pending row, records the server message ID, then removes only the initiating account queue item", 0 <= sync.find("FynxChatStore.replaceMessage") < sync.find("FynxOfflineOutbox.markSent(context, item.id, remote.id, accountKey)") < sync.find("FynxOfflineOutbox.remove(context, item.id, accountKey)")),
+    ("successful sync replaces the pending row, records the server message ID, then removes only the initiating account queue item", 0 <= successful_send.find("FynxChatStore.replaceMessage") < successful_send.find("FynxOfflineOutbox.markSent(context, item.id, remote.id, accountKey)") < successful_send.find("FynxOfflineOutbox.remove(context, item.id, accountKey)")),
     ("chat history persists structured payloads", 'put("messageType", message.messageType)' in store and 'put("messagePayload", JSONObject(message.messagePayload))' in store),
     ("acknowledgement inserts authoritative messages when the pending UI row is missing", "current.filterNot { it.id == replacement.id } + replacement" in store),
     ("late snapshots are reconciled with the acknowledged server ID", "reconcilePendingOutboxMessages(messages, previous, aliases)" in store and "OUTBOX_REPLACEMENTS_SUFFIX" in store),
