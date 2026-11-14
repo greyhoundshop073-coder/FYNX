@@ -7,6 +7,7 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 PRODUCTION_MESSAGING = (UI / "FynxProductionMessaging.kt").read_text(encoding="utf-8")
 PRIVATE_BACKEND = (ROOT / "backend/server.js").read_text(encoding="utf-8")
+BACKEND = (UI / "FynxBackendClient.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
