@@ -53,7 +53,13 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
     echo "::notice::Capturing Chat and Groups with the configured server-authenticated CI test account."
     FYNX_CHAT_GROUPS_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   else
-    echo "::notice::Backend or E2E credentials unavailable; using the explicit debug-local UI entry. No server behavior is certified."
+    echo "::notice::Backend or E2E credentials unavailable; seeding an isolated local private-chat fixture before the explicit debug-local UI capture. No server behavior is certified."
+    ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest --no-daemon --build-cache
+    FIXTURE_EXIT=$?
+    if [ "${FIXTURE_EXIT}" -ne 0 ]; then
+      echo "::error::The isolated local private-chat fixture could not be seeded; refusing to count a self-chat or empty conversation as private-chat runtime evidence."
+      exit "${FIXTURE_EXIT}"
+    fi
     FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   fi
   NAV_EXIT=$?
