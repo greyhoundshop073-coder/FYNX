@@ -35,6 +35,7 @@ check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'b
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
 check("group message push hook", "queueFynxNotification" in bootstrap and "type:'GROUP'" in bootstrap and "targetId:groupId" in bootstrap and "userId:member.user_id" in bootstrap and "notificationId:'group-'" in bootstrap)
 check("group mentions receive targeted notification copy and stable mention IDs", "mentionedUsers=new Set" in bootstrap and "mentionedUsers.has(String(member.username||'').replace(/^@/,'').toLowerCase())" in bootstrap and "You were mentioned in a group" in bootstrap and "mentioned?'mention':'message'" in bootstrap)
+check("per-chat mute suppresses its FCM banner in addition to the conversation notification switch", 'FynxConversationPreferences.chatNotifications(this, chatUsername)' in service and 'FynxPreferencesStore.isChatMuted(this, chatUsername)' in service)
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
 check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
 check("private message push hook", ('message-${message.id}' in bootstrap or 'notificationId: "message-" + message.id' in bootstrap) and 'type: "MESSAGE"' in bootstrap)
