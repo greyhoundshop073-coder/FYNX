@@ -67,6 +67,7 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
     val scope = rememberCoroutineScope()
     var addStatusOpen by remember { mutableStateOf(false) }
     var composing by remember { mutableStateOf(false) }
+    var selectedInitialType by remember { mutableStateOf<FynxStatusType?>(null) }
     var cameraOpen by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
     var timelineRefreshKey by remember { mutableIntStateOf(0) }
@@ -107,9 +108,9 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
             when {
                 composing -> FynxMatureStatusComposerPanel(
                     initialMediaUri = selectedInitialMedia?.uri,
-                    initialType = selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
+                    initialType = selectedInitialType ?: selectedInitialMedia?.let { if (it.isVideo) FynxStatusType.VIDEO else FynxStatusType.PHOTO },
                     initialMusic = selectedStatusMusic,
-                    onClose = { selectedInitialMedia = null; selectedStatusMusic = null; composing = false }
+                    onClose = { selectedInitialMedia = null; selectedInitialType = null; selectedStatusMusic = null; composing = false }
                 )
                 addStatusOpen -> FynxAddStatusPanel(
                     onClose = { addStatusOpen = false },
@@ -119,11 +120,12 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                             cameraOpen = true
                         }
                     },
-                    onText = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
-                    onVoice = { selectedInitialMedia = null; composing = true; addStatusOpen = false },
+                    onText = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.TEXT; composing = true; addStatusOpen = false },
+                    onVoice = { selectedInitialMedia = null; selectedInitialType = FynxStatusType.VOICE; composing = true; addStatusOpen = false },
                     onMusic = { showStatusMusicPicker = true },
                     onMediaSelected = { media ->
                         selectedInitialMedia = media
+                        selectedInitialType = null
                         composing = true
                         addStatusOpen = false
                     }

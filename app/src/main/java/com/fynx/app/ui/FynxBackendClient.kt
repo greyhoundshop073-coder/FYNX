@@ -47,6 +47,20 @@ object FynxBackendClient {
     fun saveAccessToken(context: Context, token: String?) { if (token.isNullOrBlank()) { FynxAuthStore.clear(context); return }; FynxSecureTokenStore.save(context, token) }
     fun accessToken(context: Context): String? = FynxSecureTokenStore.load(context) ?: migrateLegacyAccessToken(context)
     fun hasAccessToken(context: Context): Boolean = accessToken(context) != null
+
+    /**
+     * Starts a debug-only saved-device session without accidentally reusing an
+     * expired server token from a previous login. Keep this separate from
+     * FynxAuthStore.clear(): local drafts and offline account data must survive.
+     */
+    fun clearAccessTokenForDebugOfflineSession(context: Context) {
+        if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
+        FynxSecureTokenStore.save(context, null)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .remove(LEGACY_ACCESS_TOKEN)
+            .apply()
+    }
     fun isNetworkAvailable(context: Context): Boolean = hasNetwork(context)
     fun isUnauthorizedFailure(error: Throwable): Boolean = generateSequence(error) { it.cause }.any { it is FynxUnauthorizedException }
     suspend fun health(context: Context): Result<String> = get(context, "/health")
