@@ -34,6 +34,7 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+offline_outbox_test = read("app/src/androidTest/java/com/fynx/app/ui/FynxOfflineOutboxInstrumentationTest.kt")
 backend = read("backend/server.js")
 isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
@@ -83,12 +84,28 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 4. Attachment send must share the same completion/error path as text sends.
-require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
-require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
-require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
-require(conversation, r"sendResult\s*\.onSuccess[\s\S]{0,3000}\.onFailure", "Attachment send must surface failures from the shared failure path")
-require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
+# 4. Attachments use the durable device-owned outbox so they remain safe when the backend is offline.
+# Assert durable staging, account-scoped local persistence, automatic sync attempt, and truthful failure UI.
+require(conversation, r"suspend fun queuePrivateAttachment\(", "Attachment send must use the durable offline queue")
+require(conversation, r"FynxOfflineOutbox\.Item\(", "Queued attachment must have a typed outbox record")
+require(conversation, r"requestId = java\.util\.UUID\.randomUUID\(\)\.toString\(\)", "Queued attachment must carry a unique idempotency request ID")
+require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Attachment bytes must be copied into app-owned durable storage before success")
+require(conversation, r"FynxChatStore\.save\(context, chat\.username, updatedMessages\)", "Pending attachment message must be persisted with the account-scoped conversation")
+require(conversation, r"FynxOfflineSync\.drain\(context\)", "Queued attachment must attempt normal sync without discarding failed uploads")
+require(conversation, r"val queued = queuePrivateAttachment\(", "Composer attachment send must enqueue before clearing the draft")
+require(conversation, r"if \(queued\) \{[\s\S]{0,700}attachment = null[\s\S]{0,300}Attachment saved on this device and will send when the connection returns", "Successful attachment staging must clear the composer only after durable save")
+require(conversation, r"else \{\s*networkError = \"Attachment could not be saved for retry\. Keep it selected and try again\.\"\s*\}", "Failed attachment staging must keep the selection and explain how to retry")
+require(conversation, r"pendingLocalUpload", "Queued attachment must render as an explicitly pending local upload")
+
+# 4a. Device-side proof for the offline attachment queue must exercise the real
+# Android Context, app-owned media copy, account namespaces and cleanup.
+require(offline_outbox_test, r"connectedDebugAndroidTest|FynxOfflineOutboxInstrumentationTest", "Offline attachment behavior must have an Android instrumentation test")
+require(offline_outbox_test, r"enqueueAttachment\(", "Android offline test must call the production attachment enqueue path")
+require(offline_outbox_test, r"assertArrayEquals", "Android offline test must compare the actual copied media bytes")
+require(offline_outbox_test, r"FynxOfflineOutbox\.load\(context\)", "Android offline test must reload persisted outbox records")
+require(offline_outbox_test, r"A different account must not see", "Android offline test must verify cross-account isolation")
+require(offline_outbox_test, r"storedFile\.exists\(\)", "Android offline test must verify queued media cleanup")
+require(offline_outbox_test, r"attachmentStagingFailureDoesNotCreateAnOutboxEntry", "Android offline test must verify local staging failure does not enqueue an unusable item")
 
 # 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
 # both at send time and at the recorder itself, so the UI cannot continue recording past it.

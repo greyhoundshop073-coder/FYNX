@@ -5,6 +5,37 @@
 set +e
 mkdir -p fynx-runtime-screenshots
 
+if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
+  # Run the focused Chat offline-outbox device tests without any server login,
+  # Marketplace navigation, backend probe, or remote fixture dependency.
+  ./gradlew connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxOfflineOutboxInstrumentationTest \
+    --no-daemon --build-cache
+  TEST_EXIT=$?
+  adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
+  {
+    echo "# FYNX Chat offline attachment outbox instrumentation"
+    echo
+    echo "- Scope: local Android media staging, durable outbox persistence, account separation and cleanup."
+    echo "- Network: not used; no server sign-in or backend request is required by the focused test."
+    echo "- Instrumentation exit code: ${TEST_EXIT}"
+    if [ "${TEST_EXIT}" -eq 0 ]; then
+      echo
+      echo "## Result: GREEN — focused Android offline outbox instrumentation passed."
+    else
+      echo
+      echo "## Result: RED — focused Android offline outbox instrumentation failed; see the logcat and Gradle output."
+    fi
+  } > fynx-runtime-screenshots/FYNX-chat-offline-outbox-runtime.md
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    echo "::error::FYNX Chat offline attachment instrumentation failed."
+  else
+    echo "::notice::FYNX Chat offline attachment instrumentation passed without backend access."
+  fi
+  exit "${TEST_EXIT}"
+fi
+
 ./gradlew connectedDebugAndroidTest --no-daemon --build-cache
 TEST_EXIT=$?
 

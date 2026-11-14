@@ -170,6 +170,7 @@ class FynxAppConnectionManager(
         if (drainJob?.isActive == true) return
         drainJob = scope.launch(Dispatchers.IO) {
             runCatching { FynxOfflineSync.drain(appContext) }
+            runCatching { FynxGroupRemoteClient.drainPendingWork(appContext) }
         }
     }
 }

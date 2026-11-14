@@ -23,11 +23,30 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
-            "GROUP" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
             "REMINDER" -> FynxNotificationFoundation.REMINDERS_CHANNEL
             else -> FynxNotificationFoundation.FRIENDS_CHANNEL
         }
+        val groupId = data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                val parsed = Uri.parse(route)
+                if (type == "GROUP") parsed.lastPathSegment?.takeIf { it.isNotBlank() } else null
+            }.getOrNull()
+        if (type == "GROUP" && groupId != null &&
+            (!FynxConversationPreferences.groupNotifications(this, groupId) ||
+                FynxConversationPreferences.groupMuted(this, groupId))) return
+        val chatUsername = if (type == "MESSAGE") {
+            data["targetId"]?.trim()?.takeIf { it.isNotBlank() }
+                ?: runCatching { Uri.parse(route).pathSegments.lastOrNull()?.takeIf { it.isNotBlank() } }.getOrNull()
+        } else null
+        val notificationBody = if (type == "MESSAGE" && chatUsername != null &&
+            !FynxConversationPreferences.chatMessagePreviews(this, chatUsername)) {
+            "You have a new message."
+        } else body
+        if (type == "MESSAGE" && chatUsername != null &&
+            !FynxConversationPreferences.chatNotifications(this, chatUsername)) return
+
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
         val safeRoute = runCatching { Uri.parse(route) }.getOrNull() ?: Uri.parse("fynx://home")
@@ -48,7 +67,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             channelId = channel,
             id = stableHash,
             title = title,
-            message = body,
+            message = notificationBody,
             stableKey = notificationId,
             contentIntent = pendingIntent
         )

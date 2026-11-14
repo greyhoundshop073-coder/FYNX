@@ -19,10 +19,14 @@ assert.match(backend, /fun saveAccessToken\(context: Context, token: String\?\)/
   "backend client must expose the secure token persistence boundary");
 assert.match(backend, /FynxSecureTokenStore\.save\(context, token\)/,
   "access tokens must be saved through encrypted storage");
-assert.match(backend, /if \(requiresAuthentication\) accessToken\(context\)\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
-  "protected API requests must attach the stored bearer token");
-assert.match(backend, /if \(requiresAuthentication && !accessToken\(context\)\.isNullOrBlank\(\)\) FynxAuthStore\.clear\(context\)/,
-  "an unauthorized request clears only a server token that was actually present");
+assert.match(backend, /val requestToken = if \(useRequestTokenOverride\) requestTokenOverride else if \(isPublicAuthPath\(path\)\) null else accessToken\(context\)/,
+  "protected API requests must snapshot the initiating account token before asynchronous dispatch");
+assert.match(backend, /requestToken\?\.let \{ setRequestProperty\("Authorization", "Bearer \$it"\) \}/,
+  "protected API requests must attach the captured bearer token, not a later account session");
+assert.match(backend, /if \(shouldClearRejectedAccessToken\(requestToken, accessToken\(context\)\)\) FynxAuthStore\.clear\(context\)/,
+  "an unauthorized response must not clear a newer account token");
+assert.match(backend, /internal fun shouldClearRejectedAccessToken\(rejectedToken: String\?, currentToken: String\?\): Boolean =\s*!rejectedToken\.isNullOrBlank\(\) && rejectedToken == currentToken/,
+  "only the exact nonblank token rejected by the server may clear the session");
 assert.match(backend, /private fun isPublicAuthPath\(path: String\): Boolean =\s*path == "\/health" \|\|\s*path == "\/ready"/,
   "health and readiness probes must remain public so they measure backend reachability, not login state");
 assert.ok(authUi.indexOf("FynxAuthStore.saveAccount(context, account.displayName") < authUi.indexOf("FynxBackendClient.saveAccessToken(context, account.token)"),
