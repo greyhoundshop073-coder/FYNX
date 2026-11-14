@@ -76,6 +76,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+
+/**
+ * Merge an authenticated server page without reintroducing cached group history
+ * that the current member is no longer authorized to see. Only older pages loaded
+ * successfully in this signed-in session are retained; unsent local messages remain.
+ */
+internal fun mergeGroupMessageRefresh(
+    existing: List<ChatMessage>,
+    latestRemote: List<ChatMessage>,
+    authorizedOlderMessageIds: Set<String>
+): List<ChatMessage> {
+    val refreshedIds = latestRemote.asSequence().map { it.id }.toSet()
+    val retained = existing.filter {
+        it.id !in refreshedIds && (it.id in authorizedOlderMessageIds || !it.delivered)
+    }
+    return (retained + latestRemote).distinctBy { it.id }.sortedBy { it.timestamp }
+}
+
 private fun normalizedFynxGroupUsername(username: String): String =
     username.trim().removePrefix("@").trim().lowercase()
 
@@ -327,6 +345,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var groupLoadComplete by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     val groupTitle = currentGroup?.name ?: "Group"
     var messages by remember(groupId, groupAccountKey) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var authorizedOlderGroupMessageIds by remember(groupId, groupAccountKey) { mutableStateOf<Set<String>>(emptySet()) }
     var hasMoreGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     var loadingOlderGroupHistory by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     LaunchedEffect(groupId, groupAccountKey) {
@@ -340,10 +359,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
         if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         currentGroup = local.first
-        messages = local.second
+        // Cached delivered history is not trusted until the server authorizes it for
+        // this membership. Keep only the local unsent outbox while offline/reconnecting.
+        messages = local.second.filterNot { it.delivered }
         groupLoadComplete = true
     }
     val latestMessages by rememberUpdatedState(messages)
+    val latestAuthorizedOlderGroupMessageIds by rememberUpdatedState(authorizedOlderGroupMessageIds)
     var showMembers by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
@@ -720,11 +742,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 if (message.id.isBlank()) message.copy(id = "group-remote-" + index + "-" + message.timestamp) else message
                             }
                         }
-                        val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()
-                        val pendingLocal = messages.filter { it.id !in remoteIds }
-                        val mergedMessages = (remoteMessages + pendingLocal)
-                            .distinctBy { it.id }
-                            .sortedBy { it.timestamp }
+                        val mergedMessages = mergeGroupMessageRefresh(
+                            messages,
+                            remoteMessages,
+                            latestAuthorizedOlderGroupMessageIds
+                        )
                         messages = mergedMessages
                         val incomingIds = remoteMessages.filter { !it.fromMe }.map { it.id }.takeLast(100)
                         if (incomingIds.isNotEmpty()) {
@@ -796,9 +818,11 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                 FynxBackendClient.baseUrl(context)
                             )
                             val isNewIncoming = !incoming.fromMe && latestMessages.none { it.id == incoming.id }
-                            val merged = (latestMessages.filterNot { it.id == incoming.id } + incoming)
-                                .distinctBy { it.id }
-                                .sortedBy { it.timestamp }
+                            val merged = mergeGroupMessageRefresh(
+                                latestMessages,
+                                listOf(incoming),
+                                latestAuthorizedOlderGroupMessageIds
+                            )
                             if (!isCurrentGroupAccount(groupAccountKey)) return@launch
                             messages = merged
                             withContext(Dispatchers.IO) {
@@ -1061,7 +1085,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     }).onSuccess { page ->
                                         if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
                                         val older = page.messages.map { FynxGroupRemoteClient.toChatMessage(it,currentUsername,FynxBackendClient.baseUrl(context)) }
-                                        messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                        val nowAuthorized = latestAuthorizedOlderGroupMessageIds + older.map { it.id }
+                                        authorizedOlderGroupMessageIds = nowAuthorized
+                                        messages = mergeGroupMessageRefresh(messages, older, nowAuthorized)
                                         hasMoreGroupHistory = page.hasMore
                                         val incomingOlderIds = older.filter { !it.fromMe }.map { it.id }.takeLast(100)
                                         if (incomingOlderIds.isNotEmpty()) {
