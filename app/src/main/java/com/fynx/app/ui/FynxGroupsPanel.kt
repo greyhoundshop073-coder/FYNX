@@ -928,18 +928,13 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
-                        if (!groupLoadComplete) "Loading group conversation…" else "No messages here yet",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-                if (groupLoadComplete) {
-                    OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
-                        enabled = false,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Message…") },
-                        singleLine = true
+                        if (!groupLoadComplete) {
+                            "Loading group conversation…"
+                        } else {
+                            "This group is unavailable to this account. Return to Groups and check your membership."
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
