@@ -96,6 +96,7 @@ export function registerGroupRoutes({ app }) {
       const users=await findUsers(req.body?.members); const requested=new Map(users.map(u=>[String(u.username).toLowerCase(),u])); requested.set(String(currentUser.username).toLowerCase(),{...currentUser,requestedRole:groupAccess?.role||'ADMIN'});
       await client.query('BEGIN');
       const existing=(await client.query(`SELECT id,owner_id,group_photo_media_id FROM fynx_groups WHERE id=$1 FOR UPDATE`,[groupId])).rows[0];
+      if(!existing && requested.size>500){await client.query('ROLLBACK');return res.status(409).json({error:'group member limit reached',code:'GROUP_MEMBER_LIMIT_REACHED'});}
       let groupOwner=currentUser;
       if(existing){
         groupOwner=(await client.query(`SELECT id,username FROM users WHERE id=$1 LIMIT 1`,[existing.owner_id])).rows[0] || currentUser;
