@@ -1573,6 +1573,16 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not dialog:
         FAILURES.append("The dedicated Groups manager did not open its real create-group dialog.")
         return ""
+    screenshot("chat-groups-create-dialog.png")
+    # Invalid input must not enable Create. This also proves the test is looking
+    # at the real modal instead of accepting the manager's decorative plus icon.
+    if not find_control(dialog, ["Create"], exact_only=True):
+        FAILURES.append("The actual group dialog did not expose its Create action.")
+        return ""
+    if control_is_enabled(dialog, ["Create"]):
+        FAILURES.append("The Create action was enabled while both required group fields were empty.")
+        return ""
+    report.append("- PASS: the blank group form keeps Create disabled until valid name and description are supplied.")
     name_field = find_control(dialog, ["Group name input"], exact_only=True)
     description_field = find_control(dialog, ["Description input"], exact_only=True)
     if not name_field or not description_field:
@@ -1604,6 +1614,9 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not create_button:
         FAILURES.append("The real Create button remained unavailable after valid group details were entered.")
         return ""
+    if not control_is_enabled(ready, ["Create"]):
+        FAILURES.append("The Create action remained disabled after both valid group fields were entered.")
+        return ""
     _, create_x, create_y = create_button
     run("adb", "shell", "input", "tap", str(create_x), str(create_y))
     deadline = time.monotonic() + 15.0
@@ -1616,6 +1629,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not find_control(latest, [f"Open group {group_name}"]):
         FAILURES.append("The app did not show the newly created group in its Groups list.")
         return ""
+    screenshot("chat-groups-created-fixture.png")
     if not local_group_fixture_is_persisted(group_name):
         FAILURES.append("The created group was not found in the signed-in emulator account's persisted FynxGroupsStore.")
         return ""
@@ -3595,7 +3609,14 @@ if CHAT_GROUPS_VISUALS_ONLY:
             finally:
                 set_emulator_network_enabled(True)
 
-    required_images = ["authenticated-chat.png", "private-chat-inside.png", "authenticated-groups.png", "group-chat-inside.png"]
+    required_images = [
+        "authenticated-chat.png",
+        "private-chat-inside.png",
+        "authenticated-groups.png",
+        "chat-groups-create-dialog.png",
+        "chat-groups-created-fixture.png",
+        "group-chat-inside.png",
+    ]
     missing = [name for name in required_images if not (ROOT/name).is_file() or (ROOT/name).stat().st_size < 12000]
     if missing:
         FAILURES.append("Chat/Groups screenshot evidence is missing or undersized: " + ", ".join(missing))
