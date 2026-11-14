@@ -4,6 +4,7 @@ package com.fynx.app.ui
  * Isolated instrumentation data. This file lives only in src/androidTest:
  * it is not packaged in the app, sent to the backend, or written to app storage.
  * Every synthetic transaction and review in this object is explicitly test-only.
+ * This instrumentation-only fixture must never be enabled from release app navigation.
  */
 internal object FynxMarketplaceIsolatedTestFixtures {
     const val banner = "FYNX TEST DATA — ISOLATED INSTRUMENTATION ONLY"
