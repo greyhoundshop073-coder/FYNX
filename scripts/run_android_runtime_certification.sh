@@ -45,7 +45,17 @@ fi
 
 if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
   echo "::notice::Running Chat and Groups-only UI certification; unrelated Marketplace/Wallet checks are excluded."
-  FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    echo "::error::Android instrumentation failed; Chat/Groups navigation was not attempted."
+    exit "${TEST_EXIT}"
+  fi
+  if [ -n "${FYNX_E2E_USERNAME:-}" ] && [ -n "${FYNX_E2E_PASSWORD:-}" ] && node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\\/+$/, ""); try { if(!base) throw new Error("backend URL missing"); const response=await fetch(base+"/health",{headers:{Accept:"application/json"},signal:AbortSignal.timeout(8000)}); const body=await response.json().catch(()=>null); if(!response.ok||body?.ok!==true||body?.service!=="fynx-backend"||body?.database!=="ready") process.exitCode=1; } catch { process.exitCode=1; }'; then
+    echo "::notice::Capturing Chat and Groups with the configured server-authenticated CI test account."
+    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  else
+    echo "::notice::Backend or E2E credentials unavailable; using the explicit debug-local UI entry. No server behavior is certified."
+    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  fi
   NAV_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "${NAV_EXIT}" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${NAV_EXIT}"; fi
