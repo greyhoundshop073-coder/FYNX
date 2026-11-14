@@ -30,6 +30,7 @@ composer=read('app/src/main/java/com/fynx/app/ui/FynxStatusComposerPanel.kt'); m
 timeline=read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt'); hub=read('app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt'); stories=read('app/src/main/java/com/fynx/app/ui/StoriesPanel.kt')
 share=read('app/src/main/java/com/fynx/app/ui/FynxShare.kt'); deeplink=read('app/src/main/java/com/fynx/app/ui/FynxDeepLink.kt'); marketplace=read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt'); marketplace_detail=read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceDetailComponents.kt')
 remote_media=read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt'); camera=read('app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt')
+runtime_navigation=read('scripts/verify_authenticated_runtime_navigation.py')
 media_privacy=read('backend/mediaPrivacy.js')
 
 require('backend Status schema + expiry','CREATE TABLE IF NOT EXISTS statuses' in server and 'expires_at TIMESTAMPTZ NOT NULL' in server)
@@ -97,6 +98,8 @@ require('mature creation controls fit small screens','LazyRow(' in mature and 'T
 require('mature combined Photo/Video gallery mode','FynxStatusType.PHOTO' in mature and 'FynxStatusType.VIDEO' in mature and 'val pickMedia = rememberLauncherForActivityResult' in mature and 'pickMedia.launch(arrayOf("image/*", "video/*"))' in mature)
 require('mature media picker distinguishes photo and video','mime.startsWith("video/")' in mature and 'FynxStatusType.VIDEO' in mature and 'FynxStatusType.PHOTO' in mature)
 require('mature Voice mode','FynxStatusType.VOICE' in mature and 'beginMatureVoiceRecording' in mature and 'stopMatureVoiceRecording' in mature)
+require('mature Voice exposes a clear, separately actionable recording control','Text("Start recording")' in mature and 'contentDescription = "Start voice recording"' in mature and 'micPermission.launch(Manifest.permission.RECORD_AUDIO)' in mature)
+require('debug Status runtime exercises Voice recording, caption, preview playback and discard without publishing', all(token in runtime_navigation for token in ['status-voice-composer','status-voice-record-start','status-voice-stop','status-voice-preview-play','status-voice-discard','authenticated-status-voice-recording.png','authenticated-status-voice-preview.png','Never tap Send']))
 require('mature audience control','FynxStatusAudience.EVERYONE' in mature and 'FynxStatusAudience.FRIENDS' in mature and 'FynxStatusAudience.ONLY_ME' in mature)
 require('mature visible Send action','Icons.Default.Send' in mature and 'Text(if (publishing) "Sending…" else "Send")' in mature)
 require('mature Send is not a field trailing action','trailingIcon' not in mature)
