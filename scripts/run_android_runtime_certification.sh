@@ -54,7 +54,7 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
     FYNX_CHAT_GROUPS_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   else
     echo "::notice::Backend or E2E credentials unavailable; seeding an isolated local private-chat fixture before the explicit debug-local UI capture. No server behavior is certified."
-    ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest --no-daemon --build-cache
+    ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest -Pandroid.testInstrumentationRunnerArguments.username="${FYNX_E2E_USERNAME:-marketplace_visual_check}" --no-daemon --build-cache
     FIXTURE_EXIT=$?
     if [ "${FIXTURE_EXIT}" -ne 0 ]; then
       echo "::error::The isolated local private-chat fixture could not be seeded; refusing to count a self-chat or empty conversation as private-chat runtime evidence."
