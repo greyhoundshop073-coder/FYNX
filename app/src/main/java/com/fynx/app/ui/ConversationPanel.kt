@@ -943,6 +943,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         loadPrivateSearchPage(query)
     }
 
+    LaunchedEffect(chat.username, searchOpen, searchQuery) { selectedMessageIds = emptySet() }
+
     val localSearchMatches = if (searchQuery.isBlank()) emptyList() else messages.filter { it.text.contains(searchQuery.trim(), ignoreCase = true) }
     val visibleMessages = when {
         searchQuery.isBlank() -> messages
@@ -1296,7 +1298,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     }
                                     .combinedClickable(
                                         onClick = {
-                                            if (selectedMessageIds.isNotEmpty()) toggleMessageSelection(message.id)
+                                            if (!message.deleted && selectedMessageIds.isNotEmpty()) toggleMessageSelection(message.id)
                                             else if (!message.deleted) menuMessageId = message.id
                                         },
                                         onLongClick = { if (!message.deleted) toggleMessageSelection(message.id) }
