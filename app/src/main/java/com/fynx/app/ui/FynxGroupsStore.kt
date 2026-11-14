@@ -43,7 +43,7 @@ object FynxGroupsStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pending = prefs.getStringSet(pendingSyncKey(context, accountKey), emptySet()).orEmpty().toMutableSet()
         pending.add(groupId)
-        prefs.edit().putStringSet(pendingSyncKey(context), pending).apply()
+        prefs.edit().putStringSet(pendingSyncKey(context, accountKey), pending).apply()
     }
 
     @Synchronized
@@ -80,20 +80,24 @@ object FynxGroupsStore {
         return true
     }
 
-    fun updateGroup(context: Context, updated: FynxGroup): Boolean {
+    fun updateGroup(context: Context, updated: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (FynxGroupsBatch1.validate(updated).isNotEmpty()) return false
-        val groups = load(context)
+        val groups = load(context, accountKey)
         if (groups.none { it.id == updated.id }) return false
-        save(context, groups.map { if (it.id == updated.id) updated else it })
+        save(context, groups.map { if (it.id == updated.id) updated else it }, accountKey)
         return true
     }
 
-    fun removeGroup(context: Context, groupId: String): Boolean {
+    fun removeGroup(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (groupId.isBlank()) return false
-        val groups = load(context)
+        val groups = load(context, accountKey)
         if (groups.none { it.id == groupId }) return false
-        save(context, groups.filterNot { it.id == groupId })
-        FynxChatStore.clear(context, "group_$groupId")
+        save(context, groups.filterNot { it.id == groupId }, accountKey)
+        // The message store resolves its own account namespace; never clear the new
+        // account's cache if a delayed removal completes after a session switch.
+        if (FynxAuthStore.accountStorageKey(context) == accountKey) {
+            FynxChatStore.clear(context, "group_$groupId")
+        }
         return true
     }
 
