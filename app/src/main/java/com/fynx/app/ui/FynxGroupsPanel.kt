@@ -61,6 +61,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -155,7 +157,12 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(visible, key = { it.id }) { group ->
-                    Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { onOpenGroup(group.id) },
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Open group ${group.name}"
+                        }
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(48.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                                 if (group.groupPhotoMediaId.isNullOrBlank()) {

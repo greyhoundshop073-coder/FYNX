@@ -394,6 +394,62 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             return ""
     return after
 
+
+def tap_first_group_if_present(xml_text: str, name: str = "group-chat-entry") -> str:
+    """Open only a visible group card with FynxGroupsPanel's semantic identity."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    parents = {}
+    for parent in root.iter("node"):
+        for child in list(parent):
+            parents[id(child)] = parent
+
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        description = (node.attrib.get("content-desc") or "").strip()
+        if not description.startswith("Open group "):
+            continue
+        target = node
+        current = node
+        while current is not None:
+            if current.attrib.get("clickable", "false").lower() == "true" and _center(current):
+                target = current
+                break
+            current = parents.get(id(current))
+        if target is node and target.attrib.get("clickable", "false").lower() != "true":
+            continue
+        center = _center(target)
+        if center:
+            candidates.append((center[1], target, description))
+    if not candidates:
+        return ""
+    _, target, description = min(candidates, key=lambda item: item[0])
+    x, y = _center(target)
+    run("adb", "logcat", "-c")
+    run("adb", "shell", "input", "tap", str(x), str(y))
+    deadline = time.monotonic() + 20.0
+    after = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        after = dump_ui(f"{name}-after-open.xml")
+        if after and (
+            find_control(after, ["Message composer", "Chat message composer area", "Message…", "Message..."])
+            or find_control(after, ["Messaging is restricted", "No messages here yet"])
+        ):
+            return after
+    if not after:
+        FAILURES.append(name + " caused the app UI to disappear after selecting " + description)
+    else:
+        FAILURES.append(name + " selected " + description + " but the group conversation markers were absent; visible markers: " + visible_marker_summary(after))
+    return ""
+
+
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
@@ -3271,7 +3327,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         screenshot("authenticated-groups.png")
         (ROOT/"authenticated-groups.xml").write_text(groups_xml+"\n", encoding="utf-8")
         report.append("- PASS: captured the actual Groups list surface from the installed APK.")
-        group_xml = tap_first_real_chat_or_group_if_present(groups_xml, "group-chat-entry")
+        group_xml = tap_first_group_if_present(groups_xml, "group-chat-entry")
         if not group_xml:
             # No real group exists in the local test account. Open the production
             # Group ConversationPanel route with a deterministic, non-persisted ID.
@@ -4701,7 +4757,7 @@ if not FAILURES:
                     groups_tab=tap_control(groups_xml,["Groups"],"chat-groups-tab",["New group"])
                     if groups_tab:
                         clear_runtime_log()
-                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                        group_after=tap_first_group_if_present(groups_tab,"group-chat-entry")
                         if not group_after:
                             create_control=find_control(groups_tab,["New group","Create group"])
                             if create_control:
@@ -4718,7 +4774,7 @@ if not FAILURES:
                                         _,cx,cy=create_btn
                                         run("adb","shell","input","tap",str(cx),str(cy)); time.sleep(2.0)
                                         groups_tab=dump_ui("chat-groups-after-ci-create.xml")
-                                        group_after=tap_first_real_chat_or_group_if_present(groups_tab,"group-chat-entry")
+                                        group_after=tap_first_group_if_present(groups_tab,"group-chat-entry")
                         group_id=first_local_group_id()
                         alive, crashlog = capture_runtime_log("group-chat-process.log")
                         screenshot("group-chat-after-open.png")
