@@ -819,9 +819,28 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             }
                         }.onFailure { if (showError) syncMessage = "Your group messages could not be saved locally. Please try again." }
                     }
-                    .onFailure {
+                    .onFailure { error ->
                         if (!isCurrentGroupAccount(groupAccountKey)) return@onFailure
-                        if (showError && FynxBackendClient.hasAccessToken(context)) {
+                        if (FynxBackendClient.isAccessDeniedOrMissing(error)) {
+                            withContext(Dispatchers.IO) {
+                                if (isCurrentGroupAccount(groupAccountKey)) {
+                                    FynxChatStore.clear(context, "group_$groupId")
+                                    FynxGroupsStore.removeGroup(
+                                        context,
+                                        groupId,
+                                        groupAccountKey.takeUnless { it == "signed_out" }
+                                    )
+                                }
+                            }
+                            if (!isCurrentGroupAccount(groupAccountKey)) return@onFailure
+                            messages = emptyList()
+                            android.widget.Toast.makeText(
+                                context,
+                                "You no longer have access to this group.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                            onBack()
+                        } else if (showError && FynxBackendClient.hasAccessToken(context)) {
                             syncMessage = "Group messages could not sync yet. Check your connection and retry."
                         }
                     }
