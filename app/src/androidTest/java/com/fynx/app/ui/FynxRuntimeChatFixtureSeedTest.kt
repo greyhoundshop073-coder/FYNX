@@ -21,7 +21,14 @@ class FynxRuntimeChatFixtureSeedTest {
     @Test
     fun seedDisposablePrivateConversationForLocalRuntimeCapture() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val username = "marketplace_visual_check"
+        // The focused runtime shell passes the same username the UI login will use.
+        // This matters when CI has a username but deliberately has no backend password.
+        val username = InstrumentationRegistry.getArguments()
+            .getString("username")
+            ?.trim()
+            ?.removePrefix("@")
+            ?.takeIf { it.isNotBlank() }
+            ?: "marketplace_visual_check"
         val peerUsername = "fynx_runtime_peer"
         val now = System.currentTimeMillis()
 
