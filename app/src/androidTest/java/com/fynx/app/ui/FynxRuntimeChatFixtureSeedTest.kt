@@ -81,5 +81,30 @@ class FynxRuntimeChatFixtureSeedTest {
 
         assertEquals(listOf(peerMessage, ownerReply), FynxChatStore.load(context, peerUsername))
         assertEquals(peerUsername, FynxChatStore.loadPreviews(context).firstOrNull()?.username)
+
+        // save()/savePreview() intentionally use apply() for normal UI writes.
+        // This fixture is consumed by a separately launched app process immediately
+        // after instrumentation exits, so wait for the queued disk writes to finish
+        // and assert the exact account-scoped records from the persisted preference map.
+        val chatPreferences = context.getSharedPreferences("fynx_chat_store", Context.MODE_PRIVATE)
+        assertTrue(
+            "The private-chat fixture must be durably flushed before the UI process starts",
+            chatPreferences.edit().commit()
+        )
+        val normalizedUsername = username.trim().lowercase()
+        val persistedHistory = chatPreferences.getString(
+            "chat_${normalizedUsername}_${peerUsername}", null
+        ).orEmpty()
+        val persistedPreviews = chatPreferences.getString(
+            "chat_previews_${normalizedUsername}", null
+        ).orEmpty()
+        assertTrue(
+            "The exact account-scoped private history must be present on disk",
+            persistedHistory.contains(peerMessage.text) && persistedHistory.contains(ownerReply.text)
+        )
+        assertTrue(
+            "The exact account-scoped peer preview must be present on disk",
+            persistedPreviews.contains(peerUsername) && persistedPreviews.contains("FYNX Runtime Peer")
+        )
     }
 }
