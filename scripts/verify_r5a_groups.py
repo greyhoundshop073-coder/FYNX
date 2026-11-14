@@ -24,6 +24,7 @@ active_group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt'
 app_navigation = read('app/src/main/java/com/fynx/app/ui/FynxApp.kt')
 group_remote_client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
 group_settings_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt')
+remote_media = read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt')
 group_social = read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt')
 conversation_preferences = read('app/src/main/java/com/fynx/app/ui/FynxConversationPreferences.kt')
 firebase_messaging = read('app/src/main/java/com/fynx/app/ui/FynxFirebaseMessagingService.kt')
@@ -83,6 +84,7 @@ check('group event RSVP retry rechecks account identity after the server respons
 check('group content response is cached only for the account that initiated the request', 'FYNX account changed while group content was loading.' in group_remote_client and 'if(FynxAuthStore.accountStorageKey(context)!=account)throw' in group_remote_client)
 
 
+check('received-media gallery setting is disabled on Android versions before scoped MediaStore support', 'Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q' in group_settings_panel and 'Automatic gallery saving requires Android 10 or newer.' in group_settings_panel and 'Build.VERSION.SDK_INT < Build.VERSION_CODES.Q' in remote_media)
 check('new-member history visibility is an admin-controlled server policy', 'show_history_to_new_members' in membership and 'showHistoryToNewMembers' in group_remote_client and 'Show previous messages to new members' in group_settings_panel and 'isAdmin&&FynxBackendClient.hasAccessToken(context)' in group_settings_panel)
 check('group message idempotency rejects cross-sender, changed-payload and hidden-history collisions', 'ON CONFLICT(id) DO NOTHING RETURNING id' in group and 'existingMessage.sender_id' in group and 'samePayload' in group and 'visibleForMember' in group and "message id conflict" in group)
 check('new-member history cutoff is enforced for message pages, read receipts, replies, actions and media attachments', 'const memberHistory = async' in group and 'm.created_at >= $6' in group and 'message.created_at >= $4' in group and 'm.created_at >= gm.created_at' in group and 'parent.created_at >= gm.created_at' in group and 'gm.created_at >= gmem.created_at' in server)
