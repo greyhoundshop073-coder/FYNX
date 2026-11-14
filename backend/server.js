@@ -796,6 +796,62 @@ function rowToMessage(row) {
   return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), messageType: row.message_type || 'text', messagePayload: row.message_payload || null, reaction: row.reaction || null, pinned: Boolean(row.pinned) };
 }
 
+app.get("/api/messages/recent", auth, async (req, res) => {
+  try {
+    // This endpoint feeds the signed-in account's Chat list after a cold start or reinstall.
+    // Keep it ahead of /api/messages/:username so "recent" is never treated as a username.
+    res.set("Cache-Control", "private, no-store");
+    const result = await pool.query(`
+      WITH latest AS (
+        SELECT DISTINCT ON (CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END)
+          m.id,m.sender_id,m.recipient_id,m.text,m.media_type,m.deleted,m.created_at
+        FROM messages m
+        WHERE m.sender_id=$1 OR m.recipient_id=$1
+        ORDER BY CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END,
+          m.created_at DESC,m.id DESC
+      )
+      SELECT
+        u.username,
+        u.display_name,
+        u.profile_photo_media_id,
+        CASE
+          WHEN latest.deleted THEN 'Message deleted'
+          WHEN COALESCE(NULLIF(latest.text,''),'') <> '' THEN
+            CASE WHEN latest.sender_id=$1 THEN 'You: ' ELSE '' END || latest.text
+          WHEN latest.media_type='image' THEN 'Photo'
+          WHEN latest.media_type IN ('video','video_note') THEN 'Video'
+          WHEN latest.media_type='audio' THEN 'Voice message'
+          WHEN latest.media_type='document' THEN 'File'
+          ELSE 'Message'
+        END AS last_message,
+        EXTRACT(EPOCH FROM latest.created_at) * 1000 AS last_message_timestamp,
+        (SELECT COUNT(*) FROM messages unread
+          WHERE unread.sender_id=u.id AND unread.recipient_id=$1
+            AND unread.read_at IS NULL AND unread.deleted=FALSE) AS unread_count
+      FROM latest
+      JOIN users u ON u.id=CASE WHEN latest.sender_id=$1 THEN latest.recipient_id ELSE latest.sender_id END
+      WHERE NOT EXISTS (
+        SELECT 1 FROM blocks b
+        WHERE (b.blocker_id=$1 AND b.blocked_id=u.id)
+           OR (b.blocker_id=u.id AND b.blocked_id=$1)
+      )
+      ORDER BY latest.created_at DESC,latest.id DESC
+      LIMIT 200
+    `, [req.user.sub]);
+    return res.json({ conversations: result.rows.map(row => ({
+      username: row.username,
+      displayName: row.display_name || row.username,
+      profilePhotoMediaId: row.profile_photo_media_id || null,
+      lastMessage: row.last_message || "Message",
+      lastMessageTimestamp: Number(row.last_message_timestamp),
+      unreadCount: Number(row.unread_count || 0)
+    })) });
+  } catch (error) {
+    console.error("recent message conversations", error);
+    return res.status(500).json({ error: "recent conversations failed" });
+  }
+});
+
 app.get("/api/messages/:username", auth, async (req, res) => {
   try {
     const other = await findUserByUsername(req.params.username.trim().toLowerCase());
