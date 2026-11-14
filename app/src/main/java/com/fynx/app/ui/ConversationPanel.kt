@@ -1709,7 +1709,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             Modifier
                                 .size(46.dp)
                                 .clip(androidx.compose.foundation.shape.CircleShape)
-                                .background(if (voiceMode) Color(0xFF7C3AED) else glassPalette.outgoingStart)
+                                .background(if (voiceMode) MaterialTheme.colorScheme.primary else glassPalette.outgoingStart)
                                 .semantics {
                                     contentDescription = when {
                                         !voiceMode -> "Send message"
