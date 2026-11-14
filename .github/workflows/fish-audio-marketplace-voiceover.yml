@@ -1,0 +1,61 @@
+name: FYNX Marketplace Voiceover
+
+on:
+  push:
+    branches:
+      - main
+      - feature/fish-audio-marketplace-voiceover
+    paths:
+      - ".github/workflows/fish-audio-marketplace-voiceover.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-voiceover:
+    name: Generate marketplace narration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify API secret is available
+        env:
+          FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
+        run: |
+          if [ -z "$FISH_API_KEY" ]; then
+            echo "::error::FISH_API_KEY Actions secret is missing."
+            exit 1
+          fi
+
+      - name: Generate MP3 with Fish Audio S2.1 Pro Free
+        env:
+          FISH_API_KEY: ${{ secrets.FISH_API_KEY }}
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --location \
+            --retry 2 --retry-all-errors --max-time 180 \
+            --request POST "https://api.fish.audio/v1/tts" \
+            --header "Authorization: Bearer ${FISH_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --header "model: s2.1-pro-free" \
+            --data-binary @- \
+            --output FYNX-Marketplace-Voiceover.mp3 <<'JSON'
+          {
+            "text": "Every great business deserves to be seen! That's why there's F. Y. N. X.! Discover amazing products, meet trusted sellers, showcase what you offer, and connect with customers who are looking for exactly what you sell. Whatever your business, your next opportunity could be just one connection away. F. Y. N. X. — let the world discover you!",
+            "reference_id": "933563129e564b19a115bedd57b7406a",
+            "format": "mp3"
+          }
+          JSON
+          test -s FYNX-Marketplace-Voiceover.mp3
+          if ! file FYNX-Marketplace-Voiceover.mp3 | grep -qi 'audio\|mpeg\|mp3'; then
+            echo "::error::Fish Audio response is not recognized as an MP3 file."
+            exit 1
+          fi
+          ls -lh FYNX-Marketplace-Voiceover.mp3
+
+      - name: Upload downloadable MP3
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-Marketplace-Voiceover
+          path: FYNX-Marketplace-Voiceover.mp3
+          if-no-files-found: error
+          retention-days: 14
