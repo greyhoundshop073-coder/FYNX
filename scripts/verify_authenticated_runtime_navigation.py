@@ -3679,7 +3679,8 @@ def capture_wallet_from_features(prefix:str):
             wallet_settled=True
             break
 
-    wallet_opened=(wallet_shell_opened or offline_wallet_ui_ready) and wallet_settled
+    wallet_opened=wallet_shell_opened and wallet_settled
+    offline_wallet_opened=offline_wallet_ui_ready and wallet_settled
     authenticated_wallet_errors=[]
     if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
         authenticated_wallet_error_markers=(
@@ -3698,10 +3699,11 @@ def capture_wallet_from_features(prefix:str):
     if wallet_opened:
         screenshot("authenticated-wallet.png")
         (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
-        if offline_wallet_ui_ready:
-            result_message="Captured the real offline FYNX Wallet shell, explicit unavailable-balance/server state and security controls; live ledger and funding remain blocked until backend restoration."
-        else:
-            result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
+        result_message="Captured the actual FYNX Wallet after summary and activity loading settled."
+    elif offline_wallet_opened:
+        screenshot("authenticated-wallet.png")
+        (ROOT/"authenticated-wallet.xml").write_text(wallet_xml+chr(10),encoding="utf-8")
+        result_message="Captured the real offline FYNX Wallet shell, explicit unavailable-balance/server state and security controls; live ledger and funding remain blocked until backend restoration."
     else:
         screenshot(prefix+"-wallet-destination-incomplete.png")
         (ROOT/(prefix+"-wallet-destination-incomplete.xml")).write_text(
@@ -3712,8 +3714,8 @@ def capture_wallet_from_features(prefix:str):
         else:
             result_message="Wallet result opened, but its title and visible balance-detail cards did not appear."
 
-    action_screens_captured = bool(offline_wallet_ui_ready and wallet_settled)
-    if wallet_opened and not offline_wallet_ui_ready:
+    action_screens_captured = False
+    if wallet_opened:
         # Capture the real Add Money screen and provider-generated account state.
         add_money_xml = tap_control(
             wallet_xml, ["Add money"], "wallet-add-money",
@@ -3778,10 +3780,12 @@ def capture_wallet_from_features(prefix:str):
     home_after=restore_home_after_restart(prefix+"-return-home")
     if not home_after or find_control(home_after, ["FYNX Features"]):
         return False, result_message+" Home could not be restored after Wallet capture."
-    if not wallet_opened:
+    if not wallet_opened and not offline_wallet_opened:
         return False, result_message
-    if not action_screens_captured:
+    if not action_screens_captured and not offline_wallet_opened:
         return False, result_message+" Add Money, bank-transfer and Withdraw screenshots were not all captured."
+    if offline_wallet_opened:
+        return True, result_message+" No payment or funding action was attempted in local-only mode."
     return True, result_message+" Also captured the real Add Money, bank-transfer readiness and Withdraw screens."
 
 
