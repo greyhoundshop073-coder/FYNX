@@ -168,6 +168,57 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var uploadedAttachmentCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
     var pendingVoiceRetry by remember(chat.username) { mutableStateOf<Pair<File, Long>?>(null) }
     var uploadedVoiceCache by remember(chat.username) { mutableStateOf<Pair<String, FynxProductionMessaging.RemoteMedia>?>(null) }
+    var hasPendingOutbox by remember(chat.username) { mutableStateOf(false) }
+    suspend fun restorePendingOutboxMessages() {
+        val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
+        val restored = withContext(Dispatchers.IO) {
+            val stored = FynxChatStore.load(context, chat.username, fallbackMessage)
+            val queued = FynxOfflineOutbox.load(context).filter {
+                it.recipient.trim().removePrefix("@").equals(normalizedRecipient, ignoreCase = true)
+            }
+            val pendingBubbles = queued.asSequence()
+                .filter { it.sentMessageId.isNullOrBlank() }
+                .map { item ->
+                    val label = when (item.messageType) {
+                        "gif" -> "GIF"
+                        "sticker" -> "Sticker"
+                        else -> when (item.mediaType) {
+                            "image" -> "Photo"
+                            "video", "video_note" -> "Video"
+                            "audio" -> "Voice message"
+                            else -> "Attachment"
+                        }
+                    }
+                    ChatMessage(
+                        text = item.text,
+                        fromMe = true,
+                        id = item.id,
+                        timestamp = item.createdAt,
+                        delivered = false,
+                        read = false,
+                        replyToId = item.replyToId,
+                        attachmentType = item.mediaType,
+                        voiceDurationMs = item.voiceDurationMs,
+                        messageType = item.messageType,
+                        messagePayload = item.messagePayload + mapOf(
+                            "pendingLocalUpload" to "true",
+                            "pendingLabel" to label
+                        )
+                    )
+                }
+                .toList()
+            (stored + pendingBubbles).distinctBy { it.id }.sortedBy { it.timestamp } to queued.isNotEmpty()
+        }
+        messages = restored.first
+        hasPendingOutbox = restored.second
+    }
+    LaunchedEffect(chat.username) {
+        val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
+        restorePendingOutboxMessages()
+        FynxOfflineOutbox.updates.collect { updatedRecipient ->
+            if (updatedRecipient == normalizedRecipient) restorePendingOutboxMessages()
+        }
+    }
     var typingSent by remember { mutableStateOf(false) }
     var marketplaceContextAttached by remember { mutableStateOf(false) }
     val replySwipeOffsets = remember { mutableStateMapOf<String, Float>() }
@@ -223,9 +274,22 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    FynxInChatSound.play(context)
+                    if (FynxConversationPreferences.chatSounds(context, chat.username)) {
+                        FynxInChatSound.play(context)
+                    }
+                    if (FynxConversationPreferences.chatVibration(context, chat.username)) {
+                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            vibrator?.vibrate(VibrationEffect.createOneShot(35L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                        } else {
+                            @Suppress("DEPRECATION")
+                            vibrator?.vibrate(35L)
+                        }
+                    }
                     realtimeClient.acknowledgeMessage(remote.id)
-                    conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                    if (FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
+                        conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
+                    }
                 }
             },
             onStateChanged = { state ->
@@ -343,7 +407,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     val unread = remoteMessages
                         .filter { it.recipientId == loadedCurrentUserId && !it.read }
                         .map { it.id }
-                    if (unread.isNotEmpty()) {
+                    if (unread.isNotEmpty() && FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
                         // The stable connection effect can connect while history is loading;
                         // send the realtime acknowledgement and retain HTTP as the durable path.
                         realtimeClient.sendRead(unread)
@@ -436,6 +500,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     latest.messageType == "poll" -> "Poll: " + latest.messagePayload["question"].orEmpty()
                     latest.messageType == "sticker" -> "Sticker"
                     latest.messageType == "gif" -> "GIF"
+                    latest.messagePayload["pendingLocalUpload"] == "true" -> (latest.messagePayload["pendingLabel"] ?: "Attachment") + " · waiting to send"
                     latest.voiceUri != null -> "Voice message"
                     latest.attachmentUri != null && latest.text.isBlank() -> when (latest.attachmentType) { "video_note" -> "Video note"; "video" -> "Video"; "audio" -> "Voice message"; else -> "Photo" }
                     else -> latest.text
@@ -487,30 +552,132 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }.onFailure { networkError = "Voice recording could not be resumed. Please try again." }
         }
     }
-    fun retryVoiceMessage() {
-        val pending = pendingVoiceRetry ?: return
+    suspend fun queuePrivateAttachment(
+        sourceUri: Uri,
+        mimeType: String,
+        messageText: String,
+        replyId: String?,
+        mediaType: String,
+        structuredMessageType: String? = null,
+        voiceDurationMs: Long = 0L
+    ): Boolean {
+        val createdAt = System.currentTimeMillis()
+        val localId = "offline-$createdAt-${java.util.UUID.randomUUID()}"
+        val item = FynxOfflineOutbox.Item(
+            id = localId,
+            requestId = java.util.UUID.randomUUID().toString(),
+            recipient = chat.username.trim().removePrefix("@"),
+            text = messageText,
+            replyToId = replyId,
+            mediaId = null,
+            mediaType = mediaType,
+            voiceDurationMs = voiceDurationMs,
+            createdAt = createdAt,
+            messageType = structuredMessageType ?: "text",
+            marketplaceListingId = marketplaceListingId
+        )
+        if (FynxOfflineOutbox.enqueueAttachment(context, item, sourceUri, mimeType) == null) return false
+        val label = when (mediaType) {
+            "image" -> "Photo"
+            "video", "video_note" -> "Video"
+            "audio" -> "Voice message"
+            else -> "Attachment"
+        }
+        val pendingMessage = ChatMessage(
+            text = messageText,
+            fromMe = true,
+            id = localId,
+            timestamp = createdAt,
+            delivered = false,
+            read = false,
+            replyToId = replyId,
+            attachmentType = mediaType,
+            voiceDurationMs = voiceDurationMs,
+            messageType = structuredMessageType ?: "text",
+            messagePayload = mapOf("pendingLocalUpload" to "true", "pendingLabel" to label)
+        )
+        val updatedMessages = (messages.filterNot { it.id == localId } + pendingMessage).sortedBy { it.timestamp }
+        messages = updatedMessages
+        withContext(Dispatchers.IO) { FynxChatStore.save(context, chat.username, updatedMessages) }
+        // A failed upload/send leaves the app-owned media copy and stable request ID queued.
+        runCatching { FynxOfflineSync.drain(context) }
+        messages = withContext(Dispatchers.IO) {
+            FynxChatStore.load(context, chat.username, fallbackMessage)
+        }
+        hasPendingOutbox = withContext(Dispatchers.IO) {
+            FynxOfflineOutbox.load(context).any {
+                it.recipient.trim().removePrefix("@").equals(chat.username.trim().removePrefix("@"), ignoreCase = true)
+            }
+        }
+        return true
+    }
+
+    fun retryPendingOutbox() {
         if (sending) return
         conversationScope.launch {
             sending = true
             networkError = null
+            runCatching { FynxOfflineSync.drain(context) }
+            messages = withContext(Dispatchers.IO) {
+                FynxChatStore.load(context, chat.username, fallbackMessage)
+            }
+            hasPendingOutbox = withContext(Dispatchers.IO) {
+                FynxOfflineOutbox.load(context).any {
+                    it.recipient.trim().removePrefix("@").equals(chat.username.trim().removePrefix("@"), ignoreCase = true)
+                }
+            }
+            if (hasPendingOutbox) networkError = "Some messages are still saved on this device and will retry when the connection returns."
+            sending = false
+        }
+    }
+
+    fun retryVoiceMessage() {
+        val pending = pendingVoiceRetry ?: return
+        if (sending) return
+        val requestAccountKey = FynxAuthStore.accountStorageKey(context)
+        val requestToken = FynxBackendClient.accessToken(context)
+        conversationScope.launch {
+            sending = true
+            networkError = null
             val (pendingFile, duration) = pending
+            if (!FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                networkError = "Your account changed. Sign in to the original account to retry this voice message."
+                sending = false
+                return@launch
+            }
             val uploaded = uploadedVoiceCache?.takeIf { it.first == pendingFile.absolutePath }?.second
                 ?.let { Result.success(it) }
-                ?: FynxProductionMessaging.uploadMedia(context, Uri.fromFile(pendingFile), "audio/mp4")
-                    .onSuccess { media -> uploadedVoiceCache = pendingFile.absolutePath to media }
+                ?: FynxProductionMessaging.uploadMedia(
+                    context, Uri.fromFile(pendingFile), "audio/mp4", requestAccountKey, requestToken
+                ).onSuccess { media ->
+                    if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                        uploadedVoiceCache = pendingFile.absolutePath to media
+                    }
+                }
             uploaded
                 .onSuccess { media ->
-                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), "", mediaId = media.id, mediaType = "audio", voiceDurationMs = duration)
-                        .onSuccess { remote ->
-                            isNewConversation = false
-                            currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
-                            pendingFile.delete()
-                            pendingVoiceRetry = null
-                            uploadedVoiceCache = null
+                    FynxProductionMessaging.sendText(
+                        context, chat.username.removePrefix("@"), "",
+                        mediaId = media.id, mediaType = "audio", voiceDurationMs = duration,
+                        expectedAccountKey = requestAccountKey, requestToken = requestToken
+                    ).onSuccess { remote ->
+                        if (!FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return@onSuccess
+                        isNewConversation = false
+                        currentUserId?.let { myId -> messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp } }
+                        pendingFile.delete()
+                        pendingVoiceRetry = null
+                        uploadedVoiceCache = null
+                    }.onFailure {
+                        if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                            networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message."
                         }
-                        .onFailure { networkError = "Voice message not sent yet. Your recording is saved; tap Retry voice message." }
+                    }
                 }
-                .onFailure { networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message." }
+                .onFailure {
+                    if (FynxBackendClient.isRequestSessionCurrent(requestAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                        networkError = "Voice recording could not upload yet. Your recording is saved; tap Retry voice message."
+                    }
+                }
             sending = false
         }
     }
@@ -533,9 +700,29 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         recordingPausedTotalMs = 0L
         recordingElapsed = 0L
         if (file != null && file.exists() && file.length() > 0L && duration >= 300L) {
-            pendingVoiceRetry = file to duration
-            uploadedVoiceCache = null
-            retryVoiceMessage()
+            conversationScope.launch {
+                sending = true
+                val queued = queuePrivateAttachment(
+                    sourceUri = Uri.fromFile(file),
+                    mimeType = "audio/mp4",
+                    messageText = "",
+                    replyId = null,
+                    mediaType = "audio",
+                    voiceDurationMs = duration
+                )
+                if (queued) {
+                    pendingVoiceRetry = null
+                    uploadedVoiceCache = null
+                    file.delete()
+                    if (hasPendingOutbox) networkError = "Voice message saved on this device and will send when the connection returns."
+                } else {
+                    // If durable staging itself fails, keep the legacy same-session retry as a fallback.
+                    pendingVoiceRetry = file to duration
+                    uploadedVoiceCache = null
+                    networkError = "Voice recording could not be saved for restart-safe retry. Keep FYNX open and retry."
+                }
+                sending = false
+            }
         } else file?.delete()
     }
     stopRecordingAction = ::stopRecording
@@ -599,7 +786,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             } else {
                 val selectedAttachment = attachment
                 val selectedMessageType = attachmentMessageType
-                val sendResult = if (selectedAttachment != null) {
+                if (selectedAttachment != null) {
                     val selectedType = when {
                         attachmentType == "video_note" -> "video_note"
                         attachmentType?.startsWith("image/") == true -> "image"
@@ -609,38 +796,19 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         attachmentType == null -> "image"
                         else -> "document"
                     }
-                    (uploadedAttachmentCache?.takeIf { it.first == selectedAttachment.toString() }?.second
-                        ?.let { Result.success(it) }
-                        ?: FynxProductionMessaging.uploadMedia(context, selectedAttachment).onSuccess { media ->
-                            uploadedAttachmentCache = selectedAttachment.toString() to media
-                        }).mapCatching { media ->
-                            if (selectedMessageType != null) {
-                                FynxProductionMessaging.sendStructuredMessage(
-                                    context = context,
-                                    recipientUsername = chat.username,
-                                    messageType = selectedMessageType,
-                                    payload = mapOf("mediaId" to media.id),
-                                    replyToId = replyToId,
-                                    mediaId = media.id,
-                                    mediaType = selectedType
-                                ).getOrThrow()
-                            } else {
-                                FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, media.id, selectedType, 0L).getOrThrow()
-                            }
-                        }
-                } else {
-                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
-                }
-                sendResult
-                    .onSuccess { remote ->
-                        currentUserId?.let { myId ->
-                            messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
-                        }
-                        if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
-                            FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
-                                .onSuccess { marketplaceContextAttached = true }
-                                .onFailure { networkError = "The listing could not be attached to this message. Please try again." }
-                        }
+                    val mimeType = attachmentType?.takeIf { it.contains("/") }
+                        ?: context.contentResolver.getType(selectedAttachment)
+                        ?: if (selectedMessageType == "gif") "image/gif" else "image/png"
+                    val queued = queuePrivateAttachment(
+                        sourceUri = selectedAttachment,
+                        mimeType = mimeType,
+                        messageText = value,
+                        replyId = replyToId,
+                        mediaType = selectedType,
+                        structuredMessageType = selectedMessageType
+                    )
+                    if (queued) {
+                        isNewConversation = false
                         text = ""
                         editingId = null
                         replyToId = null
@@ -649,8 +817,28 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         attachmentMessageType = null
                         uploadedAttachmentCache = null
                         composerVideoMode = false
+                        networkError = if (hasPendingOutbox) "Attachment saved on this device and will send when the connection returns." else null
+                    } else {
+                        networkError = "Attachment could not be saved for retry. Keep it selected and try again."
                     }
-                    .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
+                } else {
+                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                        .onSuccess { remote ->
+                            currentUserId?.let { myId ->
+                                messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
+                            }
+                            if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
+                                FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
+                                    .onSuccess { marketplaceContextAttached = true }
+                                    .onFailure { networkError = "The listing could not be attached to this message. Please try again." }
+                            }
+                            text = ""
+                            editingId = null
+                            replyToId = null
+                            composerVideoMode = false
+                        }
+                        .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
+                }
             }
             sending = false
         }
@@ -676,7 +864,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     }
 
     if (showChatSettings) {
-        FynxChatSettingsPanel(chatUsername = chat.username, onBack = { showChatSettings = false })
+        FynxChatSettingsPanel(chatUsername = chat.username, onBack = { chatNotificationsEnabled = FynxConversationPreferences.chatNotifications(context, chat.username); showChatSettings = false }, onClearHistory = { messages = emptyList() })
         return
     }
 
@@ -827,6 +1015,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
         networkError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp)) }
+        if (hasPendingOutbox) {
+            TextButton(
+                enabled = !sending,
+                onClick = { retryPendingOutbox() },
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) { Text(if (sending) "Retrying pending messages…" else "Retry pending messages") }
+        }
         if (pendingVoiceRetry != null) {
             TextButton(
                 enabled = !sending,
@@ -835,7 +1030,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             ) { Text(if (sending) "Sending voice message…" else "Retry voice message") }
         }
 
-        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), contentPadding = PaddingValues(bottom = 8.dp)) {
+        LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
@@ -861,11 +1056,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         Box {
                             val mediaOnly = message.attachmentUri != null && message.text.isBlank() && message.attachmentType in setOf("image", "video", "video_note")
                             val bubbleShape = RoundedCornerShape(messageCornerRadius)
-                            val bubbleBrush = if (message.fromMe) {
-                                Brush.horizontalGradient(listOf(glassPalette.outgoingStart.copy(alpha = bubbleTransparency), glassPalette.outgoingEnd.copy(alpha = bubbleGradient)))
-                            } else {
-                                Brush.linearGradient(listOf(glassPalette.incomingGlass.copy(alpha = bubbleTransparency), glassPalette.backgroundMid.copy(alpha = (0.55f + bubbleGradient * 0.4f).coerceIn(0.55f, 0.95f))))
-                            }
+                            val bubbleBrush = fynxGlassMessageBubbleBrush(glassPalette, message.fromMe, bubbleTransparency, bubbleGradient)
                             Surface(
                                 color = Color.Transparent,
                                 contentColor = glassPalette.messageText,
@@ -908,7 +1099,6 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     val replied = messages.firstOrNull { it.id == message.replyToId }
                                     Column(
                                         Modifier
-                                            .fillMaxWidth()
                                             .padding(bottom = 5.dp)
                                             .background(glassPalette.backgroundMid.copy(alpha = 0.32f), RoundedCornerShape(8.dp))
                                             .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -997,6 +1187,19 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                 }
                                             }
                                         }
+                                    } else if (message.messagePayload["pendingLocalUpload"] == "true") {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                (message.messagePayload["pendingLabel"] ?: "Attachment") + " · waiting to send",
+                                                modifier = Modifier.padding(12.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     } else if (message.mediaId != null && message.attachmentUri == null) {
                                         Surface(
                                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -1037,7 +1240,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }
                                 }
                                 if (message.edited) Text("Edited", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                                Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = if (message.fromMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (message.fromMe) { Spacer(Modifier.width(4.dp)); Text(if (message.read) "✓✓" else if (message.delivered) "✓✓" else "✓", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted) }
                                 }
