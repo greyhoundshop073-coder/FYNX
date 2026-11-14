@@ -4137,6 +4137,17 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         else:
             FAILURES.append("Marketplace Local businesses shortcut could not be opened")
 
+        # Navigating away and back can restart Marketplace discovery. Wait for the
+        # real post-return terminal state again before probing the Sell form; otherwise
+        # the temporary loading skeleton hides a client-side action and creates a false failure.
+        if find_control(marketplace_xml, ["Search products, sellers or categories"]):
+            returned_marketplace_xml, returned_marketplace_state = wait_for_marketplace_settled(timeout=20.0)
+            if returned_marketplace_xml and returned_marketplace_state != "loading timeout":
+                marketplace_xml = returned_marketplace_xml
+                report.append("- PASS: Marketplace returned from Local businesses and settled again to: " + returned_marketplace_state + ".")
+            else:
+                report.append("- BLOCKED: Marketplace discovery was still loading after returning from Local businesses; live catalogue readiness requires the backend.")
+
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
         product_target = marketplace_product_card_target(marketplace_xml)
