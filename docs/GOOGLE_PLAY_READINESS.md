@@ -143,3 +143,69 @@ Ask testers to exercise and report on:
 
 ---
 **Completion rule:** A checklist item is complete only when implementation or configuration has been verified with source evidence, runtime evidence, or a Play Console confirmation. This document is a preparation baseline, not proof of Google approval.
+
+
+## 8. Canonical-branch reconciliation audit — 2026-11-12
+
+The following findings were verified by comparing the Stage 1 privacy branch
+(`compliance/stage1-privacy-foundation-20261110`) with the current canonical
+integration branch (`integration/fynx-single-apk-20261013`). The Stage 1 branch
+has diverged (34 commits ahead and 76 behind at the time of comparison); it must
+not be merged wholesale.
+
+### Confirmed gaps in the canonical source
+
+- The canonical `FynxSafetyRemoteClient.Report` model contains only report ID,
+  target username, reason, and status. It does not expose typed content targets
+  or content IDs.
+- The canonical `backend/trustSafety.js` report schema and routes accept
+  account-target reports only. They do not store typed post/content targets or
+  moderator review audit fields.
+- The Stage 1 branch adds typed report-target and moderation review fields, but
+  those changes require a targeted reconciliation against current canonical
+  admin and safety code before adoption.
+- The Stage 1 branch adds a versioned Contacts disclosure. The canonical branch
+  does not contain `FynxContactsDisclosure.kt`; its Contacts flow therefore
+  needs a focused review before any change is ported.
+- The Stage 1 branch adds permission-context changes across camera, chat,
+  location, notifications, AI voice, Status media, and post location. These
+  are not to be copied as a batch: compare each current canonical flow and
+  preserve later camera, chat, feed, and notification work.
+- The Stage 1 branch's account-deletion architecture is a design document only.
+  It explicitly does not implement a deletion endpoint, worker, database
+  mutation, or public deletion page. Do not represent account deletion as
+  implemented.
+
+### CI evidence and merge rule
+
+The Stage 1 source commit inspected during this audit had successful GitHub
+Actions runs for Android Build, Backend CI, and Chat Group Parity + Layout
+Safety. Those results apply to that commit only; they do not certify the
+current canonical branch or a future reconciliation commit. The combined
+commit-status endpoint returned no status entries, so workflow-run conclusions
+must be based on the actual workflow run records.
+
+No Stage 1 code has been merged into the canonical branch by this audit.
+The legal policy drafts in PR #529 also remain separate draft documents and
+are not published notices.
+
+### Required next implementation sequence
+
+1. Port typed content reporting and moderator audit fields as a narrowly scoped
+   change against the current canonical safety/admin implementation.
+2. Add and test report targets for posts and other supported UGC types; reject
+   invalid or inaccessible targets server-side.
+3. Verify moderator review actions are authorized, audited, and visible in the
+   admin UI; do not claim an active moderation operation until staffing and
+   response coverage are confirmed.
+4. Review permission disclosures individually against current feature code and
+   Android runtime behavior; do not bulk-merge the older Stage 1 branch.
+5. Design and implement account deletion as a separate backend/app/web workflow
+   only after mapping financial, dispute, media, and legal-retention dependencies.
+6. Run Android, backend, and relevant UI parity workflows on the resulting
+   branch. Merge only after checks pass and the PR is current with the canonical
+   base.
+
+**Status:** This section records verified engineering findings and sequencing.
+It does not certify Google Play compliance, Paystack activation, legal review,
+runtime behavior, or production deployment.
