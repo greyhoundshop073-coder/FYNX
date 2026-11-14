@@ -1770,7 +1770,7 @@ private fun FynxGroupMembersDialog(
                         if (!isSelfMember) {
                             TextButton(
                                 enabled = hasServerAccess && busyMemberAction == null,
-                                onClick = { reportMemberUsername = normalizedUsername; reportReason = "" }
+                                onClick = { reportMemberUsername = normalizedUsername; reportReason = ""; message = "" }
                             ) { Text("Report") }
                         }
                         if (canManage && !isOwnerMember && !isSelfMember) {
@@ -1871,7 +1871,7 @@ private fun FynxGroupMembersDialog(
                             reportMemberUsername = null
                             reportReason = ""
                         }
-                        .onFailure { message = it.message ?: "Member report could not be submitted. Please try again." }
+                        .onFailure { message = "Member report could not be submitted. Check your connection and try again." }
                     reportBusy = false
                 }
             }) { Text(if (reportBusy) "Submitting…" else "Submit report") }
