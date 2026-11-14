@@ -82,7 +82,7 @@ Local chat persistence now round-trips message deletion state, pin state, sender
 
 **Verification added:** the PostgreSQL group-history test now exercises per-member receipt uniqueness, idempotent repeats, sender exclusion and group isolation. Source contracts cover the authenticated route, receipt payload, account-bound history/realtime handling, older-page marking and local persistence. Exact-head Android and parity checks are required before certification; live two-account receipt visibility still requires runtime verification.
 
-**Still not implemented:** group voice/video calling. The current call transport models one caller and one callee with a single remote peer connection; adding group calling requires a proper multi-participant room/signaling and media architecture, not a decorative call button. Automatic gallery saving and configurable new-member history visibility also remain outstanding.
+**Still not implemented:** group voice/video calling. The current call transport models one caller and one callee with a single remote peer connection; adding group calling requires a proper multi-participant room/signaling and media architecture, not a decorative call button. The later sections in this matrix record the subsequent implementation of the received-media gallery-save preference and the server-enforced new-member history visibility policy. Those controls and their backend authorization are now present, but their end-to-end Android behavior still requires runtime verification.
 
 
 ## 2026-11-13 — New-member group history privacy
@@ -93,3 +93,18 @@ The PostgreSQL history test now verifies both policy states and confirms that a 
 
 
 The group send endpoint also validates an idempotent retry against the original sender, message payload and current member history cutoff. A reused message ID can no longer return another member's message or reveal an old message hidden by the new-member history policy; mismatched retries receive HTTP 409.
+
+
+## 2026-11-14 — Source-level coverage reconciliation (not runtime certification)
+
+The current PR #535 source now includes the following controls that older audit notes had listed as missing:
+- Private conversation older-history pagination uses the server's bounded history cursor and account/session boundary checks.
+- Private message full-history search has server-backed cursor pagination.
+- Private long-press multi-select exposes Copy and Cancel actions.
+- Group conversation older-history pagination appends only server-authorized pages and carries the server history-scope boundary.
+- Group full-history search has cursor pagination.
+- The active group settings expose received photo/video gallery saving and the server-backed “Show previous messages to new members” policy.
+
+These are implementation observations, not GREEN journey gates. The private history test currently checks SQL pagination/isolation with a temporary PostgreSQL fixture; it is not an authenticated HTTP/API two-account test. The group content PostgreSQL integration fixture creates distinct ADMIN, MEMBER and outsider users and exercises the authenticated route handlers, including send/reply, read receipts, idempotent retry, history search/cursor pagination, history privacy, polls and events. That verifies backend route behavior in CI, not a live Android two-account session against Railway.
+
+The outstanding Android runtime acceptance remains: verify the active private and group screens, older-page loading, search pagination, retry after reconnect, attachments and protected retrieval, per-chat/group notification preferences, mention targeting, member/owner actions, read receipts and account switching with real app sessions. A local offline emulator group fixture may certify local group creation/message persistence only; it must not be reported as server delivery or cross-account proof.
