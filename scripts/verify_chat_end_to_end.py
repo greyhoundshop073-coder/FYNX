@@ -83,12 +83,18 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 4. Attachment send must share the same completion/error path as text sends.
-require(conversation, r"val sendResult = if \(selectedAttachment != null\)", "Attachment send must produce a shared send result")
-require(conversation, r"uploadMedia\(context, selectedAttachment\)", "Attachment send must upload through production media")
-require(conversation, r"sendResult\s*\.onSuccess", "Attachment send must update UI from the shared success path")
-require(conversation, r"sendResult\s*\.onSuccess[\s\S]{0,3000}\.onFailure", "Attachment send must surface failures from the shared failure path")
-require(conversation, r"attachment = null; attachmentType = null", "Successful attachment send must clear the pending attachment")
+# 4. Attachments use the durable device-owned outbox so they remain safe when the backend is offline.
+# Assert durable staging, account-scoped local persistence, automatic sync attempt, and truthful failure UI.
+require(conversation, r"suspend fun queuePrivateAttachment\(", "Attachment send must use the durable offline queue")
+require(conversation, r"FynxOfflineOutbox\.Item\(", "Queued attachment must have a typed outbox record")
+require(conversation, r"requestId = java\.util\.UUID\.randomUUID\(\)\.toString\(\)", "Queued attachment must carry a unique idempotency request ID")
+require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Attachment bytes must be copied into app-owned durable storage before success")
+require(conversation, r"FynxChatStore\.save\(context, chat\.username, updatedMessages\)", "Pending attachment message must be persisted with the account-scoped conversation")
+require(conversation, r"FynxOfflineSync\.drain\(context\)", "Queued attachment must attempt normal sync without discarding failed uploads")
+require(conversation, r"val queued = queuePrivateAttachment\(", "Composer attachment send must enqueue before clearing the draft")
+require(conversation, r"if \(queued\) \{[\s\S]{0,700}attachment = null[\s\S]{0,300}Attachment saved on this device and will send when the connection returns", "Successful attachment staging must clear the composer only after durable save")
+require(conversation, r"else \{\s*networkError = \"Attachment could not be saved for retry\. Keep it selected and try again\.\"\s*\}", "Failed attachment staging must keep the selection and explain how to retry")
+require(conversation, r"pendingLocalUpload", "Queued attachment must render as an explicitly pending local upload")
 
 # 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
 # both at send time and at the recorder itself, so the UI cannot continue recording past it.
