@@ -344,7 +344,7 @@ def tap_first_message_if_present(xml_text:str, name:str="message-tap")->str:
     FAILURES.append(name+" did not open message actions")
     return after
 def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
-    """Open the first real conversation/group row without fabricating application data."""
+    """Open the first conversation row; focused local mode requires its seeded peer history."""
     if not xml_text: return ""
     try: root=ET.fromstring(xml_text)
     except ET.ParseError: return ""
@@ -392,6 +392,15 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
                 or find_control(after, ["No messages here yet"])):
             FAILURES.append(name+" did not enter ConversationPanel; destination UI markers were absent")
             return ""
+        if CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS:
+            required_local_messages = (
+                "FYNX offline private fixture: hello from the test peer",
+                "FYNX local reply: the private conversation history restored",
+            )
+            missing_local_messages = [item for item in required_local_messages if item not in after]
+            if missing_local_messages:
+                FAILURES.append(name+" opened a ConversationPanel but did not restore both disposable peer/owner messages: " + ", ".join(missing_local_messages))
+                return ""
     if name == "group-chat-entry":
         if not (find_control(after, ["Message composer", "Chat message composer area"])
                 or find_control(after, ["Messaging is restricted", "No messages here yet"])):
@@ -3543,8 +3552,9 @@ if CHAT_GROUPS_VISUALS_ONLY:
         (ROOT/"authenticated-chat.xml").write_text(chat_xml+"\n", encoding="utf-8")
         report.append("- PASS: captured the actual Chat list surface from the installed APK.")
 
-        # Open an existing conversation where available; otherwise use the account's
-        # own real ConversationPanel deep link. No fake participant or backend record is created.
+        # In local-only mode, a dedicated instrumentation fixture seeds one disposable
+        # peer and two messages in the account-scoped store. Never accept an empty self-chat
+        # as proof of the private-chat journey.
         private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
         if not private_xml:
             # The local visual account is created without FYNX_E2E_USERNAME;
@@ -3562,7 +3572,10 @@ if CHAT_GROUPS_VISUALS_ONLY:
         ):
             screenshot("private-chat-inside.png")
             (ROOT/"private-chat-inside.xml").write_text(private_xml+"\n", encoding="utf-8")
-            report.append("- PASS: captured the real private ConversationPanel.")
+            if FORCE_LOCAL_VISUALS:
+                report.append("- PASS: captured the real private ConversationPanel with two persisted disposable peer/owner messages from the local test fixture.")
+            else:
+                report.append("- PASS: captured the real private ConversationPanel.")
         else:
             FAILURES.append("Chat list and account deep link did not expose the real private ConversationPanel.")
 
