@@ -20,6 +20,7 @@ HOME_FEED_FIXTURES_SEEDED=False
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
+GROUP_RUNTIME_BLOCKED=False
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
 
@@ -4567,7 +4568,8 @@ if not FAILURES:
         report += ["", "## Captured Status surfaces",
                    "- authenticated-status-home.png", "- authenticated-status-create.png",
                    "", "Server-authenticated Chat/Friends/Stories/Marketplace journeys were not run: this session used the debug-only saved-device UI entry, which explicitly does not certify server authentication."]
-        report += ["", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+        runtime_result = "RED" if FAILURES else ("PARTIAL — GROUP RUNTIME BLOCKED" if GROUP_RUNTIME_BLOCKED else "GREEN")
+report += ["", f"## Result: {runtime_result}"]
         if FAILURES:
             report += ["", "Failures:"] + ["- " + item for item in FAILURES]
         (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
@@ -4802,16 +4804,18 @@ if not FAILURES:
                             group_destination=wait_for_group_conversation_ui("group-chat-inside.xml")
                             screenshot("group-chat-inside.png")
                             alive,crashlog=capture_runtime_log("group-chat-inside-process.log")
-                            fake_group_ui_ready = bool(group_destination) and (
+                            group_conversation_ready = bool(group_destination) and (
                                 "Message..." in group_destination
                                 or "Messaging is restricted" in group_destination
                                 or "No messages here yet" in group_destination
-                                or "Group unavailable" in group_destination
-                            )
-                            if fake_group_ui_ready and alive:
-                                report.append("- PASS deterministic Group ConversationPanel rendered a stable conversation or explicit missing-group state; captured group-chat-inside.png")
+                            ) and "Group unavailable" not in group_destination
+                            if group_conversation_ready and alive:
+                                report.append("- PASS deterministic Group ConversationPanel rendered an available conversation surface; captured group-chat-inside.png")
+                            elif group_destination and "Group unavailable" in group_destination and alive:
+                                GROUP_RUNTIME_BLOCKED = True
+                                report.append("- BLOCKED group conversation runtime: the deterministic route resolved to 'Group unavailable'. No persisted group fixture or live backend group was available, so this screen is not counted as a successful group conversation test.")
                             else:
-                                FAILURES.append("deterministic Group ConversationPanel did not open or left the app process unhealthy")
+                                FAILURES.append("deterministic Group ConversationPanel did not open an available conversation or left the app process unhealthy")
                         if group_after and not group_id:
                             report.append("- PASS group notification-route test skipped because the real group ID could not be read from the authenticated app store; no test data was fabricated")
                     else:
