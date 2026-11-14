@@ -192,7 +192,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(group.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${group.members.size} members • ${group.visibility.name.lowercase().replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${group.members.size} ${if (group.members.size == 1) "member" else "members"} • ${group.visibility.name.lowercase().replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(3.dp))
                                 Text(group.description, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
                             }
@@ -1008,7 +1008,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                 }
                 Column(Modifier.weight(1f).padding(start = 10.dp)) {
                     Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageText, maxLines = 1)
-                    Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, maxLines = 1)
+                    Text("${selectedGroup?.members?.size ?: 0} ${if ((selectedGroup?.members?.size ?: 0) == 1) "member" else "members"}", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, maxLines = 1)
                 }
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                 Box {
@@ -1484,7 +1484,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     )
                     Spacer(Modifier.width(6.dp))
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF7C3AED)),
+                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         IconButton(
