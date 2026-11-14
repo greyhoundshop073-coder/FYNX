@@ -38,6 +38,8 @@ internal object FynxMarketplaceIsolatedTestFixtures {
         val type: String,
         val amount: Double,
         val availableBalanceDelta: Double,
+        val reservedBalanceDelta: Double = 0.0,
+        val withdrawalPendingBalanceDelta: Double = 0.0,
         val status: String = "SIMULATED — TEST ONLY"
     )
     data class Wallet(
@@ -49,8 +51,12 @@ internal object FynxMarketplaceIsolatedTestFixtures {
         val transactions: List<SimulatedTransaction>
     ) {
         fun isReconciled(): Boolean {
-            val openingBalance = transactions.sumOf { it.availableBalanceDelta }
-            return kotlin.math.abs(openingBalance - available) < 0.005
+            val availableLedger = transactions.sumOf { it.availableBalanceDelta }
+            val reservedLedger = transactions.sumOf { it.reservedBalanceDelta }
+            val pendingLedger = transactions.sumOf { it.withdrawalPendingBalanceDelta }
+            return kotlin.math.abs(availableLedger - available) < 0.005 &&
+                kotlin.math.abs(reservedLedger - reserved) < 0.005 &&
+                kotlin.math.abs(pendingLedger - withdrawalPending) < 0.005
         }
     }
     data class CartLine(val listingId: String, val unitPrice: Double, val quantity: Int)
@@ -129,8 +135,14 @@ internal object FynxMarketplaceIsolatedTestFixtures {
         testMode = true,
         transactions = listOf(
             SimulatedTransaction("FYNX-TEST-FUND-001", "TEST FUNDING", 200_000.0, 200_000.0),
-            SimulatedTransaction("FYNX-TEST-ORDER-001", "TEST MARKETPLACE RESERVE", 20_000.0, -20_000.0),
-            SimulatedTransaction("FYNX-TEST-WITHDRAW-001", "TEST WITHDRAWAL HOLD", 10_000.0, -10_000.0)
+            SimulatedTransaction(
+                "FYNX-TEST-ORDER-001", "TEST MARKETPLACE RESERVE",
+                20_000.0, availableBalanceDelta = -20_000.0, reservedBalanceDelta = 20_000.0
+            ),
+            SimulatedTransaction(
+                "FYNX-TEST-WITHDRAW-001", "TEST WITHDRAWAL HOLD",
+                10_000.0, availableBalanceDelta = -10_000.0, withdrawalPendingBalanceDelta = 10_000.0
+            )
         )
     )
 
