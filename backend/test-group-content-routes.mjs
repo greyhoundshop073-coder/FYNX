@@ -161,7 +161,7 @@ try {
   const hiddenHistory = await call("GET", messagePath, params, memberId, {}, { q: "confidential earlier discussion" });
   assert.equal(hiddenHistory.statusCode, 200);
   assert.equal(hiddenHistory.body.messages.length, 0, "new members must not search messages hidden by group history policy");
-  assert.match(hiddenHistory.body.historyScope, /^FROM:\\d+$/,
+  assert.match(hiddenHistory.body.historyScope, /^FROM:\d+$/,
     "the group history endpoint must return a cutoff-specific authorization scope");
   const firstHiddenScope = hiddenHistory.body.historyScope;
   const hiddenRead = await call("POST", readPath, params, memberId, { messageIds: [hiddenMessageId] });
@@ -176,7 +176,7 @@ try {
   assert.equal(visibleNewMessage.statusCode, 201);
   const visibleNewHistory = await call("GET", messagePath, params, memberId, {}, { q: "new member visible marker" });
   assert.ok(visibleNewHistory.body.messages.some(message => message.id === visibleNewMessageId), "new members must still receive messages posted after joining");
-  assert.match(visibleNewHistory.body.historyScope, /^FROM:\\d+$/);
+  assert.match(visibleNewHistory.body.historyScope, /^FROM:\d+$/);
   assert.equal(visibleNewHistory.body.historyScope, firstHiddenScope,
     "repeat reads for the same member and policy must keep a stable scope marker");
 
@@ -184,13 +184,13 @@ try {
   const rejoinedScopePage = await call("GET", messagePath, params, memberId, {}, { q: "new member visible marker" });
   assert.notEqual(rejoinedScopePage.body.historyScope, firstHiddenScope,
     "a new membership join timestamp must invalidate older pages from the previous membership");
-  assert.match(rejoinedScopePage.body.historyScope, /^FROM:\\d+$/);
+  assert.match(rejoinedScopePage.body.historyScope, /^FROM:\d+$/);
 
   await client.query("UPDATE fynx_groups SET show_history_to_new_members=TRUE WHERE id=$1", [groupId]);
   const allHistoryPage = await call("GET", messagePath, params, memberId, {}, { q: "new member visible marker" });
   assert.notEqual(allHistoryPage.body.historyScope, rejoinedScopePage.body.historyScope,
     "changing the history visibility policy must change the authorization scope");
-  assert.match(allHistoryPage.body.historyScope, /^ALL:\\d+$/);
+  assert.match(allHistoryPage.body.historyScope, /^ALL:\d+$/);
 
   const pollPath = "/api/groups/:groupId/polls";
   const votePath = "/api/groups/:groupId/polls/:pollId/votes";
