@@ -140,6 +140,7 @@ require("group search exposes empty-result and offline-cache fallback states", "
 require("Android group-history client encodes q and preserves the timestamp/ID cursor", "query:String?=null" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "&q=${Uri.encode(it)}" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "beforeTimestamp" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 
 
+require("runtime certification never counts an unavailable group placeholder as a conversation pass", '"Group unavailable" not in group_destination' in NAVIGATION and "GROUP_RUNTIME_BLOCKED = True" in NAVIGATION and "PARTIAL — GROUP RUNTIME BLOCKED" in NAVIGATION)
 require("group member report is available to other members and submits the selected target through the authenticated group report client", 'Text("Report")' in ACTIVE_GROUP and "reportMemberUsername = normalizedUsername" in ACTIVE_GROUP and "FynxGroupRemoteClient.reportGroup(context, current.id, reportReason, target)" in ACTIVE_GROUP)
 require("group settings expose a working report-group flow", 'GroupActionRow("Report group"' in GROUP_SETTINGS and "FynxGroupRemoteClient.reportGroup(context, groupId, reportReason)" in GROUP_SETTINGS and "showReportDialog" in GROUP_SETTINGS)
 require("group report client sends a required bounded reason and optional target username to the existing endpoint", '"/api/groups/$groupId/reports"' in GROUP_CLIENT and 'put("reason", cleanReason)' in GROUP_CLIENT and 'put("username", it)' in GROUP_CLIENT)
