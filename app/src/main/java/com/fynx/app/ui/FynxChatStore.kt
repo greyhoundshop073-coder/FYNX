@@ -194,14 +194,16 @@ object FynxChatStore {
         }.getOrElse { emptyList() }
     }
 
-    fun savePreview(context: Context, preview: ChatPreview) {
-        val unreadCount = load(context, preview.username)
-            .count { !it.fromMe && !it.read }
-        val normalizedPreview = preview.copy(unreadCount = unreadCount)
-        val previews = loadPreviews(context).filterNot { it.username.equals(normalizedPreview.username, ignoreCase = true) }
-        val updated = listOf(normalizedPreview) + previews
+    /**
+     * Persist a complete preview snapshot without publishing previewUpdates.
+     *
+     * Remote list hydration uses this method from the preview-update collector.
+     * Emitting another event here would recursively trigger another network refresh.
+     */
+    @Synchronized
+    fun savePreviews(context: Context, previews: List<ChatPreview>) {
         val array = JSONArray()
-        updated.forEach { item ->
+        previews.forEach { item ->
             array.put(JSONObject().apply {
                 put("name", item.name)
                 put("username", item.username)
@@ -213,7 +215,19 @@ object FynxChatStore {
             })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(previewKey(context), array.toString()).apply()
+            .edit()
+            .putString(previewKey(context), array.toString())
+            .apply()
+    }
+
+    @Synchronized
+    fun savePreview(context: Context, preview: ChatPreview) {
+        val unreadCount = load(context, preview.username)
+            .count { !it.fromMe && !it.read }
+        val normalizedPreview = preview.copy(unreadCount = unreadCount)
+        val previews = loadPreviews(context)
+            .filterNot { it.username.equals(normalizedPreview.username, ignoreCase = true) }
+        savePreviews(context, listOf(normalizedPreview) + previews)
         previewUpdates.tryEmit(normalizedPreview.username)
     }
 
