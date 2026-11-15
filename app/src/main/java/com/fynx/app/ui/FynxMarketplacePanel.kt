@@ -864,6 +864,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         savedProductBusyIds = savedProductBusyIds + listingId
         savedProductStateGeneration += 1
         scope.launch {
+            if (testOnlyListings != null) {
+                setSavedProductState(listingId, knownSavedProductState(listingId) != true)
+                savedProductBusyIds = savedProductBusyIds - listingId
+                return@launch
+            }
             FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
                 .onSuccess { saved -> setSavedProductState(listingId, saved) }
                 .onFailure { error = marketplaceSafeError(it, "Saved Products could not be updated.") }
