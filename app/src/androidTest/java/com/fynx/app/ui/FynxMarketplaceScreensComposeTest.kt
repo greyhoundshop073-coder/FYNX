@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -277,7 +278,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("FYNX Wallet").assertIsDisplayed()
         compose.onNodeWithText("TEST MODE — simulated balance; cannot spend or withdraw").assertIsDisplayed()
         compose.onNodeWithText("FYNX-TEST-FUND-001", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Wallet security & PIN").assertIsDisplayed()
+        compose.onNodeWithText("Wallet security & PIN").performScrollTo().assertIsDisplayed()
         assertTrue(FynxMarketplaceIsolatedTestFixtures.wallet.isReconciled())
         saveScreenshot("wallet-simulated-test-ledger-screen.png")
     }
@@ -320,8 +321,8 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("US Dollar").assertIsDisplayed()
         compose.onNodeWithText("\$1,234.50").assertIsDisplayed()
-        compose.onNodeWithText("\$250.00").assertIsDisplayed()
-        compose.onNodeWithText("FYNX-TEST-USD-001").assertIsDisplayed()
+        compose.onNodeWithText("\$250.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX-TEST-USD-001").performScrollTo().assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
     }
 
