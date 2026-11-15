@@ -65,8 +65,14 @@ import java.time.OffsetDateTime
 import java.util.Date
 import kotlinx.coroutines.launch
 
-private fun fynxWalletMoney(amount: Double): String =
-    "₦" + String.format(Locale.US, "%,.2f", amount)
+private fun fynxWalletMoney(amount: Double, currency: String = "NGN"): String =
+    fynxWalletCurrencyMoney(amount, currency)
+
+internal fun fynxWalletCurrencySymbol(currency: String?): String =
+    if (currency.equals("USD", ignoreCase = true)) "\$" else "₦"
+
+internal fun fynxWalletCurrencyLabel(currency: String?): String =
+    if (currency.equals("USD", ignoreCase = true)) "US Dollar" else "Nigerian Naira"
 
 /** Show only a real ledger balance; a newly provisioned pending Wallet has a truthful zero. */
 internal fun shouldShowBuyerWalletBalance(wallet: FynxBuyerWalletSummary?): Boolean =
@@ -370,7 +376,7 @@ internal fun FynxBuyerWalletPanel(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("FYNX WALLET", fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = Color.White.copy(alpha = 0.88f))
-                            Text("Nigerian Naira", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f))
+                            Text(fynxWalletCurrencyLabel(wallet?.currency), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f))
                         }
                         Icon(
                             Icons.Default.AccountBalanceWallet,
@@ -391,8 +397,8 @@ internal fun FynxBuyerWalletPanel(
                         Text(
                             when {
                                 summaryLoading -> "Checking…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
-                                canShowBalance -> "₦ ••••••"
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0, wallet?.currency ?: "NGN")
+                                canShowBalance -> fynxWalletCurrencySymbol(wallet?.currency) + " ••••••"
                                 summaryError != null -> "Unavailable"
                                 else -> "—"
                             },
@@ -521,6 +527,7 @@ internal fun FynxBuyerWalletPanel(
                     amount = wallet?.reservedBalance,
                     explanation = "Held for an order or an active review.",
                     visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
                     modifier = Modifier.weight(1f)
                 )
                 FynxWalletMetric(
@@ -528,6 +535,7 @@ internal fun FynxBuyerWalletPanel(
                     amount = wallet?.withdrawalPendingBalance,
                     explanation = "Sent for withdrawal and awaiting final confirmation.",
                     visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -713,7 +721,7 @@ internal fun FynxBuyerWalletPanel(
         }
         item {
             Text(
-                "FYNX Wallet currently supports the NGN foundation only. No funds are moved by this preview screen.",
+                "Wallet balances and activity use the currency recorded on each entry. Deposits, purchases and withdrawals depend on payment-provider availability.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -738,7 +746,7 @@ internal fun FynxBuyerWalletPanel(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (balanceVisible) direction + fynxWalletMoney(transaction.amount) else "••••••",
+                        if (balanceVisible) direction + fynxWalletMoney(transaction.amount, transaction.currency) else "••••••",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = detailAccent
@@ -746,7 +754,7 @@ internal fun FynxBuyerWalletPanel(
                     Text("Status: " + transaction.status.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() })
                     Text("Date: " + fynxWalletActivityDate(transaction.createdAt))
                     if (transaction.description.isNotBlank()) Text("Details: " + transaction.description)
-                    Text("Fee: " + if (balanceVisible) fynxWalletMoney(transaction.fee) else "••••••")
+                    Text("Fee: " + if (balanceVisible) fynxWalletMoney(transaction.fee, transaction.currency) else "••••••")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Reference: " + transaction.reference, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = {
@@ -779,8 +787,8 @@ internal fun FynxBuyerWalletPanel(
     }
 }
 
-private fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
-    val symbol = if (currency.equals("USD", ignoreCase = true)) "\$" else "₦"
+internal fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
+    val symbol = fynxWalletCurrencySymbol(currency)
     return symbol + String.format(Locale.US, "%,.2f", amount)
 }
 
@@ -885,6 +893,7 @@ private fun FynxWalletMetric(
     amount: Double?,
     explanation: String,
     visible: Boolean,
+    currency: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -896,7 +905,7 @@ private fun FynxWalletMetric(
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                if (visible) amount?.let(::fynxWalletMoney) ?: "—" else "••••••",
+                if (visible) amount?.let { fynxWalletMoney(it, currency) } ?: "—" else "••••••",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
