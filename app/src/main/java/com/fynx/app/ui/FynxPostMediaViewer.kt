@@ -156,7 +156,7 @@ fun FynxPostMediaViewer(
                 var bitmap by remember(file) { mutableStateOf<android.graphics.Bitmap?>(null) }
                 LaunchedEffect(file) {
                     bitmap = withContext(Dispatchers.IO) {
-                        runCatching { BitmapFactory.decodeFile(file!!.absolutePath) }.getOrNull()
+                        runCatching { FynxBitmapSampling.decodeFileSampled(file!!, FynxBitmapSampling.FEED_MAX_DIMENSION) }.getOrNull()
                     }
                     if (bitmap == null) failed = true
                 }
