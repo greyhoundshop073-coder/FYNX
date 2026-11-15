@@ -498,7 +498,8 @@ internal fun FynxMarketplaceCheckoutDialog(
     context: Context,
     listing: FynxRemoteSocialClient.MarketplaceListing,
     onProtectedOrder: (FynxRemoteSocialClient.MarketplaceOrder) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    testOnly: Boolean = false
 ) {
     var quantityText by remember { mutableStateOf("1") }
     var fulfillment by remember { mutableStateOf(if (listing.pickupAvailable) "PICKUP" else "DELIVERY") }
@@ -543,16 +544,46 @@ internal fun FynxMarketplaceCheckoutDialog(
         busy = true
         message = null
         scope.launch {
-            val result = requestMarketplaceCheckoutQuote(
-                context,
-                listing,
-                quantity,
-                fulfillment,
-                if (fulfillment == "DELIVERY") FynxMarketplaceCheckoutAddress(name, phone, address, city, state, country) else null
-            )
-            if (quoteRequestGeneration == requestGeneration) {
-                result.onSuccess { quote = it }
-                    .onFailure { message = marketplaceSafeError(it, "Checkout quote could not be prepared.") }
+            if (testOnly) {
+                val subtotal = kotlin.math.round(listing.price * quantity * 100.0) / 100.0
+                val deliveryFee = if (fulfillment == "PICKUP") 0.0 else (listing.deliveryFee ?: 0.0)
+                // The offline fixture preview exercises the agreed 5% Marketplace fee only.
+                // It is not the live provider quote and never creates an order or payment.
+                val simulatedFee = kotlin.math.round(subtotal * 0.05 * 100.0) / 100.0
+                val simulated = FynxMarketplaceCheckoutQuote(
+                    id = "FYNX-TEST-QUOTE-" + listing.id,
+                    expiresAt = Instant.now().plusSeconds(300).toString(),
+                    listingId = listing.id,
+                    sellerDisplayName = listing.sellerDisplayName,
+                    productTitle = listing.title,
+                    quantity = quantity,
+                    unitPrice = listing.price,
+                    currency = listing.currency,
+                    fulfillmentMethod = fulfillment,
+                    subtotal = subtotal,
+                    deliveryFee = deliveryFee,
+                    marketplaceFee = simulatedFee,
+                    marketplaceFeeBuyer = simulatedFee,
+                    discountAmount = 0.0,
+                    total = kotlin.math.round((subtotal + deliveryFee + simulatedFee) * 100.0) / 100.0,
+                    protectionText = "Test-only quote preview. No order or payment is created."
+                )
+                if (quoteRequestGeneration == requestGeneration) {
+                    quote = simulated
+                    message = null
+                }
+            } else {
+                val result = requestMarketplaceCheckoutQuote(
+                    context,
+                    listing,
+                    quantity,
+                    fulfillment,
+                    if (fulfillment == "DELIVERY") FynxMarketplaceCheckoutAddress(name, phone, address, city, state, country) else null
+                )
+                if (quoteRequestGeneration == requestGeneration) {
+                    result.onSuccess { quote = it }
+                        .onFailure { message = marketplaceSafeError(it, "Checkout quote could not be prepared.") }
+                }
             }
             busy = false
         }
@@ -606,6 +637,10 @@ internal fun FynxMarketplaceCheckoutDialog(
                         message = "This checkout quote has expired. Review the exact total again."
                         return@Button
                     }
+                    if (testOnly) {
+                        message = "FYNX TEST MODE — quote reviewed; no order or payment was created."
+                        return@Button
+                    }
                     busy = true
                     message = null
                     val checkoutAddress = if (q.fulfillmentMethod == "DELIVERY") {
@@ -640,7 +675,7 @@ internal fun FynxMarketplaceCheckoutDialog(
                         busy = false
                     }
                 }
-            ) { Text("Place protected order") }
+            ) { Text(if (testOnly) "Confirm test preview" else "Place protected order") }
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !busy) { Text("Cancel") } }
     )
