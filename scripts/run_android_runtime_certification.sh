@@ -63,13 +63,13 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
       echo "::error::The exact-head debug APK pair is missing; refusing to seed a fixture into an unknown install."
       exit 1
     fi
-    adb install -r "${APP_APK}"
+    adb install -t -r "${APP_APK}"
     INSTALL_APP_EXIT=$?
     if [ "${INSTALL_APP_EXIT}" -ne 0 ]; then
       echo "::error::Could not install the exact-head FYNX debug APK before private-chat fixture seeding."
       exit "${INSTALL_APP_EXIT}"
     fi
-    adb install -r "${TEST_APK}"
+    adb install -t -r "${TEST_APK}"
     INSTALL_TEST_EXIT=$?
     if [ "${INSTALL_TEST_EXIT}" -ne 0 ]; then
       echo "::error::Could not install the exact-head Android test APK before private-chat fixture seeding."
@@ -80,7 +80,7 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
       -e username "${FYNX_E2E_USERNAME:-marketplace_visual_check}" \
       com.fynx.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1)
     FIXTURE_EXIT=$?
-    printf '%s\\n' "${FIXTURE_OUTPUT}"
+    printf '%s\n' "${FIXTURE_OUTPUT}"
     if [ "${FIXTURE_EXIT}" -ne 0 ] || ! printf '%s' "${FIXTURE_OUTPUT}" | grep -q 'INSTRUMENTATION_CODE: -1'; then
       echo "::error::The private-chat fixture instrumentation did not report a clean AndroidJUnitRunner pass."
       exit "${FIXTURE_EXIT:-1}"
@@ -91,7 +91,7 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
        ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX local reply: the private conversation history restored' ||
        ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX Runtime Peer'; then
       echo "::error::The target app's persisted Chat XML does not contain the expected peer and both messages."
-      printf '%s\\n' "${FIXTURE_DISK}"
+      printf '%s\n' "${FIXTURE_DISK}"
       exit 1
     fi
     echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before UI login."
