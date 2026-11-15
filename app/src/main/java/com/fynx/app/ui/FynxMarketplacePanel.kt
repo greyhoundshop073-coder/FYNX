@@ -751,7 +751,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}, testOnlyListings: List<FynxRemoteSocialClient.MarketplaceListing>? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -999,6 +999,21 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reload() {
         scope.launch {
+            if (testOnlyListings != null) {
+                val filtered = testOnlyListings.filter { listing ->
+                    (query.isBlank() || listing.title.contains(query.trim(), ignoreCase = true) || listing.description.contains(query.trim(), ignoreCase = true) || listing.storeName.contains(query.trim(), ignoreCase = true)) &&
+                        (category.equals("All", ignoreCase = true) || listing.category.equals(category, ignoreCase = true))
+                }
+                listingRequestGeneration += 1
+                listings = filtered.take(24)
+                nextListingsOffset = listings.size
+                hasMoreListings = filtered.size > listings.size
+                loading = false
+                loadingMoreListings = false
+                error = null
+                discoveryFallbackWarning = "FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed."
+                return@launch
+            }
             val requestGeneration = ++listingRequestGeneration
             val requestQuery = query
             val requestCategory = category
@@ -1102,6 +1117,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         val requestOffset = nextListingsOffset
         scope.launch {
             loadingMoreListings = true
+            if (testOnlyListings != null) {
+                val filtered = testOnlyListings.filter { listing ->
+                    (requestQuery.isBlank() || listing.title.contains(requestQuery.trim(), ignoreCase = true) || listing.description.contains(requestQuery.trim(), ignoreCase = true) || listing.storeName.contains(requestQuery.trim(), ignoreCase = true)) &&
+                        (requestCategory.equals("All", ignoreCase = true) || listing.category.equals(requestCategory, ignoreCase = true))
+                }
+                val page = filtered.drop(requestOffset).take(24)
+                listings = appendDistinctMarketplacePage(listings, page) { it.id }
+                nextListingsOffset = requestOffset + page.size
+                hasMoreListings = filtered.size > nextListingsOffset
+                loadingMoreListings = false
+                return@launch
+            }
             val result = kotlinx.coroutines.withTimeoutOrNull(MARKETPLACE_LISTING_REQUEST_TIMEOUT_MS) {
                 FynxRemoteSocialClient.marketplaceDiscoveryPage(context, requestQuery, requestCategory, limit = 24, offset = requestOffset)
             }
@@ -1132,6 +1159,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(currentUsername) {
+        if (testOnlyListings != null) return@LaunchedEffect
         reloadWeeklySeller()
         reloadSponsoredPromotions()
         reloadSeasonalPromotions()
@@ -1146,10 +1174,16 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(cartOwnerKey, cart, cartQuantities) {
-        writeFynxMarketplaceCart(context, cartOwnerKey, cart, cartQuantities)
+        if (testOnlyListings == null) writeFynxMarketplaceCart(context, cartOwnerKey, cart, cartQuantities)
     }
 
     LaunchedEffect(cartOwnerKey) {
+        if (testOnlyListings != null) {
+            savedProductIds = emptySet()
+            savedProductKnownIds = emptySet()
+            savedProductStateLoaded = true
+            return@LaunchedEffect
+        }
         val requestGeneration = savedProductStateGeneration
         FynxRemoteSocialClient.savedMarketplaceProducts(context)
             .onSuccess { savedProducts ->
@@ -1190,6 +1224,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(listings) {
+        if (testOnlyListings != null) return@LaunchedEffect
         val sellers = listings.map { it.sellerUsername.removePrefix("@").trim() }
             .filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.US) }.take(12)
         val pending = sellers.filter { username ->
@@ -1238,6 +1273,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
 
     LaunchedEffect(query) {
+        if (testOnlyListings != null) return@LaunchedEffect
         val term = query.trim()
         if (term.length >= 2) {
             delay(900)
@@ -1890,6 +1926,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         )
     }
     LaunchedEffect(selected?.id) {
+        if (testOnlyListings != null) {
+            priceWatchListingId = null
+            return@LaunchedEffect
+        }
         priceWatchListingId = null
         val requestGeneration = savedProductStateGeneration
         selected?.id?.let { listingId ->
@@ -2084,7 +2124,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
     val context = LocalContext.current
     val username = l.sellerUsername.removePrefix("@").trim()
     var photoId by remember(username) { mutableStateOf<String?>(null) }
-    LaunchedEffect(username) { if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
+    LaunchedEffect(username) { if (testOnlyListings == null && username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
     Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -2181,6 +2221,7 @@ private fun MarketplaceDetails(
     var productReviewsError by remember(l.id) { mutableStateOf<String?>(null) }
     var productReviewsReloadKey by remember(l.id) { mutableIntStateOf(0) }
     LaunchedEffect(l.id, productReviewsReloadKey) {
+        if (testOnlyListings != null) return@LaunchedEffect
         productReviewsLoading = true
         productReviewsError = null
         FynxRemoteSocialClient.marketplaceProductReviews(context, l.id, limit = 5, offset = 0)
