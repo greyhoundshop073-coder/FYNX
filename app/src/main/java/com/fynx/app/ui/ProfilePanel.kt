@@ -294,10 +294,10 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
         bitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
             when {
                 !mediaId.isNullOrBlank() -> FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()?.let { uri ->
-                    runCatching { context.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+                    runCatching { FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.FEED_MAX_DIMENSION) }.getOrNull()
                 }
                 !localPhotoUri.isNullOrBlank() -> runCatching {
-                    context.contentResolver.openInputStream(Uri.parse(localPhotoUri)).use { android.graphics.BitmapFactory.decodeStream(it) }
+                    FynxBitmapSampling.decodeUriSampled(context, Uri.parse(localPhotoUri), FynxBitmapSampling.FEED_MAX_DIMENSION)
                 }.getOrNull()
                 else -> null
             }
