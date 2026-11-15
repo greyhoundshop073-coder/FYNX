@@ -974,13 +974,13 @@ private fun FynxWalletActivityRow(
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    if (amountsVisible) sign + fynxWalletMoney(transaction.amount) else "••••••",
+                    if (amountsVisible) sign + fynxWalletMoney(transaction.amount, transaction.currency) else "••••••",
                     fontWeight = FontWeight.SemiBold,
                     color = accent
                 )
                 if (transaction.fee > 0.0 && amountsVisible) {
                     Text(
-                        "Fee " + fynxWalletMoney(transaction.fee),
+                        "Fee " + fynxWalletMoney(transaction.fee, transaction.currency),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
