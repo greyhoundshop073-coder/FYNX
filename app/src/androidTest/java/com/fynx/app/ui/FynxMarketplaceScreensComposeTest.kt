@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -121,6 +122,43 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("Save product").performScrollTo().performClick()
         compose.onNodeWithText("Remove from Saved Products").performScrollTo().assertIsDisplayed()
+
+        compose.onNodeWithText("Buy now").performScrollTo().performClick()
+        compose.onNodeWithText("Checkout").assertIsDisplayed()
+        compose.onNodeWithText("Review exact total").performClick()
+        compose.onNodeWithText("FYNX fee: NGN 2,875.00").assertIsDisplayed()
+        compose.onNodeWithText("Delivery: NGN 0.00").assertIsDisplayed()
+        compose.onNodeWithText("Total: NGN 60,375.00").assertIsDisplayed()
+        saveScreenshot("marketplace-checkout-pickup-quote.png")
+        compose.onNodeWithText("Confirm test preview").performClick()
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
+    }
+
+    @Test
+    fun actualMarketplaceCheckoutDeliveryPreviewRequiresAddressAndCalculatesDeliveryFee() {
+        compose.setContent {
+            MaterialTheme {
+                FynxMarketplacePanel(
+                    currentUsername = FynxMarketplaceIsolatedTestFixtures.buyer.username,
+                    testOnlyListings = marketplaceListings
+                )
+            }
+        }
+        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithText("Buy now").performScrollTo().performClick()
+        compose.onNodeWithText("Delivery").performClick()
+        compose.onNodeWithText("Full name").performTextInput("FYNX Test Buyer")
+        compose.onNodeWithText("Phone").performTextInput("08000000000")
+        compose.onNodeWithText("Delivery address").performTextInput("FYNX Test Delivery Address")
+        compose.onNodeWithText("City").performTextInput("Port Harcourt")
+        compose.onNodeWithText("State").performTextInput("Rivers")
+        compose.onNodeWithText("Review exact total").performClick()
+        compose.onNodeWithText("Delivery: NGN 1,500.00").assertIsDisplayed()
+        compose.onNodeWithText("FYNX fee: NGN 2,875.00").assertIsDisplayed()
+        compose.onNodeWithText("Total: NGN 61,875.00").assertIsDisplayed()
+        saveScreenshot("marketplace-checkout-delivery-quote.png")
+        compose.onNodeWithText("Confirm test preview").performClick()
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
     }
 
     @Test
