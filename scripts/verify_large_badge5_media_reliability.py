@@ -3,6 +3,10 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(relative_path: str) -> str:
+    return (ROOT / relative_path).read_text(encoding="utf-8")
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 status = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
