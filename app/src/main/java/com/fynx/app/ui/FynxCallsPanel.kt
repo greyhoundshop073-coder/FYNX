@@ -173,6 +173,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 val isVideo = active.type == FynxCallType.VIDEO
                 if (isRinging) realtimeClient.sendCallReject(active.id, peerId, isVideo)
                 else realtimeClient.sendCallEnd(active.id, peerId, isVideo)
+                FynxCallsStore.updateStatus(
+                    context, active.id, if (isRinging) "Declined" else "Ended", missed = false
+                )
             }
             mediaEngine.disconnect()
             realtimeClient.close()
@@ -303,7 +306,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         if (incoming) realtimeClient.sendCallReject(current.id, peer, video)
                         else realtimeClient.sendCallEnd(current.id, peer, video)
                     }
-                    FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = incoming)
+                    FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = false)
                 }
                 mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
                 calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; endingCall = false
