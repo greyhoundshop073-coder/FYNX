@@ -142,11 +142,12 @@ private fun marketplaceShopProfileSignature(
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel(
+internal fun FynxMarketplaceSellerCenterPanel(
     onViewPublicShop: () -> Unit = {},
     testOnlyListings: List<FynxMarketplaceClient.Listing>? = null,
     testOnlyShopName: String = "FYNX Test Market",
-    testOnlyShopDescription: String = "Test-only shop profile; not a public seller account."
+    testOnlyShopDescription: String = "Test-only shop profile; not a public seller account.",
+    testOnlyOrders: List<SellerOrderRow>? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -694,7 +695,7 @@ fun FynxMarketplaceSellerCenterPanel(
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Orders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() })
+                        FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() }, testOnlyOrders = testOnlyOrders)
                     }
                 }
             }
