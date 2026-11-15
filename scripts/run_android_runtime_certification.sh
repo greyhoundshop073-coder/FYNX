@@ -88,7 +88,6 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
       exit 1
     fi
     echo "::notice::Private-chat fixture instrumentation passed: ${FIXTURE_SUMMARY}"
-    fi
     # Verify the real target-app preference file from the shell before launching UI.
     FIXTURE_DISK=$(adb shell run-as com.fynx.app cat shared_prefs/fynx_chat_store.xml 2>&1)
     if ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX offline private fixture: hello from the test peer' ||
