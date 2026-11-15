@@ -2239,7 +2239,7 @@ private fun MarketplaceDetails(
         if (testOnlyReviews != null) {
             productReviews = testOnlyReviews
             productReviewCount = testOnlyReviews.size
-            productReviewAverage = testOnlyReviews.takeIf { it.isNotEmpty() }?.averageOf { it.rating.toDouble() } ?: 0.0
+            productReviewAverage = testOnlyReviews.map { it.rating.toDouble() }.average().takeIf { it.isFinite() } ?: 0.0
             productReviewsHasMore = false
             productReviewsOffset = testOnlyReviews.size
             productReviewsLoading = false
