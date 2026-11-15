@@ -1,6 +1,7 @@
 import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
+import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -8,9 +9,40 @@ const pool = getFynxDatabasePool();
 
 const MAX_POSTGRES_BIGINT = 9223372036854775807n;
 function isPositivePostgresBigint(value) {
-  const raw = String(value ?? '').trim();
+  let raw;
+  if (typeof value === "string") raw = value.trim();
+  else if (typeof value === "bigint") raw = value.toString();
+  else if (typeof value === "number" && Number.isSafeInteger(value)) raw = String(value);
+  else return false;
   if (!/^[1-9]\d*$/.test(raw)) return false;
   try { return BigInt(raw) <= MAX_POSTGRES_BIGINT; } catch { return false; }
+}
+export function createAdminAuthMiddleware({ pool, jwtApi, jwtSecret }) {
+  return async (req, res, next) => {
+    const header = req.get('authorization') || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token || !jwtSecret) return res.status(401).json({ error: 'authentication required' });
+    let claims;
+    try {
+      claims = jwtApi.verify(token, jwtSecret);
+      if (!isPositivePostgresBigint(claims?.sub)) throw new Error('invalid token subject');
+    } catch {
+      return res.status(401).json({ error: 'invalid or expired token' });
+    }
+    const subject = String(claims.sub).trim();
+    try {
+      if (!pool) return res.status(503).json({ error: 'authentication temporarily unavailable' });
+      const current = await pool.query('SELECT session_version FROM users WHERE id=$1', [subject]);
+      const version = current.rows?.[0] ? Number(current.rows[0].session_version || 0) : -1;
+      if (version < 0 || !Number.isSafeInteger(version) || version !== Number(claims.sv || 0)) {
+        return res.status(401).json({ error: 'session expired; sign in again' });
+      }
+      req.user = { ...claims, sub: subject };
+      return next();
+    } catch {
+      return res.status(503).json({ error: 'authentication temporarily unavailable' });
+    }
+  };
 }
 
 // Validate calendar fields before Date.parse, which normalizes impossible dates.
@@ -87,18 +119,41 @@ export function registerAdminRoutes({ app }) {
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
   };
-  const auth = (req,res,next) => { const header=req.get('authorization')||''; const token=header.startsWith('Bearer ')?header.slice(7).trim():''; if(!token||!JWT_SECRET)return res.status(401).json({error:'authentication required'}); try{req.user=jwt.verify(token,JWT_SECRET);return next();}catch{return res.status(401).json({error:'invalid or expired token'});} };
-  const role = async userId => {
-    const first=(await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1')).rows[0];
-    if(first && String(first.id)===String(userId)) return 'OWNER';
-    const admin=(await pool.query('SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 LIMIT 1',[userId])).rowCount;
-    return admin ? 'ADMIN' : null;
-  };
+  const auth = createAdminAuthMiddleware({ pool, jwtApi: jwt, jwtSecret: JWT_SECRET });
+  const role = createPlatformAdminRoleResolver(pool);
   const requireAdmin = async (req,res) => { const value=await role(req.user.sub); if(!value){res.status(403).json({error:'administrator access required',code:'ADMIN_REQUIRED'});return null;} req.fynxAdminRole=value; return value; };
   // Accept a transaction-scoped executor so state changes and their audit row commit atomically.
   const recordAdminActivity = async (req, action, targetType = '', targetId = '', summary = '', metadata = {}, executor = pool) => {
     await executor.query(`INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`, [req.user.sub, req.fynxAdminRole || 'OWNER', action, targetType, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]);
   };
+  app.get('/api/admin/users/search', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      if (!(await requireAdmin(req, res))) return;
+      const query = typeof req.query?.q === 'string' ? req.query.q.trim().replace(/^@+/, '').slice(0, 80) : '';
+      if (query.length < 2) return res.status(400).json({ error: 'enter at least two characters to search for an account' });
+      const result = await pool.query(
+        `SELECT u.id, u.username, u.display_name, COALESCE(s.account_status, 'ACTIVE') AS account_status
+         FROM users u
+         LEFT JOIN fynx_account_safety s ON s.user_id=u.id
+         WHERE u.id::text<>$2 AND (u.id::text=$3 OR u.username ILIKE $1 OR COALESCE(u.display_name, '') ILIKE $1)
+         ORDER BY CASE WHEN LOWER(u.username)=LOWER($4) THEN 0 ELSE 1 END, u.username
+         LIMIT 20`,
+        [`%${query}%`, String(req.user.sub), query, query]
+      );
+      res.set('Cache-Control', 'no-store');
+      return res.json({ users: result.rows.map(user => ({
+        id: String(user.id),
+        username: user.username || '',
+        displayName: user.display_name || '',
+        accountStatus: user.account_status || 'ACTIVE'
+      })) });
+    } catch (error) {
+      console.error('admin user search', error);
+      return res.status(500).json({ error: 'admin user search failed' });
+    }
+  });
+
   const countRows = async (table, where = 'TRUE') => {
     const exists = await pool.query('SELECT 1 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name=$1 LIMIT 1',[table]);
     if (!exists.rowCount) return 0;
