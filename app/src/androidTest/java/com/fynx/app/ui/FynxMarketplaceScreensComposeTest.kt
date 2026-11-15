@@ -113,7 +113,7 @@ class FynxMarketplaceScreensComposeTest {
         saveScreenshot("my-shop-listings-screen.png")
 
         compose.onNodeWithText("Orders").performClick()
-        compose.onNodeWithText("Seller orders").assertIsDisplayed()
+        compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
     }
 
     @Test
@@ -149,7 +149,7 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollTo().performClick()
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name)
             .assertIsDisplayed()
-        compose.onNodeWithText("FYNX TEST DATA", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("FYNX TEST DATA — sample business directory record 1.").assertIsDisplayed()
     }
 
     @Test
