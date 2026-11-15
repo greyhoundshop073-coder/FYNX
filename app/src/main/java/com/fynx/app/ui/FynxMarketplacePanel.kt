@@ -751,7 +751,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}, testOnlyListings: List<FynxRemoteSocialClient.MarketplaceListing>? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}, testOnlyListings: List<FynxRemoteSocialClient.MarketplaceListing>? = null, testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1953,6 +1953,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
         val isOwnListing = viewerUsername.isNotBlank() && listing.sellerUsername.removePrefix("@").trim().equals(viewerUsername, ignoreCase = true)
         MarketplaceDetails(
             l = listing,
+            testOnlyReviews = testOnlyReviews,
             canPurchase = !isOwnListing,
             sellerReputation = sellerReputations[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
@@ -1971,9 +1972,13 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     savedProductBusy = true
                     savedProductStateGeneration += 1
                     scope.launch {
-                        FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
-                            .onSuccess { saved -> setSavedProductState(listingId, saved) }
-                            .onFailure { error = marketplaceSafeError(it, "Saved Products could not be updated.") }
+                        if (testOnlyReviews != null) {
+                            setSavedProductState(listingId, knownSavedProductState(listingId) != true)
+                        } else {
+                            FynxRemoteSocialClient.toggleMarketplaceProductSaved(context, listingId, knownSavedProductState(listingId))
+                                .onSuccess { saved -> setSavedProductState(listingId, saved) }
+                                .onFailure { error = marketplaceSafeError(it, "Saved Products could not be updated.") }
+                        }
                         savedProductBusy = false
                     }
                 }
@@ -1982,13 +1987,17 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 if (!priceWatchBusy) {
                     priceWatchBusy = true
                     scope.launch {
-                        val result = if (priceWatchListingId == listingId) {
-                            FynxRemoteSocialClient.unwatchMarketplacePrice(context, listingId)
+                        if (testOnlyReviews != null) {
+                            priceWatchListingId = if (priceWatchListingId == listingId) null else listingId
                         } else {
-                            FynxRemoteSocialClient.watchMarketplacePrice(context, listingId)
+                            val result = if (priceWatchListingId == listingId) {
+                                FynxRemoteSocialClient.unwatchMarketplacePrice(context, listingId)
+                            } else {
+                                FynxRemoteSocialClient.watchMarketplacePrice(context, listingId)
+                            }
+                            result.onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
+                                .onFailure { error = marketplaceSafeError(it, "Price Watch could not be updated.") }
                         }
-                        result.onSuccess { watched -> priceWatchListingId = if (watched) listingId else null }
-                            .onFailure { error = marketplaceSafeError(it, "Price Watch could not be updated.") }
                         priceWatchBusy = false
                     }
                 }
@@ -2213,7 +2222,8 @@ private fun MarketplaceDetails(
     onToggleSavedProduct: (String) -> Unit,
     onWatchPrice: (String) -> Unit,
     onOpenAssistant: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null
 ) {
     val context = LocalContext.current
     val reviewScope = rememberCoroutineScope()
@@ -2226,7 +2236,16 @@ private fun MarketplaceDetails(
     var productReviewsError by remember(l.id) { mutableStateOf<String?>(null) }
     var productReviewsReloadKey by remember(l.id) { mutableIntStateOf(0) }
     LaunchedEffect(l.id, productReviewsReloadKey) {
-        if (testOnlyListings != null) return@LaunchedEffect
+        if (testOnlyReviews != null) {
+            productReviews = testOnlyReviews
+            productReviewCount = testOnlyReviews.size
+            productReviewAverage = testOnlyReviews.takeIf { it.isNotEmpty() }?.averageOf { it.rating.toDouble() } ?: 0.0
+            productReviewsHasMore = false
+            productReviewsOffset = testOnlyReviews.size
+            productReviewsLoading = false
+            productReviewsError = null
+            return@LaunchedEffect
+        }
         productReviewsLoading = true
         productReviewsError = null
         FynxRemoteSocialClient.marketplaceProductReviews(context, l.id, limit = 5, offset = 0)
