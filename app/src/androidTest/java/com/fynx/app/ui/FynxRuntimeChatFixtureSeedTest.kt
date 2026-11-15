@@ -103,9 +103,19 @@ class FynxRuntimeChatFixtureSeedTest {
         // after instrumentation exits, so wait for the queued disk writes to finish
         // and assert the exact account-scoped records from the persisted preference map.
         val chatPreferences = context.getSharedPreferences("fynx_chat_store", Context.MODE_PRIVATE)
+        // An empty commit() can return without scheduling a disk write, so it does
+        // not reliably wait for the earlier apply() operations above. Make a real
+        // marker mutation: its synchronous disk write is queued after those pending
+        // SharedPreferences writes and therefore establishes the process boundary.
+        val flushMarker = System.currentTimeMillis().toString()
         assertTrue(
             "The private-chat fixture must be durably flushed before the UI process starts",
-            chatPreferences.edit().commit()
+            chatPreferences.edit().putString("runtime_fixture_flush_marker", flushMarker).commit()
+        )
+        assertEquals(
+            "The synchronous marker write must be visible before the app process starts",
+            flushMarker,
+            chatPreferences.getString("runtime_fixture_flush_marker", null)
         )
         val normalizedUsername = username.trim().lowercase()
         val persistedHistory = chatPreferences.getString(
