@@ -84,8 +84,13 @@ check("instrumentation remains mandatory before APK publication",
 check("no common API secrets are committed to Android source",
       not re.search(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
                    "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java").rglob("*.kt"))))
+manifest_secret_pattern = re.compile(r"""(api[_-]?key|secret|private[_-]?key)\s*[=:]\s*["']?[A-Za-z0-9_-]{20,}""", re.I)
+check("manifest secret detector recognizes a whitespace-separated key assignment",
+      bool(manifest_secret_pattern.search("api_key = ABCDEFGHIJKLMNOPQRSTUVWXYZ123456")))
+check("manifest secret detector recognizes a quoted private-key assignment",
+      bool(manifest_secret_pattern.search("private_key: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'")))
 check("manifest does not contain embedded secret-looking values",
-      not re.search(r"(api[_-]?key|secret|private[_-]?key)\\s*[=:]\\s*[A-Za-z0-9_\\-]{20,}", manifest, re.I))
+      not manifest_secret_pattern.search(manifest))
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
