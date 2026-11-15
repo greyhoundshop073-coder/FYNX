@@ -127,7 +127,11 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
 }
 
 @Composable
-fun FynxBuyerWalletPanel() {
+fun FynxBuyerWalletPanel(
+    testOnlySummary: FynxBuyerWalletSummary? = null,
+    testOnlyActivity: List<FynxBuyerWalletActivity> = emptyList(),
+    testOnlySellerSummary: FynxWalletSellerSummary? = null
+) {
     val context = LocalContext.current
     var activeAction by rememberSaveable { mutableStateOf("HOME") }
     var fundingAmount by rememberSaveable { mutableStateOf("") }
@@ -192,6 +196,19 @@ fun FynxBuyerWalletPanel() {
         hasMoreActivity = false
         nextActivityCursor = null
 
+        // Explicit instrumentation-only injection: never calls the wallet API or writes a ledger.
+        if (testOnlySummary != null) {
+            summary = testOnlySummary.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false)
+            activity = testOnlyActivity
+            summaryLoading = false
+            activityLoading = false
+            summaryError = null
+            activityError = null
+            hasMoreActivity = false
+            nextActivityCursor = null
+            return@LaunchedEffect
+        }
+
         try {
             if (!FynxBackendClient.hasAccessToken(context)) {
                 summaryError = "Wallet needs an online sign-in. Sign out, then sign in with your account password; leaving it blank only opens local mode."
@@ -234,6 +251,12 @@ fun FynxBuyerWalletPanel() {
     LaunchedEffect(refreshVersion) {
         sellerSummaryLoading = true
         sellerSummaryError = null
+        if (testOnlySummary != null) {
+            sellerSummary = testOnlySellerSummary
+            sellerSummaryLoading = false
+            sellerSummaryError = null
+            return@LaunchedEffect
+        }
         if (!FynxBackendClient.hasAccessToken(context)) {
             sellerSummary = null
             sellerSummaryError = "Sign in online with your account password to view Marketplace seller earnings."
