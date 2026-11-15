@@ -43,7 +43,7 @@ checks = {
     "approval locks the group and uses the bounded member-capacity insert": "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership_routes and "insertMemberIfCapacity(client, groupId, requested.user_id)" in membership_routes,
     "rejection uses the same admin-only request lifecycle": "app.post('/api/groups/:groupId/join-requests/:username/reject'" in membership_routes and "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership_routes,
     "invite lifecycle has one authoritative backend registration": "registerGroupInviteRoutes" not in bootstrap and "registerGroupMembershipRoutes({ app });" in bootstrap,
-    "private fixture runner accepts the actual AndroidJUnitRunner JUnit success summary": "grep -E '^[[:space:]]*OK \\([1-9][0-9]* tests?\\)[[:space:]]*}
+    "private fixture runner accepts the actual AndroidJUnitRunner JUnit success summary": "grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$'" in runtime_shell and "OK (1 test)" not in runtime_shell,
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS: " if ok else "FAIL: ") + name)
@@ -52,6 +52,7 @@ if failed:
 print(f"GROUP PERMISSIONS CONTRACT GREEN ({len(checks)} checks)")
 " in runtime_shell and "OK (1 test)" not in runtime_shell,
     "private fixture runner fails closed when instrumentation output is missing or reports failures": 'if [ "${FIXTURE_EXIT}" -ne 0 ] || [ -z "${FIXTURE_SUMMARY}" ]' in runtime_shell and "FAILURES!!!" in runtime_shell and '      exit 1' in runtime_shell,
+    "JUnit success-summary matcher accepts one or multiple passing test summaries and rejects failure output": re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "OK (1 test)") is not None and re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "OK (12 tests)") is not None and re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "FAILURES!!!") is None,
     "private fixture runner does not depend on a non-guaranteed INSTRUMENTATION_CODE marker": "INSTRUMENTATION_CODE: -1" not in runtime_shell,
 }
 failed = [name for name, ok in checks.items() if not ok]
