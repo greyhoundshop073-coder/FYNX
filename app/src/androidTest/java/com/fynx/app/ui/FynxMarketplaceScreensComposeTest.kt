@@ -6,11 +6,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -96,7 +96,61 @@ class FynxMarketplaceScreensComposeTest {
                 FynxMarketplaceSellerCenterPanel(
                     testOnlyListings = sellerListings,
                     testOnlyShopName = FynxMarketplaceIsolatedTestFixtures.shop.name,
-                    testOnlyShopDescription = FynxMarketplaceIsolatedTestFixtures.shop.description
+                    testOnlyShopDescription = FynxMarketplaceIsolatedTestFixtures.shop.description,
+                    testOnlyOrders = listOf(
+                        SellerOrderRow(
+                            id = "FYNX-TEST-DELIVERY-001",
+                            buyerName = "FYNX Test Buyer",
+                            title = "FYNX Test Delivery Order",
+                            total = 25_000.0,
+                            currency = "NGN",
+                            status = "PAID",
+                            fulfillment = "DELIVERY",
+                            fulfillmentStatus = "PREPARING",
+                            address = null,
+                            tracking = "FYNX-TEST-TRACK-001",
+                            driverId = null,
+                            driverType = "FYNX_ACCOUNT",
+                            localDriverName = null,
+                            localDriverPhone = null,
+                            pickupPoint = null,
+                            pickupInstructions = null,
+                            vehicleType = null,
+                            vehicleColor = null,
+                            vehiclePlate = null,
+                            vehicleNote = null,
+                            driverApprovalActive = false,
+                            driverAcceptedAt = null,
+                            driverHandoverAt = null,
+                            driverDeliveredAt = null
+                        ),
+                        SellerOrderRow(
+                            id = "FYNX-TEST-PICKUP-001",
+                            buyerName = "FYNX Test Buyer",
+                            title = "FYNX Test Pickup Order",
+                            total = 12_500.0,
+                            currency = "NGN",
+                            status = "PAID",
+                            fulfillment = "PICKUP",
+                            fulfillmentStatus = "READY_FOR_PICKUP",
+                            address = null,
+                            tracking = null,
+                            driverId = null,
+                            driverType = "FYNX_ACCOUNT",
+                            localDriverName = null,
+                            localDriverPhone = null,
+                            pickupPoint = "FYNX Test Market Pickup Desk",
+                            pickupInstructions = "Ask for the isolated test order only.",
+                            vehicleType = null,
+                            vehicleColor = null,
+                            vehiclePlate = null,
+                            vehicleNote = null,
+                            driverApprovalActive = false,
+                            driverAcceptedAt = null,
+                            driverHandoverAt = null,
+                            driverDeliveredAt = null
+                        )
+                    )
                 )
             }
         }
@@ -112,8 +166,12 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("FYNX Test Android Smartphone").performScrollTo().assertIsDisplayed()
         saveScreenshot("my-shop-listings-screen.png")
 
-        compose.onNodeWithText("Orders").performClick()
+        compose.onAllNodesWithText("Orders")[0].performClick()
         compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
+        compose.onNodeWithText("Seller orders").performClick()
+        compose.onNodeWithText("FYNX Test Delivery Order").assertIsDisplayed()
+        compose.onNodeWithText("FYNX Test Pickup Order").assertIsDisplayed()
+        compose.onNodeWithText("Pickup").assertIsDisplayed()
     }
 
     @Test
