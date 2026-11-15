@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.io.File
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -22,6 +23,7 @@ class FynxRuntimeChatFixtureSeedTest {
     @Test
     fun seedDisposablePrivateConversationForLocalRuntimeCapture() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        assertEquals("The fixture must write into the installed FYNX application, not the test APK", "com.fynx.app", context.packageName)
         // The focused runtime shell passes the same username the UI login will use.
         // This matters when CI has a username but deliberately has no backend password.
         val username = InstrumentationRegistry.getArguments()
@@ -55,10 +57,12 @@ class FynxRuntimeChatFixtureSeedTest {
             auth.edit()
                 .putString("username", username)
                 .putString("display_name", "FYNX Runtime Owner")
+                .putBoolean("account_created", true)
                 .putBoolean("signed_in", false)
                 .commit()
         )
         assertEquals(username, FynxAuthStore.accountStorageKey(context))
+        assertTrue("The disposable fixture must enter the saved-device LOGIN route", FynxAuthStore.hasAccount(context))
         assertFalse("The fixture must not pre-authenticate the app before its debug-local login flow", auth.getBoolean("signed_in", false))
 
         val peerMessage = ChatMessage(
@@ -132,6 +136,13 @@ class FynxRuntimeChatFixtureSeedTest {
             "The exact account-scoped peer preview must be present on disk",
             persistedPreviews.contains(peerUsername) && persistedPreviews.contains("FYNX Runtime Peer")
         )
+        // Read the actual app-private XML file, not only SharedPreferences' in-memory map.
+        val chatStoreFile = File(context.applicationInfo.dataDir, "shared_prefs/fynx_chat_store.xml")
+        assertTrue("The installed FYNX app must have a real fynx_chat_store.xml file", chatStoreFile.isFile)
+        val diskSnapshot = chatStoreFile.readText()
+        assertTrue("The persisted XML must contain the peer message", diskSnapshot.contains(peerMessage.text))
+        assertTrue("The persisted XML must contain the owner reply", diskSnapshot.contains(ownerReply.text))
+        assertTrue("The persisted XML must contain the account-scoped preview", diskSnapshot.contains("chat_previews_" + normalizedUsername))
 
         assertEquals(2, FynxChatStore.load(context, peerUsername).size)
         assertNull("Tokenless local entry must remain independent of a backend credential", FynxBackendClient.accessToken(context))

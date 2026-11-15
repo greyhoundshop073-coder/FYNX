@@ -54,12 +54,47 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
     FYNX_CHAT_GROUPS_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   else
     echo "::notice::Backend or E2E credentials unavailable; seeding an isolated local private-chat fixture before the explicit debug-local UI capture. No server behavior is certified."
-    ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest -Pandroid.testInstrumentationRunnerArguments.username="${FYNX_E2E_USERNAME:-marketplace_visual_check}" --no-daemon --build-cache
-    FIXTURE_EXIT=$?
-    if [ "${FIXTURE_EXIT}" -ne 0 ]; then
-      echo "::error::The isolated local private-chat fixture could not be seeded; refusing to count a self-chat or empty conversation as private-chat runtime evidence."
-      exit "${FIXTURE_EXIT}"
+    # Seed after the suite. A second Gradle-managed connected test invocation can
+    # replace the target package; use the built APK pair and invoke AndroidJUnitRunner
+    # directly so the fixture remains in the installed app's private data directory.
+    APP_APK="app/build/outputs/apk/debug/app-debug.apk"
+    TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+    if [ ! -s "${APP_APK}" ] || [ ! -s "${TEST_APK}" ]; then
+      echo "::error::The exact-head debug APK pair is missing; refusing to seed a fixture into an unknown install."
+      exit 1
     fi
+    adb install -r "${APP_APK}"
+    INSTALL_APP_EXIT=$?
+    if [ "${INSTALL_APP_EXIT}" -ne 0 ]; then
+      echo "::error::Could not install the exact-head FYNX debug APK before private-chat fixture seeding."
+      exit "${INSTALL_APP_EXIT}"
+    fi
+    adb install -r "${TEST_APK}"
+    INSTALL_TEST_EXIT=$?
+    if [ "${INSTALL_TEST_EXIT}" -ne 0 ]; then
+      echo "::error::Could not install the exact-head Android test APK before private-chat fixture seeding."
+      exit "${INSTALL_TEST_EXIT}"
+    fi
+    FIXTURE_OUTPUT=$(adb shell am instrument -w \
+      -e class com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest \
+      -e username "${FYNX_E2E_USERNAME:-marketplace_visual_check}" \
+      com.fynx.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1)
+    FIXTURE_EXIT=$?
+    printf '%s\\n' "${FIXTURE_OUTPUT}"
+    if [ "${FIXTURE_EXIT}" -ne 0 ] || ! printf '%s' "${FIXTURE_OUTPUT}" | grep -q 'INSTRUMENTATION_CODE: -1'; then
+      echo "::error::The private-chat fixture instrumentation did not report a clean AndroidJUnitRunner pass."
+      exit "${FIXTURE_EXIT:-1}"
+    fi
+    # Verify the real target-app preference file from the shell before launching UI.
+    FIXTURE_DISK=$(adb shell run-as com.fynx.app cat shared_prefs/fynx_chat_store.xml 2>&1)
+    if ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX offline private fixture: hello from the test peer' ||
+       ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX local reply: the private conversation history restored' ||
+       ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX Runtime Peer'; then
+      echo "::error::The target app's persisted Chat XML does not contain the expected peer and both messages."
+      printf '%s\\n' "${FIXTURE_DISK}"
+      exit 1
+    fi
+    echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before UI login."
     FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   fi
   NAV_EXIT=$?
