@@ -2564,6 +2564,19 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     ["Unmute full-screen video", "Mute full-screen video", "Pause full-screen video", "Play full-screen video", "Close media viewer"]
                 )
                 if fullscreen_xml:
+                    # Opening the media viewer intentionally leaves playback paused.
+                    # Start the clip through its real accessible Play control before
+                    # waiting for the active Pause state; otherwise the test waits on
+                    # a state it never requested and leaves the viewer over the Home feed.
+                    if find_control(fullscreen_xml, ["Play full-screen video"]):
+                        playing_xml = tap_control(
+                            fullscreen_xml,
+                            ["Play full-screen video"],
+                            "authenticated-home-fullscreen-video-start",
+                            ["Pause full-screen video"]
+                        )
+                        if playing_xml:
+                            fullscreen_xml = playing_xml
                     fullscreen_xml = camera_wait_for_control(
                         fullscreen_xml,
                         ["Unmute full-screen video", "Mute full-screen video"],

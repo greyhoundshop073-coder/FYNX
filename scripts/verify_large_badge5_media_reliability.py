@@ -3,6 +3,10 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def read(relative_path: str) -> str:
+    return (ROOT / relative_path).read_text(encoding="utf-8")
 remote = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
 camera = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 status = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
@@ -42,8 +46,19 @@ surface_checks = {
     "camera-to-post gate remains": "verify_camera_post_journey.py" in workflow,
 }
 
+
+sampling_checks = {
+    "shared bitmap sampler checks bounds before allocation": "inJustDecodeBounds = true" in read("app/src/main/java/com/fynx/app/ui/FynxBitmapSampling.kt") and "computeInSampleSize" in read("app/src/main/java/com/fynx/app/ui/FynxBitmapSampling.kt"),
+    "media cache uses shared bounded sampling": "FynxBitmapSampling.computeInSampleSize" in read("app/src/main/java/com/fynx/app/ui/FynxMediaCache.kt"),
+    "remote Home feed previews use sampled decoding": "FynxBitmapSampling.decodeFileSampled" in read("app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt"),
+    "post media viewer uses sampled decoding": "FynxBitmapSampling.decodeFileSampled" in read("app/src/main/java/com/fynx/app/ui/FynxPostMediaViewer.kt"),
+    "own and other profile photos use sampled decoding": "FynxBitmapSampling.decodeUriSampled" in read("app/src/main/java/com/fynx/app/ui/ProfilePanel.kt") and "FynxBitmapSampling.decodeUriSampled" in read("app/src/main/java/com/fynx/app/ui/OtherUserProfilePanel.kt"),
+    "saved post opens the author's username profile": "onOpenAuthorProfile(entry.post.authorUsername.removePrefix" in read("app/src/main/java/com/fynx/app/ui/FynxSavedPostsPanel.kt"),
+    "passive video allows parent feed scrolling": "return false" in read("app/src/main/java/com/fynx/app/ui/FynxPassiveVideoView.kt"),
+}
+
 failed = []
-for group, checks in (("remote-media", remote_checks), ("camera", camera_checks), ("surfaces", surface_checks)):
+for group, checks in (("remote-media", remote_checks), ("camera", camera_checks), ("surfaces", surface_checks), ("preview-sampling", sampling_checks)):
     for name, ok in checks.items():
         print(f"{'PASS' if ok else 'FAIL'}: {group}: {name}")
         if not ok:
