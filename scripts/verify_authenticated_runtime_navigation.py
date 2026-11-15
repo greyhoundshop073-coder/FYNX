@@ -1456,56 +1456,142 @@ def first_username_in_xml(xml_text:str)->str:
     return ""
 
 def local_private_fixture_state() -> dict:
-    """Inspect the real app sandbox after local login without exposing account data."""
+    """Inspect auth and Chat storage independently without exposing account data."""
     auth_result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_auth.xml")
     store_result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_chat_store.xml")
-    state = {"account_matches": False, "history_present": False, "preview_present": False}
-    if auth_result.returncode != 0 or store_result.returncode != 0:
-        return state
-    try:
-        auth_root = ET.fromstring(auth_result.stdout or "")
-        auth_strings = {
-            item.attrib.get("name", ""): (item.text or "")
-            for item in auth_root.findall("string")
-        }
-        signed_in = any(
-            item.attrib.get("name") == "signed_in" and item.attrib.get("value") == "true"
-            for item in auth_root.findall("boolean")
-        )
-        stored_username = auth_strings.get("username", "").strip().lower().removeprefix("@")
-        expected_username = (USERNAME or "marketplace_visual_check").strip().lower().removeprefix("@")
-        state["account_matches"] = bool(signed_in and stored_username and stored_username == expected_username)
+    files_result = run("adb", "shell", "run-as", PACKAGE, "ls", "shared_prefs")
+    expected_username = (USERNAME or "marketplace_visual_check").strip().lower().removeprefix("@")
+    state = {
+        "auth_file_readable": auth_result.returncode == 0,
+        "chat_store_file_readable": store_result.returncode == 0,
+        "shared_prefs_directory_readable": files_result.returncode == 0,
+        "chat_store_file_listed": "fynx_chat_store.xml" in (files_result.stdout or "").split(),
+        "auth_xml_parse_ok": False,
+        "chat_store_xml_parse_ok": False,
+        "stored_username_present": False,
+        "signed_in": False,
+        "account_matches": False,
+        "expected_history_key_present": False,
+        "expected_preview_key_present": False,
+        "expected_history_present": False,
+        "expected_preview_present": False,
+        "stored_namespace_history_present": False,
+        "stored_namespace_preview_present": False,
+        "matching_history_namespace_count": 0,
+        "fixture_ready": False,
+    }
 
-        store_root = ET.fromstring(store_result.stdout or "")
-        stored_values = {
-            item.attrib.get("name", ""): (item.text or "")
-            for item in store_root.findall("string")
-        }
-        safe_account = re.sub(r"[^A-Za-z0-9_@.-]", "_", stored_username)
-        history_raw = stored_values.get("chat_" + safe_account + "_fynx_runtime_peer", "")
-        previews_raw = stored_values.get("chat_previews_" + safe_account, "")
-        history = json.loads(history_raw) if history_raw else []
-        previews = json.loads(previews_raw) if previews_raw else []
-        required_messages = {
-            "FYNX offline private fixture: hello from the test peer",
-            "FYNX local reply: the private conversation history restored",
-        }
-        state["history_present"] = (
-            isinstance(history, list)
-            and required_messages.issubset({
+    def safe_key(value: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_@.-]", "_", value)
+
+    try:
+        auth_root = ET.fromstring(auth_result.stdout or "") if auth_result.returncode == 0 else None
+        if auth_root is not None:
+            state["auth_xml_parse_ok"] = True
+            auth_strings = {
+                item.attrib.get("name", ""): (item.text or "")
+                for item in auth_root.findall("string")
+            }
+            signed_in = any(
+                item.attrib.get("name") == "signed_in" and item.attrib.get("value") == "true"
+                for item in auth_root.findall("boolean")
+            )
+            stored_username = auth_strings.get("username", "").strip()
+            normalized_stored = stored_username.lower().removeprefix("@")
+            state["stored_username_present"] = bool(stored_username)
+            state["signed_in"] = bool(signed_in)
+            state["account_matches"] = bool(
+                signed_in and normalized_stored and normalized_stored == expected_username
+            )
+        else:
+            stored_username = ""
+            normalized_stored = ""
+
+        store_root = ET.fromstring(store_result.stdout or "") if store_result.returncode == 0 else None
+        stored_values = {}
+        if store_root is not None:
+            state["chat_store_xml_parse_ok"] = True
+            stored_values = {
+                item.attrib.get("name", ""): (item.text or "")
+                for item in store_root.findall("string")
+            }
+
+        def history_for(account: str):
+            if not account or store_root is None:
+                return False, 0
+            key = "chat_" + safe_key(account.strip().lower()) + "_fynx_runtime_peer"
+            raw = stored_values.get(key, "")
+            state["expected_history_key_present"] = state["expected_history_key_present"] or key in stored_values
+            try:
+                history = json.loads(raw) if raw else []
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return False, 0
+            required = {
+                "FYNX offline private fixture: hello from the test peer",
+                "FYNX local reply: the private conversation history restored",
+            }
+            messages = {
                 str(item.get("text", "")) for item in history if isinstance(item, dict)
-            })
-        )
-        state["preview_present"] = (
-            isinstance(previews, list)
-            and any(
+            } if isinstance(history, list) else set()
+            return required.issubset(messages), len(history) if isinstance(history, list) else 0
+
+        def preview_for(account: str):
+            if not account or store_root is None:
+                return False
+            key = "chat_previews_" + safe_key(account.strip().lower())
+            raw = stored_values.get(key, "")
+            state["expected_preview_key_present"] = state["expected_preview_key_present"] or key in stored_values
+            try:
+                previews = json.loads(raw) if raw else []
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return False
+            return isinstance(previews, list) and any(
                 isinstance(item, dict)
                 and str(item.get("username", "")).strip().lower().removeprefix("@") == "fynx_runtime_peer"
+                and str(item.get("name", "")) == "FYNX Runtime Peer"
                 for item in previews
             )
-        )
-    except (ET.ParseError, ValueError, TypeError):
-        return state
+
+        expected_history, _ = history_for(expected_username)
+        expected_preview = preview_for(expected_username)
+        state["expected_history_present"] = expected_history
+        state["expected_preview_present"] = expected_preview
+        if normalized_stored:
+            stored_history, _ = history_for(stored_username)
+            stored_preview = preview_for(stored_username)
+            state["stored_namespace_history_present"] = stored_history
+            state["stored_namespace_preview_present"] = stored_preview
+
+        if store_root is not None:
+            for entry in store_root.findall("string"):
+                key = entry.attrib.get("name", "")
+                if not (key.startswith("chat_") and key.endswith("_fynx_runtime_peer")):
+                    continue
+                try:
+                    history = json.loads(entry.text or "[]")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                required = {
+                    "FYNX offline private fixture: hello from the test peer",
+                    "FYNX local reply: the private conversation history restored",
+                }
+                messages = {
+                    str(item.get("text", "")) for item in history if isinstance(item, dict)
+                } if isinstance(history, list) else set()
+                if required.issubset(messages):
+                    state["matching_history_namespace_count"] += 1
+    except (ET.ParseError, TypeError, ValueError):
+        pass
+
+    state["fixture_ready"] = bool(
+        state["auth_file_readable"]
+        and state["chat_store_file_readable"]
+        and state["auth_xml_parse_ok"]
+        and state["chat_store_xml_parse_ok"]
+        and state["account_matches"]
+        and state["expected_history_present"]
+        and state["expected_preview_present"]
+    )
     return state
 
 
@@ -3592,6 +3678,13 @@ if CHAT_GROUPS_VISUALS_ONLY:
         print("\n".join(report))
         raise SystemExit(2)
 
+    local_fixture_state_before_theme = None
+    if FORCE_LOCAL_VISUALS:
+        local_fixture_state_before_theme = local_private_fixture_state()
+        (ROOT / "chat-local-fixture-state-before-theme.json").write_text(
+            json.dumps(local_fixture_state_before_theme, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+
     night_mode = run("adb", "shell", "cmd", "uimode", "night", "yes", timeout=15)
     if night_mode.returncode == 0:
         time.sleep(0.8)
@@ -3601,12 +3694,26 @@ if CHAT_GROUPS_VISUALS_ONLY:
     local_fixture_state = None
     if FORCE_LOCAL_VISUALS:
         local_fixture_state = local_private_fixture_state()
+        (ROOT / "chat-local-fixture-state-after-theme.json").write_text(
+            json.dumps(local_fixture_state, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
         report.append(
             "- Local private fixture after saved-device entry: "
-            + ", ".join(f"{key}={'yes' if value else 'no'}" for key, value in local_fixture_state.items())
+            + ", ".join(
+                f"{key}={'yes' if local_fixture_state.get(key) else 'no'}"
+                for key in (
+                    "fixture_ready", "auth_file_readable", "chat_store_file_readable",
+                    "chat_store_file_listed", "signed_in", "account_matches",
+                    "expected_history_present", "expected_preview_present",
+                    "matching_history_namespace_count"
+                )
+            )
         )
         (ROOT / "chat-local-fixture-state.json").write_text(
-            json.dumps(local_fixture_state, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+            json.dumps({
+                "before_theme": local_fixture_state_before_theme,
+                "after_theme": local_fixture_state
+            }, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
     chat_xml = tap_control(home_xml, ["Chat"], "chat-groups-home-chat", ["Messages and groups in one place"])
     if not chat_xml:
@@ -3621,10 +3728,18 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # as proof of the private-chat journey.
         private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
         if FORCE_LOCAL_VISUALS and local_fixture_state is not None:
-            if not all(local_fixture_state.values()):
+            if not local_fixture_state.get("fixture_ready"):
+                before_ready = bool(local_fixture_state_before_theme and local_fixture_state_before_theme.get("fixture_ready"))
+                after_readable = bool(local_fixture_state.get("chat_store_file_readable"))
+                reason = (
+                    "the fixture was present immediately after login but became unavailable after the emulator theme change"
+                    if before_ready and not local_fixture_state.get("fixture_ready") else
+                    "the account-scoped Chat fixture was not readable or complete at the post-login boundary"
+                )
                 FAILURES.append(
-                    "The debug-local app session lost the seeded account/history/preview before Chat opened; "
-                    "inspect chat-local-fixture-state.json for the exact boundary."
+                    "The debug-local private fixture is not ready: " + reason
+                    + "; see chat-local-fixture-state.json for separate auth-file, Chat-store, account and key checks."
+                    + (" The Chat preferences file could not be read." if not after_readable else "")
                 )
             elif "FYNX Runtime Peer" not in chat_xml:
                 FAILURES.append(
