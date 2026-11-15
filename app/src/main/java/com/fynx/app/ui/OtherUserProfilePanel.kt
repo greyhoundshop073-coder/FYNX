@@ -309,7 +309,7 @@ private fun ProfilePhotoViewerDialog(mediaId: String, name: String, onDismiss: (
         bitmap = if (uri != null) {
             withContext(Dispatchers.IO) {
                 runCatching {
-                    context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
+                    FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.FEED_MAX_DIMENSION)
                 }.getOrNull()
             }
         } else null
@@ -537,7 +537,7 @@ private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifie
     LaunchedEffect(mediaId) {
         bitmap = if (mediaId != null) {
             val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
-            if (uri != null) withContext(Dispatchers.IO) { runCatching { context.contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) } }.getOrNull() } else null
+            if (uri != null) withContext(Dispatchers.IO) { runCatching { FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION) }.getOrNull() } else null
         } else null
     }
     val image = bitmap
