@@ -2138,7 +2138,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
     val context = LocalContext.current
     val username = l.sellerUsername.removePrefix("@").trim()
     var photoId by remember(username) { mutableStateOf<String?>(null) }
-    LaunchedEffect(username) { if (testOnlyListings == null && username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
+    LaunchedEffect(username) { if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
     Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
