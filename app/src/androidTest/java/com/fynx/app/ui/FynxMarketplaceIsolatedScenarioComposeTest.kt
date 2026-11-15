@@ -15,6 +15,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -83,7 +84,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         )
-        val expectedDealId = candidates.first().id
+        assertTrue("Great Deals fixture needs at least two eligible products", candidates.size >= 2)
+        val expectedDealId = candidates[1].id
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -137,7 +139,11 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // The first real production banner CTA must route the exact selected listing ID.
+        // Manual carousel navigation must advance the actual production carousel and route the
+        // exact identity of the newly selected deal, not the first or a neighbouring listing.
+        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Next advertised product").performClick()
+        compose.onNodeWithText("Product 2 of ${candidates.size}").assertIsDisplayed()
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
@@ -150,6 +156,43 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             assertEquals(1, favoriteActions)
             assertEquals(1, cartActions)
             assertEquals(FynxMarketplaceIsolatedTestFixtures.listings[12].id, openedCardId)
+        }
+    }
+
+    @Test
+    fun greatDealsAutomaticallyAdvanceFromTheFirstToTheNextEligibleProduct() {
+        val dealListings = FynxMarketplaceIsolatedTestFixtures.listings.take(6)
+        val candidates = selectMarketplaceAdvertisingCandidates(
+            dealListings.map { listing ->
+                MarketplaceAdvertisingCandidate(
+                    id = listing.id,
+                    sellerUsername = listing.sellerUsername,
+                    title = listing.title,
+                    price = listing.price,
+                    currency = listing.currency,
+                    quantity = listing.quantity,
+                    active = listing.active
+                )
+            }
+        )
+        assertTrue(candidates.size >= 2)
+        compose.setContent {
+            MaterialTheme {
+                MarketplacePromotionalBanner(
+                    listings = dealListings,
+                    sellerReputations = emptyMap(),
+                    weeklySeller = null,
+                    weeklySellerListing = null,
+                    sponsoredPromotions = emptyList(),
+                    seasonalPromotions = emptyList(),
+                    onOpenListing = {}, onOpenSeller = {}, onOpenProduct = {}, onOpenCategory = {},
+                    onShopNow = {}, onOpenOrders = {}, onRefresh = {}
+                )
+            }
+        }
+        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
+        compose.waitUntil(timeoutMillis = 6_500) {
+            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
