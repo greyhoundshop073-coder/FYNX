@@ -24,7 +24,7 @@ checks = {
     "active group chat loads and uses remote send/media/member permissions": "FynxGroupRemoteClient.loadPermissions(context, groupId)" in active and "remotePermissions?.sendMessages" in active and "remotePermissions?.sendMedia" in active and "remotePermissions?.addMembers" in active,
     "authenticated group actions fail closed until server permissions load": "val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMessages == true" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMedia == true" in active and "remotePermissions?.addMembers == true" in active and "permissionLoadError" in active,
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
-    "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
+    "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds = remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
     "group settings remote permission controls fail closed until loaded for an admin session": "permissionsLoaded by remember(groupId){mutableStateOf(false)}" in settings and "canEditGroupRemotePermissions(isAdmin,FynxBackendClient.hasAccessToken(context),permissionsLoaded,permissionsSaving)" in settings,
     "remote permission updates refuse an unloaded or saving settings snapshot": "if (!canEditGroupRemotePermissions(isAdmin, !expectedToken.isNullOrBlank(), permissionsLoaded, permissionsSaving))" in settings and "permissionsLoaded = false" in settings,
     "permission load and save responses remain bound to the initiating account and token": "FynxBackendClient.isRequestSessionCurrent(" in settings and settings.count("FynxBackendClient.isRequestSessionCurrent(") >= 2,
@@ -43,7 +43,7 @@ checks = {
     "approval locks the group and uses the bounded member-capacity insert": "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership_routes and "insertMemberIfCapacity(client, groupId, requested.user_id)" in membership_routes,
     "rejection uses the same admin-only request lifecycle": "app.post('/api/groups/:groupId/join-requests/:username/reject'" in membership_routes and "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership_routes,
     "invite lifecycle has one authoritative backend registration": "registerGroupInviteRoutes" not in bootstrap and "registerGroupMembershipRoutes({ app });" in bootstrap,
-    "private fixture runner accepts the actual AndroidJUnitRunner JUnit success summary": "grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$'" in runtime_shell and "OK (1 test)" not in runtime_shell,
+    "private fixture runner accepts the actual AndroidJUnitRunner JUnit success summary": r"grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$'" in runtime_shell and "OK (1 test)" not in runtime_shell,
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS: " if ok else "FAIL: ") + name)

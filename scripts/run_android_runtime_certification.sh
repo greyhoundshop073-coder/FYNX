@@ -85,7 +85,7 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
     # summary (for example, "OK (1 test)"); it does not guarantee an
     # INSTRUMENTATION_CODE line in adb's captured output. Require the actual
     # successful test summary and a zero adb exit, and fail closed otherwise.
-    FIXTURE_SUMMARY=$(printf '%s\n' "${FIXTURE_OUTPUT}" | grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*    # Verify the real target-app preference file from the shell before launching UI.
+    FIXTURE_SUMMARY=$(printf '%s\n' "${FIXTURE_OUTPUT}" | grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$' | tail -n 1)
     FIXTURE_DISK=$(adb shell run-as com.fynx.app cat shared_prefs/fynx_chat_store.xml 2>&1)
     if ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX offline private fixture: hello from the test peer' ||
        ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX local reply: the private conversation history restored' ||
