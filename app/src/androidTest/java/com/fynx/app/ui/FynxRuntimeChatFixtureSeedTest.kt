@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,6 +35,21 @@ class FynxRuntimeChatFixtureSeedTest {
 
         // Reserve the account-scoped store that the debug-local UI login will use,
         // but leave the session signed out so the real login gate is exercised.
+        // This capture must be a deterministic local-only saved-device session.
+        // A previous instrumentation run or emulator snapshot may leave a stale
+        // bearer token behind; the app's normal 401 handling would correctly clear
+        // the auth session, which also changes FynxChatStore's account namespace.
+        // Clear only credential values, preserving backend URL/configuration.
+        assertTrue(
+            context.getSharedPreferences("fynx_secure_auth", Context.MODE_PRIVATE)
+                .edit().remove("access_token").commit()
+        )
+        assertTrue(
+            context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
+                .edit().remove("access_token").commit()
+        )
+        assertNull("Local visual fixture must never inherit a server credential", FynxBackendClient.accessToken(context))
+
         val auth = context.getSharedPreferences("fynx_auth", Context.MODE_PRIVATE)
         assertTrue(
             auth.edit()
@@ -106,5 +122,18 @@ class FynxRuntimeChatFixtureSeedTest {
             "The exact account-scoped peer preview must be present on disk",
             persistedPreviews.contains(peerUsername) && persistedPreviews.contains("FYNX Runtime Peer")
         )
+
+        assertEquals(2, FynxChatStore.load(context, peerUsername).size)
+        assertNull("Tokenless local entry must remain independent of a backend credential", FynxBackendClient.accessToken(context))
+
+        // Exercise the exact local sign-in transition used by FynxApp's auth gate.
+        // The account-scoped cache must remain reachable after the UI marks this
+        // saved-device session signed in, and the backend token must remain absent.
+        FynxAuthStore.save(context, username)
+        assertEquals(username.trim().lowercase(), FynxAuthStore.accountStorageKey(context))
+        assertEquals(peerUsername, FynxChatStore.loadPreviews(context).firstOrNull()?.username)
+        assertEquals(2, FynxChatStore.load(context, peerUsername).size)
+        assertNull(FynxBackendClient.accessToken(context))
+        assertTrue("Restore the signed-out gate for the following UI login", auth.edit().putBoolean("signed_in", false).commit())
     }
 }

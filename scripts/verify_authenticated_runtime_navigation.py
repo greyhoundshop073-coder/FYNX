@@ -1455,6 +1455,60 @@ def first_username_in_xml(xml_text:str)->str:
             return value
     return ""
 
+def local_private_fixture_state() -> dict:
+    """Inspect the real app sandbox after local login without exposing account data."""
+    auth_result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_auth.xml")
+    store_result = run("adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_chat_store.xml")
+    state = {"account_matches": False, "history_present": False, "preview_present": False}
+    if auth_result.returncode != 0 or store_result.returncode != 0:
+        return state
+    try:
+        auth_root = ET.fromstring(auth_result.stdout or "")
+        auth_strings = {
+            item.attrib.get("name", ""): (item.text or "")
+            for item in auth_root.findall("string")
+        }
+        signed_in = any(
+            item.attrib.get("name") == "signed_in" and item.attrib.get("value") == "true"
+            for item in auth_root.findall("boolean")
+        )
+        stored_username = auth_strings.get("username", "").strip().lower().removeprefix("@")
+        expected_username = (USERNAME or "marketplace_visual_check").strip().lower().removeprefix("@")
+        state["account_matches"] = bool(signed_in and stored_username and stored_username == expected_username)
+
+        store_root = ET.fromstring(store_result.stdout or "")
+        stored_values = {
+            item.attrib.get("name", ""): (item.text or "")
+            for item in store_root.findall("string")
+        }
+        safe_account = re.sub(r"[^A-Za-z0-9_@.-]", "_", stored_username)
+        history_raw = stored_values.get("chat_" + safe_account + "_fynx_runtime_peer", "")
+        previews_raw = stored_values.get("chat_previews_" + safe_account, "")
+        history = json.loads(history_raw) if history_raw else []
+        previews = json.loads(previews_raw) if previews_raw else []
+        required_messages = {
+            "FYNX offline private fixture: hello from the test peer",
+            "FYNX local reply: the private conversation history restored",
+        }
+        state["history_present"] = (
+            isinstance(history, list)
+            and required_messages.issubset({
+                str(item.get("text", "")) for item in history if isinstance(item, dict)
+            })
+        )
+        state["preview_present"] = (
+            isinstance(previews, list)
+            and any(
+                isinstance(item, dict)
+                and str(item.get("username", "")).strip().lower().removeprefix("@") == "fynx_runtime_peer"
+                for item in previews
+            )
+        )
+    except (ET.ParseError, ValueError, TypeError):
+        return state
+    return state
+
+
 def emulator_signed_in_username() -> str:
     """Read the account actually signed into this disposable emulator session.
 
@@ -3544,6 +3598,16 @@ if CHAT_GROUPS_VISUALS_ONLY:
         xml = dismiss_runtime_permission_prompt() or dump_ui("chat-groups-dark-home.xml") or xml
 
     home_xml = dump_ui("chat-groups-home-entry.xml") or xml
+    local_fixture_state = None
+    if FORCE_LOCAL_VISUALS:
+        local_fixture_state = local_private_fixture_state()
+        report.append(
+            "- Local private fixture after saved-device entry: "
+            + ", ".join(f"{key}={'yes' if value else 'no'}" for key, value in local_fixture_state.items())
+        )
+        (ROOT / "chat-local-fixture-state.json").write_text(
+            json.dumps(local_fixture_state, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
     chat_xml = tap_control(home_xml, ["Chat"], "chat-groups-home-chat", ["Messages and groups in one place"])
     if not chat_xml:
         FAILURES.append("Home -> Chat did not reach the real Chat and Groups surface")
@@ -3556,6 +3620,17 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # peer and two messages in the account-scoped store. Never accept an empty self-chat
         # as proof of the private-chat journey.
         private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
+        if FORCE_LOCAL_VISUALS and local_fixture_state is not None:
+            if not all(local_fixture_state.values()):
+                FAILURES.append(
+                    "The debug-local app session lost the seeded account/history/preview before Chat opened; "
+                    "inspect chat-local-fixture-state.json for the exact boundary."
+                )
+            elif "FYNX Runtime Peer" not in chat_xml:
+                FAILURES.append(
+                    "The seeded account-scoped preview and two-message history remain in app storage after login, "
+                    "but ChatsPanel did not render the peer row."
+                )
         if not private_xml and not (CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS):
             # Non-focused fallback paths may inspect the signed-in account's own panel.
             # The focused local Chat/Groups run must never substitute self-chat for
