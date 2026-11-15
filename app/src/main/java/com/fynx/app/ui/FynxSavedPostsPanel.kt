@@ -160,7 +160,7 @@ fun FynxSavedPostsPanel(onOpenAuthorProfile: (String) -> Unit = {}) {
                                 if (openingMediaPostId == entry.post.id) Text("Opening media…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                             }
                             Spacer(Modifier.height(8.dp))
-                            Text("View @${entry.post.authorUsername.removePrefix("@")} profile", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clickable { onOpenAuthorProfile(entry.post.authorId) }.padding(vertical = 4.dp))
+                            Text("View @${entry.post.authorUsername.removePrefix("@")} profile", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.clickable { onOpenAuthorProfile(entry.post.authorUsername.removePrefix("@").trim()) }.padding(vertical = 4.dp))
                         }
                     }
                 }
