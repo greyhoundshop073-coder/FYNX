@@ -267,7 +267,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             context = context,
             onMessage = { remote ->
                 val myId = currentUserIdLatest ?: return@FynxRealtimeClient
-                if (remote.senderId != myId && remote.recipientId != myId) return@FynxRealtimeClient
+                if (!belongsToDirectConversation(
+                    remoteSenderId = remote.senderId,
+                    remoteSenderUsername = remote.senderUsername,
+                    remoteRecipientId = remote.recipientId,
+                    remoteRecipientUsername = remote.recipientUsername,
+                    currentUserId = myId,
+                    peerUserId = recipientUserIdLatest,
+                    peerUsername = chat.username
+                )) return@FynxRealtimeClient
                 val converted = FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
                     if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                 }
