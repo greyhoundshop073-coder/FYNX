@@ -25,6 +25,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
+internal fun canEditGroupRemotePermissions(isAdmin: Boolean, hasAccessToken: Boolean, permissionsLoaded: Boolean, permissionsSaving: Boolean): Boolean =
+    isAdmin && hasAccessToken && permissionsLoaded && !permissionsSaving
+
 @Composable
 fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boolean=false,onBack:()->Unit={},onClearHistory:()->Unit={}){
     val context=LocalContext.current;val scope=rememberCoroutineScope();val prefs=remember(groupId){FynxConversationPreferences.group(context,groupId)};val storedGroup=remember(groupId){FynxGroupsStore.load(context).firstOrNull{it.id==groupId}}
@@ -44,12 +47,103 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
             }.onFailure{photoMessage=it.message?:"Photo upload failed."}
             photoBusy=false
         }
-    };var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))};var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))};var sendMessages by remember(groupId){mutableStateOf(true)};var sendMedia by remember(groupId){mutableStateOf(true)};var addMembers by remember(groupId){mutableStateOf(true)};var inviteLinks by remember(groupId){mutableStateOf(true)};var approveNewMembers by remember(groupId){mutableStateOf(false)};var disappearingSeconds by remember(groupId){mutableStateOf(0)};var showHistoryToNewMembers by remember(groupId){mutableStateOf(true)};var permissionsLoading by remember(groupId){mutableStateOf(false)};var permissionsSaving by remember(groupId){mutableStateOf(false)};var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)};var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))};var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))};var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")};var showWallpaper by remember{mutableStateOf(false)};var showClearDialog by remember{mutableStateOf(false)};var showResetDialog by remember{mutableStateOf(false)};var showEditInfo by remember{mutableStateOf(false)};var editName by remember{mutableStateOf(currentGroup?.name?:groupName)};var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())};var infoMessage by remember{mutableStateOf<String?>(null)};var savingInfo by remember{mutableStateOf(false)};var inviteMessage by remember{mutableStateOf<String?>(null)};var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)};var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())};var requestsLoading by remember(groupId){mutableStateOf(false)};var requestAction by remember(groupId){mutableStateOf<String?>(null)};var showReportDialog by remember(groupId){mutableStateOf(false)};var reportReason by remember(groupId){mutableStateOf("")};var reportBusy by remember(groupId){mutableStateOf(false)};var reportSubmitted by remember(groupId){mutableStateOf(false)};var reportMessage by remember(groupId){mutableStateOf<String?>(null)}
+    };var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))};var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))};var sendMessages by remember(groupId){mutableStateOf(true)};var sendMedia by remember(groupId){mutableStateOf(true)};var addMembers by remember(groupId){mutableStateOf(true)};var inviteLinks by remember(groupId){mutableStateOf(true)};var approveNewMembers by remember(groupId){mutableStateOf(false)};var disappearingSeconds by remember(groupId){mutableStateOf(0)};var showHistoryToNewMembers by remember(groupId){mutableStateOf(true)};var permissionsLoading by remember(groupId){mutableStateOf(false)};var permissionsLoaded by remember(groupId){mutableStateOf(false)};var permissionsSaving by remember(groupId){mutableStateOf(false)};var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)};var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))};var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))};var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")};var showWallpaper by remember{mutableStateOf(false)};var showClearDialog by remember{mutableStateOf(false)};var showResetDialog by remember{mutableStateOf(false)};var showEditInfo by remember{mutableStateOf(false)};var editName by remember{mutableStateOf(currentGroup?.name?:groupName)};var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())};var infoMessage by remember{mutableStateOf<String?>(null)};var savingInfo by remember{mutableStateOf(false)};var inviteMessage by remember{mutableStateOf<String?>(null)};var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)};var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())};var requestsLoading by remember(groupId){mutableStateOf(false)};var requestAction by remember(groupId){mutableStateOf<String?>(null)};var showReportDialog by remember(groupId){mutableStateOf(false)};var reportReason by remember(groupId){mutableStateOf("")};var reportBusy by remember(groupId){mutableStateOf(false)};var reportSubmitted by remember(groupId){mutableStateOf(false)};var reportMessage by remember(groupId){mutableStateOf<String?>(null)}
     fun save(key:String,value:Boolean)=prefs.edit().putBoolean(key,value).apply()
-    LaunchedEffect(groupId,isAdmin){if(!FynxBackendClient.hasAccessToken(context))return@LaunchedEffect;permissionsLoading=true;FynxGroupRemoteClient.loadPermissions(context,groupId).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers;disappearingSeconds=remote.disappearingSeconds;showHistoryToNewMembers=remote.showHistoryToNewMembers;permissionsMessage=null}.onFailure{permissionsMessage=it.message?:"Unable to load group permissions."};permissionsLoading=false}
+    val permissionAccountKey = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+    suspend fun refreshServerPermissions() {
+        val expectedAccountKey = permissionAccountKey
+        val expectedToken = FynxBackendClient.accessToken(context)
+        if (!isAdmin || expectedAccountKey == null || expectedToken.isNullOrBlank()) {
+            permissionsLoaded = false
+            permissionsLoading = false
+            return
+        }
+        permissionsLoaded = false
+        permissionsLoading = true
+        permissionsMessage = null
+        try {
+            val result = FynxGroupRemoteClient.loadPermissions(context, groupId)
+            val sessionCurrent = FynxBackendClient.isRequestSessionCurrent(
+                expectedAccountKey,
+                FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase(),
+                expectedToken,
+                FynxBackendClient.accessToken(context)
+            )
+            if (!sessionCurrent) {
+                permissionsLoaded = false
+                permissionsMessage = "Your account changed. Reopen group settings to load current permissions."
+                return
+            }
+            result.onSuccess { remote ->
+                sendMessages = remote.sendMessages
+                sendMedia = remote.sendMedia
+                addMembers = remote.addMembers
+                inviteLinks = remote.inviteLinks
+                approveNewMembers = remote.approveNewMembers
+                disappearingSeconds = remote.disappearingSeconds
+                showHistoryToNewMembers = remote.showHistoryToNewMembers
+                permissionsLoaded = true
+                permissionsMessage = null
+            }.onFailure { error ->
+                permissionsLoaded = false
+                permissionsMessage = error.message ?: "Unable to load group permissions."
+            }
+        } finally {
+            permissionsLoading = false
+        }
+    }
+    LaunchedEffect(groupId, isAdmin, permissionAccountKey) { refreshServerPermissions() }
     fun refreshRequests(){if(!isAdmin||!approveNewMembers)return;requestsLoading=true;scope.launch{FynxGroupRemoteClient.loadJoinRequests(context,groupId).onSuccess{joinRequests=it}.onFailure{inviteMessage=it.message?:"Unable to load join requests."};requestsLoading=false}}
     LaunchedEffect(groupId,isAdmin,approveNewMembers){refreshRequests()}
-    fun updatePermissions(next:FynxGroupRemoteClient.RemotePermissions){permissionsSaving=true;permissionsMessage=null;scope.launch{FynxGroupRemoteClient.updatePermissions(context,groupId,next).onSuccess{remote->sendMessages=remote.sendMessages;sendMedia=remote.sendMedia;addMembers=remote.addMembers;inviteLinks=remote.inviteLinks;approveNewMembers=remote.approveNewMembers;disappearingSeconds=remote.disappearingSeconds;showHistoryToNewMembers=remote.showHistoryToNewMembers}.onFailure{permissionsMessage=it.message?:"Group permissions could not be saved."};permissionsSaving=false}}
+    fun updatePermissions(next: FynxGroupRemoteClient.RemotePermissions) {
+        val expectedAccountKey = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()
+        val expectedToken = FynxBackendClient.accessToken(context)
+        if (!canEditGroupRemotePermissions(isAdmin, !expectedToken.isNullOrBlank(), permissionsLoaded, permissionsSaving)) {
+            permissionsMessage = "Load the current server permissions before changing them."
+            permissionsLoaded = false
+            return
+        }
+        if (expectedAccountKey.isNullOrBlank() || expectedToken.isNullOrBlank()) {
+            permissionsLoaded = false
+            permissionsMessage = "Reconnect to FYNX before changing group permissions."
+            return
+        }
+        permissionsSaving = true
+        permissionsMessage = null
+        scope.launch {
+            try {
+                val result = FynxGroupRemoteClient.updatePermissions(context, groupId, next)
+                val sessionCurrent = FynxBackendClient.isRequestSessionCurrent(
+                    expectedAccountKey,
+                    FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase(),
+                    expectedToken,
+                    FynxBackendClient.accessToken(context)
+                )
+                if (!sessionCurrent) {
+                    permissionsLoaded = false
+                    permissionsMessage = "Your account changed. Reload group permissions before trying again."
+                    return@launch
+                }
+                result.onSuccess { remote ->
+                    sendMessages = remote.sendMessages
+                    sendMedia = remote.sendMedia
+                    addMembers = remote.addMembers
+                    inviteLinks = remote.inviteLinks
+                    approveNewMembers = remote.approveNewMembers
+                    disappearingSeconds = remote.disappearingSeconds
+                    showHistoryToNewMembers = remote.showHistoryToNewMembers
+                    permissionsLoaded = true
+                }.onFailure {
+                    // A timed-out PATCH may have reached the server. Never reuse a stale
+                    // full-settings snapshot for another save until GET confirms state.
+                    permissionsLoaded = false
+                    permissionsMessage = "Could not confirm the saved permissions. Reload them before trying again."
+                }
+            } finally {
+                permissionsSaving = false
+            }
+        }
+    }
     if(showReportDialog) AlertDialog(
         onDismissRequest = { if (!reportBusy) showReportDialog = false },
         title = { Text("Report this group") },
@@ -98,8 +192,8 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
         }
         GroupSettingsSection("Group information",Icons.Default.Edit){Text(currentGroup?.name?:groupName,style=MaterialTheme.typography.titleMedium);Spacer(Modifier.height(3.dp));Text(currentGroup?.description?:"Group information",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant);if(isAdmin&&currentGroup!=null){Spacer(Modifier.height(8.dp));OutlinedButton(onClick={editName=currentGroup?.name.orEmpty();editDescription=currentGroup?.description.orEmpty();infoMessage=null;showEditInfo=true}){Icon(Icons.Default.Edit,null);Spacer(Modifier.width(8.dp));Text("Edit group information")}}}
         GroupSettingsSection("Notifications",Icons.Default.Notifications){GroupSwitchRow("Group notifications",notifications){notifications=it;save("notifications",it)};GroupSwitchRow("Mute notifications",mute){mute=it;save("mute",it)}}
-        GroupSettingsSection("Permissions",Icons.Default.Security){if(permissionsLoading)Text("Loading server permissions…",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);if(!FynxBackendClient.hasAccessToken(context))Text("A server connection is required to change group permissions. These controls are temporarily unavailable.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);permissionsMessage?.let{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)};GroupSwitchRow("Members can send messages",sendMessages,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(it,sendMedia,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Members can send media and files",sendMedia,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,it,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Members can add people",addMembers,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,it,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Invite links",inviteLinks,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,it,approveNewMembers,disappearingSeconds,showHistoryToNewMembers));if(!it){inviteMessage=null;activeInviteToken=null}};GroupSwitchRow("Approve new members",approveNewMembers,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,inviteLinks,it,disappearingSeconds,showHistoryToNewMembers))}}
-        GroupSettingsSection("Media & history",Icons.Default.Settings){GroupSwitchRow("Save received photos and videos to gallery",saveMedia,Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q){saveMedia=it;save("save_media",it)};if(Build.VERSION.SDK_INT<Build.VERSION_CODES.Q)Text("Automatic gallery saving requires Android 10 or newer.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text("Only media received in this group is saved. Existing media is not exported automatically.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.height(6.dp));GroupSwitchRow("Show previous messages to new members",showHistoryToNewMembers,isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsSaving){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,it))};Text(if(showHistoryToNewMembers)"New members can view the existing group conversation." else "New members can only see messages sent after they join.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        GroupSettingsSection("Permissions",Icons.Default.Security){val canEditPermissions=canEditGroupRemotePermissions(isAdmin,FynxBackendClient.hasAccessToken(context),permissionsLoaded,permissionsSaving);if(permissionsLoading)Text("Loading server permissions…",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);if(!FynxBackendClient.hasAccessToken(context))Text("A server connection is required to change group permissions. These controls are temporarily unavailable.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);permissionsMessage?.let{Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)};if(isAdmin&&FynxBackendClient.hasAccessToken(context)&&!permissionsLoaded&&!permissionsLoading){TextButton(onClick={scope.launch{refreshServerPermissions()}}){Text("Retry loading permissions")}};GroupSwitchRow("Members can send messages",sendMessages,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(it,sendMedia,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Members can send media and files",sendMedia,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,it,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Members can add people",addMembers,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,it,inviteLinks,approveNewMembers,disappearingSeconds,showHistoryToNewMembers))};GroupSwitchRow("Invite links",inviteLinks,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,it,approveNewMembers,disappearingSeconds,showHistoryToNewMembers));if(!it){inviteMessage=null;activeInviteToken=null}};GroupSwitchRow("Approve new members",approveNewMembers,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,inviteLinks,it,disappearingSeconds,showHistoryToNewMembers))}}
+        GroupSettingsSection("Media & history",Icons.Default.Settings){GroupSwitchRow("Save received photos and videos to gallery",saveMedia,Build.VERSION.SDK_INT>=Build.VERSION_CODES.Q){saveMedia=it;save("save_media",it)};if(Build.VERSION.SDK_INT<Build.VERSION_CODES.Q)Text("Automatic gallery saving requires Android 10 or newer.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text("Only media received in this group is saved. Existing media is not exported automatically.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Spacer(Modifier.height(6.dp));GroupSwitchRow("Show previous messages to new members",showHistoryToNewMembers,canEditPermissions){updatePermissions(FynxGroupRemoteClient.RemotePermissions(sendMessages,sendMedia,addMembers,inviteLinks,approveNewMembers,disappearingSeconds,it))};Text(if(showHistoryToNewMembers)"New members can view the existing group conversation." else "New members can only see messages sent after they join.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         GroupSettingsSection("Appearance",Icons.Default.Settings){Text("Chat appearance",style=MaterialTheme.typography.titleSmall);Spacer(Modifier.height(6.dp));Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("FYNX Default","Light","Dark").forEach{option->FilterChip(selected=appearance==option,onClick={appearance=option;prefs.edit().putString("appearance",option).apply()},label={Text(option)})}};Spacer(Modifier.height(8.dp));OutlinedButton(onClick={showWallpaper=true},modifier=Modifier.fillMaxWidth()){Text("Group wallpaper")}}
         GroupSettingsSection("Invitations & approvals",Icons.Default.GroupAdd){
             if(isAdmin&&inviteLinks){GroupActionRow("Create new invite link","Generate a server-backed shareable link",Icons.Default.GroupAdd){scope.launch{FynxGroupRemoteClient.createInvite(context,groupId).onSuccess{(token,_)->activeInviteToken=token;inviteMessage="Invite link created.";FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))}.onFailure{inviteMessage=it.message?:"Invite link could not be created."}}};activeInviteToken?.let{token->Text("A current server invite is ready to share.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick={FynxShareActions.share(context,FynxSharePayload("FYNX group invite","Join ${currentGroup?.name?:groupName} on FYNX.",FynxDeepLinkParser.inviteWebLink(token,groupId)))},modifier=Modifier.weight(1f)){Text("Share link")};OutlinedButton(onClick={scope.launch{FynxGroupRemoteClient.revokeInvite(context,groupId,token).onSuccess{activeInviteToken=null;inviteMessage="Invite link revoked."}.onFailure{inviteMessage=it.message?:"Invite link could not be revoked."}}},modifier=Modifier.weight(1f)){Text("Revoke")}}}}
