@@ -15,7 +15,6 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -143,6 +142,9 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // exact identity of the newly selected deal, not the first or a neighbouring listing.
         compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
         compose.onNodeWithContentDescription("Next advertised product").performClick()
+        compose.waitUntil(timeoutMillis = 2_000) {
+            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Product 2 of ${candidates.size}").assertIsDisplayed()
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
