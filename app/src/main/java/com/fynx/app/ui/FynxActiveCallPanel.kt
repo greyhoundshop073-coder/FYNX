@@ -24,6 +24,7 @@ fun FynxActiveCallPanel(
     realtimeState: FynxRealtimeClient.State = FynxRealtimeClient.State.CONNECTED,
     localVideoTrack: VideoTrack? = null,
     remoteVideoTrack: VideoTrack? = null,
+    errorMessage: String? = null,
     onAnswer: () -> Unit,
     onRetry: () -> Unit,
     onToggleMicrophone: () -> Unit,
@@ -50,6 +51,18 @@ fun FynxActiveCallPanel(
             .safeDrawingPadding()
             .imePadding()
     ) {
+        if (!errorMessage.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.errorContainer
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(errorMessage, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    if (!incoming) TextButton(onClick = onRetry) { Text("Retry", color = MaterialTheme.colorScheme.onErrorContainer) }
+                }
+            }
+        }
         if (video && connected) {
             Box(Modifier.fillMaxSize()) {
                 if (remoteVideoTrack != null) {
