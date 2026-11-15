@@ -579,7 +579,7 @@ private fun createFynxLayoutCollage(context: android.content.Context, media: Lis
     val thumbs = photos.mapNotNull { item ->
         runCatching {
             if (android.os.Build.VERSION.SDK_INT >= 29) context.contentResolver.loadThumbnail(item.uri, Size(600, 600), null)
-            else context.contentResolver.openInputStream(item.uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+            else FynxBitmapSampling.decodeUriSampled(context, item.uri, 600)
         }.getOrNull()
     }
     if (thumbs.isEmpty()) return null
@@ -656,6 +656,8 @@ private fun FynxRecentMediaCell(media: FynxRecentMedia, selected: Boolean, selec
         bitmap = runCatching {
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 contextLoadThumbnail(context, media.uri)
+            } else if (!media.isVideo) {
+                FynxBitmapSampling.decodeUriSampled(context, media.uri, FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION)
             } else {
                 null
             }
