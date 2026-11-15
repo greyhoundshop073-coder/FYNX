@@ -142,7 +142,12 @@ private fun marketplaceShopProfileSignature(
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
+fun FynxMarketplaceSellerCenterPanel(
+    onViewPublicShop: () -> Unit = {},
+    testOnlyListings: List<FynxMarketplaceClient.Listing>? = null,
+    testOnlyShopName: String = "FYNX Test Market",
+    testOnlyShopDescription: String = "Test-only shop profile; not a public seller account."
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
@@ -374,6 +379,44 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     }
 
     fun refresh() {
+        if (testOnlyListings != null) {
+            // Explicit instrumentation path: render real seller UI without touching seller APIs.
+            listings = testOnlyListings.filter { it.active }
+            archivedListings = testOnlyListings.filterNot { it.active }
+            loading = false
+            error = null
+            listingActionError = null
+            listingActionMessage = null
+            shopName = testOnlyShopName
+            shopDescription = testOnlyShopDescription
+            shopLocation = "Port Harcourt, Rivers State, Nigeria"
+            shopContactPhone = ""
+            shopProfileSavedSignature = marketplaceShopProfileSignature(
+                shopName, shopDescription, shopLocation, shopContactPhone
+            )
+            shopLoading = false
+            shopError = null
+            shopMessage = null
+            accountLoading = false
+            accountMessage = null
+            payoutAccount = null
+            payoutAccounts = emptyList()
+            marketplacePayoutsEnabled = false
+            payoutReadinessNotice = "TEST MODE — payout verification and transfers are not active."
+            moneyLoading = false
+            moneyError = null
+            moneyRecords = emptyList()
+            moneyTotals = emptyMap()
+            moneyTotalsFromBackend = false
+            moneyNextCursor = null
+            moneyHasMore = false
+            moneyPageLoading = false
+            moneyPageError = null
+            weeklySellerAwards = emptyList()
+            weeklyAwardsLoading = false
+            weeklyAwardsError = null
+            return
+        }
         val requestGeneration = ++refreshGeneration
         loading = true
         error = null
