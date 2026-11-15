@@ -179,9 +179,7 @@ fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modi
         bitmap = withContext(Dispatchers.IO) {
             uriString?.let {
                 runCatching {
-                    context.contentResolver.openInputStream(Uri.parse(it)).use { input ->
-                        BitmapFactory.decodeStream(input)
-                    }
+                    FynxBitmapSampling.decodeUriSampled(context, Uri.parse(it), FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION)
                 }.getOrNull()
             }
         }
