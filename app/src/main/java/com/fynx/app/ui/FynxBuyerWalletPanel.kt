@@ -127,7 +127,7 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
 }
 
 @Composable
-fun FynxBuyerWalletPanel(
+internal fun FynxBuyerWalletPanel(
     testOnlySummary: FynxBuyerWalletSummary? = null,
     testOnlyActivity: List<FynxBuyerWalletActivity> = emptyList(),
     testOnlySellerSummary: FynxWalletSellerSummary? = null
