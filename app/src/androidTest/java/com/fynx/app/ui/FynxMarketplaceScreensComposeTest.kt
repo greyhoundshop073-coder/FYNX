@@ -224,6 +224,49 @@ class FynxMarketplaceScreensComposeTest {
         saveScreenshot("wallet-simulated-test-ledger-screen.png")
     }
 
+    @Test
+    fun actualWalletScreenUsesUsdForUsdBalancesAndActivity() {
+        val summary = FynxBuyerWalletSummary(
+            walletStatus = "ACTIVE",
+            currency = "USD",
+            availableBalance = 1_234.5,
+            reservedBalance = 250.0,
+            withdrawalPendingBalance = 100.0,
+            canFund = false,
+            canSpend = false,
+            canWithdraw = false,
+            notice = "TEST MODE — simulated USD balance only.",
+            testMode = true
+        )
+        val transaction = FynxBuyerWalletActivity(
+            id = "FYNX-TEST-USD-001",
+            type = "FUNDING",
+            status = "SIMULATED — TEST ONLY",
+            amount = 1_234.5,
+            fee = 0.0,
+            walletDelta = 1_234.5,
+            currency = "USD",
+            reference = "FYNX-TEST-USD-001",
+            description = "USD test transaction only.",
+            createdAt = "2026-11-15T00:00:00Z"
+        )
+
+        compose.setContent {
+            MaterialTheme {
+                FynxBuyerWalletPanel(
+                    testOnlySummary = summary,
+                    testOnlyActivity = listOf(transaction)
+                )
+            }
+        }
+
+        compose.onNodeWithText("US Dollar").assertIsDisplayed()
+        compose.onNodeWithText("\$1,234.50").assertIsDisplayed()
+        compose.onNodeWithText("\$250.00").assertIsDisplayed()
+        compose.onNodeWithText("FYNX-TEST-USD-001").assertIsDisplayed()
+        saveScreenshot("wallet-usd-simulated-test-screen.png")
+    }
+
     private fun saveScreenshot(name: String) {
         val directory = File(
             compose.activity.getExternalFilesDir(null),
