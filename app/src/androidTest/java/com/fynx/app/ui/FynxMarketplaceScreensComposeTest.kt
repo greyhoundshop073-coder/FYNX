@@ -91,6 +91,39 @@ class FynxMarketplaceScreensComposeTest {
     }
 
     @Test
+    fun actualMarketplaceProductDetailsUseOnlyFixtureReviewsAndKeepActionsLocal() {
+        val fixtureReviews = FynxMarketplaceIsolatedTestFixtures.sampleReviews.map { review ->
+            FynxRemoteSocialClient.MarketplaceProductReview(
+                id = review.id,
+                rating = review.rating,
+                comment = review.comment,
+                createdAt = null,
+                reviewerUsername = "fynx_test_buyer",
+                reviewerDisplayName = review.authorLabel
+            )
+        }
+        compose.setContent {
+            MaterialTheme {
+                FynxMarketplacePanel(
+                    currentUsername = FynxMarketplaceIsolatedTestFixtures.buyer.username,
+                    testOnlyListings = marketplaceListings,
+                    testOnlyReviews = fixtureReviews
+                )
+            }
+        }
+
+        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithText("Product details").assertIsDisplayed()
+        compose.onNodeWithText("Product reviews").assertIsDisplayed()
+        compose.onNodeWithText("FYNX TEST BUYER A").assertIsDisplayed()
+        compose.onNodeWithText("Sample review content — not a customer review.").assertIsDisplayed()
+        saveScreenshot("marketplace-product-details-test-reviews.png")
+
+        compose.onNodeWithText("Save product").performScrollTo().performClick()
+        compose.onNodeWithText("Remove from Saved Products").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun actualSellerCenterScreenRendersIsolatedInventoryAndSectionNavigation() {
         compose.setContent {
             MaterialTheme {
@@ -320,7 +353,7 @@ class FynxMarketplaceScreensComposeTest {
         }
 
         compose.onNodeWithText("US Dollar").assertIsDisplayed()
-        compose.onNodeWithText("\$1,234.50").assertIsDisplayed()
+        compose.onAllNodesWithText("\$1,234.50")[0].assertIsDisplayed()
         compose.onNodeWithText("\$250.00").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("FYNX-TEST-USD-001").performScrollTo().assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
