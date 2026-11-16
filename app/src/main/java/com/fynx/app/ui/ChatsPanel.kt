@@ -43,9 +43,19 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var chatSearch by remember { mutableStateOf("") }
 
     suspend fun refreshChats() {
+        val expectedAccountKey = FynxAuthStore.accountStorageKey(context)
+        val expectedRequestToken = FynxBackendClient.accessToken(context)
+        val expectedAccountUsername = FynxAuthStore.storedUsername(context)?.trim()?.lowercase()
         val local = withContext(Dispatchers.IO) { FynxChatStore.loadPreviews(context) }
-        val remote = FynxProductionMessaging.recentConversations(context).getOrNull()
+        val remote = FynxProductionMessaging.recentConversations(
+            context, expectedAccountKey, expectedRequestToken
+        ).getOrNull()
         if (remote != null) {
+            if (!FynxBackendClient.isRequestSessionCurrent(
+                    expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                    expectedRequestToken, FynxBackendClient.accessToken(context)
+                ) || FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername
+            ) return
             val localHistories = withContext(Dispatchers.IO) {
                 local.associateBy(
                     { it.username.removePrefix("@").trim().lowercase() },
@@ -74,7 +84,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val merged = pendingMerged + remote.filterNot {
                 it.username.removePrefix("@").trim().lowercase() in pendingUsernames
             } + cachedLocalOnly
-            withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged) }
+            withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged, expectedAccountUsername) }
             chats = merged
         } else {
             chats = withContext(Dispatchers.IO) {
