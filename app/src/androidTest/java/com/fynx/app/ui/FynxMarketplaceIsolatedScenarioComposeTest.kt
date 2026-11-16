@@ -149,7 +149,9 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
-        compose.onNodeWithText("Shop this product").performClick()
+        // The whole production slide is clickable; tap the selected product itself so
+        // a repeated action label on a neighbouring LazyRow item cannot be ambiguous.
+        compose.onNodeWithText(candidates[1].title).performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
         compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()
