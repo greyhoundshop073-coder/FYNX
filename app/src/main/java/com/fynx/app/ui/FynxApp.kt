@@ -106,6 +106,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
+    var previousAuthIdentity by remember { mutableStateOf(authSession.state to authSession.username) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
@@ -120,6 +121,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         mutableStateOf(FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, authSession.username ?: ""))
     }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
+    var homeCameraRequest by remember { mutableIntStateOf(0) }
 
     // Clear transient UI state owned by the previous signed-in identity.
     // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
@@ -155,7 +157,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         homeCameraRequest = 0
     }
 
-    var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
@@ -334,7 +335,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
-        clearSessionScopedState()
+        val currentIdentity = authSession.state to authSession.username
+        if (previousAuthIdentity != currentIdentity) {
+            clearSessionScopedState()
+            previousAuthIdentity = currentIdentity
+        }
         if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         while (true) {
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
