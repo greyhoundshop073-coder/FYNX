@@ -213,7 +213,7 @@ class FynxOfflineOutboxInstrumentationTest {
                 val payload = when (type) {
                     "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
                     "contact" -> mapOf("name" to "Test Contact", "phone" to "+2348000000000")
-                    "poll" -> mapOf("question" to "Choose?", "options" to "A\\u001FB")
+                    "poll" -> mapOf("question" to "Choose?", "options" to "A\u001FB")
                     else -> mapOf("caption" to type)
                 }
                 val pending = ChatMessage(
