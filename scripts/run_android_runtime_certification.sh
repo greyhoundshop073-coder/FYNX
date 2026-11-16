@@ -103,6 +103,9 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
       BADGE12_EXIT=$?
       if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
     else
+      echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Reason: focused Chat instrumentation failed before authenticated runtime could run." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
       echo "::error::Badge 12 authentication was not attempted because focused Chat instrumentation failed."
     fi
   fi
@@ -123,6 +126,9 @@ if [ "${FYNX_REQUIRE_BADGE12_AUTH:-0}" = "1" ]; then
     BADGE12_EXIT=$?
     if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
   else
+    echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+    echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+    echo "- Reason: Android instrumentation failed before authenticated runtime could run." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
     echo "::error::Badge 12 authentication was not attempted because Android instrumentation failed."
   fi
   exit "$TEST_EXIT"

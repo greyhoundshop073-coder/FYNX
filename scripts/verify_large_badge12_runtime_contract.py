@@ -22,7 +22,7 @@ checks = [
     ("runtime reads username and password only from environment",
      'os.environ.get("FYNX_E2E_USERNAME"' in runtime and 'os.environ.get("FYNX_E2E_PASSWORD"' in runtime),
     ("runtime does not contain a literal password assignment",
-     not re.search(r"PASSWORD\\s*=\\s*[\\"'][^\\"']+[\\"']", runtime)),
+     not re.search(r"""PASSWORD\s*=\s*["\'][^"\']+["\']""", runtime)),
     ("runtime does not create test accounts",
      "create test account" not in runtime.lower() and "register test account" not in runtime.lower()),
     ("strict runner mode checks the mandatory-auth flag",
