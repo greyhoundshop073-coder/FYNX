@@ -200,7 +200,9 @@ object FynxChatStore {
      * another event here would recursively trigger another network refresh.
      */
     @Synchronized
-    fun savePreviews(context: Context, previews: List<ChatPreview>, expectedAccountUsername: String? = accountKey(context)) {\n        val expectedAccount = expectedAccountUsername?.trim()?.lowercase()?.ifBlank { "preview" } ?: "preview"\n        if (accountKey(context) != expectedAccount) return
+    fun savePreviews(context: Context, previews: List<ChatPreview>, expectedAccountUsername: String? = accountKey(context)) {
+        val expectedAccount = expectedAccountUsername?.trim()?.lowercase()?.ifBlank { "preview" } ?: "preview"
+        if (accountKey(context) != expectedAccount) return
         val array = JSONArray()
         previews.forEach { item ->
             array.put(JSONObject().apply {
