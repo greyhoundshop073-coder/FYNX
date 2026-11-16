@@ -5,6 +5,87 @@
 set +e
 mkdir -p fynx-runtime-screenshots
 
+run_badge12_authenticated_certification() {
+  local report="fynx-runtime-screenshots/FYNX-badge12-certification-summary.md"
+  local runtime_report="fynx-runtime-screenshots/FYNX-authenticated-runtime.md"
+  local feed_report="fynx-runtime-screenshots/FYNX-home-feed-visual-capture.md"
+  local auth_exit=0
+  local feed_exit=0
+  mkdir -p fynx-runtime-screenshots
+  if [ -z "${FYNX_E2E_USERNAME:-}" ] || [ -z "${FYNX_E2E_PASSWORD:-}" ]; then
+    echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+    echo "- Result: BLOCKED" >> "$report"
+    echo "- Reason: dedicated GitHub Actions test account secrets are required." >> "$report"
+    echo "- No local visual fallback was accepted." >> "$report"
+    echo "::error::Badge 12 blocked: runtime account secrets are not configured."
+    return 2
+  fi
+  if ! node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"https://fynx-backend-testing-testing.up.railway.app").replace(/\/+$/,""); try { const r=await fetch(base+"/health",{headers:{Accept:"application/json"},signal:AbortSignal.timeout(8000)}); const b=await r.json().catch(()=>null); if(!r.ok||b?.ok!==true||b?.service!=="fynx-backend"||b?.database!=="ready") process.exitCode=1; } catch { process.exitCode=1; }' >/dev/null; then
+    echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+    echo "- Result: BLOCKED" >> "$report"
+    echo "- Reason: the configured backend health check did not confirm a ready service and database." >> "$report"
+    echo "- No debug-local screenshots were accepted as authenticated evidence." >> "$report"
+    echo "::error::Badge 12 blocked: FYNX backend/database unavailable."
+    return 2
+  fi
+  unset FYNX_AI_VISUALS_ONLY FYNX_HOME_FEED_VISUALS_ONLY FYNX_MUSIC_VISUALS_ONLY
+  unset FYNX_MARKETPLACE_VISUALS_ONLY FYNX_LOCAL_VISUALS_ONLY
+  unset FYNX_ADMIN_VISUALS_ONLY FYNX_LOCAL_BUSINESS_ONLY
+  python3 scripts/verify_authenticated_runtime_navigation.py
+  auth_exit=$?
+  if [ "$auth_exit" -ne 0 ] || ! grep -Fq "PASS real account authenticated through the FYNX login flow" "$runtime_report" || ! grep -Fq "## Result: GREEN" "$runtime_report"; then
+    echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+    echo "- Result: RED" >> "$report"
+    echo "- Reason: the full authenticated FYNX journey did not produce a verified GREEN result." >> "$report"
+    echo "- Runtime verifier exit code: $auth_exit" >> "$report"
+    echo "- The local visual-only fallback was disabled for this run." >> "$report"
+    return 1
+  fi
+  for asset in authenticated-home.png authenticated-home.xml authenticated-chat.png authenticated-chat.xml authenticated-friends.png authenticated-friends.xml authenticated-stories.png authenticated-stories.xml authenticated-features.png authenticated-features.xml authenticated-money.png authenticated-ai.png authenticated-ai.xml authenticated-wallet.png; do
+    if [ ! -s "fynx-runtime-screenshots/$asset" ]; then
+      echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+      echo "- Result: RED" >> "$report"
+      echo "- Reason: required authenticated evidence is missing: $asset" >> "$report"
+      return 1
+    fi
+  done
+  FYNX_HOME_FEED_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  feed_exit=$?
+  if [ "$feed_exit" -ne 0 ] || ! grep -Fq "Session: server-authenticated Home Feed session." "$feed_report" || ! grep -Fq "## Result: GREEN" "$feed_report" || [ ! -s fynx-runtime-screenshots/authenticated-home-feed.png ] || [ ! -s fynx-runtime-screenshots/authenticated-home-feed-final.png ] || [ ! -s fynx-runtime-screenshots/authenticated-home-feed-final.xml ]; then
+    echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+    echo "- Result: RED" >> "$report"
+    echo "- Reason: authenticated Home/Feed screenshots and server-session evidence were incomplete." >> "$report"
+    echo "- Home/Feed runtime verifier exit code: $feed_exit" >> "$report"
+    return 1
+  fi
+  echo "# FYNX Large Badge 12 authenticated runtime certification" > "$report"
+  echo "- Result: GREEN" >> "$report"
+  echo "- Session: dedicated GitHub Actions test-account credentials through the real login flow." >> "$report"
+  echo "- Backend: ready health and database state confirmed before login." >> "$report"
+  echo "- Home, Chat, Friends, Stories, Features, Money, Wallet and FYNX AI passed with screenshot evidence." >> "$report"
+  echo "- Home/Feed: separate server-authenticated capture and accessibility hierarchy passed." >> "$report"
+  echo "- Debug-local visual fallback: disabled." >> "$report"
+  echo "::notice::Badge 12 authenticated runtime certification passed."
+  return 0
+}
+
+apply_badge12_requirement() {
+  if [ "${FYNX_REQUIRE_BADGE12_AUTH:-0}" = "1" ]; then
+    if [ "${TEST_EXIT:-0}" -eq 0 ]; then
+      run_badge12_authenticated_certification
+      BADGE12_EXIT=$?
+    else
+      mkdir -p fynx-runtime-screenshots
+      echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Reason: an earlier required Android test or focused visual check failed; authenticated navigation was not started." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      BADGE12_EXIT="$TEST_EXIT"
+      echo "::error::Badge 12 authentication was not attempted because an earlier required Android check failed."
+    fi
+    if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
+  fi
+}
+
 if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   # Run the focused Chat offline-outbox device tests without any server login,
   # Marketplace navigation, backend probe, or remote fixture dependency.
@@ -32,6 +113,8 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
     echo "::error::FYNX Chat offline attachment instrumentation failed."
   else
     echo "::notice::FYNX Chat offline attachment instrumentation passed without backend access."
+  fi
+  apply_badge12_requirement
   fi
   exit "${TEST_EXIT}"
 fi
@@ -71,6 +154,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   else
     echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
   fi
+  apply_badge12_requirement
   exit "${TEST_EXIT}"
 fi
 
@@ -80,6 +164,7 @@ if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   NAV_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  apply_badge12_requirement
   exit "$TEST_EXIT"
 fi
 
@@ -101,6 +186,7 @@ if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  apply_badge12_requirement
   exit "$TEST_EXIT"
 fi
 
@@ -175,4 +261,5 @@ else
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi
+apply_badge12_requirement
 exit "$TEST_EXIT"

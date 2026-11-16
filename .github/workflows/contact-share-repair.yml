@@ -2,6 +2,8 @@ name: Contact Share Repair
 
 on:
   push:
+    branches:
+      - integration/fynx-single-apk-20261013
     paths:
       - '.github/workflows/contact-share-repair.yml'
       - 'scripts/repair_contact_share.py'
@@ -9,12 +11,16 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: integration/fynx-single-apk-20261013
+          fetch-depth: 0
       - name: Apply guarded contact picker repair
         run: python3 scripts/repair_contact_share.py
       - name: Verify diff
@@ -23,11 +29,24 @@ jobs:
           grep -q 'ActivityResultContracts.PickContact()' app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
           grep -q 'ContactsContract.CommonDataKinds.Phone.CONTENT_URI' app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
           grep -q 'sendStructuredMessage(context, chat.username, "contact"' app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
-      - name: Commit repair
+      - name: Open reviewable integration pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
-          git diff --cached --quiet && exit 0
-          git commit -m 'Make in-chat contact sharing use device contacts'
-          git push origin HEAD:main
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- app/src/main/java/com/fynx/app/ui/ConversationPanel.kt
+          if git diff --cached --quiet; then
+            echo "No contact-sharing source change was produced; nothing to submit."
+            exit 0
+          fi
+          git diff --cached --check
+          BRANCH_NAME="automation/contact-share-repair-${GITHUB_RUN_ID}"
+          git switch -c "$BRANCH_NAME"
+          git commit -m "Make in-chat contact sharing use device contacts"
+          git push origin "HEAD:refs/heads/$BRANCH_NAME"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base integration/fynx-single-apk-20261013 --head "$BRANCH_NAME" \
+            --title "fix(chat): repair in-chat contact sharing" \
+            --body "Automated guarded contact-sharing repair. Review the exact source diff and Android CI before merging."
