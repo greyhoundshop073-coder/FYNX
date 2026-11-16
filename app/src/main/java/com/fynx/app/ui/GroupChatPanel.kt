@@ -91,6 +91,19 @@ fun GroupChatPanel(
     var searchQuery by remember { mutableStateOf("") }
     var showGroupMenu by remember { mutableStateOf(false) }
 
+    val toneGenerator = remember { runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60) }.getOrNull() }
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { toneGenerator?.release() }
+            val activeRecorder = recording
+            if (activeRecorder != null) {
+                runCatching { activeRecorder.stop() }
+                runCatching { activeRecorder.release() }
+                recording = null
+                isRecording = false
+            }
+        }
+    }
     fun feedback() {
         if (Build.VERSION.SDK_INT >= 31) {
             (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)
@@ -99,7 +112,7 @@ fun GroupChatPanel(
             @Suppress("DEPRECATION")
             (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.vibrate(35)
         }
-        runCatching { ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60).startTone(ToneGenerator.TONE_PROP_ACK, 70) }
+        runCatching { toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 70) }
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->

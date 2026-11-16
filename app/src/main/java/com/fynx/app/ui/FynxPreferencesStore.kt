@@ -219,6 +219,7 @@ object FynxPreferencesStore {
             .remove("privacy_status_visibility")
             .remove("privacy_profile_photo_visibility")
             .remove("privacy_messages_visibility")
+            .remove("status_audience")
             .remove(KEY_PROFILE_PHOTO)
             .remove(KEY_ASSET)
             .remove(KEY_NIGHT_MODE)
@@ -231,6 +232,7 @@ object FynxPreferencesStore {
             .apply()
         runCatching { context.getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching { context.getSharedPreferences("${KEY_REMOTE_PROFILE_STATS_CACHE}_$accountNamespace", Context.MODE_PRIVATE).edit().clear().apply() }
+        runCatching { context.getSharedPreferences("fynx_home_feed_view", Context.MODE_PRIVATE).edit().clear().apply() }
         runCatching {
             File(context.applicationInfo.dataDir, "shared_prefs")
                 .listFiles()

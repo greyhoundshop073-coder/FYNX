@@ -241,6 +241,7 @@ fun FynxCameraCapturePanel(
     var showEffectTray by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
+    var timerRunId by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showAdjustments by remember { mutableStateOf(false) }
@@ -321,8 +322,6 @@ fun FynxCameraCapturePanel(
             delay(200L)
         }
     }
-    // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
-    LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -524,6 +523,21 @@ fun FynxCameraCapturePanel(
             }
             override fun onError(exception: ImageCaptureException) { error = exception.message ?: "Photo capture failed"; showCaptureControls = true }
         })
+    }
+
+    // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
+    LaunchedEffect(timerRunId) {
+        if (timerRunId == 0) return@LaunchedEffect
+        while (timerCountingDown > 0) {
+            delay(1000L)
+            if (pendingUri != null || mode != CameraMode.PHOTO) {
+                timerCountingDown = 0
+                showCaptureControls = true
+                return@LaunchedEffect
+            }
+            timerCountingDown -= 1
+        }
+        capturePhotoNow()
     }
 
     if (!hasCamera) { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally){Text("FYNX needs camera access to capture photos and videos.");Spacer(Modifier.height(12.dp));Button(onClick={permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))}){Text("Allow camera")};TextButton(onClick=onDismiss){Text("Close")}}};return }
@@ -1058,11 +1072,7 @@ fun FynxCameraCapturePanel(
                             if (timerCountingDown == 0) {
                                 timerCountingDown = captureTimerSeconds
                                 showCaptureControls = false
-                                scope.launch {
-                                    delay(captureTimerSeconds * 1000L)
-                                    timerCountingDown = 0
-                                    capturePhotoNow()
-                                }
+                                timerRunId += 1
                             }
                         } else capturePhotoNow()
                     } else {

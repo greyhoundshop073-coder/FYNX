@@ -152,8 +152,11 @@ fun FynxMatureStatusComposerPanel(
     var alignment by remember { mutableIntStateOf(1) }
     var audience by remember {
         mutableStateOf(
-            runCatching { FynxStatusAudience.valueOf(FynxPreferencesStore.loadVisibility(context, "status_audience", FynxStatusAudience.EVERYONE.name)) }
-                .getOrDefault(FynxStatusAudience.EVERYONE)
+            runCatching {
+                val explicit = FynxPreferencesStore.loadVisibility(context, "status_audience", "")
+                val privacyDefault = FynxPreferencesStore.loadVisibility(context, "privacy_status_visibility")
+                FynxStatusAudience.valueOf(effectiveStatusAudienceName(explicit, privacyDefault))
+            }.getOrDefault(FynxStatusAudience.EVERYONE)
         )
     }
     var publishing by remember { mutableStateOf(false) }

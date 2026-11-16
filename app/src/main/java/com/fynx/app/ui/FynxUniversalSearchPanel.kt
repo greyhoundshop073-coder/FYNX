@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,7 +18,10 @@ import kotlinx.coroutines.launch
 
 /** Account-scoped universal FYNX search using the existing authenticated people, marketplace and social-feed APIs. */
 @Composable
-fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
+fun FynxUniversalSearchPanel(
+    onOpenProfile: (String) -> Unit = {},
+    onOpenMarketplaceListing: (String) -> Unit = {}
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -119,7 +123,13 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                     item { Text("Posts", style = MaterialTheme.typography.titleMedium) }
                     if (posts.isEmpty() && query.trim().length >= 2) item { Text("No matching recent posts.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(posts.take(30), key = { "post_${it.id}" }) { post ->
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
+                        Card(
+                            Modifier.fillMaxWidth().clickable {
+                                if (post.authorUsername.isNotBlank()) onOpenProfile(post.authorUsername)
+                            },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
+                            shape = FynxDesign.CardShape
+                        ) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { Text(post.authorDisplayName.ifBlank { post.authorUsername }, style = MaterialTheme.typography.titleSmall); Text("@${post.authorUsername.removePrefix("@")}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (post.text.isNotBlank()) Text(post.text.take(1000), style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
@@ -128,7 +138,11 @@ fun FynxUniversalSearchPanel(onOpenProfile: (String) -> Unit = {}) {
                     item { Text("Marketplace", style = MaterialTheme.typography.titleMedium) }
                     if (listings.isEmpty() && query.trim().length >= 2) item { Text("No matching marketplace listings.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                     items(listings.take(30), key = { "listing_${it.id}" }) { listing ->
-                        Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)), shape = FynxDesign.CardShape) {
+                        Card(
+                            Modifier.fillMaxWidth().clickable { onOpenMarketplaceListing(listing.id) },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .55f)),
+                            shape = FynxDesign.CardShape
+                        ) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) { Text(listing.title, style = MaterialTheme.typography.titleSmall); Text("${listing.currency} ${String.format(java.util.Locale.US, "%,.2f", listing.price)}", style = MaterialTheme.typography.titleMedium); Text(listing.storeName.ifBlank { listing.sellerDisplayName }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall); if (listing.location.isNotBlank()) Text(listing.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                         }
                     }
