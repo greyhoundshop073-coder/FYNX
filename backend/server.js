@@ -592,6 +592,34 @@ app.get("/api/media/:id", auth, async (req, res) => {
     const mediaId = Number(req.params.id);
     if (!Number.isInteger(mediaId) || mediaId < 1) return res.status(400).json({ error: "invalid media id" });
     let privateEvidenceMedia = false;
+    let groupMessageAuthorization = "";
+    let groupMessageMediaFlag = "FALSE AS group_message_media";
+    let ownerMediaAuthorization = "mm.owner_id = $2";
+    const groupMediaSchema = await pool.query(
+      "SELECT to_regclass('public.fynx_group_messages') AS messages, to_regclass('public.fynx_group_members') AS members, to_regclass('public.fynx_groups') AS groups, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='fynx_groups' AND column_name='show_history_to_new_members') AS has_history_visibility"
+    );
+    if (groupMediaSchema.rows[0]?.messages && groupMediaSchema.rows[0]?.members) {
+      const groupHistoryVisibility = groupMediaSchema.rows[0]?.has_history_visibility
+        ? 'AND (group_settings.show_history_to_new_members IS DISTINCT FROM FALSE OR gm.created_at >= gmem.created_at)'
+        : '';
+      const groupMessageAccess = `EXISTS (
+        SELECT 1
+        FROM fynx_group_messages gm
+        JOIN fynx_group_members gmem ON gmem.group_id = gm.group_id
+        JOIN fynx_groups group_settings ON group_settings.id = gm.group_id
+        WHERE gm.attachment_media_id = mm.id
+          AND gm.deleted_at IS NULL
+          AND gmem.user_id = $2
+          ${groupHistoryVisibility}
+      )`;
+      groupMessageAuthorization = `OR ${groupMessageAccess}`;
+      groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`;
+      // Ownership must not bypass membership for active group-message attachments.
+      ownerMediaAuthorization = `(mm.owner_id = $2 AND NOT EXISTS (
+        SELECT 1 FROM fynx_group_messages gm
+        WHERE gm.attachment_media_id = mm.id AND gm.deleted_at IS NULL
+      ))`;
+    }
     // Seasonal campaigns are provisioned by the advertising module. Check the
     // table before referencing it so an early media request remains safe while
     // optional campaign schema setup is still in progress.
@@ -621,16 +649,17 @@ app.get("/api/media/:id", auth, async (req, res) => {
         )`
       : "";
     let result = await pool.query(`
-      SELECT mm.mime_type, mm.storage_provider, mm.object_key
+      SELECT mm.mime_type, mm.storage_provider, mm.object_key, ${groupMessageMediaFlag}
       FROM message_media mm
       WHERE mm.id = $1
         AND (
-          mm.owner_id = $2
+          ${ownerMediaAuthorization}
           OR EXISTS (
             SELECT 1 FROM messages m
             WHERE m.media_id = mm.id
               AND (m.sender_id = $2 OR m.recipient_id = $2)
           )
+          ${groupMessageAuthorization}
           OR EXISTS (
             SELECT 1
             FROM marketplace_listings ml
@@ -748,6 +777,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
       }
     }
     if (!result.rows[0]) return res.status(404).json({ error: "media not found" });
+    if (result.rows[0].group_message_media) privateEvidenceMedia = true;
     // Publicly shareable media stored in Neon/R2 is served through a short-lived
     // signed URL. Order evidence remains proxied so its response can enforce no-store.
     if (!privateEvidenceMedia && await redirectStoredMedia(res, result.rows[0], { cacheControl: "private, max-age=300" })) return;
@@ -766,14 +796,103 @@ function rowToMessage(row) {
   return { id: String(row.id), senderId: String(row.sender_id), senderUsername: row.sender_username || null, senderDisplayName: row.sender_display_name || null, recipientId: String(row.recipient_id), recipientUsername: row.recipient_username || null, recipientDisplayName: row.recipient_display_name || null, text: row.text, timestamp: Number(row.timestamp), delivered: row.delivered, read: row.read, edited: row.edited, deleted: row.deleted, replyToId: row.reply_to_id == null ? null : String(row.reply_to_id), mediaId: row.media_id == null ? null : String(row.media_id), mediaType: row.media_type || null, mediaUrl: row.media_id == null ? null : `/api/media/${row.media_id}`, voiceDurationMs: Number(row.voice_duration_ms || 0), messageType: row.message_type || 'text', messagePayload: row.message_payload || null, reaction: row.reaction || null, pinned: Boolean(row.pinned) };
 }
 
+app.get("/api/messages/recent", auth, async (req, res) => {
+  try {
+    // This endpoint feeds the signed-in account's Chat list after a cold start or reinstall.
+    // Keep it ahead of /api/messages/:username so "recent" is never treated as a username.
+    res.set("Cache-Control", "private, no-store");
+    const result = await pool.query(`
+      WITH latest AS (
+        SELECT DISTINCT ON (CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END)
+          m.id,m.sender_id,m.recipient_id,m.text,m.media_type,m.deleted,m.created_at
+        FROM messages m
+        WHERE m.sender_id=$1 OR m.recipient_id=$1
+        ORDER BY CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END,
+          m.created_at DESC,m.id DESC
+      )
+      SELECT
+        u.username,
+        u.display_name,
+        u.profile_photo_media_id,
+        CASE
+          WHEN latest.deleted THEN 'Message deleted'
+          WHEN COALESCE(NULLIF(latest.text,''),'') <> '' THEN
+            CASE WHEN latest.sender_id=$1 THEN 'You: ' ELSE '' END || latest.text
+          WHEN latest.media_type='image' THEN 'Photo'
+          WHEN latest.media_type IN ('video','video_note') THEN 'Video'
+          WHEN latest.media_type='audio' THEN 'Voice message'
+          WHEN latest.media_type='document' THEN 'File'
+          ELSE 'Message'
+        END AS last_message,
+        EXTRACT(EPOCH FROM latest.created_at) * 1000 AS last_message_timestamp,
+        (SELECT COUNT(*) FROM messages unread
+          WHERE unread.sender_id=u.id AND unread.recipient_id=$1
+            AND unread.read_at IS NULL AND unread.deleted=FALSE) AS unread_count
+      FROM latest
+      JOIN users u ON u.id=CASE WHEN latest.sender_id=$1 THEN latest.recipient_id ELSE latest.sender_id END
+      WHERE NOT EXISTS (
+        SELECT 1 FROM blocks b
+        WHERE (b.blocker_id=$1 AND b.blocked_id=u.id)
+           OR (b.blocker_id=u.id AND b.blocked_id=$1)
+      )
+      ORDER BY latest.created_at DESC,latest.id DESC
+      LIMIT 200
+    `, [req.user.sub]);
+    return res.json({ conversations: result.rows.map(row => ({
+      username: row.username,
+      displayName: row.display_name || row.username,
+      profilePhotoMediaId: row.profile_photo_media_id || null,
+      lastMessage: row.last_message || "Message",
+      lastMessageTimestamp: Number(row.last_message_timestamp),
+      unreadCount: Number(row.unread_count || 0)
+    })) });
+  } catch (error) {
+    console.error("recent message conversations", error);
+    return res.status(500).json({ error: "recent conversations failed" });
+  }
+});
+
 app.get("/api/messages/:username", auth, async (req, res) => {
   try {
     const other = await findUserByUsername(req.params.username.trim().toLowerCase());
     if (!other) return res.status(404).json({ error: "user not found" });
     const blocked = await pool.query(`SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1`, [req.user.sub, other.id]);
     if (blocked.rowCount) return res.status(403).json({ error: "conversation unavailable" });
-    const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
-    return res.json({ messages: result.rows.map(rowToMessage) });
+    res.set("Cache-Control", "no-store");
+
+    // Keep the pre-pagination response for existing callers. New clients opt into the
+    // explicit bounded cursor contract by supplying limit, beforeId or q.
+    const hasPageContract = req.query?.limit != null || req.query?.beforeId != null || req.query?.q != null;
+    if (!hasPageContract) {
+      const result = await pool.query(`${messageProjection()} WHERE (m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1) ORDER BY m.created_at ASC LIMIT 200`, [req.user.sub, other.id]);
+      return res.json({ messages: result.rows.map(rowToMessage) });
+    }
+
+    const requestedLimit = Number.parseInt(String(req.query?.limit || "50"), 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+    const beforeIdRaw = String(req.query?.beforeId || "").trim();
+    if (beforeIdRaw && !/^\d+$/.test(beforeIdRaw)) return res.status(400).json({ error: "invalid message cursor" });
+    const beforeId = beforeIdRaw || null;
+    const searchQuery = String(req.query?.q || "").trim().slice(0, 100);
+    if (searchQuery.length === 1) return res.status(400).json({ error: "search query must contain at least two characters" });
+
+    if (searchQuery.length >= 2) {
+      const searched = await pool.query(
+        `${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND m.deleted = FALSE AND strpos(lower(COALESCE(m.text, '')), lower($3)) > 0 AND ($4::bigint IS NULL OR m.id < $4::bigint) ORDER BY m.id DESC LIMIT $5`,
+        [req.user.sub, other.id, searchQuery, beforeId, limit + 1]
+      );
+      const hasMore = searched.rows.length > limit;
+      const page = searched.rows.slice(0, limit).reverse().map(rowToMessage);
+      return res.json({ messages: page, hasMore, nextBeforeId: page.length ? String(page[0].id) : null });
+    }
+
+    const result = await pool.query(
+      `${messageProjection()} WHERE ((m.sender_id = $1 AND m.recipient_id = $2) OR (m.sender_id = $2 AND m.recipient_id = $1)) AND ($3::bigint IS NULL OR m.id < $3::bigint) ORDER BY m.id DESC LIMIT $4`,
+      [req.user.sub, other.id, beforeId, limit + 1]
+    );
+    const hasMore = result.rows.length > limit;
+    const page = result.rows.slice(0, limit).reverse().map(rowToMessage);
+    return res.json({ messages: page, hasMore, nextBeforeId: page.length ? String(page[0].id) : null });
   } catch (error) { console.error("messages", error); return res.status(500).json({ error: "message history failed" }); }
 });
 
