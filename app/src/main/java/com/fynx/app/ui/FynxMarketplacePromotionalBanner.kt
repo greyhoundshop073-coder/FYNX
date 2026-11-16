@@ -25,6 +25,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -444,6 +445,11 @@ private fun MarketplacePromotionalSlide(
                 )
                 if (slide.destinationType != "NONE") Button(
                     onClick = onClick,
+                    modifier = Modifier.semantics {
+                        contentDescription = if (slide.listing != null && slide.actionLabel == "Shop this product") {
+                            "Shop this product: \${slide.headline}"
+                        } else slide.actionLabel
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF12233C)),
                     contentPadding = PaddingValues(horizontal = 15.dp, vertical = 7.dp)
                 ) {

@@ -367,7 +367,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: |
-            bash -c 'set +e; bash scripts/prepare_android_runtime_emulator.sh; preflight_status=$?; if [ "$preflight_status" -eq 0 ]; then bash scripts/run_android_runtime_certification.sh; runtime_status=$?; else runtime_status=$preflight_status; fi; mkdir -p fynx-runtime-screenshots/marketplace-test-fixtures; adb pull /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; adb pull /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; exit "$runtime_status"'
+            bash -c 'set +e; bash scripts/prepare_android_runtime_emulator.sh; preflight_status=$?; if [ "$preflight_status" -eq 0 ]; then bash scripts/run_android_runtime_certification.sh; runtime_status=$?; else runtime_status=$preflight_status; fi; mkdir -p fynx-runtime-screenshots/marketplace-test-fixtures; screenshot_dir="$(adb logcat -d -s FYNX_MARKETPLACE_TEST_SCREENSHOT:I -v brief | while IFS= read -r line; do case "$line" in *directory=*) echo "${line##*directory=}";; esac; done | tail -n 1)"; if [ -n "$screenshot_dir" ] && adb shell test -d "$screenshot_dir"; then adb pull "$screenshot_dir/." fynx-runtime-screenshots/marketplace-test-fixtures/ || echo "::warning::Marketplace test screenshots could not be pulled from $screenshot_dir"; else echo "::warning::No Marketplace instrumentation screenshot directory was reported by the tests"; fi; exit "$runtime_status"'
         env:
           FYNX_MARKETPLACE_VISUALS_ONLY: ${{ ((github.event_name == 'pull_request' && (contains(github.event.pull_request.head.ref, 'fix/real-wallet-runtime-screen-capture-20261101') || github.event.pull_request.head.ref == 'work1/seller-profile-port-20261110' || github.event.pull_request.head.ref == 'feat/local-business-discovery-20261111' || github.event.pull_request.head.ref == 'feat/business-profile-details-20261111')) || github.ref == 'refs/heads/fix/real-wallet-runtime-screen-capture-20261101' || github.ref == 'refs/heads/feat/local-business-discovery-20261111' || github.ref == 'refs/heads/feat/business-profile-details-20261111' || (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'fix/marketplace-cards-quickcart-rebased-20261115')) && '1' || '0' }}
           FYNX_AI_VISUALS_ONLY: ${{ ((github.event_name == 'pull_request' && (github.event.pull_request.head.ref == 'feature/ai-streaming-reliability-20261105' || github.event.pull_request.head.ref == 'work1/seller-profile-port-20261110')) || (github.event_name == 'push' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' && !contains(github.event.head_commit.message, '[home-cert]'))) && '1' || '0' }}
@@ -392,6 +392,16 @@ jobs:
         with:
           name: FYNX-marketplace-isolated-test-screenshots-${{ github.sha }}
           path: fynx-runtime-screenshots/marketplace-test-fixtures/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Upload Android instrumentation XML reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-android-instrumentation-reports-${{ github.sha }}
+          path: |
+            app/build/reports/androidTests/connected/debug/
+            app/build/outputs/androidTest-results/connected/debug/
           if-no-files-found: warn
           retention-days: 14
       - name: Reassemble debug APK after emulator certification

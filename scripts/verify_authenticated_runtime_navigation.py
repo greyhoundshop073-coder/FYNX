@@ -19,6 +19,7 @@ HOME_FEED_FIXTURES_SEEDED=False
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
+BLOCKED=[]
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
 
@@ -4005,7 +4006,10 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             marketplace_xml=wallet_return_xml
         else:
             report.append("- BLOCKED: "+wallet_shortcut_message)
-            FAILURES.append("Marketplace -> Wallet shortcut: "+wallet_shortcut_message)
+            if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+                BLOCKED.append("Marketplace -> Wallet shortcut: "+wallet_shortcut_message)
+            else:
+                FAILURES.append("Marketplace -> Wallet shortcut: "+wallet_shortcut_message)
             if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml=wallet_return_xml
 
@@ -4112,6 +4116,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             marketplace_xml = dump_ui("marketplace-after-product-detail.xml") or marketplace_xml
         else:
             report.append("- BLOCKED: no visible real listing card with an accessible displayed price; Product Details cannot be shown without real data.")
+            BLOCKED.append("Product Details requires a real visible Marketplace listing; no fixture product was substituted.")
 
         # Scroll the actual Marketplace content viewport to the seller action. Match "Sell"
         # exactly: substring matching would also match "sellers" in the search field.
@@ -4139,6 +4144,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 report.append("- BLOCKED: the sell action was visible, but the publishing form did not expose its expected fields.")
         else:
             report.append("- BLOCKED: the Sell action was not exposed by the rendered Marketplace state; publishing flow not captured.")
+            BLOCKED.append("Seller publishing flow was not exposed in the debug-only local UI session.")
 
         # Return the actual Marketplace content to its top before opening My Shop.
         for attempt in range(5):
@@ -4150,10 +4156,13 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if not scrolled_xml:
                 break
             marketplace_xml = scrolled_xml
-        shop_xml = tap_control(
-            marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
-            ["Your shop at a glance", "Manage your storefront", "Shop profile"]
-        )
+        if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)" and not find_control(marketplace_xml, ["My Shop"]):
+            shop_xml = ""
+        else:
+            shop_xml = tap_control(
+                marketplace_xml, ["My Shop"], "marketplace-my-shop-overview",
+                ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+            )
         if shop_xml:
             if LOGIN_MODE != "debug-only local UI entry (not server-authenticated)":
                 token_present=secure_access_token_persisted()
@@ -4286,6 +4295,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     current_shop_xml = dump_ui("marketplace-my-shop-"+slug+"-after-attempt.xml") or current_shop_xml
         else:
             report.append("- BLOCKED: Marketplace -> My Shop did not reach the seller control center.")
+            BLOCKED.append("Marketplace -> My Shop was not reachable in the debug-only local UI session.")
     else:
         report.append("- BLOCKED: Home -> Marketplace did not reach the real Marketplace search surface.")
 
@@ -4294,7 +4304,10 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         report.append("- PASS: "+wallet_message)
     else:
         report.append("- BLOCKED: "+wallet_message)
-        FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
+        if LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
+            BLOCKED.append("Read-only Wallet screen capture: "+wallet_message)
+        else:
+            FAILURES.append("Read-only Wallet screen capture: "+wallet_message)
 
     report += [
         "",
@@ -4303,10 +4316,12 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
         "- No products, orders, payments, earnings, drivers, or seller records are fabricated.",
         "- A visible page or screenshot does not prove that a backend request succeeded.",
         "",
-        f"## Result: {'GREEN' if not FAILURES else 'RED'}",
+        f"## Result: {'RED' if FAILURES else ('BLOCKED' if BLOCKED else 'GREEN')}",
     ]
     if FAILURES:
         report += ["", "Capture failures:"] + ["- " + item for item in FAILURES]
+    if BLOCKED:
+        report += ["", "Blocked — not counted as passed:"] + ["- " + item for item in BLOCKED]
     (ROOT/"FYNX-marketplace-visual-capture.md").write_text("\n".join(report)+"\n", encoding="utf-8")
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)

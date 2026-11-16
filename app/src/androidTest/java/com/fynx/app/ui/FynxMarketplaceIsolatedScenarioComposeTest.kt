@@ -85,6 +85,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         )
         assertTrue("Great Deals fixture needs at least two eligible products", candidates.size >= 2)
         val expectedDealId = candidates[1].id
+        val expectedDealTitle = dealListings.first { it.id == expectedDealId }.title
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -146,7 +147,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Product 2 of ${candidates.size}").assertIsDisplayed()
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: $expectedDealTitle").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
         compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()
@@ -199,10 +200,11 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
     }
 
     private fun saveScreenshot(name: String) {
-        val directory = File(
-            compose.activity.getExternalFilesDir(null),
-            "marketplace-test-fixtures"
-        )
+        val externalFiles = requireNotNull(compose.activity.getExternalFilesDir(null)) {
+            "External app files directory is unavailable for instrumentation screenshots."
+        }
+        val directory = File(externalFiles, "marketplace-test-fixtures")
+        android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=\${directory.absolutePath}")
         check(directory.mkdirs() || directory.isDirectory)
         val file = File(directory, name)
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
