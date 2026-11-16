@@ -85,8 +85,10 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 it.username.removePrefix("@").trim().lowercase() in pendingUsernames
             } + cachedLocalOnly
             withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged, expectedAccountUsername) }
+            if (FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername) return
             chats = merged
         } else {
+            if (FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername) return
             chats = withContext(Dispatchers.IO) {
                 local.map { preview ->
                     val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
