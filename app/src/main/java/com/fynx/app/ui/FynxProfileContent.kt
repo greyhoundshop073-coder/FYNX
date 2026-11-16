@@ -35,18 +35,21 @@ import kotlinx.coroutines.launch
 @Composable
 fun FynxProfileContentSection(
     username: String,
+    currentUsername: String?,
+    onOpenMarketplaceListing: (String) -> Unit,
     onError: (String?) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var posts by remember(username) { mutableStateOf<List<FynxProfileRemoteClient.ProfilePost>>(emptyList()) }
-    var marketplace by remember(username) { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
-    var loading by remember(username) { mutableStateOf(true) }
-    var selectedTab by rememberSaveable(username) { mutableStateOf("All") }
-    var selectedPost by remember { mutableStateOf<FynxProfileRemoteClient.ProfilePost?>(null) }
-    var selectedListing by remember { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
-    val isOwnProfile = FynxAuthStore.load(context).username?.removePrefix("@")?.equals(username.removePrefix("@"), true) == true
+    val accountKey = normalizeFynxProfileUsername(currentUsername) ?: "signed-out"
+    var posts by remember(username, accountKey) { mutableStateOf<List<FynxProfileRemoteClient.ProfilePost>>(emptyList()) }
+    var marketplace by remember(username, accountKey) { mutableStateOf<List<FynxMarketplaceClient.Listing>>(emptyList()) }
+    var loading by remember(username, accountKey) { mutableStateOf(true) }
+    var selectedTab by rememberSaveable(username, accountKey) { mutableStateOf("All") }
+    var selectedPost by remember(username, accountKey) { mutableStateOf<FynxProfileRemoteClient.ProfilePost?>(null) }
+    var selectedListing by remember(username, accountKey) { mutableStateOf<FynxMarketplaceClient.Listing?>(null) }
+    val isOwnProfile = isOwnFynxProfile(username, currentUsername)
 
-    LaunchedEffect(username) {
+    LaunchedEffect(username, accountKey) {
         loading = true
         FynxProfileRemoteClient.posts(context, username)
             .onSuccess { posts = it }
@@ -171,7 +174,14 @@ fun FynxProfileContentSection(
         FynxProfilePostViewer(post, context) { selectedPost = null }
     }
     selectedListing?.let { listing ->
-        FynxProfileMarketplaceDetails(listing) { selectedListing = null }
+        FynxProfileMarketplaceDetails(
+            listing = listing,
+            onClose = { selectedListing = null },
+            onOpenMarketplace = {
+                onOpenMarketplaceListing(listing.id)
+                selectedListing = null
+            }
+        )
     }
 }
 
@@ -514,7 +524,8 @@ private fun FynxProfilePostViewer(
 @Composable
 private fun FynxProfileMarketplaceDetails(
     listing: FynxMarketplaceClient.Listing,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onOpenMarketplace: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onClose,
@@ -546,6 +557,7 @@ private fun FynxProfileMarketplaceDetails(
                 Text("FYNX protected payment", style = MaterialTheme.typography.labelLarge)
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+        confirmButton = { TextButton(onClick = onOpenMarketplace) { Text("Open in Marketplace") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Close") } }
     )
 }
