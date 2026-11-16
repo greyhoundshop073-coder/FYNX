@@ -34,8 +34,20 @@ object FynxProductionMessaging {
         val replyToId: String?, val reaction: String? = null, val messageType: String = "text", val messagePayload: Map<String, String> = emptyMap(), val mediaId: String? = null, val mediaType: String? = null, val mediaUrl: String? = null, val voiceDurationMs: Long = 0L, val pinned: Boolean = false
     )
 
-    suspend fun recentConversations(context: Context): Result<List<ChatPreview>> =
-        FynxBackendClient.get(context, "/api/messages/recent").mapCatching { raw ->
+    suspend fun recentConversations(
+        context: Context,
+        expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
+        requestToken: String? = FynxBackendClient.accessToken(context)
+    ): Result<List<ChatPreview>> {
+        if (expectedAccountKey.isNullOrBlank() ||
+            !isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)
+        ) {
+            return Result.failure(IllegalStateException("Your account changed before recent conversations could load."))
+        }
+        return FynxBackendClient.get(context, "/api/messages/recent").mapCatching { raw ->
+            check(isMessageRequestSessionCurrent(context, expectedAccountKey, requestToken)) {
+                "Your account changed while recent conversations were loading."
+            }
             val array = JSONObject(raw).optJSONArray("conversations") ?: JSONArray()
             buildList {
                 for (index in 0 until array.length()) {
@@ -65,7 +77,7 @@ object FynxProductionMessaging {
                 }
             }.distinctBy { it.username.lowercase() }
         }
-
+    }
 
     private fun isMessageRequestSessionCurrent(context: Context, expectedAccountKey: String?, requestToken: String?): Boolean =
         FynxBackendClient.isRequestSessionCurrent(
