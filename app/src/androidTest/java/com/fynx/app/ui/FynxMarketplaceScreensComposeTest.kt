@@ -1,20 +1,19 @@
 package com.fynx.app.ui
 
-import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
@@ -22,7 +21,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
-import java.io.FileOutputStream
 
 /**
  * Screen-level instrumentation for the real production Marketplace, Seller Center,
@@ -243,7 +241,9 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("FYNX Test Android Smartphone").assertIsDisplayed()
         saveScreenshot("my-shop-listings-screen.png")
 
-        compose.onAllNodesWithText("Orders")[0].performClick()
+        compose.onNodeWithTag("fynx-seller-center-scroll-container").performScrollToIndex(1)
+        compose.onNodeWithTag("fynx-seller-center-section-tabs").performScrollToNode(hasText("Orders"))
+        compose.onNodeWithText("Orders").performClick()
         compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
         compose.onNodeWithText("Seller orders").performClick()
         compose.onNodeWithText("FYNX Test Delivery Order").assertIsDisplayed()
@@ -414,10 +414,9 @@ class FynxMarketplaceScreensComposeTest {
         android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=${directory.absolutePath}")
         check(directory.mkdirs() || directory.isDirectory)
         val file = File(directory, name)
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        FileOutputStream(file).use { output ->
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-        }
+        compose.waitForIdle()
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        assertTrue("Android must capture the full screen, including Compose dialogs.", device.takeScreenshot(file))
         assertTrue(file.isFile && file.length() > 0L)
     }
 }
