@@ -568,7 +568,7 @@ private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifie
     LaunchedEffect(mediaId) {
         bitmap = if (mediaId != null) {
             val path = resolveProfilePhotoMediaPath(mediaId) ?: "/api/media/$mediaId"
-        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId.trim(), path).getOrNull()
+            val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId.trim(), path).getOrNull()
             if (uri != null) withContext(Dispatchers.IO) { runCatching { FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION) }.getOrNull() } else null
         } else null
     }
