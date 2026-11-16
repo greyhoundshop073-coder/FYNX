@@ -146,7 +146,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // Swipe the actual visible slide and verify that the next eligible listing is shown.
         compose.onNodeWithText(candidates.first().title).performTouchInput { swipeLeft() }
         compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithText(candidates[1].title).fetchSemanticsNodes().isNotEmpty()
+            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
         compose.onNodeWithText("Shop this product").performClick()
@@ -199,7 +199,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
         compose.waitUntil(timeoutMillis = 9_000) {
-            compose.onAllNodesWithText(candidates[1].title).fetchSemanticsNodes().isNotEmpty()
+            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
     }
