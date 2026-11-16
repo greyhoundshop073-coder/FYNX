@@ -133,8 +133,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Total: NGN 60,375.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-pickup-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
-        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
-            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
     }
 
     @Test
@@ -161,7 +160,8 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Total: NGN 61,875.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-delivery-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
-        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
+            .performScrollTo().assertIsDisplayed()
     }
 
     @Test
