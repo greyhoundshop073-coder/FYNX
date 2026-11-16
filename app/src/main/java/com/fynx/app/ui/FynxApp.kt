@@ -918,27 +918,6 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 FynxAuthStore.clear(context)
                 authSession = AuthSession()
                 clearSessionScopedState()
-                adminRole = null
-                selected = "Home"
-                openProfileSettings = false
-                notificationPreferencesOnly = false
-                openChat = null
-                openChatMarketplaceListingId = null
-                openGroup = null
-                profileUser = null
-                marketplaceListingId = null
-                marketplaceAiListingId = null
-                marketplaceProfileUsername = null
-                postOpenId = null
-                postOpenCommentId = null
-                statusOpenId = null
-                statusOpenOwner = null
-                statusCreatorRequested = false
-                callTarget = null
-                pendingIncomingCall = null
-                notifications = emptyList()
-                remoteUnreadCount = 0
-                navigationHistory = emptyList()
             }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" }, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }, onUsernameUpdated = { nextUsername ->
                 if (nextUsername.isNotBlank() && !nextUsername.equals(authSession.username, ignoreCase = true)) {
                     FynxAuthStore.save(context, nextUsername)
