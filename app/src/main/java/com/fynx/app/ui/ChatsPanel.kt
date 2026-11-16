@@ -65,7 +65,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val pendingLocal = local.filter { preview ->
                 localHistories[preview.username.removePrefix("@").trim().lowercase()]?.any { !it.delivered } == true
             }
-            val remoteByUsername = remote.associateBy { it.username.removePrefix("@").trim().lowercase() }
+            // The server is authoritative for profile-photo removal. Do not retain
+            // a stale cached avatar when a contact has removed their photo.
+            val authoritativeRemote = remote.map { chat ->
+                if (chat.avatarUri != null) chat else chat.copy(avatarUri = null)
+            }
+            val remoteByUsername = authoritativeRemote.associateBy { it.username.removePrefix("@").trim().lowercase() }
             val pendingMerged = pendingLocal.map { pending ->
                 val serverPreview = remoteByUsername[pending.username.removePrefix("@").trim().lowercase()]
                 if (serverPreview == null) pending else serverPreview.copy(
@@ -75,7 +80,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 )
             }
             val pendingUsernames = pendingLocal.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
-            val remoteUsernames = remote.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val remoteUsernames = authoritativeRemote.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
             val cachedLocalOnly = local.filter { preview ->
                 val username = preview.username.removePrefix("@").trim().lowercase()
                 username !in remoteUsernames && username !in pendingUsernames &&
