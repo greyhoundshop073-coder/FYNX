@@ -69,6 +69,23 @@ run_badge12_authenticated_certification() {
   return 0
 }
 
+apply_badge12_requirement() {
+  if [ "${FYNX_REQUIRE_BADGE12_AUTH:-0}" = "1" ]; then
+    if [ "${TEST_EXIT:-0}" -eq 0 ]; then
+      run_badge12_authenticated_certification
+      BADGE12_EXIT=$?
+    else
+      mkdir -p fynx-runtime-screenshots
+      echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      echo "- Reason: an earlier required Android test or focused visual check failed; authenticated navigation was not started." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
+      BADGE12_EXIT="$TEST_EXIT"
+      echo "::error::Badge 12 authentication was not attempted because an earlier required Android check failed."
+    fi
+    if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
+  fi
+}
+
 if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   # Run the focused Chat offline-outbox device tests without any server login,
   # Marketplace navigation, backend probe, or remote fixture dependency.
@@ -97,17 +114,7 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   else
     echo "::notice::FYNX Chat offline attachment instrumentation passed without backend access."
   fi
-  if [ "${FYNX_REQUIRE_BADGE12_AUTH:-0}" = "1" ]; then
-    if [ "${TEST_EXIT}" -eq 0 ]; then
-      run_badge12_authenticated_certification
-      BADGE12_EXIT=$?
-      if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
-    else
-      echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-      echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-      echo "- Reason: focused Chat instrumentation failed before authenticated runtime could run." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-      echo "::error::Badge 12 authentication was not attempted because focused Chat instrumentation failed."
-    fi
+  apply_badge12_requirement
   fi
   exit "${TEST_EXIT}"
 fi
@@ -119,20 +126,6 @@ TEST_EXIT=$?
 adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
-
-if [ "${FYNX_REQUIRE_BADGE12_AUTH:-0}" = "1" ]; then
-  if [ "${TEST_EXIT}" -eq 0 ]; then
-    run_badge12_authenticated_certification
-    BADGE12_EXIT=$?
-    if [ "$BADGE12_EXIT" -ne 0 ]; then TEST_EXIT="$BADGE12_EXIT"; fi
-  else
-    echo "# FYNX Large Badge 12 authenticated runtime certification" > fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-    echo "- Result: BLOCKED" >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-    echo "- Reason: Android instrumentation failed before authenticated runtime could run." >> fynx-runtime-screenshots/FYNX-badge12-certification-summary.md
-    echo "::error::Badge 12 authentication was not attempted because Android instrumentation failed."
-  fi
-  exit "$TEST_EXIT"
-fi
 
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # Admin permissions and account queues require the live OWNER/ADMIN backend.
@@ -161,6 +154,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   else
     echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
   fi
+  apply_badge12_requirement
   exit "${TEST_EXIT}"
 fi
 
@@ -170,6 +164,7 @@ if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   NAV_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  apply_badge12_requirement
   exit "$TEST_EXIT"
 fi
 
@@ -191,6 +186,7 @@ if [ "${FYNX_HOME_FEED_VISUALS_ONLY:-0}" = "1" ]; then
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "$NAV_EXIT" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then TEST_EXIT="$NAV_EXIT"; fi
+  apply_badge12_requirement
   exit "$TEST_EXIT"
 fi
 
@@ -265,4 +261,5 @@ else
   fi
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 fi
+apply_badge12_requirement
 exit "$TEST_EXIT"
