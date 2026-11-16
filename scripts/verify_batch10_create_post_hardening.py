@@ -26,7 +26,7 @@ checks = [
     ("Location is label-only and bounded", '"location"' in client and 'take(160)' in client and 'location TEXT' in routes),
     ("Text backgrounds are persisted by the backend", '"textBackground"' in client and 'text_background' in routes),
     ("Music is controlled by the published catalogue", 'fynx_music_catalogue' in routes and 'musicMediaId' in bootstrap and 'published' in bootstrap),
-    ("Music catalogue media is served through the controlled endpoint", '/api/social/music/media/:id' in routes and '/api/social/music/catalogue/' in composer),
+    ("Music catalogue media is served through the controlled endpoint", '/api/social/music/media/:id' in routes and '/api/social/music/media/' in composer),
     ("Feeling/Activity is validated and persisted", 'allowedFeelingActivityTypes' in routes and 'feeling_activity_type' in routes),
     ("Multi-media backend persists ordered media", 'social_post_media' in bootstrap and 'position' in bootstrap),
     ("Backend media retrieval checks authenticated visibility", 'visibleSocialPost(postId, req.user.sub)' in bootstrap),

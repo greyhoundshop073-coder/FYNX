@@ -227,4 +227,4 @@ await installHomeCommentPrivacy();
 await installSocialPostReactions();
 await installHomeCommentReactions();
 await installHomeCommentExperience();
-await import("./serverBootstrap.js");
+if (process.env.FYNX_BUILD_RUNTIME_ONLY !== "1") await import("./serverBootstrap.js");

@@ -9,7 +9,7 @@ internal val MARKETPLACE_CAMPAIGN_CATEGORIES = listOf(
     "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture",
     "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts",
     "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local",
-    "Business & Workshop Supplies", "Other"
+    "Used", "Business & Workshop Supplies", "Other"
 )
 
 /** Campaign CTA destinations must be resolvable by the actual Marketplace navigation. */
