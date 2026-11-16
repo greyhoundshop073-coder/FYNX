@@ -37,6 +37,7 @@ fun FynxProfileContentSection(
     username: String,
     currentUsername: String?,
     onOpenMarketplaceListing: (String) -> Unit,
+    onPostDeleted: () -> Unit = {},
     onError: (String?) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -164,7 +165,7 @@ fun FynxProfileContentSection(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     gridItems.filterIsInstance<FynxProfileGridItem.PostItem>().forEach { item ->
-                        FynxProfilePostFeedCard(post = item.post, username = username, canManage = isOwnProfile, onOpen = { selectedPost = item.post }, onDeleted = { posts = posts.filterNot { it.id == item.post.id } }, onAudienceChanged = { next -> posts = posts.map { if (it.id == item.post.id) it.copy(visibility = next.name) else it } })
+                        FynxProfilePostFeedCard(post = item.post, username = username, canManage = isOwnProfile, onOpen = { selectedPost = item.post }, onDeleted = { posts = posts.filterNot { it.id == item.post.id }; onPostDeleted() }, onAudienceChanged = { next -> posts = posts.map { if (it.id == item.post.id) it.copy(visibility = next.name) else it } })
                     }
                 }
             }        }
@@ -192,15 +193,9 @@ private sealed class FynxProfileGridItem {
 
 @Composable
 private fun FynxProfilePostTile(post: FynxProfileRemoteClient.ProfilePost, username: String, onOpen: () -> Unit) {
-    val context = LocalContext.current
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
-    var profilePhotoId by remember(username) { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(username) {
-        FynxProfileRemoteClient.get(context, username)
-            .onSuccess { profilePhotoId = it.profilePhotoMediaId?.trim()?.takeIf { id -> id.isNotBlank() } }
-    }
+    val profilePhotoId = null as String?
     Card(
         Modifier.fillMaxWidth().height(184.dp).clickable(onClick = onOpen),
         shape = RoundedCornerShape(12.dp),
@@ -322,12 +317,11 @@ private fun FynxProfilePostFeedCard(post: FynxProfileRemoteClient.ProfilePost, u
     val scope = rememberCoroutineScope()
     val mediaUrl = post.mediaUrl ?: post.mediaId?.let { "/api/social/media/" + it }
     val type = post.mediaType?.lowercase().orEmpty()
-    var profilePhotoId by remember(username) { mutableStateOf<String?>(null) }
+    val profilePhotoId = null as String?
     var menuOpen by remember(post.id) { mutableStateOf(false) }
     var audienceOpen by remember(post.id) { mutableStateOf(false) }
     var deleteConfirm by remember(post.id) { mutableStateOf(false) }
     var deleting by remember(post.id) { mutableStateOf(false) }
-    LaunchedEffect(username) { FynxProfileRemoteClient.get(context, username).onSuccess { profilePhotoId = it.profilePhotoMediaId } }
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = RoundedCornerShape(0.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(0.dp, MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -463,9 +457,10 @@ private fun FynxProfileMarketplaceTile(listing: FynxMarketplaceClient.Listing, o
                 Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FynxAvatar(
-                    listing.sellerDisplayName.ifBlank { listing.sellerUsername },
-                    Modifier.size(20.dp).clip(CircleShape),
+                FynxRemoteProfileAvatar(
+                    mediaId = null,
+                    contentDescription = listing.sellerDisplayName.ifBlank { listing.sellerUsername },
+                    modifier = Modifier.size(20.dp).clip(CircleShape),
                     ownerUsername = listing.sellerUsername
                 )
                 Spacer(Modifier.width(5.dp))

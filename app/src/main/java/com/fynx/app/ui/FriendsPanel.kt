@@ -32,9 +32,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 @Composable
-fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> Unit = {}) {
+fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> Unit = {}, currentUsername: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val signedInUsername = currentUsername ?: FynxAuthStore.load(context).username
     var query by rememberSaveable { mutableStateOf("") }
     var section by rememberSaveable { mutableStateOf("Friends") }
     var searchMethod by rememberSaveable { mutableStateOf(FynxPeopleSearchMethod.USERNAME) }
@@ -102,7 +103,8 @@ fun FriendsPanel(onOpenProfile: (String) -> Unit = {}, onOpenChat: (String) -> U
     val outgoingNames = outgoing.map { it.username.lowercase() }.toSet()
     val discover = results.filter {
         val name = it.username.lowercase()
-        name !in friendNames && name !in blockedNames && name !in incomingNames && name !in outgoingNames
+        !isOwnFynxProfile(it.username, signedInUsername) &&
+            name !in friendNames && name !in blockedNames && name !in incomingNames && name !in outgoingNames
     }
 
     fun act(username: String, action: suspend () -> Result<Unit>) {

@@ -191,7 +191,7 @@ fun OtherUserProfilePanel(
                                     }
                                 }
                                 Spacer(Modifier.height(16.dp))
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                if (shouldShowOtherProfileSocialActions(person.username, signedInUsername)) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     
                                     Button(
                                         enabled = !busy,
@@ -236,6 +236,13 @@ fun OtherUserProfilePanel(
                                             textAlign = TextAlign.Center
                                         )
                                     }
+                                } else {
+                                    Text(
+                                        "Your FYNX profile preview",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
                         }
@@ -327,7 +334,8 @@ private fun ProfilePhotoViewerDialog(mediaId: String, name: String, onDismiss: (
         loading = true
         failed = false
         bitmap = null
-        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
+        val path = resolveProfilePhotoMediaPath(mediaId) ?: "/api/media/$mediaId"
+        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId.trim(), path).getOrNull()
         bitmap = if (uri != null) {
             withContext(Dispatchers.IO) {
                 runCatching {
@@ -358,6 +366,7 @@ private fun ProfilePhotoViewerDialog(mediaId: String, name: String, onDismiss: (
                     TextButton(onClick = { retryNonce++ }) { Text("Retry") }
                 }
             }
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd)) { Text("Close") }
         }
     }
 }
@@ -558,7 +567,8 @@ private fun RemoteProfilePhoto(mediaId: String?, name: String, modifier: Modifie
     var bitmap by remember(mediaId) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(mediaId) {
         bitmap = if (mediaId != null) {
-            val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()
+            val path = resolveProfilePhotoMediaPath(mediaId) ?: "/api/media/$mediaId"
+        val uri = FynxProductionMessaging.cacheRemoteMedia(context, mediaId.trim(), path).getOrNull()
             if (uri != null) withContext(Dispatchers.IO) { runCatching { FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION) }.getOrNull() } else null
         } else null
     }

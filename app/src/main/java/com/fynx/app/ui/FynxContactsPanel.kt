@@ -22,10 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class DeviceContact(val name: String, val phone: String)
 
@@ -65,9 +67,12 @@ fun FynxContactsPanel(
             friendUsernames = emptySet()
             friendRequests = emptyList()
             try {
-                val local = readDeviceContacts(context)
-                val sim = readSimContacts(context)
-                contacts = mergeContacts(local, sim)
+                val loaded = withContext(Dispatchers.IO) {
+                    val local = readDeviceContacts(context)
+                    val sim = readSimContacts(context)
+                    mergeContacts(local, sim)
+                }
+                contacts = loaded
                 val candidates = contacts
                 val found = mutableMapOf<String, FynxSocialClient.User>()
                 var failedLookups = 0
@@ -129,7 +134,9 @@ fun FynxContactsPanel(
                     time = "Now",
                     avatarUri = targetUser?.profilePhotoMediaId?.let { "/api/media/$it" }
                 )
-                FynxChatStore.savePreview(context, preview)
+                scope.launch {
+                    withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, preview) }
+                }
                 profileUser = null
                 openChat = preview
             }

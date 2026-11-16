@@ -29,7 +29,7 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}, onOutgoingCallConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
@@ -216,6 +216,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     fun beginOutgoing(name: String, isVideo: Boolean) {
         val username = name.removePrefix("@").trim()
         if (username.isBlank()) return
+        if (isSelfCallTarget(username, currentUsername)) {
+            errorMessage = "You cannot call your own account."
+            return
+        }
         mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false
         video = isVideo; activeCall = username; targetUsername = username; targetAvatarUsername = username; errorMessage = null
         scope.launch {
@@ -256,7 +260,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         onIncomingCallConsumed(callId)
     }
 
-    LaunchedEffect(initialName, initialOutgoing) { if (initialOutgoing && !initialName.isNullOrBlank()) beginOutgoing(initialName, initialVideo) }
+    LaunchedEffect(initialName, initialOutgoing) {
+        if (shouldConsumeOutgoingCallTrigger(initialOutgoing, initialName)) {
+            onOutgoingCallConsumed()
+            beginOutgoing(initialName!!, initialVideo)
+        }
+    }
 
     LaunchedEffect(session?.id, session?.state) {
         val current = session ?: return@LaunchedEffect

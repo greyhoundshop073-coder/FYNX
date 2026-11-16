@@ -52,7 +52,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}) {
+fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onUsernameUpdated: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -60,6 +60,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     var profile by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfile(context, session.username)) }
     var description by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadDescription(context)) }
     var photo by remember(session.username) { mutableStateOf(FynxPreferencesStore.loadProfilePhoto(context)) }
+    var photoRemoved by remember(session.username) { mutableStateOf(false) }
     var remotePhotoId by remember(session.username) { mutableStateOf(session.username?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) }) }
     var remoteProfileLoaded by remember(session.username) { mutableStateOf(false) }
     var remoteVerified by remember(session.username) { mutableStateOf(false) }
@@ -110,42 +111,72 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
     }
 
     if (editing) {
-        EditProfilePanel(profile, description, photo, syncing, syncError, onPhotoChanged = { photo = it }, onSave = { updatedProfile, updatedDescription, updatedPhoto ->
-            scope.launch {
-                syncing = true
-                syncError = null
-                val originalPhoto = FynxPreferencesStore.loadProfilePhoto(context)
-                var photoId: String? = null
-                if (updatedPhoto != originalPhoto && updatedPhoto != null) {
-                    val uri = runCatching { Uri.parse(updatedPhoto) }.getOrNull()
-                    if (uri != null) {
-                        FynxProfileRemoteClient.uploadProfilePhoto(context, uri)
-                            .onSuccess { photoId = it }
-                            .onFailure { syncError = it.message ?: "Profile photo upload failed." }
+        EditProfilePanel(
+            profile = profile,
+            description = description,
+            photoUri = photo,
+            remotePhotoId = remotePhotoId,
+            photoRemoved = photoRemoved,
+            syncing = syncing,
+            syncError = syncError,
+            onPhotoChanged = { next ->
+                photo = next
+                photoRemoved = next == null
+            },
+            onSave = { updatedProfile, updatedDescription, updatedPhoto, removed ->
+                scope.launch {
+                    syncing = true
+                    syncError = null
+                    val originalPhoto = FynxPreferencesStore.loadProfilePhoto(context)
+                    var photoId: String? = null
+                    if (updatedPhoto != null && (updatedPhoto != originalPhoto || remotePhotoId == null)) {
+                        val uri = runCatching { Uri.parse(updatedPhoto) }.getOrNull()
+                        if (uri != null) {
+                            FynxProfileRemoteClient.uploadProfilePhoto(context, uri)
+                                .onSuccess { photoId = it }
+                                .onFailure { syncError = it.message ?: "Profile photo upload failed." }
+                        }
                     }
+                    val removeRemotePhoto = removed && updatedPhoto == null && (originalPhoto != null || !remotePhotoId.isNullOrBlank())
+                    if (syncError == null) {
+                        val previousUsername = profile.username
+                        FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, country = updatedProfile.country, profilePhotoMediaId = photoId, removeProfilePhoto = removeRemotePhoto)
+                            .onSuccess { remote ->
+                                val normalizedProfile = updatedProfile.copy(
+                                    displayName = remote.displayName.ifBlank { updatedProfile.displayName },
+                                    username = remote.username.ifBlank { updatedProfile.username },
+                                    bio = remote.bio,
+                                    country = remote.country
+                                )
+                                profile = normalizedProfile
+                                description = updatedDescription
+                                photo = updatedPhoto
+                                photoRemoved = false
+                                remotePhotoId = remote.profilePhotoMediaId
+                                remoteProfileLoaded = true
+                                FynxPreferencesStore.saveProfile(context, normalizedProfile)
+                                FynxPreferencesStore.saveDescription(context, updatedDescription)
+                                FynxPreferencesStore.saveProfilePhoto(context, updatedPhoto)
+                                if (!normalizedProfile.username.equals(previousUsername, ignoreCase = true)) {
+                                    onUsernameUpdated(normalizedProfile.username)
+                                }
+                                editing = false
+                            }.onFailure { syncError = it.message ?: "Profile update failed." }
+                    }
+                    syncing = false
                 }
-                val removeRemotePhoto = updatedPhoto == null && (originalPhoto != null || remotePhotoId != null)
-                if (syncError == null) {
-                    FynxProfileRemoteClient.update(context, updatedProfile.displayName, updatedProfile.username, updatedProfile.bio, country = updatedProfile.country, profilePhotoMediaId = photoId, removeProfilePhoto = removeRemotePhoto)
-                        .onSuccess { remote ->
-                            profile = updatedProfile
-                            description = updatedDescription
-                            photo = updatedPhoto
-                            remotePhotoId = remote.profilePhotoMediaId
-                            FynxPreferencesStore.saveProfile(context, updatedProfile)
-                            FynxPreferencesStore.saveDescription(context, updatedDescription)
-                            FynxPreferencesStore.saveProfilePhoto(context, updatedPhoto)
-                            editing = false
-                        }.onFailure { syncError = it.message ?: "Profile update failed." }
-                }
-                syncing = false
+            },
+            onCancel = {
+                syncError = null
+                photoRemoved = false
+                editing = false
             }
-        }, onCancel = { editing = false })
+        )
         return
     }
 
     if (settingsOpen) {
-        SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; editing = true })
+        SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; syncError = null; photoRemoved = false; editing = true }, remotePhotoId = remotePhotoId)
         return
     }
 
@@ -229,7 +260,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { editing = true },
+                            onClick = { syncError = null; photoRemoved = false; editing = true },
                             modifier = Modifier.weight(1f).heightIn(min = 44.dp),
                             shape = RoundedCornerShape(14.dp)
                         ) {
@@ -255,6 +286,10 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                     username = username,
                     currentUsername = session.username,
                     onOpenMarketplaceListing = onOpenMarketplaceListing,
+                    onPostDeleted = {
+                        postCount = (postCount - 1).coerceAtLeast(0)
+                        FynxPreferencesStore.saveRemoteProfileStats(context, profile.username, postCount, followerCount, followingCount)
+                    },
                     onError = { if (it != null) syncError = it }
                 )
             }
@@ -292,10 +327,17 @@ private fun formatProfileCount(value: Int): String = when { value >= 1_000_000 -
 private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, name: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var bitmap by remember(mediaId, localPhotoUri) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    LaunchedEffect(mediaId, localPhotoUri) {
+    var loading by remember(mediaId, localPhotoUri) { mutableStateOf(true) }
+    var failed by remember(mediaId, localPhotoUri) { mutableStateOf(false) }
+    var retryNonce by remember(mediaId, localPhotoUri) { mutableIntStateOf(0) }
+    LaunchedEffect(mediaId, localPhotoUri, retryNonce) {
+        loading = true
+        failed = false
+        bitmap = null
+        val remotePath = resolveProfilePhotoMediaPath(mediaId)
         bitmap = withContext(kotlinx.coroutines.Dispatchers.IO) {
             when {
-                !mediaId.isNullOrBlank() -> FynxProductionMessaging.cacheRemoteMedia(context, mediaId, "/api/social/media/$mediaId").getOrNull()?.let { uri ->
+                remotePath != null && !mediaId.isNullOrBlank() -> FynxProductionMessaging.cacheRemoteMedia(context, mediaId.trim(), remotePath).getOrNull()?.let { uri ->
                     runCatching { FynxBitmapSampling.decodeUriSampled(context, uri, FynxBitmapSampling.FEED_MAX_DIMENSION) }.getOrNull()
                 }
                 !localPhotoUri.isNullOrBlank() -> runCatching {
@@ -304,18 +346,29 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
                 else -> null
             }
         }
+        failed = bitmap == null && (remotePath != null || !localPhotoUri.isNullOrBlank())
+        loading = false
     }
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Box(
             Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            if (bitmap != null) androidx.compose.foundation.Image(
-                bitmap!!.asImageBitmap(),
-                contentDescription = "Profile photo",
-                modifier = Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(18.dp)),
-                contentScale = androidx.compose.ui.layout.ContentScale.Fit
-            ) else FynxAvatar(name, Modifier.size(120.dp))
+            when {
+                loading -> CircularProgressIndicator()
+                bitmap != null -> androidx.compose.foundation.Image(
+                    bitmap!!.asImageBitmap(),
+                    contentDescription = "Profile photo",
+                    modifier = Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(18.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                )
+                failed -> Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FynxAvatar(name, Modifier.size(120.dp))
+                    Text("Profile photo unavailable", color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+                    TextButton(onClick = { retryNonce++ }) { Text("Retry") }
+                }
+                else -> FynxAvatar(name, Modifier.size(120.dp))
+            }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Text("Close", color = androidx.compose.ui.graphics.Color.White) }
         }
     }
@@ -323,7 +376,7 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
 
 @Composable private fun ProfileInfoRow(title: String, value: String) { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) { Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f)); Text(value, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), textAlign = TextAlign.End, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
 
-@Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?) -> Unit, onCancel: () -> Unit) {
+@Composable private fun EditProfilePanel(profile: FynxProfile, description: String, photoUri: String?, remotePhotoId: String?, photoRemoved: Boolean, syncing: Boolean, syncError: String?, onPhotoChanged: (String?) -> Unit, onSave: (FynxProfile, String, String?, Boolean) -> Unit, onCancel: () -> Unit) {
     var displayName by remember(profile) { mutableStateOf(profile.displayName) }
     var username by remember(profile) { mutableStateOf(profile.username) }
     var bio by remember(profile) { mutableStateOf(profile.bio) }
@@ -335,12 +388,19 @@ private fun FynxProfilePhotoViewer(mediaId: String?, localPhotoUri: String?, nam
     var bioAiError by remember(profile) { mutableStateOf<String?>(null) }
     var bioAiSuggestion by remember(profile) { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> if (uri != null) onPhotoChanged(uri.toString()) }
+    val hasPhoto = hasEffectiveEditProfilePhoto(photoUri, remotePhotoId, photoRemoved)
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim(), country = country.trim()), about.trim(), photoUri) }) { Text(if (syncing) "Saving…" else "Save") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { TextButton(enabled = !syncing, onClick = onCancel) { Text("Cancel") }; Text("Edit profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); TextButton(enabled = !syncing, onClick = { onSave(profile.copy(displayName = displayName.trim().ifBlank { profile.displayName }, username = username.trim().removePrefix("@").replace(" ", "").ifBlank { profile.username }, bio = bio.trim(), country = country.trim()), about.trim(), photoUri, photoRemoved) }) { Text(if (syncing) "Saving…" else "Save") } }
         syncError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         HorizontalDivider()
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { FynxProfileImage(displayName, photoUri, Modifier.size(112.dp).clip(CircleShape)) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (photoUri == null) "Add photo" else "Change photo") }; if (photoUri != null) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            when {
+                photoUri != null -> FynxProfileImage(displayName, photoUri, Modifier.size(112.dp).clip(CircleShape), ownerUsername = profile.username, preferLocalUri = true)
+                !photoRemoved && !remotePhotoId.isNullOrBlank() -> FynxRemoteProfileAvatar(remotePhotoId, displayName, Modifier.size(112.dp).clip(CircleShape), ownerUsername = profile.username)
+                else -> FynxAvatar(displayName, Modifier.size(112.dp).clip(CircleShape))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { OutlinedButton(enabled = !syncing, onClick = { picker.launch("image/*") }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddAPhoto, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(if (hasPhoto) "Change photo" else "Add photo") }; if (hasPhoto) { Spacer(Modifier.width(6.dp)); TextButton(enabled = !syncing, onClick = { onPhotoChanged(null) }) { Text("Remove") } } }
         OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("Display name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
         OutlinedTextField(username.removePrefix("@"), { username = it.removePrefix("@").replace(" ", "") }, Modifier.fillMaxWidth(), label = { Text("Username") }, prefix = { Text("@") }, singleLine = true, shape = RoundedCornerShape(14.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -452,7 +512,8 @@ fun SettingsPanel(
     onOpenPrivacy: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
     onSignOut: () -> Unit = {},
-    onOpenAccountProfile: () -> Unit = {}
+    onOpenAccountProfile: () -> Unit = {},
+    remotePhotoId: String? = null
 ) {
     val context = LocalContext.current
     val settingsScope = rememberCoroutineScope()
@@ -505,7 +566,8 @@ fun SettingsPanel(
             onBack = { showAccountProfile = false },
             onEditProfile = { showAccountProfile = false; onOpenAccountProfile() },
             onOpenPrivacy = { showAccountProfile = false; onOpenPrivacy() },
-            onSignOut = onSignOut
+            onSignOut = onSignOut,
+            remotePhotoId = remotePhotoId
         )
         return
     }
@@ -1017,7 +1079,8 @@ private fun AccountProfileSettingsPanel(
     onBack: () -> Unit,
     onEditProfile: () -> Unit,
     onOpenPrivacy: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    remotePhotoId: String? = null
 ) {
     val context = LocalContext.current
     var infoTitle by remember { mutableStateOf<String?>(null) }
@@ -1055,7 +1118,7 @@ private fun AccountProfileSettingsPanel(
                         Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        FynxAvatar(profile.displayName.ifBlank { "FYNX User" }, Modifier.size(58.dp).clip(CircleShape))
+                        FynxRemoteProfileAvatar(remotePhotoId, profile.displayName.ifBlank { "FYNX User" }, Modifier.size(58.dp).clip(CircleShape), ownerUsername = profile.username)
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text(profile.displayName.ifBlank { "FYNX User" }, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

@@ -700,11 +700,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     when (page) {
             "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
-                onOpenProfile = { username -> profileUser = username; selected = "Home" }
+                onOpenProfile = { username -> profileUser = username; selected = "Home" },
+                onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
             )
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" }, onOpenContacts = { selected = "Contacts" })
             "Friends" -> FriendsPanel(
                 onOpenProfile = { profileUser = it },
+                currentUsername = authSession.username,
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
@@ -809,6 +811,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         FynxNotificationType.GROUP -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://group/" + Uri.encode(it) }
                         FynxNotificationType.STORY -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://status/" + Uri.encode(it) }
                         FynxNotificationType.COMMENT, FynxNotificationType.REACTION -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://post/" + Uri.encode(it) }
+                        FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://marketplace/" + Uri.encode(it) } ?: "fynx://marketplace"
+                        FynxNotificationType.WALLET_ACTIVITY -> "fynx://money"
                         else -> "fynx://home"
                     } ?: "fynx://home"
                     when (val destination = FynxDeepLinkParser.parse(Uri.parse(route))) {
@@ -826,6 +830,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     val resolvedChat = local ?: remote?.let { user ->
                                         ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it })
                                     }
+                                    openChatMarketplaceListingId = destination.marketplaceListingId
+                                    openGroup = null
+                                    profileUser = null
                                     openChat = resolvedChat
                                     if (resolvedChat != null) withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
                                 }
@@ -844,7 +851,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null })
+            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null })
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
@@ -866,7 +873,37 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" }, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSignOut = {
+                FynxAuthStore.clear(context)
+                authSession = AuthSession()
+                adminRole = null
+                selected = "Home"
+                openProfileSettings = false
+                notificationPreferencesOnly = false
+                openChat = null
+                openChatMarketplaceListingId = null
+                openGroup = null
+                profileUser = null
+                marketplaceListingId = null
+                marketplaceAiListingId = null
+                marketplaceProfileUsername = null
+                postOpenId = null
+                postOpenCommentId = null
+                statusOpenId = null
+                statusOpenOwner = null
+                statusCreatorRequested = false
+                callTarget = null
+                pendingIncomingCall = null
+                notifications = emptyList()
+                remoteUnreadCount = 0
+                navigationHistory = emptyList()
+            }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" }, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }, onUsernameUpdated = { nextUsername ->
+                if (nextUsername.isNotBlank() && !nextUsername.equals(authSession.username, ignoreCase = true)) {
+                    FynxAuthStore.save(context, nextUsername)
+                    authSession = authSession.copy(username = nextUsername)
+                    profileVersion++
+                }
+            })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)
                     }
                 }

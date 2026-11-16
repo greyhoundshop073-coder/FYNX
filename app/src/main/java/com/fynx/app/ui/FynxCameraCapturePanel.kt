@@ -241,6 +241,7 @@ fun FynxCameraCapturePanel(
     var showEffectTray by remember { mutableStateOf(false) }
     var captureTimerSeconds by remember { mutableIntStateOf(0) }
     var timerCountingDown by remember { mutableIntStateOf(0) }
+    var timerRunId by remember { mutableIntStateOf(0) }
     var showGrid by remember { mutableStateOf(false) }
     var selectedCameraTool by remember { mutableStateOf("Looks") }
     var showAdjustments by remember { mutableStateOf(false) }
@@ -322,7 +323,19 @@ fun FynxCameraCapturePanel(
         }
     }
     // Keep the shutter and capture tools visible; only the self-timer deliberately hides them during countdown.
-    LaunchedEffect(timerCountingDown) { if (timerCountingDown > 0) { delay(1000L); timerCountingDown -= 1 } }
+    LaunchedEffect(timerRunId) {
+        if (timerRunId == 0) return@LaunchedEffect
+        while (timerCountingDown > 0) {
+            delay(1000L)
+            if (pendingUri != null || mode != CameraMode.PHOTO) {
+                timerCountingDown = 0
+                showCaptureControls = true
+                return@LaunchedEffect
+            }
+            timerCountingDown -= 1
+        }
+        capturePhotoNow()
+    }
     LaunchedEffect(hasCamera, lens, mode, pendingUri, lifecycleOwner, faceAnalysisEnabled) {
         val generation = bindGeneration + 1; bindGeneration = generation
         if (!hasCamera || pendingUri != null) { cameraProvider?.unbindAll(); imageCapture = null; videoCapture = null; cameraControl = null; cameraInfo = null; return@LaunchedEffect }
@@ -1058,11 +1071,7 @@ fun FynxCameraCapturePanel(
                             if (timerCountingDown == 0) {
                                 timerCountingDown = captureTimerSeconds
                                 showCaptureControls = false
-                                scope.launch {
-                                    delay(captureTimerSeconds * 1000L)
-                                    timerCountingDown = 0
-                                    capturePhotoNow()
-                                }
+                                timerRunId += 1
                             }
                         } else capturePhotoNow()
                     } else {
