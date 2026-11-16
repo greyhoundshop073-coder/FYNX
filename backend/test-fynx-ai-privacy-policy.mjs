@@ -36,6 +36,33 @@ for (const name of blockedTools) {
 }
 assert.equal(databaseCalls, 0, "blocked private tools must be rejected before database access");
 
+const forbiddenFinancialCapabilities = [
+  "get_wallet_balance",
+  "get_my_wallet",
+  "get_wallet_transactions",
+  "get_transaction_history",
+  "get_bank_account",
+  "get_payout_details",
+  "transfer_money",
+  "send_money",
+  "withdraw_funds",
+  "initiate_payment",
+  "refund_payment",
+  "pay_for_order"
+];
+assert.ok(
+  forbiddenFinancialCapabilities.every(name => !registryTools.includes(name)),
+  "wallet, bank-detail and money-movement capabilities must never be exposed to text AI"
+);
+for (const name of forbiddenFinancialCapabilities) {
+  await assert.rejects(
+    executeFynxAiTool({ name, argumentsJson: "{}", userId: "17", databasePool }),
+    /unsupported FYNX AI tool/
+  );
+}
+assert.equal(databaseCalls, 0, "unregistered financial capabilities must be rejected without database access");
+
+
 const privacyQueries = [];
 const privacyAwarePool = {
   async query(sql, params) {
@@ -70,7 +97,7 @@ assert.match(privacyQueries[2].sql, /profile_visibility.*Everyone/);
 assert.match(privacyQueries[2].sql, /messages_visibility.*Everyone/);
 assert.match(privacyQueries[3].sql, /l\.active=TRUE/);
 assert.match(privacyQueries[3].sql, /quantity-COALESCE\(l\.reserved_quantity,0\)/);
-assert.match(privacyQueries[3].sql, /UPPER\(COALESCE\(l\.currency,''\)\)='NGN'/);
+assert.match(privacyQueries[3].sql, /UPPER\(COALESCE\(l\.currency,''\)\) IN \('NGN','USD'\)/);
 assert.match(privacyQueries[3].sql, /NOT EXISTS \(SELECT 1 FROM blocks/);
 assert.match(privacyQueries[3].sql, /l\.seller_id<>\$1/);
 assert.deepEqual(privacyQueries[3].params, ["17", "%camera%", "Electronics"]);

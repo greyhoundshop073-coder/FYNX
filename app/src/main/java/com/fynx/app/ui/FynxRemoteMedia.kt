@@ -41,6 +41,22 @@ import java.io.File
 import java.security.MessageDigest
 
 private const val MAX_REMOTE_MEDIA_BYTES = 12L * 1024L * 1024L
+private const val MAX_REMOTE_MEDIA_CACHE_BYTES = 100L * 1024L * 1024L
+
+private fun trimRemoteMediaCache(cacheFile: File) {
+    val directory = cacheFile.parentFile ?: return
+    val files = directory.listFiles()?.filter { it.isFile } ?: return
+    var total = files.sumOf { it.length() }
+    if (total <= MAX_REMOTE_MEDIA_CACHE_BYTES) return
+    files.asSequence()
+        .filter { it.absolutePath != cacheFile.absolutePath }
+        .sortedBy { it.lastModified() }
+        .forEach { candidate ->
+            if (total <= MAX_REMOTE_MEDIA_CACHE_BYTES) return@forEach
+            val size = candidate.length()
+            if (candidate.delete()) total -= size
+        }
+}
 
 private fun resolveFynxMediaUrl(context: android.content.Context, mediaUrl: String): String {
     val value = mediaUrl.trim()
@@ -92,12 +108,16 @@ fun FynxRemoteMedia(
                 val extension = if (isKnownVideo) ".media" else ".image"
                 val cacheTarget = remoteMediaCacheFile(context, resolvedUrl, extension)
                 val target = cacheTarget ?: File.createTempFile("fynx_media_", ".media", context.cacheDir)
-                val result = if (cacheTarget?.exists() == true && cacheTarget.length() > 0L) {
+                val result = if (cacheTarget?.exists() == true && cacheTarget.length() in 1..MAX_REMOTE_MEDIA_BYTES) {
+                    cacheTarget.setLastModified(System.currentTimeMillis())
                     Result.success(FynxBackendClient.DownloadedMedia(null, cacheTarget.length()))
                 } else if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.OFFLINE || !FynxBackendClient.hasAccessToken(context)) {
                     Result.failure(IllegalStateException("Media is offline and not cached"))
                 } else {
-                    downloadRemoteMedia(context, resolvedUrl, target)
+                    cacheTarget?.delete()
+                    downloadRemoteMedia(context, resolvedUrl, target).onSuccess {
+                        if (cacheTarget != null) trimRemoteMediaCache(cacheTarget)
+                    }
                 }
                 result.getOrThrow().let { downloaded ->
                     val contentType = downloaded.contentType.orEmpty()
@@ -135,11 +155,17 @@ fun FynxRemoteMedia(
         if (playbackActive && autoPlay) { if (!view.isPlaying) runCatching { view.start(); videoPlaying = true } }
         else if (!playbackActive) { if (view.isPlaying) runCatching { view.pause() }; videoPlaying = false }
     }
+    val currentBitmap by rememberUpdatedState(bitmap)
+    val currentAnimatedDrawable by rememberUpdatedState(animatedDrawable)
     DisposableEffect(resolvedUrl, type) {
         onDispose {
             videoView?.stopPlayback()
             preparedPlayer = null
             videoView = null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                (currentAnimatedDrawable as? AnimatedImageDrawable)?.stop()
+            }
+            currentBitmap?.takeUnless { it.isRecycled }?.recycle()
         }
     }
     when (kind) {

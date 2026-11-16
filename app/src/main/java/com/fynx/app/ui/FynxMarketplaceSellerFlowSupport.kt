@@ -17,10 +17,10 @@ internal object FynxMarketplaceSellerFlowSupport {
     const val MAX_DESCRIPTION_LENGTH = 5000
     const val MAX_QUANTITY = 1_000_000
     const val DEFAULT_CURRENCY = "NGN"
-    val SUPPORTED_CURRENCIES = listOf("NGN")
+    val SUPPORTED_CURRENCIES = listOf("NGN", "USD")
     fun isSupportedCurrency(currency: String): Boolean = currency.trim().uppercase() in SUPPORTED_CURRENCIES
     // Older USD orders and receipts must remain readable after new activity became NGN-only.
-    fun isReadableCurrency(currency: String): Boolean = currency.trim().uppercase() in setOf("NGN", "USD")
+    fun isReadableCurrency(currency: String): Boolean = isSupportedCurrency(currency)
 
     fun normalizedMedia(context: Context, uris: List<Uri>): List<Uri> =
         uris.asSequence()
@@ -65,6 +65,15 @@ internal fun marketplaceRequiredCurrency(value: Any?): String {
     val currency = (value as? String)?.trim()?.uppercase(Locale.US).orEmpty()
     if (!currency.matches(Regex("[A-Z]{3}"))) {
         throw IllegalStateException("Seller earnings data is incomplete.")
+    }
+    return currency
+}
+
+/** Marketplace orders and payment sessions support only the explicitly declared NGN/USD currencies. */
+internal fun marketplaceRequiredOrderCurrency(value: Any?): String {
+    val currency = marketplaceRequiredCurrency(value)
+    if (currency !in setOf("NGN", "USD")) {
+        throw IllegalStateException("Marketplace order currency is unsupported.")
     }
     return currency
 }

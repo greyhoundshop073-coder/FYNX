@@ -137,7 +137,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
       const category = cleanText(req.query?.category, 40);
       const location = cleanText(req.query?.location, 160);
       const params = [req.user.sub];
-      const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "UPPER(COALESCE(l.currency,''))='NGN'", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
+      const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); const n=params.length; where.push("(l.title ILIKE $" + n + " OR l.description ILIKE $" + n + " OR COALESCE(l.category,'') ILIKE $" + n + " OR COALESCE(l.store_name,'') ILIKE $" + n + " OR COALESCE(shop.shop_name,'') ILIKE $" + n + " OR u.username ILIKE $" + n + " OR u.display_name ILIKE $" + n + ")"); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push("l.category=$" + params.length); }
       if (location) { params.push(`%${location}%`); where.push("l.location ILIKE $" + params.length); }
@@ -173,7 +173,7 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
         FROM marketplace_listings l
         JOIN users u ON u.id=l.seller_id
         LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id=l.seller_id
-        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,''))='NGN'
+        WHERE l.id=$1 AND UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$2))
         LIMIT 1
       `, [listingId, req.user.sub]);
@@ -233,7 +233,9 @@ export function registerDiscoveryRoutes({ app, pool, auth }) {
          AND (p.author_id=$2 OR p.visibility='PUBLIC'
            OR (p.visibility='ONLY_ME' AND p.author_id=$2)
            OR (p.visibility='FRIENDS_ONLY' AND EXISTS (SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted'))
-           OR (p.visibility='SELECTED_PEOPLE' AND EXISTS (SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)))
+           OR (p.visibility='SELECTED_PEOPLE'
+             AND EXISTS (SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2)
+             AND EXISTS (SELECT 1 FROM friendships af WHERE ((af.user_id=p.author_id AND af.friend_id=$2) OR (af.user_id=$2 AND af.friend_id=p.author_id)) AND af.status='accepted')))
          AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))
        LIMIT 1
     `, [postId, userId]);

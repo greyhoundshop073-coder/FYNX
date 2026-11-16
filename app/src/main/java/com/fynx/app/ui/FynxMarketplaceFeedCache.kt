@@ -60,7 +60,7 @@ internal object FynxMarketplaceFeedCache {
                 val active = row.optBoolean("active", true)
                 val quantity = row.optInt("quantity", 0)
                 if (id.isBlank() || title.isBlank() || seller.isBlank() || !price.isFinite() ||
-                    price <= 0.0 || quantity <= 0 || currency != "NGN" || !active) continue
+                    price <= 0.0 || quantity <= 0 || currency !in setOf("NGN", "USD") || !active) continue
                 val media = row.optJSONArray("mediaIds") ?: JSONArray()
                 val mediaIds = buildList {
                     for (i in 0 until media.length()) media.optString(i).trim()

@@ -18,6 +18,7 @@ object FynxRemoteSocialClient {
     data class CommentReactionState(val counts: Map<String, Int>, val currentReaction: String?)
     data class RemoteUser(val id: String, val username: String, val displayName: String)
     data class MarketplaceListing(val id: String, val sellerId: String, val sellerUsername: String, val sellerDisplayName: String, val storeName: String, val title: String, val description: String, val price: Double, val currency: String, val category: String, val condition: String, val quantity: Int, val location: String, val deliveryAvailable: Boolean, val pickupAvailable: Boolean, val deliveryFee: Double?, val mediaIds: List<String>, val active: Boolean = true, val mediaTypes: List<String> = emptyList())
+    data class MarketplaceListingEngagement(val listingId: String, val likeCount: Int, val likedByCurrentUser: Boolean)
     data class MarketplaceOrder(val id: String, val buyerId: String, val sellerId: String, val listingId: String, val quantity: Int, val unitPrice: Double, val deliveryFee: Double, val totalAmount: Double, val currency: String, val productTitle: String, val sellerUsername: String?, val status: String, val trackingReference: String?, val fulfillmentMethod: String, val shippingAddress: JSONObject?, val buyerNote: String, val inspectionDeadline: String?, val deliveryAvailable: Boolean, val pickupAvailable: Boolean)
     data class MarketplaceDriverAssignment(val orderId: String, val status: String, val fulfillmentStatus: String, val currency: String, val totalAmount: Double, val quantity: Int, val productTitle: String, val buyerName: String, val sellerUsername: String, val shippingAddress: JSONObject?, val trackingReference: String?, val acceptedAt: String?, val handoverAt: String?, val deliveredAt: String?, val evidence: JSONArray)
     data class SocialInteractionState(val saved: Boolean, val reposted: Boolean, val savedCount: Int, val repostCount: Int)
@@ -139,6 +140,17 @@ object FynxRemoteSocialClient {
     }
     suspend fun listings(context: Context, query: String = "", category: String = "All", seller: String = ""): Result<List<MarketplaceListing>> = FynxBackendClient.get(context, "/api/marketplace/listings?q=${URLEncoder.encode(query, "UTF-8")}&category=${URLEncoder.encode(category, "UTF-8")}&seller=${URLEncoder.encode(seller.removePrefix("@"), "UTF-8")}").mapCatching { raw -> parseListings(raw, activeOmittedMeansActive = true) }
     data class MarketplaceListingPage(val listings: List<MarketplaceListing>, val hasMore: Boolean)
+    suspend fun marketplaceSellerListingsPage(context: Context, username: String, limit: Int = 24, offset: Int = 0): Result<MarketplaceListingPage> {
+        val seller = username.trim().removePrefix("@")
+        if (seller.isBlank()) return Result.failure(IllegalArgumentException("Seller username is required."))
+        val safeLimit = limit.coerceIn(1, 60)
+        val safeOffset = offset.coerceAtLeast(0)
+        val path = "/api/marketplace/listings?seller=${URLEncoder.encode(seller, "UTF-8")}&limit=$safeLimit&offset=$safeOffset"
+        return FynxBackendClient.get(context, path).mapCatching { raw ->
+            val root = JSONObject(raw)
+            MarketplaceListingPage(parseListings(raw, activeOmittedMeansActive = true), root.optBoolean("hasMore", false))
+        }
+    }
     suspend fun marketplaceDiscoveryPage(context: Context, query: String = "", category: String = "All", limit: Int = 24, offset: Int = 0, location: String = ""): Result<MarketplaceListingPage> {
         val safeLimit = limit.coerceIn(1, 60)
         val safeOffset = offset.coerceAtLeast(0)
@@ -148,6 +160,44 @@ object FynxRemoteSocialClient {
             MarketplaceListingPage(parseListings(raw, activeOmittedMeansActive = true), root.optBoolean("hasMore", false))
         }
     }
+    suspend fun marketplaceSellerListingEngagement(context: Context, username: String): Result<Map<String, MarketplaceListingEngagement>> {
+        val seller = username.trim().removePrefix("@")
+        if (seller.isBlank()) return Result.failure(IllegalArgumentException("Seller username is required."))
+        val encoded = URLEncoder.encode(seller, "UTF-8")
+        return FynxBackendClient.get(context, "/api/marketplace/shops/$encoded/listing-engagement").mapCatching { raw ->
+            val rows = JSONObject(raw).optJSONArray("listings") ?: JSONArray()
+            buildMap {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index) ?: continue
+                    val id = row.optString("listingId").trim()
+                    if (id.isNotBlank()) put(id, MarketplaceListingEngagement(id, row.optInt("likeCount", 0).coerceAtLeast(0), row.optBoolean("likedByCurrentUser")))
+                }
+            }
+        }
+    }
+
+    suspend fun setMarketplaceListingLike(context: Context, listingId: String, liked: Boolean): Result<MarketplaceListingEngagement> {
+        val numericId = listingId.toLongOrNull()?.takeIf { it > 0L }
+            ?: return Result.failure(IllegalArgumentException("Invalid Marketplace product id."))
+        return FynxBackendClient.postJson(context, "/api/marketplace/listings/$numericId/like",
+            JSONObject().put("liked", liked).toString()).mapCatching { raw ->
+            val response = JSONObject(raw)
+            MarketplaceListingEngagement(response.optString("listingId", numericId.toString()),
+                response.optInt("likeCount", 0).coerceAtLeast(0), response.optBoolean("liked"))
+        }
+    }
+
+    suspend fun myPurchasedMarketplaceListingIds(context: Context): Result<Set<String>> =
+        FynxBackendClient.get(context, "/api/marketplace/my-purchased-listings").mapCatching { raw ->
+            val rows = JSONObject(raw).optJSONArray("purchases") ?: JSONArray()
+            buildSet {
+                for (index in 0 until rows.length()) {
+                    val id = rows.optJSONObject(index)?.optString("listingId")?.trim().orEmpty()
+                    if (id.isNotBlank()) add(id)
+                }
+            }
+        }
+
     suspend fun marketplacePriceWatchState(context: Context, listingId: String): Result<Boolean> {
         val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id"))
         return FynxBackendClient.get(context, "/api/marketplace/listings/$numericId/price-watch").mapCatching { JSONObject(it).optBoolean("watched") }
@@ -206,7 +256,7 @@ object FynxRemoteSocialClient {
     suspend fun deleteMarketplaceListing(context: Context, id: String): Result<Unit> { val numericId = id.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); return FynxBackendClient.delete(context, "/api/marketplace/listings/$numericId").map { Unit } }
     suspend fun createMarketplaceOrder(context: Context, listingId: String, quantity: Int): Result<MarketplaceOrder> { val numericId = listingId.toLongOrNull() ?: return Result.failure(IllegalArgumentException("invalid listing id")); require(quantity > 0) { "Quantity must be at least 1." }; return FynxBackendClient.postJson(context, "/api/marketplace/orders", JSONObject().apply { put("listingId", numericId); put("quantity", quantity); put("orderId", java.util.UUID.randomUUID().toString()) }.toString()).mapCatching { parseOrder(JSONObject(it).getJSONObject("order")) } }
     suspend fun orders(context: Context): Result<List<MarketplaceOrder>> = FynxBackendClient.get(context, "/api/marketplace/orders").mapCatching { raw -> val a = JSONObject(raw).optJSONArray("orders") ?: JSONArray(); buildList { for (i in 0 until a.length()) add(parseOrder(a.getJSONObject(i))) } }
-    private fun parseOrder(o: JSONObject): MarketplaceOrder { val p = o.optJSONObject("product"); return MarketplaceOrder(o.optString("id"), o.optString("buyerId"), o.optString("sellerId"), o.optString("listingId"), o.optInt("quantity"), o.optDouble("unitPrice"), o.optDouble("deliveryFee"), o.optDouble("totalAmount"), o.optString("currency", "NGN"), p?.optString("title").orEmpty().ifBlank { o.optString("productTitle") }, o.optString("sellerUsername").takeIf { it.isNotBlank() } ?: p?.optString("sellerUsername")?.takeIf { it.isNotBlank() }, o.optString("status"), o.optString("trackingReference").takeIf { it.isNotBlank() }, o.optString("fulfillmentMethod", "DELIVERY"), o.optJSONObject("shippingAddress"), o.optString("buyerNote"), o.optString("inspectionDeadline").takeIf { it.isNotBlank() }, p?.optBoolean("deliveryAvailable", false) ?: false, p?.optBoolean("pickupAvailable", false) ?: false) }
+    private fun parseOrder(o: JSONObject): MarketplaceOrder { val p = o.optJSONObject("product"); return MarketplaceOrder(o.optString("id"), o.optString("buyerId"), o.optString("sellerId"), o.optString("listingId"), o.optInt("quantity"), o.optDouble("unitPrice"), o.optDouble("deliveryFee"), o.optDouble("totalAmount"), marketplaceRequiredOrderCurrency(o.opt("currency")), p?.optString("title").orEmpty().ifBlank { o.optString("productTitle") }, o.optString("sellerUsername").takeIf { it.isNotBlank() } ?: p?.optString("sellerUsername")?.takeIf { it.isNotBlank() }, o.optString("status"), o.optString("trackingReference").takeIf { it.isNotBlank() }, o.optString("fulfillmentMethod", "DELIVERY"), o.optJSONObject("shippingAddress"), o.optString("buyerNote"), o.optString("inspectionDeadline").takeIf { it.isNotBlank() }, p?.optBoolean("deliveryAvailable", false) ?: false, p?.optBoolean("pickupAvailable", false) ?: false) }
     suspend fun setMarketplaceFulfillment(context: Context, id: String, method: String, name: String = "", phone: String = "", address: String = "", city: String = "", state: String = "", country: String = "", buyerNote: String = ""): Result<Unit> { val safe = method.trim().uppercase(); require(safe == "DELIVERY" || safe == "PICKUP") { "Choose delivery or pickup." }; if (safe == "DELIVERY") require(name.trim().isNotBlank() && phone.trim().isNotBlank() && address.trim().isNotBlank()) { "Name, phone and delivery address are required." }; val shipping = if (safe == "DELIVERY") JSONObject().apply { put("name", name.trim().take(120)); put("phone", phone.trim().take(40)); put("address", address.trim().take(500)); put("city", city.trim().take(100)); put("state", state.trim().take(100)); put("country", country.trim().take(100)) } else JSONObject.NULL; return FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/fulfillment", JSONObject().apply { put("method", safe); put("shippingAddress", shipping); put("buyerNote", buyerNote.trim().take(1000)) }.toString()).map { Unit } }
     suspend fun shipMarketplaceOrder(context: Context, id: String, trackingReference: String): Result<Unit> = FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/ship", JSONObject().put("trackingReference", trackingReference.trim().take(160)).toString()).map { Unit }
     suspend fun confirmMarketplaceDelivery(context: Context, id: String): Result<Unit> = FynxBackendClient.postJson(context, "/api/marketplace/orders/$id/confirm-delivery", "{}").map { Unit }

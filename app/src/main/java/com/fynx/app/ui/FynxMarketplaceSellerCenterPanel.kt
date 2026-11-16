@@ -51,14 +51,31 @@ private data class SellerMoneyRecord(
     val orderId: String,
     val title: String,
     val currency: String,
+    val productSubtotal: Double,
+    val deliveryFee: Double,
     val sellerNet: Double,
     val marketplaceFee: Double,
     val funds: String,
     val payoutStatus: String,
+    val orderStatus: String,
     val updatedAt: String
 )
 
 private data class SellerMoneyTotals(
+    val grossSales: Double,
+    val deliveryFees: Double,
+    val marketplaceFees: Double,
+    val netEarnings: Double,
+    val protectedFunds: Double,
+    val availableForPayout: Double,
+    val payoutPending: Double,
+    val paidOut: Double,
+    val unreconciledLegacy: Double,
+    val unreconciledFailedPayouts: Double
+)
+
+/** The four balances the overview earnings card shows for one currency. */
+private data class SellerFundsFigures(
     val protectedFunds: Double,
     val availableForPayout: Double,
     val payoutPending: Double,
@@ -67,7 +84,9 @@ private data class SellerMoneyTotals(
 
 private data class SellerMoneySnapshot(
     val records: List<SellerMoneyRecord>,
-    val totals: Map<String, SellerMoneyTotals>?
+    val totals: Map<String, SellerMoneyTotals>?,
+    val nextCursor: String?,
+    val hasMore: Boolean
 )
 
 private fun marketplaceDescriptionSubcategory(description: String): String =
@@ -124,9 +143,20 @@ private fun marketplaceDescriptionWithSubcategory(description: String, subcatego
     ).take(maximumDescriptionLength)
 }
 
+private fun marketplaceShopProfileSignature(
+    shopName: String,
+    description: String,
+    location: String,
+    contactPhone: String
+): String = JSONObject().put("shopName", shopName)
+    .put("description", description)
+    .put("location", location)
+    .put("contactPhone", contactPhone)
+    .toString()
+
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel() {
+fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
@@ -161,7 +191,6 @@ fun FynxMarketplaceSellerCenterPanel() {
     var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
     var marketplacePayoutsEnabled by remember(sellerAccountKey) { mutableStateOf(false) }
     var payoutReadinessNotice by remember(sellerAccountKey) { mutableStateOf("Checking seller payout eligibility…") }
-    var payoutCurrency by rememberSaveable(sellerAccountKey) { mutableStateOf("NGN") }
     var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
@@ -180,6 +209,10 @@ fun FynxMarketplaceSellerCenterPanel() {
     var moneyRecords by remember(sellerAccountKey) { mutableStateOf(emptyList<SellerMoneyRecord>()) }
     var moneyTotals by remember(sellerAccountKey) { mutableStateOf(emptyMap<String, SellerMoneyTotals>()) }
     var moneyTotalsFromBackend by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyNextCursor by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var moneyHasMore by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyPageLoading by remember(sellerAccountKey) { mutableStateOf(false) }
+    var moneyPageError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var showDriverAssignments by remember(sellerAccountKey) { mutableStateOf(false) }
     var activeSection by rememberSaveable(sellerAccountKey) { mutableStateOf("Overview") }
     var weeklySellerAwards by remember(sellerAccountKey) { mutableStateOf<List<FynxMarketplaceSellerWeeklyAward>>(emptyList()) }
@@ -190,7 +223,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property",
         "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools",
         "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education",
-        "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"
+        "Garden & Outdoor", "Handmade & Local", "Used", "Business & Workshop Supplies", "Other"
     )
     // Existing legacy categories remain selectable until the seller intentionally picks a supported value.
     val editCategoryOptions = if (
@@ -208,13 +241,20 @@ fun FynxMarketplaceSellerCenterPanel() {
     var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
+    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    val currentShopProfileSignature = marketplaceShopProfileSignature(
+        shopName, shopDescription, shopLocation, shopContactPhone
+    )
+    val shopProfilePreviewReady = shopProfileSavedSignature.isNotBlank() &&
+        currentShopProfileSignature == shopProfileSavedSignature
 
     fun loadMoney() {
         val requestGeneration = ++moneyRequestGeneration
         scope.launch {
             moneyLoading = true
             moneyError = null
-            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary")
+            moneyPageError = null
+            val result = FynxBackendClient.get(context, "/api/marketplace/settlement/seller/summary?limit=100")
                 .mapCatching { raw ->
                     val root = JSONObject(raw)
                     val settlements = root.optJSONArray("settlements")
@@ -230,10 +270,16 @@ fun FynxMarketplaceSellerCenterPanel() {
                                 throw IllegalStateException("Seller earnings response contained duplicate currency totals.")
                             }
                             totals[currency] = SellerMoneyTotals(
+                                grossSales = marketplaceRequiredBalance(row.opt("grossSales")),
+                                deliveryFees = marketplaceRequiredBalance(row.opt("deliveryFees")),
+                                marketplaceFees = marketplaceRequiredBalance(row.opt("marketplaceFees")),
+                                netEarnings = marketplaceRequiredBalance(row.opt("netEarnings")),
                                 protectedFunds = marketplaceRequiredBalance(row.opt("protectedFunds")),
                                 availableForPayout = marketplaceRequiredBalance(row.opt("availableForPayout")),
                                 payoutPending = marketplaceRequiredBalance(row.opt("payoutPending")),
-                                paidOut = marketplaceRequiredBalance(row.opt("paidOut"))
+                                paidOut = marketplaceRequiredBalance(row.opt("paidOut")),
+                                unreconciledLegacy = marketplaceRequiredBalance(row.opt("unreconciledLegacy")),
+                                unreconciledFailedPayouts = marketplaceRequiredBalance(row.opt("unreconciledFailedPayouts"))
                             )
                         }
                     }
@@ -250,28 +296,93 @@ fun FynxMarketplaceSellerCenterPanel() {
                             orderId = orderId,
                             title = row.optString("title").ifBlank { "FYNX order" },
                             currency = currency,
+                            productSubtotal = marketplaceRequiredBalance(row.opt("productSubtotal")),
+                            deliveryFee = marketplaceRequiredBalance(row.opt("deliveryFee")),
                             sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
                             marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
                             funds = funds,
                             payoutStatus = payoutStatus,
+                            orderStatus = row.optString("orderStatus").ifBlank { "UNKNOWN" },
                             updatedAt = row.optString("updatedAt")
                         )
                     }
-                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null)
+                    val nextCursor = root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" }
+                    SellerMoneySnapshot(records, if (totalsArray != null) totals else null, nextCursor, root.optBoolean("hasMore", false))
                 }
             if (requestGeneration != moneyRequestGeneration) return@launch
             result.onSuccess { snapshot ->
-                moneyRecords = snapshot.records.sortedByDescending { it.updatedAt }
+                moneyRecords = snapshot.records.sortedWith(compareByDescending<SellerMoneyRecord> { it.updatedAt }.thenByDescending { it.orderId })
                 moneyTotals = snapshot.totals.orEmpty()
                 moneyTotalsFromBackend = snapshot.totals != null
+                moneyNextCursor = snapshot.nextCursor
+                moneyHasMore = snapshot.hasMore
             }.onFailure { failure ->
                 // A failed refresh must never leave old payout amounts looking current.
                 moneyRecords = emptyList()
                 moneyTotals = emptyMap()
                 moneyTotalsFromBackend = false
+                moneyNextCursor = null
+                moneyHasMore = false
                 moneyError = marketplaceSafeError(failure, "Seller earnings could not load.")
             }
             moneyLoading = false
+        }
+    }
+
+    fun loadMoreMoney() {
+        val cursor = moneyNextCursor ?: return
+        if (moneyPageLoading || moneyLoading) return
+        val requestGeneration = moneyRequestGeneration
+        scope.launch {
+            moneyPageLoading = true
+            moneyPageError = null
+            FynxBackendClient.get(
+                context,
+                "/api/marketplace/settlement/seller/summary?limit=100&cursor=$cursor"
+            ).mapCatching { raw ->
+                val root = JSONObject(raw)
+                val settlements = root.optJSONArray("settlements")
+                    ?: throw IllegalStateException("Seller earnings history was incomplete.")
+                val records = mutableListOf<SellerMoneyRecord>()
+                for (i in 0 until settlements.length()) {
+                    val row = settlements.optJSONObject(i)
+                        ?: throw IllegalStateException("Seller earnings history was incomplete.")
+                    val orderId = row.optString("orderId").trim()
+                    if (orderId.isBlank()) throw IllegalStateException("Seller earnings history was incomplete.")
+                    val currency = marketplaceRequiredCurrency(row.opt("currency"))
+                    val funds = row.optString("funds").ifBlank { "UNKNOWN" }
+                    val payoutStatus = row.optString("payoutStatus").ifBlank { funds }
+                    records += SellerMoneyRecord(
+                        orderId = orderId,
+                        title = row.optString("title").ifBlank { "FYNX order" },
+                        currency = currency,
+                        productSubtotal = marketplaceRequiredBalance(row.opt("productSubtotal")),
+                        deliveryFee = marketplaceRequiredBalance(row.opt("deliveryFee")),
+                        sellerNet = marketplaceRequiredAmount(row.opt("sellerNetAmount")),
+                        marketplaceFee = marketplaceRequiredBalance(row.opt("marketplaceFeeSeller")),
+                        funds = funds,
+                        payoutStatus = payoutStatus,
+                        orderStatus = row.optString("orderStatus").ifBlank { "UNKNOWN" },
+                        updatedAt = row.optString("updatedAt")
+                    )
+                }
+                val nextCursor = root.optString("nextCursor").takeIf { it.isNotBlank() && it != "null" }
+                Triple(records, nextCursor, root.optBoolean("hasMore", false))
+            }.onSuccess { (records, nextCursor, hasMore) ->
+                if (requestGeneration == moneyRequestGeneration) {
+                    moneyPageError = null
+                    val existingIds = moneyRecords.mapTo(mutableSetOf()) { it.orderId }
+                    moneyRecords = (moneyRecords + records.filterNot { it.orderId in existingIds })
+                        .sortedWith(compareByDescending<SellerMoneyRecord> { it.updatedAt }.thenByDescending { it.orderId })
+                    moneyNextCursor = nextCursor
+                    moneyHasMore = hasMore
+                }
+            }.onFailure { failure ->
+                if (requestGeneration == moneyRequestGeneration) {
+                    moneyPageError = marketplaceSafeError(failure, "Older seller earnings could not load.")
+                }
+            }
+            moneyPageLoading = false
         }
     }
 
@@ -333,10 +444,17 @@ fun FynxMarketplaceSellerCenterPanel() {
             if (requestGeneration != refreshGeneration) return@launch
             shopResult
                 .onSuccess { profile ->
-                    shopName = profile.optString("shopName")
-                    shopDescription = profile.optString("description")
-                    shopLocation = profile.optString("location")
-                    shopContactPhone = profile.optString("contactPhone")
+                    val savedName = profile.optString("shopName")
+                    val savedDescription = profile.optString("description")
+                    val savedLocation = profile.optString("location")
+                    val savedContactPhone = profile.optString("contactPhone")
+                    shopName = savedName
+                    shopDescription = savedDescription
+                    shopLocation = savedLocation
+                    shopContactPhone = savedContactPhone
+                    shopProfileSavedSignature = marketplaceShopProfileSignature(
+                        savedName, savedDescription, savedLocation, savedContactPhone
+                    )
                 }
                 .onFailure { failure ->
                     shopError = if (shopName.isNotBlank()) {
@@ -377,8 +495,8 @@ fun FynxMarketplaceSellerCenterPanel() {
                         else "Seller payouts are not enabled yet. Complete the required business and FYNX payout approvals."
                     }
                     payoutAccount = parsed.firstOrNull {
-                        it.optString("currency").trim().uppercase() == payoutCurrency
-                    } ?: parsed.firstOrNull()
+                        it.optString("currency").trim().uppercase() == "NGN"
+                    }
                     accountMessage = null
                 }
                 .onFailure { failure ->
@@ -399,10 +517,18 @@ fun FynxMarketplaceSellerCenterPanel() {
     val shopCardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     val shopCardBorder = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
 
-    fun sellerFundsFor(currency: String): SellerMoneyTotals {
-        if (moneyTotalsFromBackend) return moneyTotals[currency] ?: SellerMoneyTotals(0.0, 0.0, 0.0, 0.0)
+    fun sellerFundsFor(currency: String): SellerFundsFigures {
+        val serverTotals = moneyTotals[currency]
+        if (moneyTotalsFromBackend) {
+            return SellerFundsFigures(
+                protectedFunds = serverTotals?.protectedFunds ?: 0.0,
+                availableForPayout = serverTotals?.availableForPayout ?: 0.0,
+                payoutPending = serverTotals?.payoutPending ?: 0.0,
+                paidOut = serverTotals?.paidOut ?: 0.0
+            )
+        }
         val rows = moneyRecords.filter { it.currency == currency }
-        return SellerMoneyTotals(
+        return SellerFundsFigures(
             protectedFunds = rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet },
             availableForPayout = rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet },
             payoutPending = rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet },
@@ -418,7 +544,7 @@ fun FynxMarketplaceSellerCenterPanel() {
     val settlementSummary = when {
         moneyLoading -> "Checking recent earnings…"
         moneyError != null -> "Recent earnings unavailable until refresh succeeds"
-        else -> "${moneyRecords.size} recent earnings record${if (moneyRecords.size == 1) "" else "s"}"
+        else -> "${moneyRecords.size} settlement record${if (moneyRecords.size == 1) "" else "s"} loaded${if (moneyHasMore) " · more available" else ""}"
     }
     val shopSections = listOf("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts")
     val shopSectionsScrollState = rememberLazyListState()
@@ -514,7 +640,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             Text("Your balances are hidden until they load correctly.", style = MaterialTheme.typography.bodySmall)
                         }
                         if (ready && currencies.any { it != "NGN" }) {
-                            Text("You also have older non-Naira records in Earnings.", style = MaterialTheme.typography.bodySmall)
+                            Text("You also have earnings in other currencies. See Earnings & payouts.", style = MaterialTheme.typography.bodySmall)
                         }
                         OutlinedButton(
                             onClick = { if (moneyError != null) loadMoney() else activeSection = "Earnings & payouts" },
@@ -535,6 +661,11 @@ fun FynxMarketplaceSellerCenterPanel() {
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                         ShopActionRow(Icons.Default.LocalShipping, "Delivery & drivers", "Assign drivers and track deliveries") { activeSection = "Delivery & drivers" }
                     }
+                }
+            }
+            item(key = "seller-view-public-shop") {
+                Button(onClick = onViewPublicShop, modifier = Modifier.fillMaxWidth()) {
+                    Text("View public Marketplace profile")
                 }
             }
             item(key = "seller-weekly-recognition") {
@@ -713,6 +844,21 @@ fun FynxMarketplaceSellerCenterPanel() {
                     OutlinedTextField(value = shopLocation, onValueChange = { shopLocation = it.take(160); shopMessage = null; shopError = null }, label = { Text("Shop location (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     OutlinedTextField(value = shopContactPhone, onValueChange = { shopContactPhone = it.take(40); shopMessage = null; shopError = null }, label = { Text("Public shop contact (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !shopSaving)
                     shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }
+                    OutlinedButton(
+                        onClick = onViewPublicShop,
+                        enabled = !shopLoading && !shopSaving &&
+                            shopName.trim().length >= 2 && shopProfilePreviewReady,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Preview public Marketplace profile")
+                    }
+                    if (!shopLoading && shopName.trim().length >= 2 && !shopProfilePreviewReady) {
+                        Text(
+                            "Save your latest shop details before previewing the public profile.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Button(
                         onClick = {
                             shopSaving = true
@@ -730,10 +876,17 @@ fun FynxMarketplaceSellerCenterPanel() {
                                             ?: throw IllegalStateException("Shop profile response was incomplete.")
                                     }
                                     .onSuccess { profile ->
-                                        shopName = profile.optString("shopName")
-                                        shopDescription = profile.optString("description")
-                                        shopLocation = profile.optString("location")
-                                        shopContactPhone = profile.optString("contactPhone")
+                                        val savedName = profile.optString("shopName")
+                                        val savedDescription = profile.optString("description")
+                                        val savedLocation = profile.optString("location")
+                                        val savedContactPhone = profile.optString("contactPhone")
+                                        shopName = savedName
+                                        shopDescription = savedDescription
+                                        shopLocation = savedLocation
+                                        shopContactPhone = savedContactPhone
+                                        shopProfileSavedSignature = marketplaceShopProfileSignature(
+                                            savedName, savedDescription, savedLocation, savedContactPhone
+                                        )
                                         shopMessage = "Shop profile saved."
                                         shopError = null
                                     }
@@ -782,12 +935,64 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     if (!moneyLoading && moneyError == null) {
                         currencies.forEach { currency ->
-                            val funds = sellerFundsFor(currency)
-                            if (currencies.size > 1) Text(currency, fontWeight = FontWeight.Bold)
-                            MoneySummaryRow("Protected", funds.protectedFunds, currency)
-                            MoneySummaryRow("Available for payout", funds.availableForPayout, currency)
-                            MoneySummaryRow("Payout pending", funds.payoutPending, currency)
-                            MoneySummaryRow("Paid out", funds.paidOut, currency)
+                            val rows = moneyRecords.filter { it.currency == currency }
+                            val serverTotals = moneyTotals[currency]
+                            val reportableRows = rows.filter {
+                                it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING", "RELEASE_ELIGIBLE", "RELEASE_PENDING", "RELEASED") ||
+                                    it.payoutStatus in setOf("PENDING", "SUCCEEDED") ||
+                                    (it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus in setOf("UNKNOWN", "FAILED", "BLOCKED"))
+                            }
+                            val grossSales = if (moneyTotalsFromBackend) serverTotals?.grossSales ?: 0.0
+                                else reportableRows.sumOf { it.productSubtotal }
+                            val deliveryFees = if (moneyTotalsFromBackend) serverTotals?.deliveryFees ?: 0.0
+                                else reportableRows.sumOf { it.deliveryFee }
+                            val marketplaceFees = if (moneyTotalsFromBackend) serverTotals?.marketplaceFees ?: 0.0
+                                else reportableRows.sumOf { it.marketplaceFee }
+                            val netEarnings = if (moneyTotalsFromBackend) serverTotals?.netEarnings ?: 0.0
+                                else reportableRows.sumOf { it.sellerNet }
+                            val protected = if (moneyTotalsFromBackend) serverTotals?.protectedFunds ?: 0.0
+                                else rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet }
+                            val available = if (moneyTotalsFromBackend) serverTotals?.availableForPayout ?: 0.0
+                                else rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet }
+                            val pending = if (moneyTotalsFromBackend) serverTotals?.payoutPending ?: 0.0
+                                else rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet }
+                            val paid = if (moneyTotalsFromBackend) serverTotals?.paidOut ?: 0.0
+                                else rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+                            val unreconciledLegacy = if (moneyTotalsFromBackend) serverTotals?.unreconciledLegacy ?: 0.0
+                                else rows.filter { it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus == "UNKNOWN" }.sumOf { it.sellerNet }
+                            val unreconciledFailed = if (moneyTotalsFromBackend) serverTotals?.unreconciledFailedPayouts ?: 0.0
+                                else rows.filter { it.orderStatus == "COMPLETED" && it.funds == "UNKNOWN" && it.payoutStatus in setOf("FAILED", "BLOCKED") }.sumOf { it.sellerNet }
+                            Text(currency, fontWeight = FontWeight.Bold)
+                            MoneySummaryRow("Gross product sales", grossSales, currency)
+                            MoneySummaryRow("Delivery fees", deliveryFees, currency)
+                            MoneySummaryRow("FYNX commission", marketplaceFees, currency)
+                            MoneySummaryRow("Net seller earnings", netEarnings, currency)
+                            Text(
+                                "Net seller earnings include delivery fees and deduct the seller-side FYNX commission.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            MoneySummaryRow("Protected", protected, currency)
+                            MoneySummaryRow("Available for payout", available, currency)
+                            MoneySummaryRow("Payout pending", pending, currency)
+                            MoneySummaryRow("Paid out", paid, currency)
+                            if (unreconciledLegacy > 0.0) {
+                                MoneySummaryRow("Historical completed · not reconciled", unreconciledLegacy, currency)
+                                Text(
+                                    "These completed orders have no matching escrow or payout record. They are included in earnings totals but are not counted as protected, available or paid.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (unreconciledFailed > 0.0) {
+                                MoneySummaryRow("Failed payout · reconciliation required", unreconciledFailed, currency)
+                                Text(
+                                    "A completed order has a failed or blocked payout attempt and no matching escrow record. It is included in earnings totals but is not counted as protected, available or paid. Settlement must be reviewed before retrying.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     } else if (moneyLoading) {
                         Text("Checking current balances…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -796,7 +1001,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     if (!moneyLoading && moneyError == null && !moneyTotalsFromBackend) {
                         Text(
-                            "This backend only provides the latest 100 settlements. Totals below may not include older orders.",
+                            "Settlement history is paginated. The totals above cover all seller orders, not just the loaded history page.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -808,8 +1013,7 @@ fun FynxMarketplaceSellerCenterPanel() {
         if (activeSection == "Earnings & payouts") item {
             Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Recent earnings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    if (moneyRecords.size > 20) Text("Showing your latest 20 records.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Seller earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     moneyError?.let { message ->
                         Text(message, color = MaterialTheme.colorScheme.error)
                         TextButton(onClick = { loadMoney() }, enabled = !moneyLoading) {
@@ -820,17 +1024,41 @@ fun FynxMarketplaceSellerCenterPanel() {
                     }
                     if (moneyLoading) CircularProgressIndicator(Modifier.size(20.dp))
                     else if (moneyRecords.isEmpty() && moneyError == null) Text("Completed and protected Marketplace earnings will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else moneyRecords.take(20).forEach { record ->
+                    else moneyRecords.forEach { record ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(record.title, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                                 Text(formatSellerMoney(record.sellerNet, record.currency), color = MaterialTheme.colorScheme.primary)
                             }
-                            Text("${sellerFundsLabel(record.funds)} • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val settlementLabel = when {
+                                record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus == "UNKNOWN" ->
+                                    "LEGACY COMPLETED · SETTLEMENT UNVERIFIED"
+                                record.orderStatus == "COMPLETED" && record.funds == "UNKNOWN" && record.payoutStatus in setOf("FAILED", "BLOCKED") ->
+                                    "COMPLETED · PAYOUT FAILED · RECONCILIATION REQUIRED"
+                                else -> "${record.funds} • payout ${record.payoutStatus}"
+                            }
+                            Text("$settlementLabel • FYNX commission ${formatSellerMoney(record.marketplaceFee, record.currency)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (record.updatedAt.isNotBlank()) Text(record.updatedAt, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             HorizontalDivider(Modifier.padding(vertical = 5.dp))
                         }
                     }
+                    if (moneyHasMore && moneyError == null) {
+                        Button(
+                            onClick = { loadMoreMoney() },
+                            enabled = !moneyPageLoading && !moneyLoading && !moneyNextCursor.isNullOrBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (moneyPageLoading) CircularProgressIndicator(Modifier.size(18.dp))
+                            else Text("Load older earnings")
+                        }
+                    }
+                    moneyPageError?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { loadMoreMoney() }, enabled = !moneyPageLoading && !moneyLoading) {
+                            Text("Retry loading older records")
+                        }
+                    }
+                    if (moneyPageLoading) Text("Loading older settlement records…", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -1396,7 +1624,7 @@ fun FynxMarketplaceSellerCenterPanel() {
                             .put("bankCode", bank.code)
                             .put("accountNumber", accountNumber.trim())
                             .put("accountName", accountName.trim())
-                            .put("currency", payoutCurrency)
+                            .put("currency", "NGN")
                             .put("bankName", bank.name)
                         val body = bodyJson.toString()
                         FynxBackendClient.postJson(context, "/api/marketplace/settlement/payout-account", body)
@@ -1406,7 +1634,6 @@ fun FynxMarketplaceSellerCenterPanel() {
                                     val savedCurrency = saved.optString("currency").trim().uppercase()
                                     payoutAccounts = payoutAccounts.filterNot { it.optString("currency").trim().uppercase() == savedCurrency } + saved
                                     payoutAccount = saved
-                                    payoutCurrency = savedCurrency
                                 }
                                 accountMessage = "Payout account verified and connected."
                                 selectedPayoutBank = null; accountNumber = ""; accountName = ""
@@ -1454,17 +1681,6 @@ private fun ShopActionRow(icon: ImageVector, title: String, subtitle: String, on
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
-
-private fun sellerFundsLabel(funds: String): String = when (funds) {
-    "HELD" -> "Protected until the order completes"
-    "DISPUTED" -> "On hold for a dispute"
-    "REFUND_PENDING" -> "Refund in progress"
-    "REFUNDED" -> "Refunded to buyer"
-    "RELEASE_ELIGIBLE" -> "Ready for payout"
-    "RELEASE_PENDING" -> "Payout in progress"
-    "RELEASED" -> "Paid out"
-    else -> "Status unavailable"
 }
 
 private fun formatSellerMoney(price: Double, currency: String): String {

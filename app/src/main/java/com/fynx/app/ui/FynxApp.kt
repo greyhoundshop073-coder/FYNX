@@ -74,6 +74,7 @@ private fun fynxBackDestination(
     "Stories", "Calls" -> "Home"
     "Groups" -> "Chats"
     "Business Account" -> "Features"
+    "Local Businesses" -> "Marketplace"
     "Advertising" -> "Business Account"
     "Advertising Dashboard" -> "Advertising"
     "Advertising AI", "AI Creation", "AI Photo Editor" -> "AI"
@@ -106,6 +107,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var callVideo by remember { mutableStateOf(false) }
     var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
+    var marketplaceProfileUsername by remember { mutableStateOf<String?>(null) }
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
     var marketplaceAiListingId by remember { mutableStateOf<String?>(null) }
     var openChatMarketplaceListingId by remember { mutableStateOf<String?>(null) }
@@ -697,7 +699,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     }
                 }            )
             "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
-            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, onShareListingToStatus = { listingId, title ->
+            "Local Businesses" -> FynxLocalBusinessesPanel(
+                onBack = { selected = "Marketplace" },
+                onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
+            )
+            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
                 val draft = FynxDeepLinkParser.marketplaceStatusDraftText(listingId, title)
                 if (draft.isNotBlank()) {
                     marketplaceStatusDraft = draft
@@ -804,7 +810,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }) }
-            "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }
+            "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }
             "AI" -> FynxAiAssistantPanel(
                 onOpenDestination = { destination -> selected = destination },
                 initialMarketplaceListingId = marketplaceAiListingId,
@@ -819,7 +825,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
             "Advertising Dashboard" -> FynxAdvertisingDashboardPanel()
             "Advertising AI" -> { selected = "AI" }
-            "Announcements" -> FynxAnnouncementsPanel()
+            "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)

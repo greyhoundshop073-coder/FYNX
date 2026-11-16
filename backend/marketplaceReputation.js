@@ -297,6 +297,54 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     } catch (error) { console.error('marketplace seller reputation', error); return res.status(500).json({ error: 'seller reputation lookup failed' }); }
   });
 
+  app.get('/api/marketplace/sellers/:username/reviews', auth, async (req, res) => {
+    try {
+      const username = parseSeller(req.params.username);
+      if (!/^[a-z0-9_]{3,32}$/.test(username)) return res.status(400).json({ error: 'invalid seller username' });
+      await ensureSchema();
+      const requestedLimit = Number.parseInt(String(req.query?.limit ?? '10'), 10);
+      const limit = Number.isFinite(requestedLimit) ? Math.min(20, Math.max(1, requestedLimit)) : 10;
+      const requestedOffset = Number.parseInt(String(req.query?.offset ?? '0'), 10);
+      const offset = Number.isFinite(requestedOffset) ? Math.max(0, Math.min(10000, requestedOffset)) : 0;
+      const result = await pool.query(`
+        SELECT r.id, r.rating, r.comment, r.created_at,
+               buyer.username AS reviewer_username,
+               buyer.display_name AS reviewer_display_name,
+               COALESCE(l.title, 'Verified Marketplace purchase') AS product_title
+        FROM marketplace_seller_reviews r
+        JOIN users seller ON seller.id = r.seller_id
+        JOIN users buyer ON buyer.id = r.buyer_id
+        JOIN marketplace_orders o ON o.id = r.order_id
+        LEFT JOIN marketplace_listings l ON l.id = o.listing_id
+        WHERE lower(seller.username) = lower($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = seller.id)
+               OR (b.blocker_id = seller.id AND b.blocked_id = $2)
+          )
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT $3 OFFSET $4
+      `, [username, req.user.sub, limit, offset]);
+      return res.json({
+        reviews: result.rows.map((row) => ({
+          id: String(row.id),
+          rating: Number(row.rating),
+          comment: row.comment || '',
+          createdAt: row.created_at,
+          reviewerUsername: row.reviewer_username,
+          reviewerDisplayName: row.reviewer_display_name || row.reviewer_username,
+          productTitle: row.product_title || 'Verified Marketplace purchase'
+        })),
+        limit,
+        offset,
+        hasMore: result.rows.length === limit
+      });
+    } catch (error) {
+      console.error('marketplace public seller reviews', error);
+      return res.status(500).json({ error: 'seller reviews could not be loaded' });
+    }
+  });
+
   app.post('/api/marketplace/orders/:id/review', auth, async (req, res) => {
     try {
       await ensureSchema();
