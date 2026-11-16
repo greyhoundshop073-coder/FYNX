@@ -33,7 +33,9 @@ private data class DeviceContact(val name: String, val phone: String)
 fun FynxContactsPanel(
     onBack: () -> Unit = {},
     onVoiceCall: (String) -> Unit = {},
-    onVideoCall: (String) -> Unit = {}
+    onVideoCall: (String) -> Unit = {},
+    currentUsername: String? = null,
+    onOpenMarketplaceListing: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -114,7 +116,9 @@ fun FynxContactsPanel(
         val normalizedUsername = username.removePrefix("@").trim().lowercase()
         OtherUserProfilePanel(
             username = normalizedUsername,
+            currentUsername = currentUsername,
             onBack = { profileUser = null },
+            onOpenMarketplaceListing = onOpenMarketplaceListing,
             onMessage = { targetUsername ->
                 val target = targetUsername.removePrefix("@").trim()
                 val targetUser = matched.values.firstOrNull { it.username.removePrefix("@").equals(target, true) }
