@@ -144,7 +144,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // The production promotional banner exposes real listing headlines in a swipeable
         // LazyRow; it does not render the old "Product n of m" counter or a next-arrow button.
         // Swipe the actual visible slide and verify that the next eligible listing is shown.
-        compose.onNodeWithText(candidates.first().title).performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performTouchInput { swipeLeft() }
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
