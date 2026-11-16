@@ -120,6 +120,41 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         mutableStateOf(FynxProfileRemoteClient.hasCachedProfilePhotoEntry(context, authSession.username ?: ""))
     }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
+
+    // Clear transient UI state owned by the previous signed-in identity.
+    // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
+    fun clearSessionScopedState() {
+        openChat = null
+        openGroup = null
+        profileUser = null
+        statusOpenOwner = null
+        statusOpenId = null
+        statusCreatorRequested = false
+        statusComposerImmersive = false
+        postOpenId = null
+        postOpenCommentId = null
+        callTarget = null
+        callVideo = false
+        pendingIncomingCall = null
+        marketplaceListingId = null
+        marketplaceProfileUsername = null
+        marketplaceStatusDraft = null
+        marketplaceAiListingId = null
+        openChatMarketplaceListingId = null
+        aiCaptionDraft = null
+        navigationHistory = listOf("Home")
+        selected = "Home"
+        adminRole = null
+        notifications = emptyList()
+        remoteUnreadCount = -1
+        inviteCode = null
+        profileAvatarMenuOpen = false
+        openProfileSettings = false
+        notificationPreferencesOnly = false
+        backNavigationRequested = false
+        homeCameraRequest = 0
+    }
+
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var navigationDirection by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
@@ -299,6 +334,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
+        clearSessionScopedState()
         if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         while (true) {
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
@@ -321,7 +357,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
-            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
+            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); clearSessionScopedState() } }
         }
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
@@ -857,7 +893,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }) }
             "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }
-            "AI" -> FynxAiAssistantPanel(
+            "AI" -> key(marketplaceAccountKey) { FynxAiAssistantPanel(
                 onOpenDestination = { destination -> selected = destination },
                 initialMarketplaceListingId = marketplaceAiListingId,
                 currentUserDisplayName = myProfile.displayName.ifBlank {
@@ -865,7 +901,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 },
                 currentUsername = myProfile.username.ifBlank { authSession.username.orEmpty() },
                 currentUserPhotoUri = myPhoto
-            )
+            ) }
             "AI Creation" -> { selected = "AI" }
             "AI Photo Editor" -> { selected = "AI" }
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
@@ -876,6 +912,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSignOut = {
                 FynxAuthStore.clear(context)
                 authSession = AuthSession()
+                clearSessionScopedState()
                 adminRole = null
                 selected = "Home"
                 openProfileSettings = false
