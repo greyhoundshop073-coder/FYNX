@@ -254,8 +254,10 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("FYNX Test Android Smartphone").assertIsDisplayed()
         saveScreenshot("my-shop-listings-screen.png")
 
-        // Scroll the actual Orders chip into view in the horizontal section selector.
-        // Do not depend on a test tag being exposed through nested LazyList semantics.
+        // The previous product scroll moved the outer LazyColumn past its header,
+        // which disposes the nested section LazyRow. Bring that real header back first.
+        compose.onNodeWithTag("fynx-seller-center-list")
+            .performScrollToNode(hasText("Orders"))
         compose.onNodeWithText("Orders").performScrollTo().performClick()
         compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
         compose.onNodeWithText("Seller orders").performClick()
