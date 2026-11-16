@@ -13,7 +13,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -437,7 +436,7 @@ class FynxMarketplaceScreensComposeTest {
         val file = File(directory, name)
         // Compose dialogs create a second semantics root. Capture the actual device
         // display instead of assuming the activity is the only root window.
-        val bitmap = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).takeScreenshot()
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             ?: error("Could not capture the Android device display")
         FileOutputStream(file).use { output ->
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
