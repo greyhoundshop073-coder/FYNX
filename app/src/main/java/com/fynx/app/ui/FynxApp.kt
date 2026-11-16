@@ -336,7 +336,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
         if (notificationPreferencesOnly) notificationPreferencesOnly = false
     }
-    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username ->
+    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(
+        username = profileUser!!,
+        currentUsername = authSession.username,
+        onBack = { profileUser = null },
+        onOpenMarketplaceListing = { listingId ->
+            marketplaceListingId = listingId
+            profileUser = null
+            selected = "Marketplace"
+        },
+        onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" },
+        onMessage = { username ->
         val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }
         openChatMarketplaceListingId = null
         scope.launch {

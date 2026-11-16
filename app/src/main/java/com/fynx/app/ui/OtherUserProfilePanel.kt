@@ -43,24 +43,29 @@ import java.util.Locale
 @Composable
 fun OtherUserProfilePanel(
     username: String,
+    currentUsername: String? = null,
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
+    onOpenMarketplaceListing: (String) -> Unit,
     onOpenStatus: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var profile by remember(username) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
-    var loading by remember(username) { mutableStateOf(true) }
-    var error by remember(username) { mutableStateOf<String?>(null) }
-    var following by remember(username) { mutableStateOf(false) }
-    var busy by remember(username) { mutableStateOf(false) }
-    var reportOpen by remember(username) { mutableStateOf(false) }
-    var reportReason by remember(username) { mutableStateOf("Safety or spam") }
-    var reportDetails by remember(username) { mutableStateOf("") }
-    var reportMessage by remember(username) { mutableStateOf<String?>(null) }
-    var showProfilePhoto by remember(username) { mutableStateOf(false) }
-    var profileMenuOpen by remember(username) { mutableStateOf(false) }
-    var blockConfirmOpen by remember(username) { mutableStateOf(false) }
+    val signedInUsername = currentUsername ?: FynxAuthStore.load(context).username
+    val accountKey = normalizeFynxProfileUsername(signedInUsername) ?: "signed-out"
+    val isOwnProfile = isOwnFynxProfile(username, signedInUsername)
+    var profile by remember(username, accountKey) { mutableStateOf<FynxProfileRemoteClient.Profile?>(null) }
+    var loading by remember(username, accountKey) { mutableStateOf(true) }
+    var error by remember(username, accountKey) { mutableStateOf<String?>(null) }
+    var following by remember(username, accountKey) { mutableStateOf(false) }
+    var busy by remember(username, accountKey) { mutableStateOf(false) }
+    var reportOpen by remember(username, accountKey) { mutableStateOf(false) }
+    var reportReason by remember(username, accountKey) { mutableStateOf("Safety or spam") }
+    var reportDetails by remember(username, accountKey) { mutableStateOf("") }
+    var reportMessage by remember(username, accountKey) { mutableStateOf<String?>(null) }
+    var showProfilePhoto by remember(username, accountKey) { mutableStateOf(false) }
+    var profileMenuOpen by remember(username, accountKey) { mutableStateOf(false) }
+    var blockConfirmOpen by remember(username, accountKey) { mutableStateOf(false) }
 
     suspend fun loadProfile() {
         loading = true
@@ -75,7 +80,7 @@ fun OtherUserProfilePanel(
         loading = false
     }
 
-    LaunchedEffect(username) { loadProfile() }
+    LaunchedEffect(username, accountKey) { loadProfile() }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
@@ -84,17 +89,19 @@ fun OtherUserProfilePanel(
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
             Text("Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Box {
-                IconButton(enabled = !busy, onClick = { profileMenuOpen = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
-                DropdownMenu(expanded = profileMenuOpen, onDismissRequest = { profileMenuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Report profile") },
-                        onClick = { profileMenuOpen = false; reportMessage = null; reportOpen = true }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Block @${username.removePrefix("@")}") },
-                        onClick = { profileMenuOpen = false; blockConfirmOpen = true }
-                    )
+            if (!isOwnProfile) {
+                Box {
+                    IconButton(enabled = !busy, onClick = { profileMenuOpen = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
+                    DropdownMenu(expanded = profileMenuOpen, onDismissRequest = { profileMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Report profile") },
+                            onClick = { profileMenuOpen = false; reportMessage = null; reportOpen = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Block @${username.removePrefix("@")}") },
+                            onClick = { profileMenuOpen = false; blockConfirmOpen = true }
+                        )
+                    }
                 }
             }
         }
@@ -234,7 +241,12 @@ fun OtherUserProfilePanel(
                         }
                     }
                     item {
-                        FynxProfileContentSection(username = person.username, onError = { error = it })
+                        FynxProfileContentSection(
+                            username = person.username,
+                            currentUsername = signedInUsername,
+                            onOpenMarketplaceListing = onOpenMarketplaceListing,
+                            onError = { error = it }
+                        )
                     }
                 }
             }
@@ -278,12 +290,22 @@ fun OtherUserProfilePanel(
             },
             confirmButton = {
                 TextButton(enabled = !busy, onClick = {
-                    scope.launch {
-                        busy = true
-                        FynxProfileRemoteClient.report(context, profile!!.username, reportReason, reportDetails)
-                            .onSuccess { reportMessage = "Report submitted (" + it.status.lowercase() + ")." }
-                            .onFailure { reportMessage = it.message ?: "Report failed. Try again." }
-                        busy = false
+                    val validationMessage = validateProfileReportReason(reportReason)
+                    if (validationMessage != null) {
+                        reportMessage = validationMessage
+                    } else {
+                        scope.launch {
+                            busy = true
+                            FynxProfileRemoteClient.report(
+                                context,
+                                profile!!.username,
+                                reportReason.trim(),
+                                reportDetails.trim()
+                            )
+                                .onSuccess { reportMessage = "Report submitted (" + it.status.lowercase() + ")." }
+                                .onFailure { reportMessage = it.message ?: "Report failed. Try again." }
+                            busy = false
+                        }
                     }
                 }) { Text("Submit") }
             },
