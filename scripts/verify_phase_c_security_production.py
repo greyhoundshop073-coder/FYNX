@@ -15,6 +15,7 @@ def check(name, ok):
     checks.append((name, bool(ok)))
 
 server = read("backend/server.js")
+database_pool = read("backend/databasePool.js")
 realtime = read("backend/realtimeIsolationBootstrap.js")
 media_privacy = read("backend/mediaPrivacy.js")
 client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
@@ -44,7 +45,7 @@ check("Marketplace media remains seller-owned, listing-attached, and block-aware
 check("production transport security headers are enabled", "X-Content-Type-Options" in server and "Referrer-Policy" in server and "X-Frame-Options" in server and "Strict-Transport-Security" in server)
 check("request body size is bounded", 'express.json({ limit: "18mb"' in server)
 check("endpoint rate limiting is enabled", 'rateLimit("auth"' in server and 'rateLimit("assistant"' in server and 'rateLimit("media"' in server and 'rateLimit("messages"' in server)
-check("database pool and query timeouts are bounded", "connectionTimeoutMillis" in server and "statement_timeout" in server and "query_timeout" in server)
+check("database pool and query timeouts are bounded", "DB_POOL_MAX" in database_pool and "max: maxConnections" in database_pool and "connectionTimeoutMillis: 5_000" in database_pool and "statement_timeout: 15_000" in database_pool and "query_timeout: 20_000" in database_pool)
 check("message authorization prevents cross-account media use", "mm.owner_id = $2" in server and "m.sender_id = $2" in server and "m.recipient_id = $2" in server)
 check("logout clears secure token storage", "FynxSecureTokenStore.save(context, null)" in auth)
 check("secure token store is separated and Android-Keystore backed", "AndroidKeyStore" in token_store and "AES/GCM/NoPadding" in token_store and "FynxSecureTokenStore" in auth)

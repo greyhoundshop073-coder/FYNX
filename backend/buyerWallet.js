@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
@@ -5,16 +6,7 @@ import pg from 'pg';
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 4,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 function auth(req, res, next) {
   const header = req.get('authorization') || '';
@@ -2191,6 +2183,5 @@ export function registerBuyerWalletRoutes({ app }) {
 
 }
 
-export async function closeBuyerWalletPool() {
-  if (pool) await pool.end();
-}
+// Buyer Wallet borrows the application-wide pool; only the application owner may close it.
+export async function closeBuyerWalletPool() {}

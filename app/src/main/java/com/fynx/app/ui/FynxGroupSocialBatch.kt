@@ -89,20 +89,64 @@ fun FynxGroupSocialDialog(group: FynxGroup, onDismiss: () -> Unit, onInvite: (St
     var showFriends by remember { mutableStateOf(false) }
     var showContent by remember { mutableStateOf(openContentInitially) }
     var inviteMessage by remember { mutableStateOf("") }
+    var friends by remember { mutableStateOf(emptyList<FynxSocialClient.User>()) }
+    var friendsLoading by remember { mutableStateOf(false) }
+    var friendsRefresh by remember { mutableIntStateOf(0) }
+    var inviteBusy by remember { mutableStateOf<String?>(null) }
+    var friendsError by remember { mutableStateOf<String?>(null) }
     var selectedMedia by remember { mutableStateOf<Uri?>(null) }
     var mediaType by remember { mutableStateOf("image") }
-    val friends = remember { FynxFriendsStore(context).load().filter { it.isFriend } }
+    LaunchedEffect(showFriends, friendsRefresh) {
+        if (showFriends) {
+            friendsLoading = true
+            friendsError = null
+            friends = emptyList()
+            FynxSocialClient.friends(context).onSuccess { friends = it }.onFailure { friendsError = it.message ?: "Friends could not be loaded." }
+            friendsLoading = false
+        }
+    }
     fun handleCaptured(uri: Uri, type: String) { selectedMedia = uri; mediaType = type; onMedia(uri, type) }
 
     if (showFriends) {
         AlertDialog(onDismissRequest = { showFriends = false }, title = { Text("Invite friends") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (friends.isEmpty()) Text("No confirmed friends are available to invite yet.")
+                if (friendsLoading) Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = androidx.compose.ui.Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp)) }
+                friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall); TextButton(onClick = { friendsRefresh++ }) { Text("Retry") } }
+                if (!friendsLoading && friendsError == null && friends.isEmpty()) Text("No confirmed FYNX friends are available to invite yet.")
                 LazyColumn(Modifier.heightIn(max = 300.dp)) {
                     items(friends, key = { it.username }) { friend ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) { Text(friend.displayName, style = MaterialTheme.typography.titleSmall); Text(friend.username, style = MaterialTheme.typography.bodySmall) }
-                            TextButton(onClick = { onInvite(friend.username); inviteMessage = "Invitation prepared for ${friend.username}" }) { Text("Invite") }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Row(Modifier.weight(1f), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                FynxRemoteProfileAvatar(friend.profilePhotoMediaId, friend.displayName.ifBlank { friend.username }, Modifier.size(38.dp), ownerUsername = friend.username)
+                                Spacer(Modifier.width(8.dp))
+                                Column { Text(friend.displayName.ifBlank { friend.username }, style = MaterialTheme.typography.titleSmall); Text("@${friend.username.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                            val alreadyMember = group.members.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
+                            TextButton(
+                                enabled = !alreadyMember && !friendsLoading && friendsError == null && inviteBusy != friend.username,
+                                onClick = {
+                                    scope.launch {
+                                        inviteBusy = friend.username
+                                        friendsLoading = true
+                                        val latestFriends = FynxSocialClient.friends(context)
+                                        if (latestFriends.isSuccess) {
+                                            friends = latestFriends.getOrNull().orEmpty()
+                                            val stillFriend = friends.any { it.username.removePrefix("@").equals(friend.username.removePrefix("@"), true) }
+                                            if (stillFriend) {
+                                                onInvite(friend.username)
+                                                inviteMessage = "Invitation prepared for ${friend.username}"
+                                            } else {
+                                                inviteMessage = "This account is no longer on your accepted friends list."
+                                            }
+                                        } else {
+                                            friends = emptyList()
+                                            friendsError = latestFriends.exceptionOrNull()?.message ?: "Friendship could not be verified."
+                                        }
+                                        friendsLoading = false
+                                        inviteBusy = null
+                                    }
+                                }
+                            ) { Text(when { alreadyMember -> "In group"; inviteBusy == friend.username -> "Checking…"; else -> "Invite" }) }
                         }
                     }
                 }

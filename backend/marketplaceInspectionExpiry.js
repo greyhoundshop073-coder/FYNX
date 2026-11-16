@@ -1,18 +1,10 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { ensureMarketplaceProtectionSchema } from './marketplaceProtection.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 const AUTO_COMPLETE_INTERVAL_MS = 60_000;
 
@@ -83,15 +75,19 @@ export async function autoCompleteExpiredMarketplaceInspections({ logger = conso
   return completed;
 }
 
+let inspectionExpiryTimer = null;
+
 export function registerMarketplaceInspectionExpiryWorker({ logger = console } = {}) {
-  const timer = setInterval(() => { void autoCompleteExpiredMarketplaceInspections({ logger }); }, AUTO_COMPLETE_INTERVAL_MS);
-  timer.unref();
+  if (inspectionExpiryTimer) return;
+  inspectionExpiryTimer = setInterval(() => { void autoCompleteExpiredMarketplaceInspections({ logger }); }, AUTO_COMPLETE_INTERVAL_MS);
+  inspectionExpiryTimer.unref();
   void autoCompleteExpiredMarketplaceInspections({ logger });
   logger.log('[fynx-marketplace] 48-hour inspection expiry worker enabled');
 }
 
 export async function closeMarketplaceInspectionExpiryWorker() {
-  if (pool) await pool.end();
+  if (inspectionExpiryTimer) clearInterval(inspectionExpiryTimer);
+  inspectionExpiryTimer = null;
 }
 
 export const MARKETPLACE_INSPECTION_AUTO_COMPLETE_INTERVAL_MS = AUTO_COMPLETE_INTERVAL_MS;
