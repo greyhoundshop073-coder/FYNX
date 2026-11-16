@@ -321,37 +321,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
-            FynxBackendClient.currentUserId(context).onFailure { error ->
-                if (FynxBackendClient.isUnauthorizedFailure(error)) {
-                    FynxBackendClient.saveAccessToken(context, null)
-                    FynxAuthStore.clear(context)
-                    authSession = AuthSession()
-                    adminRole = null
-                    selected = "Home"
-                    openProfileSettings = false
-                    notificationPreferencesOnly = false
-                    openChat = null
-                    openChatMarketplaceListingId = null
-                    openGroup = null
-                    profileUser = null
-                    marketplaceListingId = null
-                    marketplaceAiListingId = null
-                    marketplaceProfileUsername = null
-                    marketplaceStatusDraft = null
-                    postOpenId = null
-                    postOpenCommentId = null
-                    statusOpenId = null
-                    statusOpenOwner = null
-                    statusCreatorRequested = false
-                    statusComposerImmersive = false
-                    callTarget = null
-                    pendingIncomingCall = null
-                    aiCaptionDraft = null
-                    notifications = emptyList()
-                    remoteUnreadCount = 0
-                    navigationHistory = listOf("Home")
-                }
-            }
+            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
         }
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
