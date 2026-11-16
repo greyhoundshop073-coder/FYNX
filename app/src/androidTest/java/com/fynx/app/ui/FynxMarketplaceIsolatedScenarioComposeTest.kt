@@ -19,8 +19,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -144,7 +143,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // The production promotional banner exposes real listing headlines in a swipeable
         // LazyRow; it does not render the old "Product n of m" counter or a next-arrow button.
         // Swipe the actual visible slide and verify that the next eligible listing is shown.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
