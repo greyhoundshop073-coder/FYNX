@@ -54,6 +54,21 @@ class FynxMarketplacePaginationSupportTest {
     }
 
     @Test
+    fun usedCategoryOffersRelevantSecondHandSubcategories() {
+        assertEquals(
+            listOf(
+                "Used electronics",
+                "Used phones & computers",
+                "Used furniture",
+                "Used vehicles",
+                "Used clothing",
+                "Other used items"
+            ),
+            marketplaceSubcategoriesFor("Used")
+        )
+    }
+
+    @Test
     fun paginationOffsetUsesAtLeastOneForInvalidPageSize() {
         assertEquals(25, advanceMarketplaceListingsOffset(24, 0))
         assertEquals(25, advanceMarketplaceListingsOffset(24, -10))

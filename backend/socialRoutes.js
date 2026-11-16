@@ -46,6 +46,13 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           PRIMARY KEY (user_id, listing_id)
         );
         CREATE INDEX IF NOT EXISTS marketplace_saved_products_listing_idx ON marketplace_saved_products (listing_id, created_at DESC);
+        CREATE TABLE IF NOT EXISTS marketplace_listing_likes (
+          user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, listing_id)
+        );
+        CREATE INDEX IF NOT EXISTS marketplace_listing_likes_listing_idx ON marketplace_listing_likes (listing_id, created_at DESC);
       `).catch((error) => {
         marketplaceSchemaPromise = undefined;
         throw error;
@@ -71,14 +78,55 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       if (mode === "phone") {
         const digits = query.replace(/[^0-9]/g, "");
         if (digits.length < 7 || digits.length > 15) return res.status(400).json({ error: "enter a valid phone number with country code" });
-        const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1 LIMIT 5`, [digits]);
+        const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE regexp_replace(phone, '[^0-9]', '', 'g') = $1 AND id <> $2 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $2 AND b.blocked_id = users.id) OR (b.blocker_id = users.id AND b.blocked_id = $2)) LIMIT 5`, [digits, req.user.sub]);
         return res.json({ users: result.rows });
       }
       const normalized = query.replace(/^@+/, "").toLowerCase();
       if (normalized.length < 2 || normalized.length > 32) return res.status(400).json({ error: "username search must be 2-32 characters" });
-      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE username ILIKE $1 OR display_name ILIKE $2 ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized]);
+      const result = await pool.query(`SELECT id, username, display_name, created_at FROM users WHERE (username ILIKE $1 OR display_name ILIKE $2) AND id <> $4 AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = $4 AND b.blocked_id = users.id) OR (b.blocker_id = users.id AND b.blocked_id = $4)) ORDER BY CASE WHEN lower(username) = $3 THEN 0 ELSE 1 END, username LIMIT 20`, [`%${normalized}%`, `%${query.toLowerCase()}%`, normalized, req.user.sub]);
       return res.json({ users: result.rows });
     } catch (error) { console.error("user search", error); return res.status(500).json({ error: "user search failed" }); }
+  });
+
+  app.get("/api/users/recommendations", auth, async (req, res) => {
+    try {
+      res.set("Cache-Control", "private, no-store");
+      const limit = Math.min(Math.max(Number.parseInt(req.query?.limit, 10) || 30, 1), 30);
+      const offset = Math.min(Math.max(Number.parseInt(req.query?.offset, 10) || 0, 0), 10000);
+      const result = await pool.query(`
+        SELECT u.id,u.username,u.display_name,u.verified
+        FROM users u
+        LEFT JOIN privacy_settings ps ON ps.user_id=u.id
+        WHERE u.id<>$1
+          AND COALESCE(ps.profile_visibility,'My friends')='Everyone'
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id=$1 AND b.blocked_id=u.id)
+               OR (b.blocker_id=u.id AND b.blocked_id=$1)
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM friendships rel
+            WHERE ((rel.user_id=$1 AND rel.friend_id=u.id) OR (rel.user_id=u.id AND rel.friend_id=$1))
+              AND rel.status IN ('accepted','pending')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM social_follows sf
+            WHERE sf.follower_id=$1 AND sf.followed_id=u.id
+          )
+        ORDER BY u.verified DESC,u.created_at DESC
+        LIMIT $2 OFFSET $3
+      `, [req.user.sub, limit, offset]);
+      return res.json({ people: result.rows.map(row => ({
+        id: String(row.id),
+        username: row.username,
+        displayName: row.display_name || "",
+        verified: Boolean(row.verified),
+        reason: row.verified ? "Verified account" : "Suggested for you"
+      })) });
+    } catch (error) {
+      console.error("people recommendations", error);
+      return res.status(500).json({ error: "people recommendations failed" });
+    }
   });
 
   app.get("/api/friends", auth, async (req, res) => {
@@ -172,6 +220,72 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) { console.error("unblock", error); return res.status(500).json({ error: "unblock failed" }); }
   });
 
+  app.get("/api/marketplace/shops/:username/listing-engagement", auth, async (req, res) => {
+    const username = typeof req.params?.username === "string" ? req.params.username.trim().replace(/^@+/, "") : "";
+    if (!/^[a-zA-Z0-9_.-]{1,40}$/.test(username)) return res.status(400).json({ error: "invalid seller username" });
+    try {
+      await ensureMarketplaceSchema();
+      const result = await pool.query(`
+        SELECT l.id, COUNT(DISTINCT likes.user_id)::INTEGER AS like_count,
+               COALESCE(BOOL_OR(likes.user_id = $2), FALSE) AS liked_by_current_user
+        FROM marketplace_listings l
+        JOIN users seller ON seller.id = l.seller_id
+        LEFT JOIN marketplace_listing_likes likes ON likes.listing_id = l.id
+        WHERE lower(seller.username) = lower($1)
+          AND l.active = TRUE
+          AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = l.seller_id)
+               OR (b.blocker_id = l.seller_id AND b.blocked_id = $2)
+          )
+        GROUP BY l.id
+      `, [username, req.user.sub]);
+      return res.json({ listings: result.rows.map((row) => ({
+        listingId: String(row.id), likeCount: Number(row.like_count || 0),
+        likedByCurrentUser: Boolean(row.liked_by_current_user)
+      })) });
+    } catch (error) {
+      console.error("marketplace listing engagement", error);
+      return res.status(500).json({ error: "product likes could not be loaded" });
+    }
+  });
+
+  app.post("/api/marketplace/listings/:id/like", auth, async (req, res) => {
+    const id = Number(req.params?.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+    if (typeof req.body?.liked !== "boolean") return res.status(400).json({ error: "liked must be true or false" });
+    try {
+      await ensureMarketplaceSchema();
+      const listing = (await pool.query(
+        "SELECT id, seller_id FROM marketplace_listings WHERE id = $1 AND active = TRUE AND GREATEST(0, quantity - COALESCE(reserved_quantity, 0)) > 0 LIMIT 1",
+        [id]
+      )).rows[0];
+      if (!listing) return res.status(404).json({ error: "product is no longer available" });
+      const blocked = await pool.query(
+        "SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1",
+        [req.user.sub, listing.seller_id]
+      );
+      if (blocked.rowCount) return res.status(404).json({ error: "product is unavailable" });
+      if (req.body.liked && String(listing.seller_id) === String(req.user.sub)) {
+        return res.status(400).json({ error: "you cannot like your own product" });
+      }
+      if (req.body.liked) {
+        await pool.query("INSERT INTO marketplace_listing_likes (user_id, listing_id) VALUES ($1, $2) ON CONFLICT (user_id, listing_id) DO NOTHING", [req.user.sub, id]);
+      } else {
+        await pool.query("DELETE FROM marketplace_listing_likes WHERE user_id = $1 AND listing_id = $2", [req.user.sub, id]);
+      }
+      const count = await pool.query(
+        "SELECT COUNT(*)::INTEGER AS like_count, COALESCE(BOOL_OR(user_id = $2), FALSE) AS liked_by_current_user FROM marketplace_listing_likes WHERE listing_id = $1",
+        [id, req.user.sub]
+      );
+      return res.json({ listingId: String(id), liked: Boolean(count.rows[0]?.liked_by_current_user), likeCount: Number(count.rows[0]?.like_count || 0) });
+    } catch (error) {
+      console.error("marketplace listing like", error);
+      return res.status(500).json({ error: "product like could not be updated" });
+    }
+  });
+
   app.get("/api/marketplace/listings", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
@@ -179,13 +293,18 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const q = typeof req.query?.q === "string" ? req.query.q.trim().slice(0, 80) : "";
       const category = typeof req.query?.category === "string" ? req.query.category.trim().slice(0, 40) : "";
       const seller = typeof req.query?.seller === "string" ? req.query.seller.trim().toLowerCase().replace(/^@+/, "") : "";
+      const limit = Math.min(60, Math.max(1, Number.parseInt(req.query?.limit, 10) || 24));
+      const offset = Math.max(0, Number.parseInt(req.query?.offset, 10) || 0);
       const params = [req.user.sub];
-      const where = ["l.active = TRUE", "GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) > 0", "UPPER(COALESCE(l.currency,''))='NGN'", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
+      const where = ["l.active = TRUE", "GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) > 0", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')", "NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocked_id=$1 AND b.blocker_id=l.seller_id))"];
       if (q) { params.push(`%${q}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR COALESCE(l.store_name, '') ILIKE $${params.length} OR COALESCE(shop.shop_name, '') ILIKE $${params.length} OR COALESCE(l.location, '') ILIKE $${params.length} OR COALESCE(l.category, '') ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
       if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category = $${params.length}`); }
       if (seller) { params.push(seller); where.push(`u.username = $${params.length}`); }
-      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT 100`, params);
-      return res.json({ listings: result.rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })) });
+      params.push(limit + 1, offset);
+      const result = await pool.query(`SELECT l.id, l.seller_id, u.username AS seller_username, u.display_name AS seller_display_name, COALESCE(NULLIF(shop.shop_name, ''), NULLIF(l.store_name, ''), '') AS store_name, l.title, l.description, l.price, l.currency, l.category, l.condition, l.quantity, GREATEST(0, l.quantity - COALESCE(l.reserved_quantity,0)) AS available_quantity, l.location, l.delivery_available, l.pickup_available, l.delivery_fee, l.media_ids, ${marketplaceMediaTypesProjection}, l.created_at FROM marketplace_listings l JOIN users u ON u.id = l.seller_id LEFT JOIN marketplace_shop_profiles shop ON shop.seller_id = l.seller_id WHERE ${where.join(" AND ")} ORDER BY l.created_at DESC LIMIT ${"${params.length - 1}"} OFFSET ${"${params.length}"}`, params);
+      const hasMore = result.rows.length > limit;
+      const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+      return res.json({ listings: rows.map((row) => ({ ...row, id: String(row.id), seller_id: String(row.seller_id), price: Number(row.price), delivery_fee: row.delivery_fee == null ? null : Number(row.delivery_fee), media_ids: Array.isArray(row.media_ids) ? row.media_ids.map(String) : [], media_types: Array.isArray(row.media_types) ? row.media_types.map(String) : [] })), hasMore });
     } catch (error) { console.error("marketplace listings", error); return res.status(500).json({ error: "marketplace lookup failed" }); }
   });
 
@@ -216,7 +335,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const pickupAvailable = req.body?.pickupAvailable == null ? true : Boolean(req.body.pickupAvailable);
       const deliveryFee = req.body?.deliveryFee == null || req.body.deliveryFee === "" ? null : Number(req.body.deliveryFee);
       const mediaIds = Array.isArray(req.body?.mediaIds) ? req.body.mediaIds.map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 12) : [];
-      if (title.length < 2 || description.length < 5 || !category || currency !== "NGN" || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required" });
+      if (title.length < 2 || description.length < 5 || !category || !["NGN","USD"].includes(currency) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity < 0 || !["NEW","USED","REFURBISHED"].includes(condition) || (deliveryFee != null && (!Number.isFinite(deliveryFee) || deliveryFee < 0)) || !mediaIds.length) return res.status(400).json({ error: "complete listing details and at least one product photo or video are required" });
       const media = await pool.query("SELECT id FROM message_media WHERE id = ANY($1::bigint[]) AND owner_id = $2", [mediaIds, req.user.sub]);
       if (media.rowCount !== mediaIds.length) return res.status(403).json({ error: "one or more media files are not owned by this account" });
       const result = await pool.query(`INSERT INTO marketplace_listings (seller_id, store_name, title, description, price, currency, category, condition, quantity, location, delivery_available, pickup_available, delivery_fee, media_ids) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING id, created_at`, [req.user.sub, listingStoreName, title, description, price, currency, category, condition, quantity, location, deliveryAvailable, pickupAvailable, deliveryFee, JSON.stringify(mediaIds)]);
@@ -593,7 +712,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     return fynxBuiltinMusicSeedPromise;
   };
 
-  const visibleSocialPost = async (id,userId) => { const r=await pool.query(`SELECT 1 FROM social_posts p WHERE p.id=$1 AND (p.author_id=$2 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))`,[id,userId]); return Boolean(r.rowCount); };
+  const visibleSocialPost = async (id,userId) => { const r=await pool.query(`SELECT 1 FROM social_posts p WHERE p.id=$1 AND (p.author_id=$2 OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2) AND EXISTS(SELECT 1 FROM friendships af WHERE ((af.user_id=p.author_id AND af.friend_id=$2) OR (af.user_id=$2 AND af.friend_id=p.author_id)) AND af.status='accepted'))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2))`,[id,userId]); return Boolean(r.rowCount); };
 
   let socialFeedRepostSchemaPromise;
   const ensureSocialFeedRepostSchema = async () => {
@@ -700,6 +819,10 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
            OR (qp.visibility='SELECTED_PEOPLE' AND EXISTS (
              SELECT 1 FROM social_post_audience qa
              WHERE qa.post_id=qp.id AND qa.user_id=$1
+           ) AND EXISTS (
+             SELECT 1 FROM friendships qaf
+             WHERE ((qaf.user_id=qp.author_id AND qaf.friend_id=$1) OR (qaf.user_id=$1 AND qaf.friend_id=qp.author_id))
+               AND qaf.status='accepted'
            ))
          )
          AND NOT EXISTS(
@@ -721,6 +844,10 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
           OR (p.visibility='SELECTED_PEOPLE' AND EXISTS (
             SELECT 1 FROM social_post_audience a
             WHERE a.post_id=p.id AND a.user_id=$1
+          ) AND EXISTS (
+            SELECT 1 FROM friendships af
+            WHERE ((af.user_id=p.author_id AND af.friend_id=$1) OR (af.user_id=$1 AND af.friend_id=p.author_id))
+              AND af.status='accepted'
           ))
         )
         AND NOT EXISTS(
@@ -742,15 +869,45 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch(e) { console.error('social feed',e); res.status(500).json({error:'social feed failed'}); }
   });
   // FYNX Music Library management is restricted to the existing OWNER/ADMIN role system.
+  let fynxMusicAdminSchemaPromise;
+  async function ensureFynxMusicAdminSchema() {
+    if (!fynxMusicAdminSchemaPromise) {
+      fynxMusicAdminSchemaPromise = (async () => {
+        await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+        await pool.query(`CREATE TABLE IF NOT EXISTS fynx_admin_activity (
+          id BIGSERIAL PRIMARY KEY,
+          actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+          actor_role TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target_type TEXT NOT NULL DEFAULT '',
+          target_id TEXT NOT NULL DEFAULT '',
+          summary TEXT NOT NULL DEFAULT '',
+          metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_created_idx ON fynx_admin_activity(created_at DESC)");
+        await pool.query("CREATE INDEX IF NOT EXISTS fynx_admin_activity_action_idx ON fynx_admin_activity(action,created_at DESC)");
+      })().catch(error => { fynxMusicAdminSchemaPromise = null; throw error; });
+    }
+    return fynxMusicAdminSchemaPromise;
+  }
+
   async function fynxMusicAdminRole(userId) {
-    // Music routes must be safe on a fresh deployment even if no other /api/admin
-    // endpoint has been called yet. The existing adminRoutes module owns this schema,
-    // but this route is independently callable during the same cold start.
-    await pool.query("CREATE TABLE IF NOT EXISTS fynx_admin_roles (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('ADMIN')), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
+    // Keep direct Music Library calls safe on a cold deployment, but run DDL once
+    // per process rather than on every OWNER-only request.
+    await ensureFynxMusicAdminSchema();
     const first = (await pool.query("SELECT id FROM users ORDER BY id ASC LIMIT 1")).rows[0];
     if (first && String(first.id) === String(userId)) return "OWNER";
     const result = await pool.query("SELECT 1 FROM fynx_admin_roles WHERE user_id=$1 AND role='ADMIN' LIMIT 1", [userId]);
     return result.rowCount ? "ADMIN" : null;
+  }
+
+  async function recordMusicAdminActivity(actorUserId, actorRole, action, targetId, summary, metadata = {}, executor = pool) {
+    await executor.query(
+      `INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata)
+       VALUES($1,$2,$3,'music_track',$4,$5,$6::jsonb)`,
+      [actorUserId, actorRole, action, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]
+    );
   }
 
   app.post('/api/admin/social/music/catalogue', auth, async (req, res) => {
@@ -761,20 +918,40 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const mediaId = Number(req.body?.mediaId);
       const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 120) : '';
       const artist = typeof req.body?.artist === 'string' ? req.body.artist.trim().slice(0, 120) : '';
-      const durationMs = Math.max(0, Math.min(Number(req.body?.durationMs) || 0, 86400000));
+      const durationMs = req.body?.durationMs;
       const category = typeof req.body?.category === 'string' ? req.body.category.trim().slice(0, 60) || 'FYNX' : 'FYNX';
-      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist) return res.status(400).json({ error: 'audio media, title and artist are required' });
-      const media = await pool.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1', [mediaId]);
-      if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
-        return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+      if (!Number.isSafeInteger(mediaId) || mediaId < 1 || !title || !artist ||
+          !Number.isSafeInteger(durationMs) || durationMs < 1 || durationMs > 86400000) {
+        return res.status(400).json({ error: 'audio media, title, artist and a valid duration (1-86400000 ms) are required' });
       }
-      const result = await pool.query(
-        `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
-         VALUES($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
-         RETURNING id,media_id,title,artist,duration_ms,category,active`,
-        [mediaId, title, artist, durationMs, category, req.user.sub]
-      );
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        const media = await client.query('SELECT id,mime_type,owner_id FROM message_media WHERE id=$1 FOR SHARE', [mediaId]);
+        if (!media.rows[0] || String(media.rows[0].owner_id) !== String(req.user.sub) || !String(media.rows[0].mime_type || '').toLowerCase().startsWith('audio/')) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'music media must be an audio file owned by the authorized admin' });
+        }
+        result = await client.query(
+          `INSERT INTO fynx_music_catalogue(media_id,title,artist,duration_ms,category,created_by)
+           VALUES($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (media_id) DO UPDATE SET title=EXCLUDED.title,artist=EXCLUDED.artist,duration_ms=EXCLUDED.duration_ms,category=EXCLUDED.category,active=TRUE
+           RETURNING id,media_id,title,artist,duration_ms,category,active`,
+          [mediaId, title, artist, durationMs, category, req.user.sub]
+        );
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_PUBLISHED", result.rows[0].id, result.rows[0].title, {
+          mediaId: String(result.rows[0].media_id),
+          category: result.rows[0].category,
+          durationMs: Number(result.rows[0].duration_ms || 0)
+        }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.status(201).json({
         track: {
           id: String(result.rows[0].id),
@@ -795,7 +972,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get('/api/admin/social/music/catalogue', auth, async (req, res) => {
     try {
       const role = await fynxMusicAdminRole(req.user.sub);
-      if (!role) return res.status(403).json({ error: 'FYNX admin access required' });
+      if (role !== 'OWNER') return res.status(403).json({ error: 'FYNX owner access required for music management' });
       await ensureSocialSchema();
       const result = await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,c.category,c.active,c.created_at FROM fynx_music_catalogue c ORDER BY c.created_at DESC`);
       return res.json({ tracks: result.rows.map((row) => ({
@@ -822,8 +999,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       const id = Number(req.params.id);
       const active = req.body?.active === true;
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active', [id, active]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      const client = await pool.connect();
+      let result;
+      try {
+        await client.query('BEGIN');
+        result = await client.query('UPDATE fynx_music_catalogue SET active=$2 WHERE id=$1 RETURNING id,active,title', [id, active]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, active ? "MUSIC_TRACK_ACTIVATED" : "MUSIC_TRACK_HIDDEN", id, result.rows[0].title, { active }, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true, active: Boolean(result.rows[0].active) });
     } catch (error) {
       console.error('admin music catalogue status', error);
@@ -838,8 +1030,22 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
       await ensureSocialSchema();
       const id = Number(req.params.id);
       if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error: 'invalid music track' });
-      const result = await pool.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id', [id]);
-      if (!result.rows[0]) return res.status(404).json({ error: 'music track not found' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await client.query('UPDATE fynx_music_catalogue SET active=FALSE WHERE id=$1 RETURNING id,title', [id]);
+        if (!result.rows[0]) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'music track not found' });
+        }
+        await recordMusicAdminActivity(req.user.sub, role, "MUSIC_TRACK_REMOVED", id, result.rows[0].title, {}, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
       return res.json({ ok: true });
     } catch (error) {
       console.error('admin remove music', error);
@@ -928,7 +1134,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     }
   });
 
-  // music catalogue selection is server-owned; client metadata is ignored when a track is selected.\n  app.post('/api/social/posts',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const visibility=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility||'').toUpperCase())?String(req.body.visibility).toUpperCase():'PUBLIC';const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];const mediaId=req.body?.mediaId==null?null:Number(req.body.mediaId);const mediaType=typeof req.body?.mediaType==='string'?req.body.mediaType.trim().toLowerCase():null;const backgroundKey=typeof req.body?.textBackground==='string'?req.body.textBackground.trim().toUpperCase():'';const location=typeof req.body?.location==='string'?req.body.location.trim().slice(0,160):null;const musicMediaId=req.body?.musicMediaId==null?null:Number(req.body.musicMediaId);let musicTitle=typeof req.body?.musicTitle==='string'?req.body.musicTitle.trim().slice(0,120):null;let musicArtist=typeof req.body?.musicArtist==='string'?req.body.musicArtist.trim().slice(0,120):null;let musicDurationMs=req.body?.musicDurationMs==null?0:Math.max(0,Math.min(Number(req.body.musicDurationMs)||0,86400000));const feelingActivityType=typeof req.body?.feelingActivityType==='string'?req.body.feelingActivityType.trim().toUpperCase():null;const feelingActivity=typeof req.body?.feelingActivity==='string'?req.body.feelingActivity.trim().slice(0,80):null;const allowedFeelingActivityTypes=['FEELING','ACTIVITY'];if(feelingActivityType!=null&&!allowedFeelingActivityTypes.includes(feelingActivityType))return res.status(400).json({error:'invalid feeling or activity type'});if(feelingActivityType!=null&&!feelingActivity)return res.status(400).json({error:'feeling or activity label is required'});const backgroundStyles={OCEAN:[0xFF1565C0,0xFFFFFFFF],VIOLET:[0xFF6A1B9A,0xFFFFFFFF],EMERALD:[0xFF00695C,0xFFFFFFFF],SUNSET:[0xFFE65100,0xFFFFFFFF],CHARCOAL:[0xFF263238,0xFFFFFFFF]};const backgroundStyle=backgroundKey&&backgroundStyles[backgroundKey]?backgroundStyles[backgroundKey]:null;if(!text&&mediaId==null&&musicMediaId==null)return res.status(400).json({error:'post content is required'});if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});if(mediaId!=null){if(!Number.isInteger(mediaId)||mediaId<1||!['image','video','audio'].includes(mediaType))return res.status(400).json({error:'invalid post media'});const m=await pool.query('SELECT id FROM message_media WHERE id=$1 AND owner_id=$2',[mediaId,req.user.sub]);if(!m.rows[0])return res.status(403).json({error:'media is not owned by this account'})}if(musicMediaId!=null){if(!Number.isInteger(musicMediaId)||musicMediaId<1)return res.status(400).json({error:'invalid music selection'});const m=await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.media_id=$1 AND c.active=TRUE`,[musicMediaId]);if(!m.rows[0]||!String(m.rows[0].mime_type||'').toLowerCase().startsWith('audio/'))return res.status(403).json({error:'music selection is not published in the FYNX catalogue'});musicTitle=m.rows[0].title;musicArtist=m.rows[0].artist;musicDurationMs=Number(m.rows[0].duration_ms||0)}if(visibility==='SELECTED_PEOPLE'){const friends=await pool.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`,[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');const r=await client.query('INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,feeling_activity_type,feeling_activity,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',[req.user.sub,text,visibility,mediaId,mediaType,musicMediaId,musicTitle,musicArtist,musicDurationMs,feelingActivityType,feelingActivity,backgroundStyle?.[0] ? backgroundKey : '',backgroundStyle?.[0] ?? null,backgroundStyle?.[1] ?? null,location]);const postId=r.rows[0].id;if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[postId,rawAudience]);await client.query('COMMIT');res.status(201).json({postId:String(postId)})}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social create post',e);res.status(500).json({error:'post creation failed'})}finally{client.release()}});
+  // music catalogue selection is server-owned; client metadata is ignored when a track is selected.
+  app.post('/api/social/posts',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const visibility=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'].includes(String(req.body?.visibility||'').toUpperCase())?String(req.body.visibility).toUpperCase():'PUBLIC';const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];const mediaId=req.body?.mediaId==null?null:Number(req.body.mediaId);const mediaType=typeof req.body?.mediaType==='string'?req.body.mediaType.trim().toLowerCase():null;const backgroundKey=typeof req.body?.textBackground==='string'?req.body.textBackground.trim().toUpperCase():'';const location=typeof req.body?.location==='string'?req.body.location.trim().slice(0,160):null;const musicMediaId=req.body?.musicMediaId==null?null:Number(req.body.musicMediaId);let musicTitle=typeof req.body?.musicTitle==='string'?req.body.musicTitle.trim().slice(0,120):null;let musicArtist=typeof req.body?.musicArtist==='string'?req.body.musicArtist.trim().slice(0,120):null;let musicDurationMs=req.body?.musicDurationMs==null?0:Math.max(0,Math.min(Number(req.body.musicDurationMs)||0,86400000));const feelingActivityType=typeof req.body?.feelingActivityType==='string'?req.body.feelingActivityType.trim().toUpperCase():null;const feelingActivity=typeof req.body?.feelingActivity==='string'?req.body.feelingActivity.trim().slice(0,80):null;const allowedFeelingActivityTypes=['FEELING','ACTIVITY'];if(feelingActivityType!=null&&!allowedFeelingActivityTypes.includes(feelingActivityType))return res.status(400).json({error:'invalid feeling or activity type'});if(feelingActivityType!=null&&!feelingActivity)return res.status(400).json({error:'feeling or activity label is required'});const backgroundStyles={OCEAN:[0xFF1565C0,0xFFFFFFFF],VIOLET:[0xFF6A1B9A,0xFFFFFFFF],EMERALD:[0xFF00695C,0xFFFFFFFF],SUNSET:[0xFFE65100,0xFFFFFFFF],CHARCOAL:[0xFF263238,0xFFFFFFFF]};const backgroundStyle=backgroundKey&&backgroundStyles[backgroundKey]?backgroundStyles[backgroundKey]:null;if(!text&&mediaId==null&&musicMediaId==null)return res.status(400).json({error:'post content is required'});if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});if(mediaId!=null){if(!Number.isInteger(mediaId)||mediaId<1||!['image','video','audio'].includes(mediaType))return res.status(400).json({error:'invalid post media'});const m=await pool.query('SELECT id FROM message_media WHERE id=$1 AND owner_id=$2',[mediaId,req.user.sub]);if(!m.rows[0])return res.status(403).json({error:'media is not owned by this account'})}if(musicMediaId!=null){if(!Number.isInteger(musicMediaId)||musicMediaId<1)return res.status(400).json({error:'invalid music selection'});const m=await pool.query(`SELECT c.id,c.media_id,c.title,c.artist,c.duration_ms,mm.mime_type FROM fynx_music_catalogue c JOIN message_media mm ON mm.id=c.media_id WHERE c.media_id=$1 AND c.active=TRUE`,[musicMediaId]);if(!m.rows[0]||!String(m.rows[0].mime_type||'').toLowerCase().startsWith('audio/'))return res.status(403).json({error:'music selection is not published in the FYNX catalogue'});musicTitle=m.rows[0].title;musicArtist=m.rows[0].artist;musicDurationMs=Number(m.rows[0].duration_ms||0)}if(visibility==='SELECTED_PEOPLE'){const friends=await pool.query(`SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status='accepted' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])`,[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');const r=await client.query('INSERT INTO social_posts(author_id,text,visibility,media_id,media_type,music_media_id,music_title,music_artist,music_duration_ms,feeling_activity_type,feeling_activity,text_background,text_background_color,text_foreground_color,location) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',[req.user.sub,text,visibility,mediaId,mediaType,musicMediaId,musicTitle,musicArtist,musicDurationMs,feelingActivityType,feelingActivity,backgroundStyle?.[0] ? backgroundKey : '',backgroundStyle?.[0] ?? null,backgroundStyle?.[1] ?? null,location]);const postId=r.rows[0].id;if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[postId,rawAudience]);await client.query('COMMIT');res.status(201).json({postId:String(postId)})}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social create post',e);res.status(500).json({error:'post creation failed'})}finally{client.release()}});
   app.delete('/api/social/posts/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const r=await pool.query('DELETE FROM social_posts WHERE id=$1 AND author_id=$2 RETURNING id',[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'post not found'});res.json({ok:true})}catch(e){res.status(500).json({error:'post deletion failed'})}});
   app.get('/api/social/posts/:id/audience',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const post=(await pool.query('SELECT id,visibility FROM social_posts WHERE id=$1 AND author_id=$2',[id,req.user.sub])).rows[0];if(!post)return res.status(404).json({error:'post not found'});const audience=await pool.query('SELECT user_id FROM social_post_audience WHERE post_id=$1 ORDER BY user_id',[id]);return res.json({visibility:post.visibility,userIds:audience.rows.map(r=>String(r.user_id))});}catch(e){return res.status(500).json({error:'post audience lookup failed'})}});
   app.patch('/api/social/posts/:id',auth,async(req,res)=>{const client=await pool.connect();try{await ensureSocialSchema();const id=Number(req.params.id);const visibility=String(req.body?.visibility||'').toUpperCase();const allowed=['PUBLIC','FRIENDS_ONLY','SELECTED_PEOPLE','ONLY_ME'];if(!allowed.includes(visibility))return res.status(400).json({error:'invalid post audience'});const rawAudience=Array.isArray(req.body?.audienceUserIds)?req.body.audienceUserIds.map(String).map(v=>v.trim()).filter(Boolean).slice(0,100):[];if(visibility==='SELECTED_PEOPLE'&&rawAudience.length===0)return res.status(400).json({error:'select at least one person'});if(visibility!=='SELECTED_PEOPLE'&&rawAudience.length)return res.status(400).json({error:'invalid selected audience'});const owned=(await client.query('SELECT id FROM social_posts WHERE id=$1 AND author_id=$2',[id,req.user.sub])).rows[0];if(!owned)return res.status(404).json({error:'post not found'});if(visibility==='SELECTED_PEOPLE'){const friends=await client.query('SELECT CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END AS id FROM friendships f WHERE (f.user_id=$1 OR f.friend_id=$1) AND f.status=\'accepted\' AND CASE WHEN f.user_id=$1 THEN f.friend_id ELSE f.user_id END = ANY($2::bigint[])',[req.user.sub,rawAudience]);if(friends.rows.length!==rawAudience.length)return res.status(403).json({error:'selected audience must contain your accepted friends'});}await client.query('BEGIN');await client.query('UPDATE social_posts SET visibility=$2 WHERE id=$1 AND author_id=$3',[id,visibility,req.user.sub]);await client.query('DELETE FROM social_post_audience WHERE post_id=$1',[id]);if(visibility==='SELECTED_PEOPLE')await client.query('INSERT INTO social_post_audience(post_id,user_id) SELECT $1,unnest($2::bigint[])',[id,rawAudience]);await client.query('COMMIT');return res.json({ok:true,postId:String(id),visibility});}catch(e){try{await client.query('ROLLBACK')}catch{}console.error('social update post audience',e);return res.status(500).json({error:'post audience update failed'});}finally{client.release();}});
@@ -939,6 +1146,6 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.post('/api/social/posts/:id/comments',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,1000):'';if(!text)return res.status(400).json({error:'comment text is required'});if(!(await visibleSocialPost(id,req.user.sub)))return res.status(404).json({error:'post not found'});const r=await pool.query('INSERT INTO social_post_comments(post_id,author_id,text) VALUES($1,$2,$3) RETURNING id,EXTRACT(EPOCH FROM created_at)*1000 timestamp',[id,req.user.sub,text]);const u=await pool.query('SELECT username,display_name FROM users WHERE id=$1',[req.user.sub]);res.status(201).json({comment:{id:String(r.rows[0].id),text,timestamp:Number(r.rows[0].timestamp),authorId:String(req.user.sub),authorUsername:u.rows[0]?.username||'',authorDisplayName:u.rows[0]?.display_name||''}})}catch(e){res.status(500).json({error:'comment failed'})}});
   app.post('/api/social/follow/:username',auth,async(req,res)=>{try{await ensureSocialSchema();const u=await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/,''));if(!u)return res.status(404).json({error:'user not found'});if(String(u.id)===String(req.user.sub))return res.status(400).json({error:'cannot follow yourself'});const b=await pool.query('SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1)',[req.user.sub,u.id]);if(b.rowCount)return res.status(403).json({error:'follow unavailable'});const inserted=await pool.query('INSERT INTO social_follows(follower_id,followed_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING follower_id,followed_id',[req.user.sub,u.id]);if(inserted.rowCount){const follower=await pool.query('SELECT username FROM users WHERE id=$1 LIMIT 1',[req.user.sub]);const sourceUsername=follower.rows[0]?.username||null;await queueFynxNotification(pool,{userId:u.id,type:'FOLLOW',title:`@${sourceUsername||'A FYNX user'} followed you`,message:'You have a new follower.',targetId:String(req.user.sub),sourceUsername,route:`fynx://profile/${encodeURIComponent(sourceUsername||'')}`,notificationId:`follow-${req.user.sub}-${u.id}`});}res.set('Cache-Control','no-store');res.status(201).json({following:true})}catch(e){res.status(500).json({error:'follow failed'})}});
   app.delete('/api/social/follow/:username',auth,async(req,res)=>{try{await ensureSocialSchema();const u=await findUserByUsername(req.params.username.trim().toLowerCase().replace(/^@+/,''));if(!u)return res.status(404).json({error:'user not found'});await pool.query('DELETE FROM social_follows WHERE follower_id=$1 AND followed_id=$2',[req.user.sub,u.id]);res.json({following:false})}catch(e){res.status(500).json({error:'unfollow failed'})}});
-  app.get('/api/social/media/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'invalid media id'});const r=await pool.query(`SELECT mm.mime_type,mm.storage_provider,mm.object_key FROM message_media mm JOIN social_posts p ON p.media_id=mm.id WHERE mm.id=$1 AND (p.author_id=$2 OR p.media_id=$1 AND p.visibility='PUBLIC' OR p.music_media_id=$1 AND p.visibility='PUBLIC' OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2)) LIMIT 1`,[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'media not found'});if(await redirectStoredMedia(res,r.rows[0],{cacheControl:'private, max-age=300'}))return;const payload=await getCachedMediaPayload(pool,id);if(!payload)return res.status(404).json({error:'media not found'});res.set('Cache-Control','private,max-age=300');res.type(payload.mimeType);return res.send(payload.data)}catch(e){res.status(500).json({error:'social media fetch failed'})}});
+  app.get('/api/social/media/:id',auth,async(req,res)=>{try{await ensureSocialSchema();const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'invalid media id'});const r=await pool.query(`SELECT mm.mime_type,mm.storage_provider,mm.object_key FROM message_media mm JOIN social_posts p ON p.media_id=mm.id WHERE mm.id=$1 AND (p.author_id=$2 OR p.media_id=$1 AND p.visibility='PUBLIC' OR p.music_media_id=$1 AND p.visibility='PUBLIC' OR p.visibility='PUBLIC' OR (p.visibility='ONLY_ME' AND p.author_id=$2) OR (p.visibility='FRIENDS_ONLY' AND EXISTS(SELECT 1 FROM friendships f WHERE ((f.user_id=p.author_id AND f.friend_id=$2) OR (f.user_id=$2 AND f.friend_id=p.author_id)) AND f.status='accepted')) OR (p.visibility='SELECTED_PEOPLE' AND EXISTS(SELECT 1 FROM social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2) AND EXISTS(SELECT 1 FROM friendships af WHERE ((af.user_id=p.author_id AND af.friend_id=$2) OR (af.user_id=$2 AND af.friend_id=p.author_id)) AND af.status='accepted'))) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=$2)) LIMIT 1`,[id,req.user.sub]);if(!r.rows[0])return res.status(404).json({error:'media not found'});if(await redirectStoredMedia(res,r.rows[0],{cacheControl:'private, max-age=300'}))return;const payload=await getCachedMediaPayload(pool,id);if(!payload)return res.status(404).json({error:'media not found'});res.set('Cache-Control','private,max-age=300');res.type(payload.mimeType);return res.send(payload.data)}catch(e){res.status(500).json({error:'social media fetch failed'})}});
 
 }

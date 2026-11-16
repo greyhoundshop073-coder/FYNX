@@ -1,0 +1,97 @@
+name: FYNX Neon Function Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-testing-function:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: fynx_test
+      PGPASSWORD: fynx_test
+      PGDATABASE: fynx_media_test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fynx_media_test
+          POSTGRES_USER: fynx_test
+          POSTGRES_PASSWORD: fynx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fynx_test -d fynx_media_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout canonical FYNX integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration/fynx-single-apk-20261013
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build and verify FYNX Neon Function
+        run: npm run verify:neon
+
+      - name: Require Neon deployment credential and preserved FYNX settings
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
+          FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
+        run: |
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ] || [ -z "$FYNX_OFFICIAL_USERNAME" ] || [ -z "$FYNX_WALLET_TEST_MODE_ENABLED" ] || [ -z "$FYNX_WALLET_CARD_FUNDING_ENABLED" ] || [ -z "$FYNX_WALLET_FUNDING_MIN_AMOUNT" ] || [ -z "$FYNX_WALLET_FUNDING_MAX_AMOUNT" ]; then
+            echo "::error::Add all required FYNX secrets and variables listed in backend/NEON_FUNCTIONS_DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Deploy only to the isolated fynx-testing branch
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
+          FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
+        run: |
+          umask 077
+          cat > .env.neon.deploy <<EOF
+          FYNX_JWT_SECRET=$FYNX_JWT_SECRET
+          FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
+          FYNX_PAYSTACK_SECRET_KEY=$FYNX_PAYSTACK_SECRET_KEY
+          FYNX_OFFICIAL_USERNAME=$FYNX_OFFICIAL_USERNAME
+          FYNX_WALLET_TEST_MODE_ENABLED=$FYNX_WALLET_TEST_MODE_ENABLED
+          FYNX_WALLET_CARD_FUNDING_ENABLED=$FYNX_WALLET_CARD_FUNDING_ENABLED
+          FYNX_WALLET_FUNDING_MIN_AMOUNT=$FYNX_WALLET_FUNDING_MIN_AMOUNT
+          FYNX_WALLET_FUNDING_MAX_AMOUNT=$FYNX_WALLET_FUNDING_MAX_AMOUNT
+          EOF
+          # Pin the CLI to the intended project and branch before applying neon.ts.
+          # The deploy command itself applies to the linked branch; it does not accept
+          # project/branch flags.
+          npx --yes neon@9.2.0 link --project-id patient-lab-43403708 --no-env-pull -y
+          npx --yes neon@9.2.0 checkout fynx-testing --no-env-pull
+          npx --yes neon@9.2.0 deploy --env .env.neon.deploy

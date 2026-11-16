@@ -35,8 +35,8 @@ object FynxMultiMediaPostClient {
     ): Result<String> = runCatching {
         val selected = uris.distinct().take(MAX_MEDIA)
         val caption = text.trim().take(4000)
-        if (caption.isBlank() && selected.isEmpty()) {
-            throw IllegalArgumentException("Add a caption or at least one media item.")
+        if (caption.isBlank() && selected.isEmpty() && catalogueMusic == null) {
+            throw IllegalArgumentException("Add a caption, media item or official FYNX music track.")
         }
 
         require(music == null) { "Local music uploads are disabled. Choose a track from the FYNX music catalogue." }
