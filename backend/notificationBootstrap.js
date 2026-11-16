@@ -35,13 +35,13 @@ await patchOnce("server.js", [
 await patchOnce("groupRoutes.js", [
   {
     marker: "import { inspectTrustSafetyText } from './trustSafety.js';",
-    replacement: "import { inspectTrustSafetyText } from './trustSafety.js';\\nimport { queueFynxNotification } from './notificationPush.js';",
+    replacement: "import { inspectTrustSafetyText } from './trustSafety.js';\nimport { queueFynxNotification } from './notificationPush.js';",
     already: "import { queueFynxNotification } from './notificationPush.js';",
     required: true
   },
   {
-    marker: "       const message = messageJson(row);\\n       await broadcastGroupMessage(groupId, message);\\n       res.status(201).json({message});",
-    replacement: "       const message = messageJson(row);\\n       const groupMembers=(await pool.query('SELECT gm.user_id,u.username FROM fynx_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND gm.user_id<>$2',[groupId,req.user.sub])).rows; const mentionedUsers=new Set((String(row.text||'').match(/@[A-Za-z0-9_.-]+/g)||[]).map(value=>value.slice(1).toLowerCase())); for(const member of groupMembers){const mentioned=mentionedUsers.has(String(member.username||'').replace(/^@/, '').toLowerCase());await queueFynxNotification(pool,{userId:member.user_id,type:'GROUP',title:mentioned?'You were mentioned in a group':'New group message',message:mentioned?'@'+(row.sender_username||'A member')+' mentioned you in a group.':'You have a new message in a FYNX group.',targetId:groupId,sourceUsername:row.sender_username,route:'fynx://group/'+encodeURIComponent(groupId),notificationId:'group-'+(mentioned?'mention':'message')+'-'+row.id+'-'+member.user_id});}\\n       await broadcastGroupMessage(groupId, message);\\n       res.status(201).json({message});",
+    marker: "       const message = messageJson(row);\n       await broadcastGroupMessage(groupId, message);\n       res.status(201).json({message});",
+    replacement: "       const message = messageJson(row);\n       const groupMembers=(await pool.query('SELECT gm.user_id,u.username FROM fynx_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND gm.user_id<>$2',[groupId,req.user.sub])).rows; const mentionedUsers=new Set((String(row.text||'').match(/@[A-Za-z0-9_.-]+/g)||[]).map(value=>value.slice(1).toLowerCase())); for(const member of groupMembers){const mentioned=mentionedUsers.has(String(member.username||'').replace(/^@/, '').toLowerCase());await queueFynxNotification(pool,{userId:member.user_id,type:'GROUP',title:mentioned?'You were mentioned in a group':'New group message',message:mentioned?'@'+(row.sender_username||'A member')+' mentioned you in a group.':'You have a new message in a FYNX group.',targetId:groupId,sourceUsername:row.sender_username,route:'fynx://group/'+encodeURIComponent(groupId),notificationId:'group-'+(mentioned?'mention':'message')+'-'+row.id+'-'+member.user_id});}\n       await broadcastGroupMessage(groupId, message);\n       res.status(201).json({message});",
     already: "const mentionedUsers=new Set(",
     required: true
   }
