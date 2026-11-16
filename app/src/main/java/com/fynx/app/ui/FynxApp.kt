@@ -106,6 +106,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
+    var previousAuthIdentity by remember { mutableStateOf(authSession.state to authSession.username) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
@@ -121,6 +122,41 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
+
+    // Clear transient UI state owned by the previous signed-in identity.
+    // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
+    fun clearSessionScopedState() {
+        openChat = null
+        openGroup = null
+        profileUser = null
+        statusOpenOwner = null
+        statusOpenId = null
+        statusCreatorRequested = false
+        statusComposerImmersive = false
+        postOpenId = null
+        postOpenCommentId = null
+        callTarget = null
+        callVideo = false
+        pendingIncomingCall = null
+        marketplaceListingId = null
+        marketplaceProfileUsername = null
+        marketplaceStatusDraft = null
+        marketplaceAiListingId = null
+        openChatMarketplaceListingId = null
+        aiCaptionDraft = null
+        navigationHistory = listOf("Home")
+        selected = "Home"
+        adminRole = null
+        notifications = emptyList()
+        remoteUnreadCount = -1
+        inviteCode = null
+        profileAvatarMenuOpen = false
+        openProfileSettings = false
+        notificationPreferencesOnly = false
+        backNavigationRequested = false
+        homeCameraRequest = 0
+    }
+
     var navigationDirection by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
@@ -299,6 +335,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
+        val currentIdentity = authSession.state to authSession.username
+        if (previousAuthIdentity != currentIdentity) {
+            clearSessionScopedState()
+            previousAuthIdentity = currentIdentity
+        }
         if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         while (true) {
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
@@ -321,7 +362,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
-            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
+            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); clearSessionScopedState() } }
         }
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
@@ -857,7 +898,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }) }
             "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }
-            "AI" -> FynxAiAssistantPanel(
+            "AI" -> key(marketplaceAccountKey) { FynxAiAssistantPanel(
                 onOpenDestination = { destination -> selected = destination },
                 initialMarketplaceListingId = marketplaceAiListingId,
                 currentUserDisplayName = myProfile.displayName.ifBlank {
@@ -865,7 +906,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 },
                 currentUsername = myProfile.username.ifBlank { authSession.username.orEmpty() },
                 currentUserPhotoUri = myPhoto
-            )
+            ) }
             "AI Creation" -> { selected = "AI" }
             "AI Photo Editor" -> { selected = "AI" }
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
@@ -876,27 +917,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSignOut = {
                 FynxAuthStore.clear(context)
                 authSession = AuthSession()
-                adminRole = null
-                selected = "Home"
-                openProfileSettings = false
-                notificationPreferencesOnly = false
-                openChat = null
-                openChatMarketplaceListingId = null
-                openGroup = null
-                profileUser = null
-                marketplaceListingId = null
-                marketplaceAiListingId = null
-                marketplaceProfileUsername = null
-                postOpenId = null
-                postOpenCommentId = null
-                statusOpenId = null
-                statusOpenOwner = null
-                statusCreatorRequested = false
-                callTarget = null
-                pendingIncomingCall = null
-                notifications = emptyList()
-                remoteUnreadCount = 0
-                navigationHistory = emptyList()
+                clearSessionScopedState()
             }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" }, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }, onUsernameUpdated = { nextUsername ->
                 if (nextUsername.isNotBlank() && !nextUsername.equals(authSession.username, ignoreCase = true)) {
                     FynxAuthStore.save(context, nextUsername)

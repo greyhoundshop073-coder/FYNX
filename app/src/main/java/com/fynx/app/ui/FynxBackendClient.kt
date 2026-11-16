@@ -21,6 +21,10 @@ import kotlinx.coroutines.job
 import org.json.JSONObject
 
 object FynxBackendClient {
+    // Instrumentation-only seam. Null in production; keeps transport recovery tests local.
+    @Volatile
+    internal var requestExecutorForTests: (suspend (Context, String, String, String?, String?) -> String)? = null
+
     private const val PREFS = "fynx_backend"
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
@@ -171,11 +175,17 @@ object FynxBackendClient {
         val requestToken = if (useRequestTokenOverride) requestTokenOverride else if (isPublicAuthPath(path)) null else accessToken(context)
         return withContext(Dispatchers.IO) {
             try {
-                val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }; awaitValidatedNetwork(context)
+                val root = baseUrl(context); require(root.isNotBlank()) { "FYNX backend is not configured." }; require(root.startsWith("https://")) { "FYNX backend must use HTTPS." }; require(path.startsWith("/")) { "Backend path must start with /." }
+                val testExecutor = requestExecutorForTests
+                if (testExecutor == null) awaitValidatedNetwork(context)
                 var attempt = 0; var completed: Result<String>? = null
                 while (completed == null) {
                     try {
-                        val response: String = requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body, requestToken) } else executeRequest(context, root, method, path, body, requestToken) }
+                        val response: String = if (testExecutor != null) {
+                            testExecutor(context, method, path, body, requestToken)
+                        } else {
+                            requestSemaphore.withPermit { if (FynxNetworkQuality.current(context) == FynxNetworkQuality.Level.WEAK) weakRequestSemaphore.withPermit { executeRequest(context, root, method, path, body, requestToken) } else executeRequest(context, root, method, path, body, requestToken) }
+                        }
                         completed = Result.success(response)
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
