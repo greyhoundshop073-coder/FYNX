@@ -209,6 +209,15 @@ jobs:
       - name: Run Chat end-to-end integration gate
         working-directory: .
         run: python3 scripts/verify_chat_end_to_end.py
+      - name: Test private-message history pagination and isolation
+        run: node test-private-message-history.mjs
+      - name: Test group-message search scope and cursor pagination
+        run: node test-group-message-search.mjs
+      - name: Test group content and membership authorization against PostgreSQL
+        run: node test-group-content-routes.mjs && node test-group-membership-requests.mjs
+      - name: Verify production Chat and Groups route registration
+        working-directory: ..
+        run: python3 scripts/verify_group_permissions_contract.py
       - name: Run Chat Gate 2 message-actions certification
         working-directory: .
         run: python3 scripts/verify_chat_gate2_message_actions.py
