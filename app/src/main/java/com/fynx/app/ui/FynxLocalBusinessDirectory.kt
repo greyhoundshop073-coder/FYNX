@@ -119,7 +119,11 @@ object FynxBusinessDirectoryClient {
 }
 
 @Composable
-fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) -> Unit = {}) {
+fun FynxLocalBusinessesPanel(
+    onBack: () -> Unit = {},
+    onOpenListing: (String) -> Unit = {},
+    testOnlyBusinesses: List<FynxBusinessDirectoryItem>? = null
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
@@ -143,6 +147,23 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) ->
         scope.launch {
             if (reset) { loading = true; loadingMore = false } else loadingMore = true
             error = null
+            if (testOnlyBusinesses != null) {
+                val filtered = testOnlyBusinesses.filter { business ->
+                    (query.isBlank() || business.businessName.contains(query, ignoreCase = true) || business.description.contains(query, ignoreCase = true)) &&
+                        (location.isBlank() || business.location.contains(location, ignoreCase = true)) &&
+                        (category == "All" || business.category.equals(category, ignoreCase = true))
+                }
+                val loaded = filtered.drop(requestedOffset).take(30)
+                if (generation == requestGeneration) {
+                    businesses = if (reset) loaded else businesses + loaded.filterNot { next -> businesses.any { it.id == next.id } }
+                    offset = requestedOffset + loaded.size
+                    hasMore = filtered.size > offset
+                    error = null
+                    loading = false
+                    loadingMore = false
+                }
+                return@launch
+            }
             FynxBusinessDirectoryClient.search(
                 context = context,
                 query = query,
@@ -236,9 +257,17 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) ->
                             businessDetails = null
                             loadingDetails = true
                             scope.launch {
-                                FynxBusinessDirectoryClient.details(context, business.username)
-                                    .onSuccess { businessDetails = it }
-                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                                if (testOnlyBusinesses != null) {
+                                    businessDetails = JSONObject()
+                                        .put("testOnly", true)
+                                        .put("businessName", business.businessName)
+                                        .put("description", business.description)
+                                        .put("location", business.location)
+                                } else {
+                                    FynxBusinessDirectoryClient.details(context, business.username)
+                                        .onSuccess { businessDetails = it }
+                                        .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                                }
                                 loadingDetails = false
                             }
                         },
