@@ -204,10 +204,10 @@ class FynxOfflineOutboxInstrumentationTest {
 
     @Test
     fun serverAcceptedStructuredMessageReplacesPendingBubbleAndRejectsStaleSnapshot() {
-        val recipient = "structured-replacement-${UUID.randomUUID()}"
         val types = listOf("location", "contact", "poll", "sticker", "gif")
-        try {
-            types.forEachIndexed { index, type ->
+        types.forEachIndexed { index, type ->
+            val recipient = "structured-replacement-$type-${UUID.randomUUID()}"
+            try {
                 val localId = "offline-pending-$type-${UUID.randomUUID()}"
                 val serverId = (System.currentTimeMillis() * 10L + index).toString()
                 val payload = when (type) {
@@ -251,9 +251,9 @@ class FynxOfflineOutboxInstrumentationTest {
                 assertEquals("Stale pending state must not replace accepted $type message", 1, afterStaleSnapshot.size)
                 assertEquals(serverId, afterStaleSnapshot.single().id)
                 assertEquals(type, afterStaleSnapshot.single().messageType)
+            } finally {
+                FynxChatStore.clear(context, recipient)
             }
-        } finally {
-            FynxChatStore.clear(context, recipient)
         }
     }
 
