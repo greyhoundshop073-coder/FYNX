@@ -1,3 +1,5 @@
+import { getFynxDatabasePool } from "./databasePool.js";
+import { randomUUID } from "node:crypto";
 import express from "express";
 // Profile-photo media follows profile visibility and block state.
 import http from "http";
@@ -19,9 +21,9 @@ import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
 
 const { Pool } = pg;
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: "/realtime" });
+export const app = express();
+export const server = http.createServer(app);
+const wss = process.env.FYNX_NEON_FUNCTION === "1" ? new WebSocketServer({ noServer: true }) : new WebSocketServer({ server, path: "/realtime" });
 
 // Keep the API deliberately strict: large media is uploaded separately and authenticated.
 app.disable("x-powered-by");
@@ -52,20 +54,32 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-  max: Number(process.env.DB_POOL_MAX || 20),
-  min: Number(process.env.DB_POOL_MIN || 2),
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 const emailAuth = createEmailAuthController({ pool, emailDelivery, tokenSecret: process.env.JWT_SECRET || "", bcrypt });
 const clientsByUserId = new Map();
 const activeCalls = new Map();
+
+export function dispatchRealtimeEventToLocalSockets(userId, payload) {
+  if (userId == null) {
+    for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
+    return;
+  }
+  for (const socket of clientsByUserId.get(String(userId)) || []) sendSocket(socket, payload);
+}
+
+export function getRealtimeLocalConnectionCount() {
+  let count = 0;
+  for (const sockets of clientsByUserId.values()) {
+    for (const socket of sockets) if (socket.readyState === 1) count += 1;
+  }
+  return count;
+}
+
+export function getRealtimeLocalUserIds() {
+  return [...clientsByUserId.entries()]
+    .filter(([, sockets]) => [...sockets].some((socket) => socket.readyState === 1))
+    .map(([userId]) => userId);
+}
 
 // Lightweight per-process abuse protection. Production deployments should also enforce
 // rate limits at the edge/load-balancer so limits remain effective across instances.
@@ -129,7 +143,6 @@ async function initDatabase() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_last_sent_at TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
     CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique ON users (LOWER(email)) WHERE email IS NOT NULL;
-    UPDATE users SET verified = FALSE;
 
     CREATE TABLE IF NOT EXISTS messages (
       id BIGSERIAL PRIMARY KEY,
@@ -252,7 +265,14 @@ async function findUserByUsername(username) {
   return result.rows[0] || null;
 }
 function sendSocket(socket, payload) { if (socket.readyState === 1) socket.send(JSON.stringify(payload)); }
-function broadcastToUser(userId, payload) { for (const socket of clientsByUserId.get(String(userId)) || []) sendSocket(socket, payload); }
+function broadcastToUser(userId, payload) {
+  dispatchRealtimeEventToLocalSockets(String(userId), payload);
+  if (process.env.FYNX_NEON_FUNCTION === "1" && typeof globalThis.__fynxNeonRealtimePublish === "function") {
+    Promise.resolve(globalThis.__fynxNeonRealtimePublish(String(userId), payload)).catch((error) => {
+      console.error("[fynx-realtime] cross-isolate event persistence failed", error?.message || error);
+    });
+  }
+}
 async function broadcastMessage(message) {
   const payload = { type: "message", message };
   broadcastToUser(message.senderId, payload);
@@ -271,7 +291,12 @@ app.locals.fynxBroadcastMessage = broadcastMessage;
 app.locals.fynxBroadcastGroupMessage = broadcastGroupMessage;
 function broadcastPresence(userId, online) {
   const payload = { type: "presence", userId: String(userId), online };
-  for (const sockets of clientsByUserId.values()) for (const socket of sockets) sendSocket(socket, payload);
+  dispatchRealtimeEventToLocalSockets(null, payload);
+  if (process.env.FYNX_NEON_FUNCTION === "1" && typeof globalThis.__fynxNeonRealtimePublish === "function") {
+    Promise.resolve(globalThis.__fynxNeonRealtimePublish(null, payload)).catch((error) => {
+      console.error("[fynx-realtime] presence persistence failed", error?.message || error);
+    });
+  }
 }
 async function markPendingDelivered(userId) {
   if (!pool) return;
@@ -583,6 +608,18 @@ app.get("/api/media/:id", auth, async (req, res) => {
             AND sp.ends_at > NOW()
         )`
       : "";
+    const announcementMediaTable = await pool.query(
+      "SELECT to_regclass('public.fynx_announcements') AS relation, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='scheduled_at') AS has_schedule, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='fynx_announcements' AND column_name='media_id') AS has_media_id"
+    );
+    const announcementMediaAuthorization = announcementMediaTable.rows[0]?.relation && announcementMediaTable.rows[0]?.has_schedule && announcementMediaTable.rows[0]?.has_media_id
+      ? `OR EXISTS (
+          SELECT 1
+          FROM fynx_announcements a
+          WHERE a.media_id = mm.id
+            AND a.published = TRUE
+            AND (a.scheduled_at IS NULL OR a.scheduled_at <= NOW())
+        )`
+      : "";
     let result = await pool.query(`
       SELECT mm.mime_type, mm.storage_provider, mm.object_key
       FROM message_media mm
@@ -618,6 +655,7 @@ app.get("/api/media/:id", auth, async (req, res) => {
               )
           )
           ${seasonalMediaAuthorization}
+          ${announcementMediaAuthorization}
           OR EXISTS (
             SELECT 1
             FROM users u
@@ -973,7 +1011,8 @@ app.delete("/api/messages/:id", auth, async (req, res) => {
   } catch (error) { console.error("message delete", error); return res.status(500).json({ error: "message delete failed" }); }
 });
 
-wss.on("connection", async (socket, req) => {
+if (wss) {
+  wss.on("connection", async (socket, req) => {
   try {
     const url = new URL(req.url || "/realtime", `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token") || "";
@@ -985,15 +1024,28 @@ wss.on("connection", async (socket, req) => {
       return socket.close(1008, "session expired");
     }
     const userId = String(user.sub);
+    if (process.env.FYNX_NEON_FUNCTION === "1") {
+      const registerConnection = globalThis.__fynxNeonRegisterConnection;
+      if (typeof registerConnection !== "function") return socket.close(1011, "realtime service unavailable");
+      const connectionId = randomUUID();
+      await registerConnection(userId, connectionId);
+      socket.__fynxConnectionId = connectionId;
+    }
     if (!clientsByUserId.has(userId)) clientsByUserId.set(userId, new Set());
     clientsByUserId.get(userId).add(socket);
     broadcastPresence(userId, true);
     markPendingDelivered(userId).catch((error) => console.error("deliver pending", error));
-    socket.on("message", (raw) => {
+    socket.on("message", async (raw) => {
       try {
         const body = JSON.parse(raw.toString());
         const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
         if (body?.type !== "call") return;
+        if (process.env.FYNX_NEON_FUNCTION === "1") {
+          const handleCall = globalThis.__fynxNeonHandleCall;
+          if (typeof handleCall !== "function") return sendSocket(socket, { type: "call", signalType: "error", error: "call service unavailable" });
+          await handleCall(userId, user, socket, body);
+          return;
+        }
         if (["invite", "accept", "reject", "end"].includes(signalType)) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
@@ -1029,16 +1081,32 @@ wss.on("connection", async (socket, req) => {
     });
     socket.on("close", () => {
       const sockets = clientsByUserId.get(userId);
-      if (!sockets) return;
-      sockets.delete(socket);
-      if (!sockets.size) {
-        clientsByUserId.delete(userId);
+      if (sockets) {
+        sockets.delete(socket);
+        if (!sockets.size) clientsByUserId.delete(userId);
+      }
+      if (process.env.FYNX_NEON_FUNCTION === "1") {
+        const disconnect = globalThis.__fynxNeonDisconnect;
+        if (socket.__fynxConnectionId && typeof disconnect === "function") {
+          Promise.resolve(disconnect(userId, socket.__fynxConnectionId)).catch((error) => {
+            console.error("[fynx-realtime] connection cleanup failed", error?.message || error);
+          });
+        }
+      } else if (!sockets || !sockets.size) {
         broadcastPresence(userId, false);
         for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
       }
     });
   } catch { socket.close(1008, "invalid token"); }
-});
+  });
+}
+
+export async function dispatchRealtimeConnection(socket, req) {
+  if (!wss) throw new Error("FYNX realtime server is unavailable.");
+  const handlers = wss.listeners("connection");
+  if (!handlers.length) throw new Error("FYNX realtime connection handler is not registered.");
+  await Promise.all(handlers.map((handler) => handler(socket, req)));
+}
 
 emailAuth.registerRoutes(app, auth);
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
@@ -1060,4 +1128,6 @@ const shutdown = async (signal) => {
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.once("SIGINT", () => shutdown("SIGINT"));
 
-server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
+if (process.env.FYNX_NEON_FUNCTION !== "1") {
+  server.listen(PORT, "0.0.0.0", () => console.log(`FYNX backend listening on ${PORT}`));
+}

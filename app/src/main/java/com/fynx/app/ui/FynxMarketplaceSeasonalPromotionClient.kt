@@ -123,6 +123,44 @@ object FynxMarketplaceSeasonalPromotionClient {
         }
     }
 
+    suspend fun update(
+        context: Context,
+        id: String,
+        promotionType: String,
+        occasionKey: String,
+        headline: String,
+        body: String,
+        actionLabel: String,
+        destinationType: String,
+        destinationValue: String,
+        artworkMediaId: String,
+        startsAt: String,
+        endsAt: String,
+        active: Boolean
+    ): Result<FynxMarketplaceSeasonalPromotion> {
+        val payload = JSONObject()
+            .put("promotionType", promotionType.trim().uppercase())
+            .put("occasionKey", occasionKey.trim())
+            .put("headline", headline.trim())
+            .put("body", body.trim())
+            .put("actionLabel", actionLabel.trim())
+            .put("destinationType", destinationType.trim().uppercase())
+            .put("destinationValue", destinationValue.trim().ifBlank { JSONObject.NULL })
+            .put("artworkMediaId", artworkMediaId.trim().ifBlank { JSONObject.NULL })
+            .put("startsAt", startsAt.trim())
+            .put("endsAt", endsAt.trim())
+            .put("active", active)
+        return FynxBackendClient.patchJson(
+            context,
+            "/api/admin/marketplace/seasonal-promotions/${Uri.encode(id)}/edit",
+            payload.toString()
+        ).mapCatching { raw ->
+            val row = JSONObject(raw).optJSONObject("promotion")
+                ?: throw IllegalStateException("Seasonal campaign update response was incomplete.")
+            parsePromotion(row)
+        }
+    }
+
     suspend fun setActive(context: Context, id: String, active: Boolean): Result<Unit> =
         FynxBackendClient.patchJson(
             context,

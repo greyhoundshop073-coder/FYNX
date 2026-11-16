@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -291,6 +292,11 @@ fun FynxBuyerWalletPanel() {
     }
 
     if (activeAction != "HOME") {
+        val goBackInWallet = {
+            activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
+            refreshVersion += 1
+        }
+        BackHandler(onBack = goBackInWallet)
         FynxWalletActionPanel(
             screen = activeAction,
             testMode = wallet?.testMode == true,
@@ -301,10 +307,7 @@ fun FynxBuyerWalletPanel() {
             canFundByBankTransfer = wallet?.canFundByBankTransfer == true,
             canFundByCard = wallet?.canFundByCard == true,
             canFundByUssd = wallet?.canFundByUssd == true,
-            onBack = {
-                activeAction = if (activeAction == "TRANSFER" || activeAction == "CARD" || activeAction == "USSD") "ADD" else "HOME"
-                refreshVersion += 1
-            },
+            onBack = goBackInWallet,
             onNavigate = { activeAction = it },
             onFundingVerified = { refreshVersion += 1 }
         )

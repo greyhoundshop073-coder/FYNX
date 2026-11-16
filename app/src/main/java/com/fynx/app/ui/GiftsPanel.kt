@@ -49,40 +49,37 @@ fun GiftsPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val authUsername = FynxAuthStore.storedUsername(context)?.let { if (it.startsWith("@")) it else "@$it" }
-    val actualProfiles = remember(context) {
-        FynxFriendsStore(context).load().filterNot { it.username.equals(authUsername, ignoreCase = true) }
-    }
-    var remoteRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(null) }
-    var recipientLoading by remember(recipientName) { mutableStateOf(false) }
-    LaunchedEffect(recipientName) {
-        val query = recipientName?.trim().orEmpty()
-        if (query.isBlank()) return@LaunchedEffect
-        val localMatch = actualProfiles.firstOrNull {
-            it.displayName.equals(query, ignoreCase = true) || it.username.equals(query, ignoreCase = true)
-        }
-        if (localMatch == null) {
-            recipientLoading = true
-            remoteRecipient = withContext(Dispatchers.IO) {
-                FynxSocialClient.searchUsers(context, query).getOrNull()?.firstOrNull {
-                    it.displayName.equals(query, ignoreCase = true) || it.username.removePrefix("@").equals(query.removePrefix("@"), ignoreCase = true)
-                }?.let { user ->
-                    FriendProfile(
-                        displayName = user.displayName.ifBlank { user.username.removePrefix("@") },
-                        username = user.username.let { if (it.startsWith("@")) it else "@$it" },
-                        hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank()
-                    )
-                }
+    var actualProfiles by remember { mutableStateOf(emptyList<FriendProfile>()) }
+    var friendsLoading by remember { mutableStateOf(true) }
+    var giftSending by remember { mutableStateOf(false) }
+    var friendsError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(context, authUsername) {
+        friendsLoading = true
+        friendsError = null
+        actualProfiles = emptyList()
+        FynxSocialClient.friends(context).onSuccess { users ->
+            actualProfiles = users.filterNot { it.username.equals(authUsername, ignoreCase = true) }.map { user ->
+                FriendProfile(
+                    displayName = user.displayName.ifBlank { user.username.removePrefix("@") },
+                    username = user.username.let { if (it.startsWith("@")) it else "@$it" },
+                    hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(),
+                    profilePhotoMediaId = user.profilePhotoMediaId,
+                    status = FynxFriendStatus.FRIENDS
+                )
             }
-            recipientLoading = false
-        }
+        }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }
+        friendsLoading = false
     }
-    val initialRecipient = remember(recipientName, actualProfiles, remoteRecipient) {
+    val initialRecipient = remember(recipientName, actualProfiles) {
         actualProfiles.firstOrNull {
             it.displayName.equals(recipientName, ignoreCase = true) || it.username.equals(recipientName, ignoreCase = true)
-        } ?: remoteRecipient
+        }
     }
     var selectedRecipient by remember(recipientName) { mutableStateOf<FriendProfile?>(initialRecipient) }
     LaunchedEffect(initialRecipient) { if (selectedRecipient == null) selectedRecipient = initialRecipient }
+    LaunchedEffect(actualProfiles, selectedRecipient) {
+        if (selectedRecipient != null && actualProfiles.none { it.username.equals(selectedRecipient?.username, true) }) selectedRecipient = null
+    }
     var selectedGift by remember { mutableStateOf<FynxGift?>(null) }
     var confirmationOpen by remember { mutableStateOf(false) }
     var preparedTransfer by remember { mutableStateOf<FynxGiftTransfer?>(null) }
@@ -90,10 +87,7 @@ fun GiftsPanel(
     var historyVersion by remember { mutableIntStateOf(0) }
     var historyTab by remember { mutableStateOf("Sent") }
     val historyStore = remember(context) { FynxGiftHistoryStore(context, ::findFynxGift) }
-    val recipients = buildList {
-        addAll(actualProfiles)
-        remoteRecipient?.let { remote -> if (none { it.username.equals(remote.username, true) }) add(remote) }
-    }
+    val recipients = actualProfiles
 
     Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -104,7 +98,7 @@ fun GiftsPanel(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text("Send a gift", style = MaterialTheme.typography.titleLarge)
-                Text(selectedRecipient?.let { "To ${it.displayName}" } ?: if (recipientLoading) "Finding recipient…" else "Choose a recipient", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(selectedRecipient?.let { "To ${it.displayName}" } ?: if (friendsLoading) "Loading your friends…" else "Choose a recipient", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -115,9 +109,13 @@ fun GiftsPanel(
         }
 
         Text("Recipient", style = MaterialTheme.typography.titleMedium)
-        if (recipients.isEmpty()) {
-            Text("No real FYNX user could be found for this chat yet. Keep the chat connected and try again.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
+        if (friendsLoading) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp); Text("Loading your accepted FYNX friends…", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        friendsError?.let { message -> Text(message, color = MaterialTheme.colorScheme.error); OutlinedButton(onClick = { scope.launch { friendsLoading = true; actualProfiles = emptyList(); FynxSocialClient.friends(context).onSuccess { users -> actualProfiles = users.filterNot { it.username.equals(authUsername, true) }.map { user -> FriendProfile(user.displayName.ifBlank { user.username.removePrefix("@") }, user.username.let { if (it.startsWith("@")) it else "@$it" }, hasProfilePhoto = !user.profilePhotoMediaId.isNullOrBlank(), profilePhotoMediaId = user.profilePhotoMediaId, status = FynxFriendStatus.FRIENDS) }; friendsError = null }.onFailure { friendsError = it.message ?: "Your FYNX friends could not be loaded." }; friendsLoading = false } }) { Text("Retry") } }
+        if (!friendsLoading && recipients.isEmpty()) {
+            Text("No accepted FYNX friends are available as gift recipients yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (recipients.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 recipients.forEach { person ->
                     Card(
@@ -126,7 +124,7 @@ fun GiftsPanel(
                         colors = CardDefaults.cardColors(containerColor = if (selectedRecipient?.username == person.username) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            FynxAvatar(person.displayName.ifBlank { person.username }, Modifier.size(38.dp), ownerUsername = person.username)
+                            FynxRemoteProfileAvatar(person.profilePhotoMediaId, person.displayName.ifBlank { person.username }, Modifier.size(38.dp), ownerUsername = person.username)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleSmall); Text(person.username, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
                             if (selectedRecipient?.username == person.username) Text("✓", color = MaterialTheme.colorScheme.primary)
@@ -160,7 +158,7 @@ fun GiftsPanel(
                     Text("${gift.emoji} ${gift.name}", style = MaterialTheme.typography.titleMedium)
                     Text("Value: ${gift.value} FYNX • ${gift.rarity}", color = MaterialTheme.colorScheme.primary)
                     Text(selectedRecipient?.let { "Recipient: ${it.displayName} (${it.username})" } ?: "Select a recipient before continuing", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(enabled = selectedRecipient != null && authUsername != null && preparedTransfer == null, onClick = { confirmationOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Review gift") }
+                    Button(enabled = selectedRecipient != null && recipients.any { it.username.equals(selectedRecipient?.username, true) } && authUsername != null && preparedTransfer == null, onClick = { confirmationOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("Review gift") }
                 }
             }
         }
@@ -200,7 +198,7 @@ fun GiftsPanel(
         Text("Virtual gifts currently use FYNX chat delivery. Wallet debits and real-money gifting remain disabled until a secure payment provider is connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
-    if (confirmationOpen && selectedGift != null && selectedRecipient != null && authUsername != null) {
+    if (confirmationOpen && selectedGift != null && selectedRecipient != null && recipients.any { it.username.equals(selectedRecipient?.username, true) } && authUsername != null) {
         val gift = selectedGift!!
         val recipient = selectedRecipient!!
         AlertDialog(
@@ -215,7 +213,7 @@ fun GiftsPanel(
                 }
             },
             confirmButton = {
-                Button(enabled = !recipientLoading, onClick = {
+                Button(enabled = !friendsLoading && !giftSending, onClick = {
                     val transactionId = UUID.randomUUID().toString()
                     val (status, transfer) = FynxGiftFlow.prepare(
                         wallet = FynxWalletFoundation.empty("FYNX"),
@@ -229,6 +227,27 @@ fun GiftsPanel(
                     if (status == FynxGiftFlowStatus.READY && transfer != null) {
                         scope.launch {
                             deliveryMessage = null
+                            friendsLoading = true
+                            val currentFriends = FynxSocialClient.friends(context)
+                            val recipientStillFriend = currentFriends.getOrNull()?.any {
+                                it.username.removePrefix("@").equals(recipient.username.removePrefix("@"), true)
+                            } == true
+                            if (currentFriends.isFailure || !recipientStillFriend) {
+                                if (currentFriends.isFailure) {
+                                    friendsError = currentFriends.exceptionOrNull()?.message ?: "Friendship could not be verified."
+                                    deliveryMessage = "Could not verify this recipient's friendship. Please retry."
+                                } else {
+                                    actualProfiles = actualProfiles.filterNot { it.username.equals(recipient.username, true) }
+                                    selectedRecipient = null
+                                    deliveryMessage = "This person is no longer on your accepted friends list."
+                                }
+                                friendsLoading = false
+                                confirmationOpen = false
+                                return@launch
+                            }
+                            friendsError = null
+                            friendsLoading = false
+                            giftSending = true
                             val result = withContext(Dispatchers.IO) {
                                 FynxProductionMessaging.sendText(
                                     context,
@@ -245,10 +264,11 @@ fun GiftsPanel(
                             }.onFailure { error ->
                                 deliveryMessage = error.message?.takeIf { it.isNotBlank() }?.let { "Gift could not be sent: $it" } ?: "Gift could not be sent. Please try again."
                             }
+                            giftSending = false
                             confirmationOpen = false
                         }
                     }
-                }) { Text("Send gift") }
+                }) { Text(if (giftSending) "Sending…" else "Send gift") }
             },
             dismissButton = { TextButton(onClick = { confirmationOpen = false }) { Text("Cancel") } }
         )

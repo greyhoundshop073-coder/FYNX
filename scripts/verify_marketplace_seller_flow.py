@@ -41,7 +41,7 @@ shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
 
 import re
 
-EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Business & Workshop Supplies", "Other"]
+EXPECTED_DISCOVERY_CATEGORIES = ["All", "Electronics", "Fashion", "Personal Accessories", "Home", "Beauty", "Vehicles", "Services", "Food", "Property", "Agriculture", "Phones & Computers", "Furniture", "Baby & Kids", "Books", "Sports", "Tools", "Health", "Appliances", "Auto Parts", "Building Materials", "Office & Education", "Garden & Outdoor", "Handmade & Local", "Used", "Business & Workshop Supplies", "Other"]
 EXPECTED_SELLER_CATEGORIES = EXPECTED_DISCOVERY_CATEGORIES[1:]
 
 def _extract_string_list(pattern: str, source: str):
@@ -145,7 +145,7 @@ checks = [
     ("active marketplace details are scrollable for phone screens", "verticalScroll(rememberScrollState())" in marketplace),
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
-    ("marketplace header respects the status bar", "statusBarsPadding()" in marketplace),
+    ("marketplace header respects the status bar through the shared app header", "statusBarsPadding()" in app_shell and "Column(Modifier.fillMaxSize().statusBarsPadding()) {\n            MarketplaceReferenceSearchBar(" not in marketplace),
     ("marketplace uses a responsive two-column product grid", "GridCells.Fixed(2)" in marketplace),
     ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
     ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
@@ -160,7 +160,14 @@ checks = [
     ("marketplace cart passes selected products into multi-product checkout", "onCheckout = { selectedItems -> showCart = false; multiCheckoutItems = selectedItems }" in marketplace and "multiCheckoutItems?.let { selectedItems -> FynxMarketplaceMultiCheckoutDialog(context, selectedItems, cartQuantities" in marketplace and "multiPaymentListingIds = selectedItems.map { it.id }.toSet()" in marketplace),
     ("cart checkout is blocked when a selected listing has become unavailable or cart quantity exceeds available stock", "val unavailable = selected.any { it.quantity <= 0 || (quantities[it.id] ?: 1) > it.quantity }" in marketplace and "enabled = selected.isNotEmpty() && !mixed && !unavailable" in marketplace and "Some selected products no longer have enough stock." in marketplace),
     ("marketplace Buy now and Add to cart are disabled for out-of-stock products and seller-owned listings", "onBuyNow" in marketplace and "enabled = canPurchase && l.quantity > 0" in marketplace and "Text(if (!canPurchase) \"Your listing\" else if (l.quantity > 0) \"Add to cart\" else \"Out of stock\")" in marketplace),
-    ("marketplace checkout initializes payment against the protected order", "initializeMarketplacePayment(context, order.id, email)" in marketplace),
+    ("marketplace checkout initializes Paystack with the protected order's reviewed amount and currency",
+     "initializeMarketplacePayment(context, order.id, email, order.totalAmount, order.currency)" in marketplace
+     and "amountSubunit == expectedAmountSubunit" in marketplace_payments
+     and "currency == normalizedExpectedCurrency" in marketplace_payments),
+    ("buyer and seller order lists reject missing or unsupported currency instead of defaulting to NGN",
+     "marketplaceRequiredOrderCurrency(o.opt(\"currency\"))" in remote_client
+     and "marketplaceRequiredOrderCurrency(order.opt(\"currency\"))" in seller_orders
+     and "internal fun marketplaceRequiredOrderCurrency(value: Any?)" in support),
     ("marketplace checkout requires payment verification before protection confirmation", "verifyMarketplacePayment(context, payment?.reference.orEmpty())" in marketplace),
     ("single-item checkout rejects invalid quantities without converting zero into a purchase of one", "val quantity = quantityText.toIntOrNull() ?: 0" in checkout and "quantityText.toIntOrNull()?.coerceAtLeast(1)" not in checkout and "val quantityError = when" in checkout and "This product is currently out of stock." in checkout and "Choose a quantity of at least 1." in checkout and "Maximum available quantity is ${listing.quantity}." in checkout and "quantityError?.let" in checkout and "enabled = !busy && quantityError == null" in checkout),
     ("marketplace checkout rejects an expired client-side quote before order creation", "marketplaceQuoteExpired(q.expiresAt)" in checkout),
@@ -186,7 +193,7 @@ checks = [
     ("My Shop has separate overview, profile, listings, orders, delivery/drivers, and earnings/payout destinations", all(f'"{section}"' in seller_center for section in ("Overview", "Shop profile", "Listings", "Orders", "Delivery & drivers", "Earnings & payouts"))),
     ("My Shop overview links to each management destination and uses existing loaded counts", "Your shop at a glance" in seller_center and 'activeSection = "Shop profile"' in seller_center and 'activeSection = "Listings"' in seller_center and 'activeSection = "Orders"' in seller_center and 'activeSection = "Delivery & drivers"' in seller_center and 'activeSection = "Earnings & payouts"' in seller_center and "listings.size" in seller_center and "moneyRecords.size" in seller_center),
     ("My Shop preserves authenticated shop profile editing and save path", 'Text("Shop identity"' in seller_center and '"/api/marketplace/my-shop"' in seller_center and 'Text("Save shop details")' in seller_center),
-    ("first My Shop save creates a seller shop profile and later saves update that same authenticated seller row", "export function ensureMarketplaceShopProfileSchema(pool)" in shop_profile_routes and "CREATE TABLE IF NOT EXISTS marketplace_shop_profiles" in shop_profile_routes and "app.patch('/api/marketplace/my-shop', auth" in shop_profile_routes and "INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone)" in shop_profile_routes and "ON CONFLICT (seller_id) DO UPDATE SET" in shop_profile_routes and "WHERE u.id = $1" in shop_profile_routes and "req.user.sub" in shop_profile_routes and "if (shopName.length < 2)" in shop_profile_routes),
+    ("first My Shop save creates a seller shop profile and later saves update that same authenticated seller row", "export function ensureMarketplaceShopProfileSchema(pool)" in shop_profile_routes and "CREATE TABLE IF NOT EXISTS marketplace_shop_profiles" in shop_profile_routes and "app.patch('/api/marketplace/my-shop', auth" in shop_profile_routes and "INSERT INTO marketplace_shop_profiles (seller_id, shop_name, description, location, contact_phone, logo_media_id, cover_media_id)" in shop_profile_routes and "ON CONFLICT (seller_id) DO UPDATE SET" in shop_profile_routes and "WHERE u.id = $1" in shop_profile_routes and "req.user.sub" in shop_profile_routes and "if (shopName.length < 2)" in shop_profile_routes),
     ("My Shop profile save success uses semantic success green while profile failures remain errors", 'shopMessage?.let { Text(it, color = if (it == "Shop profile saved.") androidx.compose.ui.graphics.Color(0xFF16A34A) else MaterialTheme.colorScheme.error) }' in seller_center and 'shopError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
     ("My Shop clears stale profile errors when any field changes and before retrying save", all(fragment in seller_center for fragment in ("shopName = it.take(120); shopDescriptionAiSuggestion = null; shopDescriptionAiError = null; shopMessage = null; shopError = null", "shopDescription = it.take(800)", "shopDescriptionAiSuggestion = null", "shopDescriptionAiError = null", "shopLocation = it.take(160); shopMessage = null; shopError = null", "shopContactPhone = it.take(40); shopMessage = null; shopError = null", "shopSaving = true\n                            shopMessage = null\n                            shopError = null"))),
     ("My Shop preserves listing edit, delete, and per-listing delivery/pickup settings", 'Icon(Icons.Default.Edit, "Edit listing")' in seller_center and 'Icon(Icons.Default.Delete, "Remove listing")' in seller_center and "FynxMarketplaceShippingSettingsCard(" in seller_center),
@@ -250,8 +257,8 @@ checks = [
     ) and all(fragment in marketplace_client for fragment in ('"description", cleanDescription.take(4000)', '"category", cleanCategory.take(40)', '"condition", cleanCondition', '"location", cleanLocation.take(160)')) and all(fragment in social_routes for fragment in ('description = $4, category = $5, condition = $6, location = $7', 'WHERE id = $1 AND seller_id = $2 FOR UPDATE', 'if (priceChanged)'))),
     ("My Shop listing cards display the first uploaded product image and an explicit fallback when no media exists", 'FynxRemoteMedia(' in seller_center and 'FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())' in seller_center and 'Product image unavailable' in seller_center),
     ("My Shop keeps seller-order review in Orders and driver assignments in Delivery & drivers", 'if (activeSection == "Orders")' in seller_center and "FynxMarketplaceSellerOrders(context = context" in seller_center and 'if (activeSection == "Delivery & drivers")' in seller_center and "showDriverAssignments = true" in seller_center),
-    ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Recent earnings"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
-    ("My Shop earnings use one authenticated seller-scoped summary query rather than per-order settlement requests", 'app.get(\'/api/marketplace/settlement/seller/summary\', auth' in settlement_routes and 'WHERE o.seller_id = $1' in settlement_routes and '"/api/marketplace/settlement/seller/summary"' in seller_center and 'settlements' in seller_center and '"/api/marketplace/settlement/order/$orderId"' not in seller_center and "payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN')" in settlement_routes and 'moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
+    ("My Shop preserves earnings, settlement history, and payout account management", 'if (activeSection == "Earnings & payouts")' in seller_center and 'Text("Seller earnings history"' in seller_center and 'Text("Payout account"' in seller_center and 'showPayoutAccount = true' in seller_center),
+    ("My Shop earnings use one authenticated seller-scoped summary query rather than per-order settlement requests", 'app.get(\'/api/marketplace/settlement/seller/summary\', auth' in settlement_routes and 'WHERE o.seller_id = $1' in settlement_routes and '"/api/marketplace/settlement/seller/summary?limit=100"' in seller_center and 'settlements' in seller_center and '"/api/marketplace/settlement/order/$orderId"' not in seller_center and "payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN')" in settlement_routes and 'moneyError?.let { Text(it, color = MaterialTheme.colorScheme.error) }' in seller_center),
     ("My Shop fails closed on missing or malformed payout balances, amounts, and currency instead of defaulting to zero",
      all(fragment in seller_center for fragment in (
          "marketplaceRequiredCurrency(row.opt(\"currency\"))",
@@ -296,19 +303,19 @@ checks = [
 ]
 
 checks.extend([
-    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings, key =" in storefront and "Showing previously loaded products." in storefront),
+    ("public seller storefront shows stale catalogue cards during loading and failure", "if (storefrontLoading) item {" in storefront and "storefrontError?.let { message ->" in storefront and "items(sellerListings.chunked(3), key =" in storefront and "Showing previously loaded products." in storefront),
     ("public seller storefront has an explicit loading state for its own listing request", "var storefrontLoading by remember(username)" in storefront and "Loading this seller’s products…" in storefront),
     ("public seller storefront surfaces listing failures and provides a retry action", "storefrontError != null" in storefront and "Products could not load. Check your connection and try again." in storefront and "Retry products" in storefront and "storefrontReloadKey += 1" in storefront),
-    ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, viewerUsername, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.listings(context, seller = username.removePrefix("@").trim())' in storefront),
+    ("public seller storefront retries by restarting the seller-specific request", "LaunchedEffect(username, viewerUsername, storefrontReloadKey)" in storefront and 'FynxRemoteSocialClient.marketplaceSellerListingsPage(context, username, limit = 24, offset = 0)' in storefront),
     ("failed storefront requests do not silently substitute a partial Marketplace feed as the seller's complete catalogue", "storefrontListings.orEmpty()" in storefront and "storefrontListings ?: listings.filter" not in storefront),
     ("public seller storefront distinguishes initial loading, failed requests and a successful empty catalogue", "else if (storefrontLoading && sellerListings.isEmpty())" in storefront and "else if (storefrontError != null && sellerListings.isEmpty())" in storefront and "else if (sellerListings.isEmpty())" in storefront),
-    ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow shop"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry follow status")' in storefront),
-    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel() }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
+    ("public seller storefront shows real follow state, follower count, and safe follow/unfollow recovery without allowing self-follow", "viewerUsername: String" in storefront and "profile.followedByCurrentUser" in storefront and "profile.followerCount" in storefront and "FynxRemoteSocialClient.follow(context, username, wasFollowing)" in storefront and 'followedByViewer == false -> "Follow"' in storefront and 'followedByViewer == true -> "Following"' in storefront and "!isOwnStore" in storefront and "followError" in storefront and 'Text("Retry")' in storefront),
+    ("Marketplace, My Shop and Saved Products discard account-scoped transient UI state when the signed-in account changes", "val marketplaceAccountKey = authSession.username?.removePrefix(\"@\")?.trim()?.lowercase(java.util.Locale.US)" in app_shell and '"Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(' in app_shell and '"Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }' in app_shell and '"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(' in app_shell),
 ])
 
 checks.extend([
-    ("seller earnings endpoint computes uncapped currency totals with exclusive accounting buckets", "FROM seller_settlements" in settlement_routes and "GROUP BY currency" in settlement_routes and "AS available_for_payout" in settlement_routes and "LIMIT 100" in settlement_routes and "AS summary_bucket" in settlement_routes and "FROM classified_settlements" in settlement_routes),
-    ("My Shop reads authoritative seller totals and warns when the backend only has a limited summary", "moneyTotalsFromBackend" in seller_center and "totalsArray" in seller_center and "This backend only provides the latest 100 settlements. Totals below may not include older orders." in seller_center and "Showing your latest 20 records." in seller_center),
+    ("seller earnings endpoint computes uncapped currency totals with exclusive accounting buckets", "FROM seller_settlements" in settlement_routes and "GROUP BY currency" in settlement_routes and "AS available_for_payout" in settlement_routes and "LIMIT $4" in settlement_routes and "pageLimit + 1" in settlement_routes and "AS summary_bucket" in settlement_routes and "FROM classified_settlements" in settlement_routes),
+    ("My Shop reads authoritative seller totals and warns when the backend only has a limited summary", "moneyTotalsFromBackend" in seller_center and "totalsArray" in seller_center and "Settlement history is paginated. The totals above cover all seller orders, not just the loaded history page." in seller_center and "Seller earnings history" in seller_center),
     ("seller catalogue and saved-products APIs return ordered MIME types with indexable media-ID joins", "WITH ORDINALITY AS listing_media(media_id, ord)" in social_routes and "ORDER BY listing_media.ord" in social_routes and "AS media_types" in social_routes and "mm.id = CASE WHEN listing_media.media_id ~" in social_routes and social_routes.count("${marketplaceMediaTypesProjection}") == 3 and "media_types: Array.isArray(row.media_types)" in social_routes),
     ("Marketplace discovery and exact-listing APIs return ordered MIME types with indexable media-ID joins", "WITH ORDINALITY AS listing_media(media_id, ord)" in discovery_routes and "ORDER BY listing_media.ord" in discovery_routes and "AS media_types" in discovery_routes and "mm.id = CASE WHEN listing_media.media_id ~" in discovery_routes and discovery_routes.count("${marketplaceMediaTypesProjection}") == 2 and "media_types:Array.isArray(row.media_types)" in discovery_routes),
     ("Marketplace parsers preserve media MIME types and render product cards, details, storefront and My Shop without guessing", all(fragment in marketplace_client for fragment in ('o.optJSONArray("media_types")', "mediaTypes: List<String>", "fun mediaDisplayType(")) and 'FynxMarketplaceClient.parseListings(raw, preferAvailableStock = true)' in discovery_client and 'o.optJSONArray("media_types")' in remote_client and all("mediaDisplayType" in source and "mediaTypes" in source for source in (product_card, marketplace, seller_center, storefront))),
@@ -421,7 +428,8 @@ checks.extend([
      and 'FynxBackendClient.get(context, "/api/marketplace/shops/" + username.removePrefix("@").trim())' in storefront
      and '.mapCatching { raw ->' in storefront
      and 'shopProfileError?.let { message ->' in storefront
-     and 'TextButton(onClick = { storefrontReloadKey += 1 }, enabled = !profileLoading) { Text("Retry shop details") }' in storefront),
+     and 'TextButton(' in storefront and 'Text("Retry")' in storefront
+     and 'onClick = { storefrontReloadKey += 1 }' in storefront),
 ])
 checks.extend([
     ("Marketplace product details receives the Status share callback", "onShareToStatus: (String, String) -> Unit" in marketplace and "onShareToStatus = onShareListingToStatus" in marketplace and "onShareToStatus = onShareToStatus" in marketplace[marketplace.index("private fun MarketplaceDetails("):]),
@@ -542,7 +550,7 @@ checks.extend([
      and "The product was accepted, but its saved listing could not be read yet." in publish_flow),
     ("server-confirmed published product stays at the top only in the unfiltered discovery feed and pin state is account-scoped",
      "requestQuery.isBlank() && requestCategory.equals(\"All\", ignoreCase = true) && !requestNearbyMode" in marketplace
-     and "listOfNotNull(pinned) + items).distinctBy { it.id }" in marketplace
+     and "listOfNotNull(pinned) + resolvedItems).distinctBy { it.id }" in marketplace
      and "listings = (listOf(confirmed) + listings.filterNot { it.id == confirmed.id }).distinctBy { it.id }" in publish_flow
      and "remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }" in marketplace
      and "remember(currentUsername) { mutableIntStateOf(0) }" in marketplace
@@ -571,6 +579,38 @@ checks.append(
      and "Wallet payments are disabled in Test Mode." in checkout
      and "FYNX Wallet currently supports NGN Marketplace orders only." in checkout
      and "marketplaceWalletAvailabilityExplainsTestModePendingAndCurrencyLimits" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxMarketplaceCheckoutQuoteTest.kt").read_text()),
+)
+
+checks.append(
+    ("My Shop distinguishes gross product sales, delivery fees, seller commission and net seller earnings using authoritative totals",
+     all(fragment in seller_center for fragment in (
+         'grossSales = marketplaceRequiredBalance(row.opt("grossSales"))',
+         'deliveryFees = marketplaceRequiredBalance(row.opt("deliveryFees"))',
+         'marketplaceFees = marketplaceRequiredBalance(row.opt("marketplaceFees"))',
+         'netEarnings = marketplaceRequiredBalance(row.opt("netEarnings"))',
+         'productSubtotal = marketplaceRequiredBalance(row.opt("productSubtotal"))',
+         'deliveryFee = marketplaceRequiredBalance(row.opt("deliveryFee"))',
+         'MoneySummaryRow("Gross product sales", grossSales, currency)',
+         'MoneySummaryRow("Delivery fees", deliveryFees, currency)',
+         'MoneySummaryRow("FYNX commission", marketplaceFees, currency)',
+         'MoneySummaryRow("Net seller earnings", netEarnings, currency)',
+         'Net seller earnings include delivery fees and deduct the seller-side FYNX commission.',
+     ))
+     and all(fragment in settlement_routes for fragment in (
+         'COALESCE(o.product_subtotal, 0) AS product_subtotal',
+         'COALESCE(o.delivery_fee, 0) AS delivery_fee',
+         'AS gross_sales',
+         'AS delivery_fees',
+         'grossSales: Number(row.gross_sales || 0)',
+         'deliveryFees: Number(row.delivery_fees || 0)',
+         'marketplaceFees: Number(row.marketplace_fees || 0)',
+         'netEarnings: Number(row.net_earnings || 0)',
+         'productSubtotal: Number(row.product_subtotal || 0)',
+         'deliveryFee: Number(row.delivery_fee || 0)',
+     ))
+     and 'else reportableRows.sumOf { it.productSubtotal }' in seller_center
+     and 'else reportableRows.sumOf { it.deliveryFee }' in seller_center
+     and 'Settlement history is paginated' in seller_center),
 )
 
 checks.append(

@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const routes = await readFile(new URL("./businessRoutes.js", import.meta.url), "utf8");
+const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
+
+assert.match(routes, /app\.get\(["\']\/api\/business\/directory["\'],\s*async/);
+assert.match(routes, /business_profiles/);
+assert.match(routes, /business_name ILIKE/);
+assert.match(routes, /business_username ILIKE/);
+assert.match(routes, /category ILIKE/);
+assert.match(routes, /location ILIKE/);
+assert.ok(routes.includes("business_name ILIKE $${index}"));
+assert.ok(routes.includes("category ILIKE $${params.length}"));
+assert.ok(routes.includes("location ILIKE $${params.length}"));
+assert.ok(routes.includes("LIMIT $${limitIndex} OFFSET $${offsetIndex}"));
+assert.match(routes, /opening_hours JSONB NOT NULL DEFAULT/);
+assert.match(routes, /service_areas JSONB NOT NULL DEFAULT/);
+assert.match(routes, /services JSONB NOT NULL DEFAULT/);
+assert.ok(routes.includes('app.get("/api/business/public/:username"'));
+assert.ok(routes.includes("business_username=$1 AND active=TRUE"));
+assert.ok(routes.includes("WHERE business_id=$1 AND COALESCE(active,TRUE)=TRUE AND quantity>0"));
+assert.ok(routes.includes("LIMIT 20"));
+assert.ok(routes.includes("opening_hours=EXCLUDED.opening_hours"));
+assert.ok(routes.includes("service_areas=EXCLUDED.service_areas"));
+assert.ok(routes.includes("services=EXCLUDED.services"));
+assert.ok(routes.includes("JSON.stringify(openingHours)"));
+assert.ok(routes.includes("JSON.stringify(serviceAreas)"));
+assert.ok(routes.includes("JSON.stringify(services)"));
+assert.doesNotMatch(routes, /SELECT\s+\*\s+FROM\s+business_profiles/i);
+assert.match(bootstrap, /registerBusinessRoutes\(\{ app, auth \}\)/);
+console.log("BUSINESS DIRECTORY + PUBLIC PROFILE API CONTRACT: GREEN");

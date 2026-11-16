@@ -111,6 +111,7 @@ fun HomePanel(
                             onOpenAi = onOpenAi,
                             onOpenCamera = onOpenCamera,
                             onOpenFastCamera = onOpenFastCamera,
+                            onCreatePost = onCreatePost,
                             onCreateStatus = openStatusCreator,
                             onOpenStatusOwner = onOpenStatusOwner
                         ) }

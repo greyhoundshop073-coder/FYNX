@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from "pg";
 import { Buffer } from "node:buffer";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
@@ -10,12 +11,12 @@ import { assertFynxAiToolAllowed, FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiP
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false, max: 4, min: 0, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 10_000, query_timeout: 12_000, keepAlive: true }) : null;
+const pool = getFynxDatabasePool();
 
 const TOOL_DEFINITIONS = [
   { type: "function", name: "prepare_send_message", description: "Prepare a real one-to-one FYNX chat message for the authenticated user. This NEVER sends the message. Use only after the user asks you to message a person. Resolve the recipient with search_users first; if the recipient is ambiguous, ask the user to choose. Return a pending confirmation action containing the exact recipient and exact message. Sending requires separate explicit user confirmation outside the AI tool.", strict: true, parameters: { type: "object", properties: { recipientUsername: { type: "string", description: "Exact FYNX username of the recipient, without @." }, message: { type: "string", description: "The exact message the user wants sent." } }, required: ["recipientUsername","message"], additionalProperties: false } },
   { type: "function", name: "search_users", description: "Search discoverable public FYNX profiles by username or display name. Return only public profile identifiers; never reveal contact details or private account information.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "At least 2 characters of a FYNX username or display name." } }, required: ["query"], additionalProperties: false } },
-  { type: "function", name: "get_people_recommendations", description: "Recommend discoverable FYNX public profiles. Backend filters blocked users and existing connections without revealing private friend or follower relationships, counts or lists. Supports paginated batches for horizontal Home discovery. Never invent people.", strict: true, parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 }, offset: { type: "integer", minimum: 0 } }, required: [], additionalProperties: false } },
+  { type: "function", name: "get_people_recommendations", description: "Recommend discoverable FYNX public profiles using public profile data only. Exclude blocked accounts, but never read or reveal private friend or follower relationships, counts or lists. Supports paginated batches for discovery. Never invent people.", strict: true, parameters: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 30 }, offset: { type: "integer", minimum: 0 } }, required: [], additionalProperties: false } },
   { type: "function", name: "search_marketplace", description: "Search real active FYNX marketplace listings available to the authenticated user. Use for product discovery only; never claim a purchase or payment happened.", strict: true, parameters: { type: "object", properties: { query: { type: "string", description: "Optional product, seller, or description search text." }, category: { type: "string", description: "Optional marketplace category." } }, required: [], additionalProperties: false } },
   { type: "function", name: "get_trending_posts", description: "Read public trending FYNX posts visible to the authenticated user. Blocked users and recent NOT_INTERESTED posts must be excluded. Use when the user asks what is trending or wants public content to discover.", strict: true, parameters: { type: "object", properties: {}, additionalProperties: false } },
 ];
@@ -101,14 +102,20 @@ export async function executeFynxAiTool({ name, argumentsJson, userId, databaseP
       ORDER BY u.verified DESC,u.created_at DESC
       LIMIT $2 OFFSET $3
     `, [userId, limit, offset]);
-    return { people: result.rows.map(row => ({ id:String(row.id), username:row.username, displayName:row.display_name || "", verified:Boolean(row.verified) })) };
+    return { people: result.rows.map(row => ({
+      id:String(row.id),
+      username:row.username,
+      displayName:row.display_name || "",
+      verified:Boolean(row.verified),
+      reason:row.verified ? "Verified account" : "Suggested for you"
+    })) };
   }
 
   if (name === "search_marketplace") {
     const query = String(args.query || "").trim().slice(0, 80);
     const category = String(args.category || "").trim().slice(0, 40);
     const params = [userId];
-    const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,''))='NGN'"];
+    const where = ["l.active=TRUE", "GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0))>0", "l.seller_id<>$1", "UPPER(COALESCE(l.currency,'')) IN ('NGN','USD')"];
     if (query) { params.push(`%${query}%`); where.push(`(l.title ILIKE $${params.length} OR l.description ILIKE $${params.length} OR u.username ILIKE $${params.length} OR u.display_name ILIKE $${params.length})`); }
     if (category && category.toLowerCase() !== "all") { params.push(category); where.push(`l.category=$${params.length}`); }
     const result = await databasePool.query(`SELECT l.id,l.title,l.description,l.price,l.currency,l.category,l.condition,GREATEST(0,l.quantity-COALESCE(l.reserved_quantity,0)) AS available_quantity,l.location,u.username AS seller_username,u.display_name AS seller_display_name FROM marketplace_listings l JOIN users u ON u.id=l.seller_id WHERE ${where.join(" AND ")}\n      AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=l.seller_id) OR (b.blocker_id=l.seller_id AND b.blocked_id=$1))\n      ORDER BY l.created_at DESC LIMIT 20`, params);

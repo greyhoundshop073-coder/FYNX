@@ -4,7 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Device-local relationship state. Server synchronization will replace this store in the backend stage. */
+/** Legacy device-local cache. It is not authoritative and must not be used for live friend relationships. */
+@Deprecated("Use FynxSocialClient for server-authoritative friend relationships.")
 class FynxFriendsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("fynx_friends", Context.MODE_PRIVATE)
     private val key = "profiles_${normalize(FynxAuthStore.storedUsername(context) ?: "@preview")}" 
@@ -19,6 +20,7 @@ class FynxFriendsStore(context: Context) {
                 username = o.optString("username"),
                 bio = o.optString("bio"),
                 hasProfilePhoto = o.optBoolean("hasProfilePhoto"),
+                profilePhotoMediaId = o.optString("profilePhotoMediaId").takeIf { it.isNotBlank() && it != "null" },
                 status = runCatching { FynxFriendStatus.valueOf(o.optString("status")) }.getOrDefault(FynxFriendStatus.NONE)
             )
         }.filter { it.username.isNotBlank() }
@@ -32,6 +34,7 @@ class FynxFriendsStore(context: Context) {
                 put("username", normalize(person.username))
                 put("bio", person.bio)
                 put("hasProfilePhoto", person.hasProfilePhoto)
+                put("profilePhotoMediaId", person.profilePhotoMediaId)
                 put("status", person.status.name)
             })
         }

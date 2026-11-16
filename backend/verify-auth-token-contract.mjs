@@ -23,7 +23,7 @@ assert.match(backend, /if \(requiresAuthentication\) accessToken\(context\)\?\.l
   "protected API requests must attach the stored bearer token");
 assert.match(backend, /if \(requiresAuthentication && !accessToken\(context\)\.isNullOrBlank\(\)\) FynxAuthStore\.clear\(context\)/,
   "an unauthorized request clears only a server token that was actually present");
-assert.match(backend, /isPublicAuthPath\(path\): Boolean = path ===? "\/health" \|\| path ===? "\/ready"/,
+assert.match(backend, /private fun isPublicAuthPath\(path: String\): Boolean =\s*path == "\/health" \|\|\s*path == "\/ready"/,
   "health and readiness probes must remain public so they measure backend reachability, not login state");
 assert.ok(authUi.indexOf("FynxAuthStore.saveAccount(context, account.displayName") < authUi.indexOf("FynxBackendClient.saveAccessToken(context, account.token)"),
   "account identity must be saved before its token so account-switch cleanup cannot erase the new token");

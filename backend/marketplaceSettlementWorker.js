@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
 import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketplacePayoutEligibility.js';
@@ -6,16 +7,7 @@ const { Pool } = pg;
 
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 4,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 function providerHeaders() {
   return {
@@ -446,8 +438,10 @@ async function recoverBlockedPayoutAfterRefundResolution(operationId, { logger =
   }
 }
 
-export function registerMarketplaceSettlementWorker({ jobs, logger = console }) {
-  if (!jobs?.enabled || typeof jobs.enqueue !== 'function') return;
+let settlementReconciliationTimer = null;
+
+export function registerMarketplaceSettlementWorker({ jobs, logger = console, startTimer = true } = {}) {
+  if (!jobs?.enabled || typeof jobs.enqueue !== 'function' || (startTimer && settlementReconciliationTimer)) return null;
   globalThis.__fynxJobHandlers = globalThis.__fynxJobHandlers || {};
   globalThis.__fynxJobHandlers['marketplace.payout.release'] = async (payload) => {
     await initiatePayout(payload);
@@ -530,12 +524,16 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console }) 
       logger.error('[fynx-marketplace] payout reconciliation failed', error?.message || error);
     }
   };
-  const timer = setInterval(() => { void scan(); }, 15_000);
-  timer.unref();
-  void scan();
+  if (startTimer) {
+    settlementReconciliationTimer = setInterval(() => { void scan(); }, 15_000);
+    settlementReconciliationTimer.unref();
+    void scan();
+  }
   logger.log('[fynx-marketplace] settlement worker handlers registered');
+  return scan;
 }
 
 export async function closeMarketplaceSettlementWorker() {
-  if (pool) await pool.end();
+  if (settlementReconciliationTimer) clearInterval(settlementReconciliationTimer);
+  settlementReconciliationTimer = null;
 }

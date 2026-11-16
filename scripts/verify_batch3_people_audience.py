@@ -22,6 +22,7 @@ checks = [
     ("Home feed enforces selected and only-me visibility", "p.visibility='SELECTED_PEOPLE'" in social and "p.visibility='ONLY_ME'" in social),
     ("post media enforces the same audience", "social_post_audience a WHERE a.post_id=p.id AND a.user_id=$2" in social),
     ("saved/repost visibility reuses the audience rule", "p.visibility='SELECTED_PEOPLE'" in discovery and "p.visibility='ONLY_ME'" in discovery),
+    ("selected-audience access is revoked when the accepted friendship ends", "af.status='accepted'" in social and "qaf.status='accepted'" in social and "af.status = 'accepted'" in multi and "af.status='accepted'" in discovery),
 ]
 
 failed = [name for name, ok in checks if not ok]

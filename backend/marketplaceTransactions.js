@@ -354,7 +354,7 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
         if(listingSafety.shouldBlock){await client.query('ROLLBACK');return res.status(422).json({error:'listing blocked by marketplace safety protection',code:'SAFETY_BLOCK'});}
       }
       const currency=typeof listing.currency==='string'?listing.currency.trim().toUpperCase():'';
-      if(currency!=='NGN'){await client.query('ROLLBACK');return res.status(409).json({error:'this Marketplace currency is not active yet',code:'UNSUPPORTED_MARKETPLACE_CURRENCY'});}
+      if(!['NGN','USD'].includes(currency)){await client.query('ROLLBACK');return res.status(409).json({error:'this Marketplace currency is not active yet',code:'UNSUPPORTED_MARKETPLACE_CURRENCY'});}
       const available=Number(listing.quantity)-Number(listing.reserved_quantity||0); if(quantity>available){await client.query('ROLLBACK');return res.status(409).json({error:'requested quantity is not available'});}
       if(clientOrderId){const existing=(await client.query('SELECT * FROM marketplace_orders WHERE id=$1 AND buyer_id=$2',[clientOrderId,req.user.sub])).rows[0];if(existing){await client.query('ROLLBACK');return res.status(200).json({order:publicOrder(existing),idempotent:true});}}
       const orderId=clientOrderId||crypto.randomUUID(), unitPrice=Number(listing.price), deliveryFee=listing.delivery_fee==null?0:Number(listing.delivery_fee), productSubtotal=Math.round(unitPrice*quantity*100)/100;
@@ -373,6 +373,27 @@ export function registerMarketplaceTransactionRoutes({ app, pool, auth }) {
       await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'ORDER_CREATED',NULL,'PAYMENT_PENDING',$3::jsonb)`,[orderId,req.user.sub,JSON.stringify({quantity,protected:true,safetyChecked:Boolean(safety.marketplace_safety),accounting:{productSubtotal,deliveryFee,marketplaceFee:totalFee,marketplaceFeeBuyer,marketplaceFeeSeller,buyerTotal,sellerNetAmount,feePolicy:config.mode,feePolicyVersion:config.version,providerFeePayer:config.providerFeePayer}})]);
       await client.query('COMMIT'); return res.status(201).json({order:publicOrder(inserted.rows[0]),protection:{enabled:true,payment:'provider_required',payout:'not_released'}});
     }catch(error){try{await client.query('ROLLBACK');}catch{} if(error?.code==='23505')return res.status(409).json({error:'order already exists'});console.error('marketplace order create',error);return res.status(500).json({error:'protected order creation failed'});}finally{client.release();}
+  });
+
+  app.get('/api/marketplace/my-purchased-listings', auth, async (req, res) => {
+    try {
+      await ensureMarketplaceTransactionSchema();
+      const result = await pool.query(`
+        SELECT listing_id::TEXT AS listing_id, COUNT(*)::INTEGER AS order_count,
+               COALESCE(SUM(quantity), 0)::INTEGER AS units_purchased
+        FROM marketplace_orders
+        WHERE buyer_id = $1
+          AND status IN ('PAID', 'SHIPPED', 'DELIVERED', 'INSPECTION', 'COMPLETED', 'DISPUTED')
+        GROUP BY listing_id
+      `, [req.user.sub]);
+      return res.json({ purchases: result.rows.map((row) => ({
+        listingId: String(row.listing_id), orderCount: Number(row.order_count || 0),
+        unitsPurchased: Number(row.units_purchased || 0)
+      })) });
+    } catch (error) {
+      console.error("marketplace buyer purchase history", error);
+      return res.status(500).json({ error: "purchase history could not be loaded" });
+    }
   });
 
   app.get('/api/marketplace/orders',auth,async(req,res)=>{try{await ensureMarketplaceTransactionSchema();const result=await pool.query(`SELECT * FROM (SELECT o.* FROM marketplace_orders o WHERE o.buyer_id = $1 ORDER BY o.created_at DESC LIMIT 100) buyer_orders UNION ALL SELECT * FROM (SELECT o.* FROM marketplace_orders o WHERE o.seller_id = $1 ORDER BY o.created_at DESC LIMIT 100) seller_orders ORDER BY created_at DESC LIMIT 100`,[req.user.sub]);return res.json({orders:result.rows.map(publicOrder)});}catch(error){console.error('marketplace orders',error);return res.status(500).json({error:'order lookup failed'});}});

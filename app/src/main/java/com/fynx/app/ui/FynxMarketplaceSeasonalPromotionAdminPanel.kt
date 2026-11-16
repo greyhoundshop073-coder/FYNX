@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.time.OffsetDateTime
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -54,7 +56,7 @@ private fun marketplaceSeasonalDateFormat(pattern: String) =
     }
 
 private fun parseMarketplaceSeasonalDateTime(value: String): Date? =
-    runCatching { marketplaceSeasonalDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").parse(value.trim()) }
+    runCatching { Date.from(OffsetDateTime.parse(value.trim()).toInstant()) }
         .getOrNull()
 
 private fun formatMarketplaceSeasonalDateTime(value: String): String =
@@ -114,6 +116,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var body by remember { mutableStateOf("") }
     var actionLabel by remember { mutableStateOf("Explore Marketplace") }
     var destinationType by remember { mutableStateOf("MARKETPLACE") }
+    var destinationLinkEnabled by remember { mutableStateOf(true) }
     var destinationValue by remember { mutableStateOf("") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
@@ -133,6 +136,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
+    var editingCampaignId by remember { mutableStateOf<String?>(null) }
+    var editingCampaignActive by remember { mutableStateOf(true) }
 
     fun refresh() {
         scope.launch {
@@ -206,88 +211,39 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             singleLine = true,
             enabled = !saving
         )
-        Text("Button destination", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Choose where the banner opens. Product IDs are checked against active, in-stock listings before the campaign is saved.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP").forEach { type ->
-                val label = when (type) {
-                    "CATEGORY" -> "Category"
-                    "PRODUCT" -> "Product"
-                    "SHOP" -> "Shop"
-                    else -> "Marketplace"
-                }
-                if (destinationType == type) {
-                    Button(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
-                        Text(label, maxLines = 1)
-                    }
-                } else {
-                    OutlinedButton(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
-                        Text(label, maxLines = 1)
-                    }
-                }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Show destination button", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(if (destinationLinkEnabled) "Customers can tap the banner button to open your selected destination." else "The banner remains visible without a destination button or navigation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Switch(checked = destinationLinkEnabled, onCheckedChange = { enabled ->
+                destinationLinkEnabled = enabled
+                if (enabled && destinationType == "NONE") destinationType = "MARKETPLACE"
+                if (!enabled) { destinationType = "NONE"; destinationValue = "" }
+                message = null
+                error = null
+            }, enabled = !saving)
         }
-        when (destinationType) {
-            "CATEGORY" -> {
-                Text("Marketplace category", style = MaterialTheme.typography.labelLarge)
-                OutlinedButton(
-                    onClick = { categoryMenuExpanded = true },
-                    enabled = !saving,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(destinationValue.ifBlank { "Choose a category" }, modifier = Modifier.weight(1f))
-                    Text("⌄")
+        if (destinationLinkEnabled) {
+            Text("Button destination", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Choose where the banner button opens. Product IDs are checked against active, in-stock listings before saving.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP").forEach { type ->
+                    val label = when (type) { "CATEGORY" -> "Category"; "PRODUCT" -> "Product"; "SHOP" -> "Shop"; else -> "Marketplace" }
+                    if (destinationType == type) Button(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) { Text(label, maxLines = 1) }
+                    else OutlinedButton(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) { Text(label, maxLines = 1) }
                 }
-                DropdownMenu(
-                    expanded = categoryMenuExpanded,
-                    onDismissRequest = { categoryMenuExpanded = false },
-                    modifier = Modifier.height(320.dp)
-                ) {
-                    MARKETPLACE_CAMPAIGN_CATEGORIES.forEach { category ->
-                        DropdownMenuItem(
-                            text = { Text(category) },
-                            onClick = {
-                                destinationValue = category
-                                categoryMenuExpanded = false
-                                message = null
-                                error = null
-                            }
-                        )
-                    }
-                }
-                Text(
-                    "Choose from the same categories buyers can browse in Marketplace.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            "PRODUCT", "SHOP" -> OutlinedTextField(
-                value = destinationValue,
-                onValueChange = {
-                    destinationValue = if (destinationType == "PRODUCT") {
-                        it.filter(Char::isDigit).take(20)
-                    } else {
-                        it.trim().removePrefix("@").lowercase().filter { char -> char.isLetterOrDigit() || char == '_' }.take(32)
+            when (destinationType) {
+                "CATEGORY" -> {
+                    Text("Marketplace category", style = MaterialTheme.typography.labelLarge)
+                    OutlinedButton(onClick = { categoryMenuExpanded = true }, enabled = !saving, modifier = Modifier.fillMaxWidth()) { Text(destinationValue.ifBlank { "Choose a category" }, modifier = Modifier.weight(1f)); Text("⌄") }
+                    DropdownMenu(expanded = categoryMenuExpanded, onDismissRequest = { categoryMenuExpanded = false }, modifier = Modifier.height(320.dp)) {
+                        MARKETPLACE_CAMPAIGN_CATEGORIES.forEach { category -> DropdownMenuItem(text = { Text(category) }, onClick = { destinationValue = category; categoryMenuExpanded = false; message = null; error = null }) }
                     }
-                    message = null
-                    error = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (destinationType == "PRODUCT") "Product listing ID" else "Seller username") },
-                supportingText = {
-                    Text(if (destinationType == "PRODUCT") {
-                        "Paste the numeric listing ID from an active, in-stock product."
-                    } else {
-                        "Enter the seller's FYNX username, without @."
-                    })
-                },
-                singleLine = true,
-                enabled = !saving
-            )
+                }
+                "PRODUCT", "SHOP" -> OutlinedTextField(value = destinationValue, onValueChange = { input -> destinationValue = if (destinationType == "PRODUCT") input.filter(Char::isDigit).take(20) else input.trim().removePrefix("@").lowercase().take(32); message = null; error = null }, modifier = Modifier.fillMaxWidth(), label = { Text(if (destinationType == "PRODUCT") "Product listing ID" else "Seller username") }, supportingText = { Text(if (destinationType == "PRODUCT") "Use an active, in-stock Marketplace listing ID." else "Enter the seller FYNX username, without @.") }, singleLine = true, enabled = !saving)
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
@@ -381,19 +337,28 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         savedArtworkId = mediaId
                         artworkMediaId = mediaId
                     }
-                    FynxMarketplaceSeasonalPromotionClient.create(
+                    val saved = editingCampaignId?.let { campaignId ->
+                        FynxMarketplaceSeasonalPromotionClient.update(
+                            context, campaignId, promotionType, occasionKey, headline, body, actionLabel,
+                            if (destinationLinkEnabled) destinationType else "NONE", if (destinationLinkEnabled) destinationValue else "", savedArtworkId, startsAt, endsAt, editingCampaignActive
+                        )
+                    } ?: FynxMarketplaceSeasonalPromotionClient.create(
                         context, promotionType, occasionKey, headline, body, actionLabel,
-                        destinationType, destinationValue, savedArtworkId, startsAt, endsAt
-                    ).onSuccess {
-                        message = "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window."
+                        if (destinationLinkEnabled) destinationType else "NONE", if (destinationLinkEnabled) destinationValue else "", savedArtworkId, startsAt, endsAt
+                    )
+                    saved.onSuccess {
+                        message = if (editingCampaignId == null) "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window." else "Campaign changes saved."
                         occasionKey = ""
                         headline = ""
                         body = ""
                         actionLabel = "Explore Marketplace"
                         destinationType = "MARKETPLACE"
+                        destinationLinkEnabled = true
                         destinationValue = ""
                         artworkUri = null
                         artworkMediaId = ""
+                        editingCampaignId = null
+                        editingCampaignActive = true
                         startsAt = ""
                         endsAt = ""
                         refresh()
@@ -404,11 +369,34 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             },
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
-                isValidMarketplaceCampaignDestination(destinationType, destinationValue) &&
+                (!destinationLinkEnabled || isValidMarketplaceCampaignDestination(destinationType, destinationValue)) &&
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (saving) CircularProgressIndicator() else Text("Schedule campaign")
+            if (saving) CircularProgressIndicator() else Text(if (editingCampaignId == null) "Schedule campaign" else "Save campaign changes")
+        }
+        if (editingCampaignId != null) {
+            TextButton(
+                onClick = {
+                    editingCampaignId = null
+                    editingCampaignActive = true
+                    promotionType = "SEASONAL"
+                    occasionKey = ""
+                    headline = ""
+                    body = ""
+                    actionLabel = "Explore Marketplace"
+                    destinationType = "MARKETPLACE"
+                    destinationLinkEnabled = true
+                    destinationValue = ""
+                    artworkUri = null
+                    artworkMediaId = ""
+                    startsAt = ""
+                    endsAt = ""
+                    message = "Campaign editing cancelled."
+                    error = null
+                },
+                enabled = !saving
+            ) { Text("Cancel editing") }
         }
         message?.let { Text(it, color = FynxDesign.ClassicGreen, style = MaterialTheme.typography.bodySmall) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -463,7 +451,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         }
                         Text("${campaign.promotionType}  •  ${campaign.occasionKey}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         Text(
-                            "Destination: ${campaign.destinationType}" +
+                            "Destination: ${if (campaign.destinationType == "NONE") "No link" else campaign.destinationType}" +
                                 campaign.destinationValue.takeIf { it.isNotBlank() }?.let { "  •  $it" }.orEmpty(),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall
@@ -471,6 +459,27 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = {
+                                    editingCampaignId = campaign.id
+                                    editingCampaignActive = campaign.active
+                                    promotionType = campaign.promotionType
+                                    occasionKey = campaign.occasionKey
+                                    headline = campaign.headline
+                                    body = campaign.body
+                                    actionLabel = campaign.actionLabel
+                                    destinationType = campaign.destinationType
+                                    destinationLinkEnabled = campaign.destinationType != "NONE"
+                                    destinationValue = campaign.destinationValue
+                                    artworkUri = null
+                                    artworkMediaId = campaign.artworkMediaId
+                                    startsAt = campaign.startsAt
+                                    endsAt = campaign.endsAt
+                                    message = "Editing campaign. Update the fields above and save your changes."
+                                    error = null
+                                },
+                                enabled = !saving && !loading
+                            ) { Text("Edit") }
                             OutlinedButton(
                                 onClick = {
                                     scope.launch {
