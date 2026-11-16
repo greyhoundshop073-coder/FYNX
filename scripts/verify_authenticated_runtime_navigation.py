@@ -4941,6 +4941,9 @@ else:
 # Chat, Friends and Stories remain covered by their own workstream gates.
 expected_authenticated_surfaces = [
     "authenticated-home.png",
+    "authenticated-chat.png",
+    "authenticated-friends.png",
+    "authenticated-stories.png",
     "authenticated-features.png",
     "authenticated-money.png",
     "authenticated-wallet.png",
@@ -4963,6 +4966,23 @@ expected_authenticated_surfaces = [
 captured_authenticated_surfaces = [
     name for name in expected_authenticated_surfaces if (ROOT / name).is_file()
 ]
+
+expected_authenticated_hierarchies = [
+    "authenticated-home.xml",
+    "authenticated-chat.xml",
+    "authenticated-friends.xml",
+    "authenticated-stories.xml",
+    "authenticated-features.xml",
+    "authenticated-ai.xml",
+]
+missing_authenticated_hierarchies = [
+    name for name in expected_authenticated_hierarchies if not (ROOT / name).is_file()
+]
+if missing_authenticated_hierarchies:
+    FAILURES.append(
+        "runtime report was missing real accessibility hierarchy files: "
+        + ", ".join(missing_authenticated_hierarchies)
+    )
 missing_authenticated_surfaces = [
     name for name in expected_authenticated_surfaces if not (ROOT / name).is_file()
 ]
