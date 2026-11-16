@@ -773,10 +773,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
         }
     }
-    var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
-    var hasMoreListings by remember { mutableStateOf(false) }
+    var listings by remember(testOnlyListings) { mutableStateOf(testOnlyListings?.take(24).orEmpty()) }
+    var hasMoreListings by remember(testOnlyListings) { mutableStateOf((testOnlyListings?.size ?: 0) > 24) }
     var loadingMoreListings by remember { mutableStateOf(false) }
-    var nextListingsOffset by remember { mutableIntStateOf(0) }
+    var nextListingsOffset by remember(testOnlyListings) { mutableIntStateOf(testOnlyListings?.take(24)?.size ?: 0) }
     // Invalidates in-flight search/filter and pagination responses when the active listing query changes.
     var listingRequestGeneration by remember { mutableIntStateOf(0) }
     val productsGridState = rememberLazyGridState()
@@ -798,9 +798,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
     var showAllProducts by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("All") }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember(testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var discoveryFallbackWarning by remember { mutableStateOf<String?>(null) }
+    var discoveryFallbackWarning by remember(testOnlyListings) { mutableStateOf(testOnlyListings?.let { "FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed." }) }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sellerStoreUsername by remember(currentUsername) { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
