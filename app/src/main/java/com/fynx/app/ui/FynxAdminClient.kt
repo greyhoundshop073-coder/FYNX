@@ -18,6 +18,7 @@ object FynxAdminClient {
     )
     data class Dashboard(val role: String, val users: Int, val openReports: Int, val openAppeals: Int, val safetyActions24h: Int)
     data class Admin(val id: String, val username: String, val displayName: String, val grantedAt: String)
+    data class AdminUser(val id: String, val username: String, val displayName: String, val accountStatus: String)
     data class MusicTrack(
         val id: String,
         val mediaId: String,
@@ -417,6 +418,24 @@ object FynxAdminClient {
         "/api/admin/announcements/${encode(announcementId)}",
         JSONObject().put("published", published).put("scheduledAt", scheduledAt ?: JSONObject.NULL).toString()
     ).map { Unit }
+
+    suspend fun searchUsers(context: Context, query: String): Result<List<AdminUser>> =
+        FynxBackendClient.get(context, "/api/admin/users/search?q=${encode(query.trim())}").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("users") ?: org.json.JSONArray()
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    add(
+                        AdminUser(
+                            id = item.optString("id"),
+                            username = item.optString("username"),
+                            displayName = item.optString("displayName"),
+                            accountStatus = item.optString("accountStatus", "ACTIVE")
+                        )
+                    )
+                }
+            }
+        }
 
     suspend fun setAccountStatus(context: Context, userId: String, status: String): Result<Unit> =
         FynxBackendClient.patchJson(context, "/api/admin/accounts/${encode(userId)}/status", JSONObject().put("status", status).toString()).map { Unit }
