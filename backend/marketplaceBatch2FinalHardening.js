@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
@@ -13,7 +14,7 @@ export function marketplaceRecoveryRetryDelayMs(failureCount) {
   if (retries === 0) return RECOVERY_INTERVAL_MS;
   return Math.min(MAX_RECOVERY_BACKOFF_MS, RECOVERY_INTERVAL_MS * (2 ** Math.min(retries, 4)));
 }
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 2, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000, keepAlive: true }) : null;
+const pool = getFynxDatabasePool();
 let fetchInstalled = false;
 
 function timeoutError(url) {
@@ -353,6 +354,27 @@ async function auditCompletedRecovery({ logger = console } = {}) {
     const client = await pool.connect();
     try { await client.query('BEGIN'); await insertRecoveryEvent(client, row, action, { providerReference: row.provider_reference || null, amount: Number(row.amount), currency: String(row.currency || '').toUpperCase(), escrowAmount: Number(row.escrow_amount), escrowCurrency: String(row.escrow_currency || '').toUpperCase(), source: 'batch2-final-recovery-audit' }); await client.query('COMMIT'); } catch (error) { await client.query('ROLLBACK').catch(() => {}); logger.error('[fynx-marketplace] recovery audit failed', error?.message || error); } finally { client.release(); }
   }
+}
+
+export async function runMarketplaceBatch2RecoveryOnce({ logger = console } = {}) {
+  installPaystackTimeoutGuard();
+  if (!pool) return { enabled: false };
+  const tasks = [
+    ["payment_without_local_reference", () => recoverPaymentWithoutLocalReference({ logger })],
+    ["pending_refunds", () => reconcilePendingRefunds({ logger })],
+    ["refund_recovery", () => reconcileRefundRecovery({ logger })],
+    ["payout_reversals", () => reconcilePostSuccessPayoutReversals({ logger })],
+    ["recovery_audit", () => auditCompletedRecovery({ logger })]
+  ];
+  const failures = [];
+  for (const [name, run] of tasks) {
+    try { await run(); }
+    catch (error) {
+      failures.push(name);
+      logger.error("[fynx-marketplace] scheduled recovery task failed", name, error?.message || error);
+    }
+  }
+  return { enabled: true, failures };
 }
 
 export function registerMarketplaceBatch2FinalHardening({ logger = console } = {}) {

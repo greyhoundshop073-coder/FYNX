@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 
@@ -6,16 +7,7 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYMENT_RESERVATION_TTL_MINUTES = 30;
 const PAYMENT_INITIALIZATION_RECOVERY_MINUTES = 2;
-const pool = DATABASE_URL ? new Pool({
-  connectionString: DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 2,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15_000,
-  query_timeout: 20_000,
-  keepAlive: true
-}) : null;
+const pool = getFynxDatabasePool();
 
 function amountSubunit(amount, currency) {
   const normalized = String(currency || '').trim().toUpperCase();
@@ -95,7 +87,7 @@ async function confirmLatePayment(client, order, providerFee = 0) {
   return true;
 }
 
-async function recoverInterruptedPaymentInitializations({ logger = console } = {}) {
+export async function recoverInterruptedPaymentInitializations({ logger = console } = {}) {
   if (!pool || !PAYSTACK_SECRET_KEY) return 0;
   const candidates = await pool.query(`
     SELECT id,buyer_id,total_amount,currency,payment_reference,payment_authorization_url,payment_access_code,updated_at
@@ -143,7 +135,7 @@ async function recoverInterruptedPaymentInitializations({ logger = console } = {
   return recovered;
 }
 
-async function reconcileTerminalFinancialOperations({ logger = console } = {}) {
+export async function reconcileTerminalFinancialOperations({ logger = console } = {}) {
   if (!pool || !PAYSTACK_SECRET_KEY) return 0;
   let repaired = 0;
   const payoutRows = await pool.query(`
@@ -244,7 +236,7 @@ async function verifyProviderCheckoutGroupPayment(group) {
  * Reconcile an expired multi-product checkout as one unit. Never release stock
  * while Paystack is unavailable or still processing a referenced payment.
  */
-async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) {
+export async function expireUnpaidMarketplaceCheckoutGroups({ logger = console } = {}) {
   if (!pool) return 0;
   let expired = 0;
   try {
@@ -410,13 +402,17 @@ export async function expireUnpaidMarketplaceReservations({ logger = console } =
   return expiredCount;
 }
 
+let marketplacePaymentExpiryTimers = [];
+
 export function registerMarketplacePaymentExpiryWorker({ logger = console } = {}) {
+  if (marketplacePaymentExpiryTimers.length) return;
   const timer = setInterval(() => { void expireUnpaidMarketplaceReservations({ logger }); }, 60_000);
   timer.unref();
   const recoveryTimer = setInterval(() => { void recoverInterruptedPaymentInitializations({ logger }); }, 20_000);
   recoveryTimer.unref();
   const terminalTimer = setInterval(() => { void reconcileTerminalFinancialOperations({ logger }); }, 30_000);
   terminalTimer.unref();
+  marketplacePaymentExpiryTimers = [timer, recoveryTimer, terminalTimer];
   void expireUnpaidMarketplaceReservations({ logger });
   void recoverInterruptedPaymentInitializations({ logger });
   void reconcileTerminalFinancialOperations({ logger });
@@ -424,7 +420,8 @@ export function registerMarketplacePaymentExpiryWorker({ logger = console } = {}
 }
 
 export async function closeMarketplacePaymentExpiryWorker() {
-  if (pool) await pool.end();
+  for (const timer of marketplacePaymentExpiryTimers) clearInterval(timer);
+  marketplacePaymentExpiryTimers = [];
 }
 
 export const MARKETPLACE_PAYMENT_RESERVATION_TTL_MINUTES = PAYMENT_RESERVATION_TTL_MINUTES;

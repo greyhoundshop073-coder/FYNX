@@ -215,85 +215,35 @@ fun FynxStatusHubPanel(openOwnerUsername: String? = null, openStatusId: String? 
                 }
             }
             if (showStatusMusicPicker) {
-                AlertDialog(
-                    onDismissRequest = { showStatusMusicPicker = false; statusMusicSearch = "" },
-                    title = { Text("FYNX Music") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedTextField(
-                                value = statusMusicSearch,
-                                onValueChange = { statusMusicSearch = it.take(80) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = { Text("Search music") },
-                                placeholder = { Text("Song or artist") }
-                            )
-                            Column(
-                                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                if (statusMusicLoading) {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        CircularProgressIndicator()
-                                        Text("Loading published music...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                } else if (statusMusicError != null) {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(statusMusicError.orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        if (statusMusicError != "Sign in to FYNX to browse published music.") {
-                                            TextButton(onClick = { statusMusicRetryKey++ }) { Text("Retry") }
-                                        }
-                                    }
-                                } else if (statusMusicCatalogue.isEmpty()) {
-                                    Text("No FYNX music is published yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    statusMusicCatalogue.forEach { track ->
-                                        Card(Modifier.fillMaxWidth()) {
-                                            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                Icon(Icons.Default.MusicNote, "Music", tint = MaterialTheme.colorScheme.primary)
-                                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                                    Text(track.title.ifBlank { "Untitled" }, maxLines = 1)
-                                                    Text(track.artist.ifBlank { "FYNX" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                                                    Text(track.durationMs.div(60000).toString() + ":" + ((track.durationMs.div(1000) % 60).toString().padStart(2, '0')), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                }
-                                                if (statusMusicPreviewId == track.id) {
-                                                    FynxRemoteAudio("/api/social/music/catalogue/" + track.id + "/media", Modifier.width(108.dp), track.durationMs.coerceAtLeast(1_000L))
-                                                    TextButton(onClick = { statusMusicPreviewId = null }) { Text("Stop") }
-                                                } else {
-                                                    TextButton(onClick = { statusMusicPreviewId = track.id }) { Text("Preview") }
-                                                }
-                                                Button(onClick = {
-                                                    selectedStatusMusic = track
-                                                    statusMusicPreviewId = null
-                                                    showStatusMusicPicker = false
-                                                    statusMusicSearch = ""
-                                                    if (musicPickerReturnsToComposer) {
-                                                        // Keep the existing text draft mounted; attach the chosen track to it.
-                                                        musicPickerReturnsToComposer = false
-                                                    } else {
-                                                        selectedInitialType = FynxStatusType.MUSIC
-                                                        selectedInitialMedia = null
-                                                        addStatusOpen = false
-                                                        composing = true
-                                                    }
-                                                }) { Text("Add") }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                FynxMusicPickerSurface(
+                    tracks = statusMusicCatalogue,
+                    search = statusMusicSearch,
+                    loading = statusMusicLoading,
+                    error = statusMusicError,
+                    previewingTrackId = statusMusicPreviewId,
+                    onSearchChange = { statusMusicSearch = it },
+                    onPreview = { statusMusicPreviewId = it.id },
+                    onStopPreview = { statusMusicPreviewId = null },
+                    onSelect = { track ->
+                        selectedStatusMusic = track
+                        statusMusicPreviewId = null
+                        showStatusMusicPicker = false
+                        statusMusicSearch = ""
+                        if (musicPickerReturnsToComposer) {
+                            // Keep the existing text draft mounted; attach the chosen track to it.
+                            musicPickerReturnsToComposer = false
+                        } else {
+                            selectedInitialType = FynxStatusType.MUSIC
+                            selectedInitialMedia = null
+                            addStatusOpen = false
+                            composing = true
                         }
                     },
-                    confirmButton = {
-                        TextButton(onClick = { showStatusMusicPicker = false; statusMusicSearch = "" }) { Text("Close") }
+                    onRetry = { statusMusicRetryKey++ },
+                    onDismiss = {
+                        showStatusMusicPicker = false
+                        statusMusicSearch = ""
+                        statusMusicPreviewId = null
                     }
                 )
             }

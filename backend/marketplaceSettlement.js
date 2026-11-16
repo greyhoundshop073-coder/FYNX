@@ -1,3 +1,4 @@
+import { getFynxDatabasePool } from "./databasePool.js";
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketplacePayoutEligibility.js';
@@ -5,11 +6,31 @@ import { marketplacePayoutsEnabled, marketplacePayoutsNotice } from './marketpla
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, max: 8 }) : null;
+const pool = getFynxDatabasePool();
 
 let schemaPromise;
 
 const parseUuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
+
+function parseSellerSettlementCursor(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 512) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    const updatedAt = new Date(decoded?.updatedAt);
+    const orderId = parseUuid(decoded?.orderId);
+    if (!orderId || !Number.isFinite(updatedAt.getTime())) return null;
+    return { updatedAt: updatedAt.toISOString(), orderId };
+  } catch {
+    return null;
+  }
+}
+
+function createSellerSettlementCursor(row) {
+  return Buffer.from(JSON.stringify({
+    updatedAt: new Date(row.updated_at).toISOString(),
+    orderId: String(row.order_id)
+  })).toString('base64url');
+}
 const amountSubunit = (value, currency) => {
   const normalized = String(currency || '').trim().toUpperCase();
   if (!['NGN', 'USD'].includes(normalized)) return null;
@@ -254,14 +275,22 @@ export function registerMarketplaceSettlementRoutes({ app }) {
   app.get('/api/marketplace/settlement/seller/summary', auth, async (req, res) => {
     try {
       await ensureSchema();
+      const requestedLimit = Number.parseInt(String(req.query.limit || '100'), 10);
+      const pageLimit = Number.isInteger(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 100;
+      const cursorValue = req.query.cursor == null ? null : String(req.query.cursor);
+      const cursor = cursorValue == null || cursorValue === '' ? null : parseSellerSettlementCursor(cursorValue);
+      if (cursorValue && !cursor) return res.status(400).json({ error: 'invalid seller settlement cursor' });
       const result = await pool.query(`
         SELECT
           o.id AS order_id,
           COALESCE(NULLIF(o.product_snapshot->>'title', ''), 'FYNX order') AS title,
           UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+          COALESCE(o.product_subtotal, 0) AS product_subtotal,
+          COALESCE(o.delivery_fee, 0) AS delivery_fee,
           COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
           COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
           COALESCE(e.status, 'UNKNOWN') AS funds,
+          o.status AS order_status,
           payout.status AS payout_status,
           COALESCE(payout.updated_at, o.updated_at, o.created_at) AS updated_at
         FROM marketplace_orders o
@@ -274,16 +303,24 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           LIMIT 1
         ) payout ON TRUE
         WHERE o.seller_id = $1
-        ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC
-        LIMIT 100
-      `, [req.user.sub]);
+          AND ($2::timestamptz IS NULL OR
+            (COALESCE(payout.updated_at, o.updated_at, o.created_at), o.id) < ($2::timestamptz, $3::uuid))
+        ORDER BY COALESCE(payout.updated_at, o.updated_at, o.created_at) DESC, o.id DESC
+        LIMIT $4
+      `, [req.user.sub, cursor?.updatedAt || null, cursor?.orderId || null, pageLimit + 1]);
+      const hasMore = result.rows.length > pageLimit;
+      const pageRows = result.rows.slice(0, pageLimit);
+      const nextCursor = hasMore && pageRows.length ? createSellerSettlementCursor(pageRows[pageRows.length - 1]) : null;
       const totalsResult = await pool.query(`
         WITH seller_settlements AS (
           SELECT
             UPPER(COALESCE(o.currency, 'NGN')) AS currency,
+            COALESCE(o.product_subtotal, 0) AS product_subtotal,
+            COALESCE(o.delivery_fee, 0) AS delivery_fee,
             COALESCE(o.seller_net_amount, o.total_amount, 0) AS seller_net_amount,
             COALESCE(o.marketplace_fee_seller, 0) AS marketplace_fee_seller,
             COALESCE(e.status, 'UNKNOWN') AS funds,
+            o.status AS order_status,
             payout.status AS payout_status
           FROM marketplace_orders o
           LEFT JOIN marketplace_escrows e ON e.order_id = o.id
@@ -303,6 +340,8 @@ export function registerMarketplaceSettlementRoutes({ app }) {
               WHEN funds = 'RELEASED' OR payout_status = 'SUCCEEDED' THEN 'paid'
               WHEN funds = 'RELEASE_PENDING' OR payout_status = 'PENDING' THEN 'pending'
               WHEN funds = 'RELEASE_ELIGIBLE' THEN 'available'
+              WHEN funds = 'UNKNOWN' AND order_status = 'COMPLETED' AND payout_status IS NULL THEN 'legacy_unreconciled'
+              WHEN funds = 'UNKNOWN' AND order_status = 'COMPLETED' AND payout_status IN ('FAILED', 'BLOCKED') THEN 'failed_unreconciled'
               ELSE 'unclassified'
             END AS summary_bucket
           FROM seller_settlements
@@ -313,9 +352,12 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           COALESCE(SUM(CASE WHEN summary_bucket = 'available' THEN seller_net_amount ELSE 0 END), 0) AS available_for_payout,
           COALESCE(SUM(CASE WHEN summary_bucket = 'pending' THEN seller_net_amount ELSE 0 END), 0) AS payout_pending,
           COALESCE(SUM(CASE WHEN summary_bucket = 'paid' THEN seller_net_amount ELSE 0 END), 0) AS paid_out,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount + marketplace_fee_seller ELSE 0 END), 0) AS gross_sales,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
-          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
+          COALESCE(SUM(CASE WHEN summary_bucket = 'legacy_unreconciled' THEN seller_net_amount ELSE 0 END), 0) AS unreconciled_legacy,
+          COALESCE(SUM(CASE WHEN summary_bucket = 'failed_unreconciled' THEN seller_net_amount ELSE 0 END), 0) AS unreconciled_failed_payouts,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN product_subtotal ELSE 0 END), 0) AS gross_sales,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN delivery_fee ELSE 0 END), 0) AS delivery_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN marketplace_fee_seller ELSE 0 END), 0) AS marketplace_fees,
+          COALESCE(SUM(CASE WHEN summary_bucket IN ('protected','available','pending','paid','legacy_unreconciled','failed_unreconciled') THEN seller_net_amount ELSE 0 END), 0) AS net_earnings
         FROM classified_settlements
         GROUP BY currency
         ORDER BY currency
@@ -327,20 +369,28 @@ export function registerMarketplaceSettlementRoutes({ app }) {
           availableForPayout: Number(row.available_for_payout || 0),
           payoutPending: Number(row.payout_pending || 0),
           paidOut: Number(row.paid_out || 0),
+          unreconciledLegacy: Number(row.unreconciled_legacy || 0),
+          unreconciledFailedPayouts: Number(row.unreconciled_failed_payouts || 0),
           grossSales: Number(row.gross_sales || 0),
+          deliveryFees: Number(row.delivery_fees || 0),
           marketplaceFees: Number(row.marketplace_fees || 0),
           netEarnings: Number(row.net_earnings || 0)
         })),
-        settlements: result.rows.map((row) => ({
+        settlements: pageRows.map((row) => ({
           orderId: String(row.order_id),
           title: String(row.title || 'FYNX order'),
           currency: String(row.currency || 'NGN').toUpperCase(),
+          productSubtotal: Number(row.product_subtotal || 0),
+          deliveryFee: Number(row.delivery_fee || 0),
           sellerNetAmount: Number(row.seller_net_amount || 0),
           marketplaceFeeSeller: Number(row.marketplace_fee_seller || 0),
           funds: String(row.funds || 'UNKNOWN'),
           payoutStatus: String(row.payout_status || row.funds || 'UNKNOWN'),
+          orderStatus: String(row.order_status || 'UNKNOWN'),
           updatedAt: row.updated_at
-        }))
+        })),
+        hasMore,
+        nextCursor
       });
     } catch (error) {
       console.error('marketplace seller settlement summary', error);

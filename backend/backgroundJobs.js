@@ -36,28 +36,37 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       enqueue: async () => { throw new Error("DATABASE_URL is not configured"); },
       start: async () => {},
       stop: async () => {},
+      runOnce: async () => ({ enabled: false }),
       snapshot: () => ({ enabled: false })
     };
   }
 
+  // Normal FYNX jobs share the application's bounded pool. Custom connection
+  // strings remain independent for isolated tests and tools.
+  const usesSharedPool = connectionString === (process.env.DATABASE_URL || "");
   let poolPromise = null;
   async function getPool() {
     if (!poolPromise) {
-      poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
-        connectionString,
-        ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-        max: Number(process.env.JOB_DB_POOL_MAX || 5),
-        idleTimeoutMillis: 30_000,
-        connectionTimeoutMillis: 5_000,
-        statement_timeout: 15_000,
-        query_timeout: 20_000,
-        keepAlive: true
-      }));
+      if (usesSharedPool) {
+        poolPromise = import("./databasePool.js").then(({ getFynxDatabasePool }) => getFynxDatabasePool());
+      } else {
+        poolPromise = import("pg").then(({ default: pg }) => new pg.Pool({
+          connectionString,
+          ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+          max: Number(process.env.JOB_DB_POOL_MAX || 5),
+          idleTimeoutMillis: 30_000,
+          connectionTimeoutMillis: 5_000,
+          statement_timeout: 15_000,
+          query_timeout: 20_000,
+          keepAlive: true
+        }));
+      }
     }
     return poolPromise;
   }
 
   let timer = null;
+  let schemaPromise = null;
   let running = false;
   let stopped = false;
   let lastAlertSignature = "";
@@ -116,6 +125,11 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
       CREATE INDEX IF NOT EXISTS fynx_background_jobs_lease_idx ON fynx_background_jobs (status, lease_expires_at);
       CREATE UNIQUE INDEX IF NOT EXISTS fynx_background_jobs_idempotency_idx ON fynx_background_jobs (idempotency_key) WHERE idempotency_key IS NOT NULL;
     `);
+  }
+
+  async function ensureSchemaOnce() {
+    if (!schemaPromise) schemaPromise = ensureSchema().catch((error) => { schemaPromise = null; throw error; });
+    return schemaPromise;
   }
 
   async function enqueue(type, payload = {}, options = {}) {
@@ -266,18 +280,24 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
 
   async function start() {
     if (stopped) return;
-    await ensureSchema();
+    await ensureSchemaOnce();
     await reclaimExpired();
     timer = setInterval(() => { void tick(); }, pollMs).unref();
     void tick();
+  }
+
+  async function runOnce() {
+    await ensureSchemaOnce();
+    await tick();
+    return snapshot();
   }
 
   async function stop() {
     stopped = true;
     if (timer) clearInterval(timer);
     const pool = poolPromise ? await poolPromise.catch(() => null) : null;
-    if (pool) await pool.end();
+    if (pool && !usesSharedPool) await pool.end();
   }
 
-  return { enabled: true, enqueue, start, stop, snapshot };
+  return { enabled: true, enqueue, start, runOnce, stop, snapshot };
 }

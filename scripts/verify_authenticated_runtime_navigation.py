@@ -14,8 +14,9 @@ USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
+MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
-VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY
+VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or MUSIC_VISUALS_ONLY
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 MESSAGE_TAP_SKIPPED=False
@@ -444,6 +445,46 @@ def tap_control(xml_text:str, labels:list[str], name:str, expected_labels:list[s
         FAILURES.append(f"{name}: destination marker not found [{expected}]; visible markers: {visible_marker_summary(next_xml)}")
         return ""
     return next_xml
+
+
+def swipe_horizontal_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
+    """Swipe inside the widest visible horizontal scroll rail using its real accessibility bounds."""
+    if not xml_text:
+        return ""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        if node.attrib.get("scrollable", "false").lower() != "true":
+            continue
+        bounds = node.attrib.get("bounds", "")
+        try:
+            left_top, right_bottom = bounds.split("][", 1)
+            left, top = map(int, left_top.strip("[]").split(","))
+            right, bottom = map(int, right_bottom.strip("[]").split(","))
+        except (ValueError, IndexError):
+            continue
+        width, height = right - left, bottom - top
+        if width < 320 or height <= 0 or height >= 320 or width <= height:
+            continue
+        candidates.append((width, left, top, right, bottom))
+    if not candidates:
+        return ""
+    _, left, top, right, bottom = max(candidates, key=lambda item: item[0])
+    y = (top + bottom) // 2
+    inset = max(50, min(120, (right - left) // 8))
+    start_x, end_x = right - inset, left + inset
+    if reverse:
+        start_x, end_x = end_x, start_x
+    if abs(start_x - end_x) < 220:
+        return ""
+    run("adb", "shell", "input", "swipe", str(start_x), str(y), str(end_x), str(y), "450")
+    time.sleep(0.4)
+    return dump_ui(name)
 
 
 def swipe_vertical_scroll_container(xml_text: str, name: str, *, reverse: bool = False) -> str:
@@ -3052,6 +3093,85 @@ if not VISUALS_ONLY and (not USERNAME or not PASSWORD):
     (ROOT/"FYNX-authenticated-runtime.md").write_text("\n".join(report)+"\n",encoding="utf-8")
     print("\n".join(report)); raise SystemExit(2)
 
+def capture_home_music_picker_visuals(home_xml: str) -> str:
+    """Capture the real Home composer and shared official-music picker without publishing."""
+    if not is_authenticated_home_surface(home_xml):
+        FAILURES.append("Home was not visible when Music picker visual certification began.")
+        return home_xml
+
+    composer_xml = tap_control(
+        home_xml,
+        ["Create post"],
+        "home-music-composer",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_xml:
+        return home_xml
+    (ROOT / "authenticated-home-music-composer.xml").write_text(
+        composer_xml + chr(10), encoding="utf-8"
+    )
+
+    picker_xml = tap_control(
+        composer_xml,
+        ["Music"],
+        "home-music-picker",
+        ["Choose your music"],
+        exact_only=True
+    )
+    if not picker_xml:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    (ROOT / "authenticated-home-music-picker.xml").write_text(
+        picker_xml + chr(10), encoding="utf-8"
+    )
+    screenshot("authenticated-home-music-picker.png")
+    if not find_control(picker_xml, ["FYNX MUSIC LIBRARY"]):
+        FAILURES.append("The Music picker opened but its official-library heading was not visible.")
+    if not find_control(picker_xml, ["Search song or artist"]):
+        FAILURES.append("The Music picker opened but its song/artist search field was not visible.")
+
+    if find_control(picker_xml, ["Try again"]):
+        report.append("- NOTE: captured the real Music picker in its retry/error state; catalogue availability was not verified.")
+    elif find_control(picker_xml, ["No official tracks have been published yet."]):
+        report.append("- NOTE: captured the real Music picker empty state; no published catalogue tracks were available to preview.")
+    elif find_control(picker_xml, ["Use"]):
+        report.append("- PASS: captured the real Music picker with published catalogue rows and Use actions visible.")
+    else:
+        report.append("- PASS: captured the real shared Music picker shell and search controls; no track was selected or published.")
+
+    composer_restored = tap_control(
+        picker_xml,
+        ["Close music picker"],
+        "home-music-picker-close",
+        ["New post", "Music"],
+        exact_only=True
+    )
+    if not composer_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        return home_xml
+
+    home_restored = tap_control(
+        composer_restored,
+        ["Close"],
+        "home-music-composer-close",
+        ["Create post", "Your feed"],
+        exact_only=True
+    )
+    if not home_restored:
+        run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+        home_restored = dump_ui("authenticated-home-after-music-picker-close.xml")
+
+    if not home_restored or not is_authenticated_home_surface(home_restored):
+        FAILURES.append("The Home composer did not close safely after Music picker screenshot capture.")
+        return home_xml
+
+    screenshot("authenticated-home-after-music-picker.png")
+    report.append("- PASS: captured the actual Home post composer and shared Music picker, then returned to Home without selecting or publishing a track.")
+    return home_restored
+
+
 def secure_access_token_persisted()->bool|None:
     """Check the encrypted token preference without ever reading or printing its value."""
     prefs_file = "shared_prefs/fynx_secure_auth.xml"
@@ -3117,6 +3237,91 @@ if AI_VISUALS_ONLY:
     print("\n".join(report))
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
+if MUSIC_VISUALS_ONLY:
+    report.append("- Focused Music picker runtime mode: captures the actual Home post composer and shared official Music picker through the debug-local UI entry; no server account, track selection or post publishing is used.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("music-picker-home-entry.xml") or xml
+    home_xml = capture_home_music_picker_visuals(home_xml)
+    composer_proof = (ROOT / "authenticated-home-music-composer.png").is_file()
+    picker_proof = (ROOT / "authenticated-home-music-picker.png").is_file()
+    if not composer_proof or not picker_proof:
+        FAILURES.append("Music picker runtime proof is incomplete; both the Home composer and Music picker screenshots are required.")
+    report += ["", "## Music picker evidence files",
+               "- authenticated-home-music-composer.png" if composer_proof else "- Home composer screenshot unavailable",
+               "- authenticated-home-music-picker.png" if picker_proof else "- Music picker screenshot unavailable",
+               "- authenticated-home-after-music-picker.png" if (ROOT / "authenticated-home-after-music-picker.png").is_file() else "- Home return screenshot unavailable",
+               "", f"## Result: {'GREEN' if not FAILURES and composer_proof and picker_proof else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT / "FYNX-music-picker-runtime.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
+
+if os.environ.get("FYNX_LOCAL_BUSINESS_ONLY") == "1":
+    report.append("- Focused Local Businesses runtime mode: verifies the real Marketplace entry, directory UI and Back navigation only; backend-dependent Wallet/My Shop transactions are not represented as passed.")
+    if error:
+        report += ["", "## Result: BLOCKED", "- Local UI entry could not reach Home: " + error]
+        (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(2)
+    home_xml = dump_ui("local-business-home.xml") or xml
+    marketplace_xml = tap_control(home_xml, ["Marketplace"], "local-business-marketplace", ["Search products, sellers or categories"])
+    if not marketplace_xml:
+        FAILURES.append("Home -> Marketplace did not expose the Marketplace search surface")
+    else:
+        screenshot("authenticated-marketplace.png")
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(marketplace_xml, "local-business-shortcut-rail-" + str(attempt))
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
+        directory_xml = tap_control(marketplace_xml, ["Local businesses"], "marketplace-local-businesses", ["Search businesses, services or names"])
+        if not directory_xml:
+            FAILURES.append("Marketplace -> Local businesses shortcut could not be opened")
+        else:
+            deadline = time.monotonic() + 12.0
+            latest = directory_xml
+            while time.monotonic() < deadline:
+                latest = dump_ui("local-business-directory-settled.xml") or latest
+                if (find_control(latest, ["Local Businesses"])
+                        and find_control(latest, ["Search businesses, services or names"])
+                        and find_control(latest, ["Area, city or neighbourhood"])):
+                    break
+                time.sleep(0.4)
+            if (find_control(latest, ["Local Businesses"])
+                    and find_control(latest, ["Search businesses, services or names"])
+                    and find_control(latest, ["Area, city or neighbourhood"])):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(latest + chr(10), encoding="utf-8")
+                report.append("- PASS: Local Businesses directory title, search and area controls rendered in the installed APK.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                FAILURES.append("Local Businesses directory did not expose its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            returned = ""
+            back_deadline = time.monotonic() + 8.0
+            while time.monotonic() < back_deadline:
+                returned = dump_ui("local-business-marketplace-back.xml") or returned
+                if find_control(returned, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(returned, ["Search products, sellers or categories"]):
+                screenshot("authenticated-marketplace-local-businesses-back.png")
+                report.append("- PASS: Back returned from Local Businesses to Marketplace.")
+            else:
+                FAILURES.append("Local Businesses Back navigation did not return to Marketplace")
+    report += ["", "## Evidence boundary", "- This is a local UI/navigation certification; no backend directory records or live search results are claimed.", "", f"## Result: {'GREEN' if not FAILURES else 'RED'}"]
+    if FAILURES:
+        report += ["", "Failures:"] + ["- " + item for item in FAILURES]
+    (ROOT/"FYNX-local-business-runtime.md").write_text("\n".join(report)+"\n", encoding="utf-8")
+    print("\n".join(report))
+    raise SystemExit(1 if FAILURES else 0)
 if HOME_FEED_VISUALS_ONLY and not error and LOGIN_MODE == "debug-only local UI entry (not server-authenticated)":
     fixtures_ready = seed_offline_home_feed_visual_fixtures(USERNAME or "marketplace_visual_check")
     if not fixtures_ready:
@@ -3844,6 +4049,88 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             if wallet_return_xml and find_control(wallet_return_xml, ["Search products, sellers or categories"]):
                 marketplace_xml=wallet_return_xml
 
+        # Wallet can return Marketplace at its previous vertical scroll offset.
+        # My Shop is in the top shortcut rail, so restore the real content viewport
+        # before looking for seller entry points. This is a bounded, read-only gesture.
+        for attempt in range(5):
+            if find_control(marketplace_xml, ["My Shop"]):
+                break
+            scrolled_xml = swipe_vertical_scroll_container(
+                marketplace_xml, "authenticated-marketplace-my-shop-return-top-" + str(attempt) + ".xml",
+                reverse=True
+            )
+            if not scrolled_xml:
+                break
+            marketplace_xml = scrolled_xml
+
+        # Exercise the new Local Businesses directory from the real Marketplace shortcut rail.
+        # The screen is useful even when the live backend is unavailable: certify the actual
+        # search/filter UI, but never fabricate a directory result or claim live data loaded.
+        for attempt in range(4):
+            if find_control(marketplace_xml, ["Local businesses"]):
+                break
+            rail_xml = swipe_horizontal_scroll_container(
+                marketplace_xml, "marketplace-local-businesses-rail-" + str(attempt)
+            )
+            if not rail_xml:
+                break
+            marketplace_xml = rail_xml
+        local_business_xml = tap_control(
+            marketplace_xml, ["Local businesses"], "marketplace-local-businesses",
+            ["Search businesses, services or names"]
+        )
+        if local_business_xml:
+            local_business_ready_xml = local_business_xml
+            local_business_deadline = time.monotonic() + 12.0
+            while time.monotonic() < local_business_deadline:
+                local_business_ready_xml = dump_ui("marketplace-local-businesses-settled.xml") or local_business_ready_xml
+                if (
+                    find_control(local_business_ready_xml, ["Local Businesses"])
+                    and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                    and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+                ):
+                    break
+                time.sleep(0.4)
+            if (
+                find_control(local_business_ready_xml, ["Local Businesses"])
+                and find_control(local_business_ready_xml, ["Search businesses, services or names"])
+                and find_control(local_business_ready_xml, ["Area, city or neighbourhood"])
+            ):
+                screenshot("authenticated-marketplace-local-businesses.png")
+                (ROOT/"authenticated-marketplace-local-businesses.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                report.append("- PASS: Marketplace -> Local businesses opened the real directory search and area-filter UI; no sample business records were inserted.")
+            else:
+                screenshot("authenticated-marketplace-local-businesses-incomplete.png")
+                (ROOT/"authenticated-marketplace-local-businesses-incomplete.xml").write_text(
+                    local_business_ready_xml + chr(10), encoding="utf-8"
+                )
+                FAILURES.append("Local Businesses directory did not settle to its title, business search and area filter")
+            run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
+            local_business_return_xml = ""
+            local_business_return_deadline = time.monotonic() + 10.0
+            while time.monotonic() < local_business_return_deadline:
+                local_business_return_xml = dump_ui("marketplace-local-businesses-return.xml") or local_business_return_xml
+                if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                    break
+                time.sleep(0.4)
+            if find_control(local_business_return_xml, ["Search products, sellers or categories"]):
+                marketplace_xml = local_business_return_xml
+                for attempt in range(4):
+                    if find_control(marketplace_xml, ["My Shop"]):
+                        break
+                    rail_xml = swipe_horizontal_scroll_container(
+                        marketplace_xml, "marketplace-local-businesses-return-rail-" + str(attempt), reverse=True
+                    )
+                    if not rail_xml:
+                        break
+                    marketplace_xml = rail_xml
+            else:
+                FAILURES.append("Local Businesses Back did not return to Marketplace")
+        else:
+            FAILURES.append("Marketplace Local businesses shortcut could not be opened")
+
         # Product details are only captured when an actual visible listing card exposes a price.
         # A failed/empty discovery response is recorded as a limitation, never filled with sample data.
         product_target = marketplace_product_card_target(marketplace_xml)
@@ -3922,6 +4209,79 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
             else:
                 report.append("- FAIL: My Shop overview remained in a loading state after 20 seconds; the screenshot is retained for diagnosis.")
                 FAILURES.append("My Shop overview remained loading after 20 seconds")
+
+            # Exercise the exact owner route added by the Marketplace-profile update.
+            # This is read-only: it does not save shop details or mutate listings/orders.
+            public_profile_xml = tap_control(
+                shop_xml,
+                ["View public Marketplace profile"],
+                "marketplace-public-profile",
+                ["Marketplace profile", "Available products"]
+            )
+            if public_profile_xml:
+                profile_deadline = time.monotonic() + 25.0
+                profile_terminal_markers = (
+                    "This seller has no active products available right now.",
+                    "Products could not load.",
+                    "Contact seller",
+                    "Retry products",
+                )
+                profile_ready_xml = public_profile_xml
+                while time.monotonic() < profile_deadline:
+                    profile_ready_xml = dump_ui("marketplace-public-profile-settled.xml") or profile_ready_xml
+                    has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
+                    has_count = bool(find_control(profile_ready_xml, ["Available products"]))
+                    has_product_state = any(
+                        find_control(profile_ready_xml, [marker])
+                        for marker in profile_terminal_markers
+                    ) or bool(find_control(profile_ready_xml, ["NGN", "USD"])) or bool(find_control(profile_ready_xml, ["Available: "]))
+                    if has_header and has_count and has_product_state:
+                        break
+                    time.sleep(0.5)
+                if (
+                    find_control(profile_ready_xml, ["Marketplace profile"])
+                    and find_control(profile_ready_xml, ["Available products"])
+                    and (
+                        any(find_control(profile_ready_xml, [marker]) for marker in profile_terminal_markers)
+                        or find_control(profile_ready_xml, ["NGN", "USD"])
+                    )
+                ):
+                    screenshot("authenticated-marketplace-public-profile.png")
+                    (ROOT/"authenticated-marketplace-public-profile.xml").write_text(
+                        profile_ready_xml + chr(10), encoding="utf-8"
+                    )
+                    report.append("- PASS: My Shop -> View public Marketplace profile opened the actual seller storefront; identity and a real product/empty/error state were captured.")
+                else:
+                    screenshot("authenticated-marketplace-public-profile-incomplete.png")
+                    (ROOT/"authenticated-marketplace-public-profile-incomplete.xml").write_text(
+                        profile_ready_xml + chr(10), encoding="utf-8"
+                    )
+                    FAILURES.append("My Shop public Marketplace profile did not settle to its identity and real product/empty/error state")
+                run("adb", "shell", "input", "keyevent", "4")
+                marketplace_return_xml = ""
+                return_deadline = time.monotonic() + 10.0
+                while time.monotonic() < return_deadline:
+                    marketplace_return_xml = dump_ui("marketplace-public-profile-return.xml") or marketplace_return_xml
+                    if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                        break
+                    time.sleep(0.4)
+                if find_control(marketplace_return_xml, ["Search products, sellers or categories"]):
+                    returned_shop_xml = tap_control(
+                        marketplace_return_xml,
+                        ["My Shop"],
+                        "marketplace-my-shop-after-public-profile",
+                        ["Your shop at a glance", "Manage your storefront", "Shop profile"]
+                    )
+                    if returned_shop_xml:
+                        shop_xml, overview_returned_settled = wait_for_my_shop_section_settled("overview", timeout=20.0)
+                        if not overview_returned_settled:
+                            FAILURES.append("My Shop overview did not settle after returning from the public Marketplace profile")
+                    else:
+                        FAILURES.append("Could not return from public Marketplace profile to My Shop")
+                else:
+                    FAILURES.append("Public Marketplace profile Back did not return to Marketplace")
+            else:
+                FAILURES.append("My Shop public Marketplace profile action could not be opened")
 
             shop_sections = [
                 ("profile", "Shop profile", ["Shop identity"]),
