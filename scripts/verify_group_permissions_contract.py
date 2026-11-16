@@ -6,6 +6,11 @@ membership_routes = (ROOT / "backend/groupMembershipRoutes.js").read_text(encodi
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 active = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
 settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
+scalability = (ROOT / "backend/scalability.js").read_text(encoding="utf-8")
+server = (ROOT / "backend/server.js").read_text(encoding="utf-8")
+chat_list = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+chat_messaging = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+chat_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatStore.kt").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
 
@@ -26,6 +31,11 @@ checks = {
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
     "story-to-group is not advertised as a text-only message until a real Status share flow exists": "onStoryShare" not in active and "Share a story to group" not in active and "Story shared to group" not in active and "onStoryShare" not in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8"),
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
+    "production startup registers group, membership and content routes exactly once": all(token in scalability for token in ["registerGroupRoutes({ app })", "registerGroupMembershipRoutes({ app })", "registerGroupContentRoutes({ app })"]) and "registerGroupInviteRoutes" not in scalability,
+    "server exposes authenticated recent conversations and bounded private-history paging": all(token in server for token in ['app.get("/api/messages/recent"', "hasPageContract", "nextBeforeId"]),
+    "Chat list hydrates from the remote conversation endpoint while preserving local pending messages": "FynxProductionMessaging.recentConversations(" in chat_list and "FynxChatStore.savePreviews(context, merged, expectedAccountUsername)" in chat_list and "pendingLocal" in chat_list,
+    "remote conversation and history APIs verify account-session continuity": all(token in chat_messaging for token in ["suspend fun recentConversations", "suspend fun historyPage", "suspend fun searchHistoryPage", "isMessageRequestSessionCurrent"]),
+    "remote preview snapshot persistence does not emit recursive refresh events": "fun savePreviews(context: Context" in chat_store and "previewUpdates.tryEmit" not in chat_store[chat_store.index("fun savePreviews(context: Context"):chat_store.index("fun savePreview(context: Context")],
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():

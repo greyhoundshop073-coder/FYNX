@@ -13,9 +13,12 @@ export function registerGroupRoutes({ app }) {
   const ensureSchema = async () => {
     if (!schemaPromise) schemaPromise = pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_groups (id TEXT PRIMARY KEY, owner_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'PRIVATE', group_photo_media_id BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS show_history_to_new_members BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS group_photo_media_id BIGINT;
       CREATE TABLE IF NOT EXISTS fynx_group_members (group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'MEMBER', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(group_id,user_id));
       CREATE TABLE IF NOT EXISTS fynx_group_messages (id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, sender_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', attachment_media_id BIGINT, attachment_type TEXT, reply_to_id TEXT, reaction TEXT, edited_at TIMESTAMPTZ, deleted_at TIMESTAMPTZ, pinned BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+       CREATE TABLE IF NOT EXISTS fynx_group_message_reads (message_id TEXT NOT NULL REFERENCES fynx_group_messages(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(message_id,user_id));
+       CREATE INDEX IF NOT EXISTS fynx_group_message_reads_user_idx ON fynx_group_message_reads(user_id,message_id);
       ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS reply_to_id TEXT;
       ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS reaction TEXT;
       ALTER TABLE fynx_group_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
@@ -24,6 +27,7 @@ export function registerGroupRoutes({ app }) {
       CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, marketplace_safety BOOLEAN NOT NULL DEFAULT TRUE, login_alerts BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE', status_note TEXT NOT NULL DEFAULT '', CHECK(account_status IN ('ACTIVE','LIMITED','LOCKED')));
       CREATE INDEX IF NOT EXISTS fynx_group_members_user_idx ON fynx_group_members(user_id,group_id);
       CREATE INDEX IF NOT EXISTS fynx_group_messages_group_idx ON fynx_group_messages(group_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS fynx_group_messages_search_idx ON fynx_group_messages USING GIN (to_tsvector('simple',COALESCE(text,'')));
       CREATE INDEX IF NOT EXISTS fynx_group_messages_media_idx ON fynx_group_messages(attachment_media_id);
     `).catch(error => { schemaPromise = undefined; throw error; });
     return schemaPromise;
@@ -37,6 +41,7 @@ export function registerGroupRoutes({ app }) {
     return rows.map(user=>({...user,requestedRole:entries.find(entry=>entry.username.toLowerCase().replace(/^@+/,'')===String(user.username).toLowerCase())?.requestedRole||'MEMBER'}));
   };
   const member = async (groupId,userId) => (await pool.query(`SELECT role FROM fynx_group_members WHERE group_id=$1 AND user_id=$2 LIMIT 1`,[groupId,userId])).rows[0] || null;
+  const memberHistory = async (groupId,userId) => (await pool.query(`SELECT gm.created_at AS joined_at,g.show_history_to_new_members FROM fynx_group_members gm JOIN fynx_groups g ON g.id=gm.group_id WHERE gm.group_id=$1 AND gm.user_id=$2 LIMIT 1`,[groupId,userId])).rows[0] || null;
   const broadcastGroupMessage = async (groupId, message) => {
     const broadcaster = app.locals?.fynxBroadcastGroupMessage;
     if (typeof broadcaster !== 'function') return;
@@ -44,7 +49,41 @@ export function registerGroupRoutes({ app }) {
   };
   const canManageMembers = role => role === 'ADMIN' || role === 'MODERATOR';
   const normalizeRole = role => ['MEMBER','MODERATOR'].includes(String(role||'').toUpperCase()) ? String(role).toUpperCase() : 'MEMBER';
-  const messageJson = row => ({id:String(row.id),text:row.deleted_at?'This message was deleted':(row.text||''),senderUsername:row.sender_username||'',timestamp:new Date(row.created_at).getTime(),attachmentMediaId:row.deleted_at?null:(row.attachment_media_id==null?null:String(row.attachment_media_id)),attachmentType:row.deleted_at?null:(row.attachment_type||null),attachmentUrl:row.deleted_at?null:(row.attachment_media_id==null?null:`/api/media/${row.attachment_media_id}`),replyToId:row.reply_to_id||null,reaction:row.reaction||null,edited:Boolean(row.edited_at),deleted:Boolean(row.deleted_at),pinned:Boolean(row.pinned)});
+  const messageJson = row => ({id:String(row.id),text:row.deleted_at?'This message was deleted':(row.text||''),senderUsername:row.sender_username||'',timestamp:new Date(row.created_at).getTime(),attachmentMediaId:row.deleted_at?null:(row.attachment_media_id==null?null:String(row.attachment_media_id)),attachmentType:row.deleted_at?null:(row.attachment_type||null),attachmentUrl:row.deleted_at?null:(row.attachment_media_id==null?null:`/api/media/${row.attachment_media_id}`),replyToId:row.reply_to_id||null,reaction:row.reaction||null,edited:Boolean(row.edited_at),deleted:Boolean(row.deleted_at),pinned:Boolean(row.pinned),readBy:Array.isArray(row.read_by)?row.read_by:[]});
+
+  // Return only groups for which the authenticated account is a current member.
+  // This is the source of truth for reinstall and multi-device group discovery.
+  app.get('/api/groups',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const rows=(await pool.query(`
+      SELECT g.id,g.name,g.description,g.visibility,g.group_photo_media_id,
+             owner.username AS owner_username,
+             member.username AS member_username,gm.role AS member_role
+      FROM fynx_group_members mine
+      JOIN fynx_groups g ON g.id=mine.group_id
+      JOIN users owner ON owner.id=g.owner_id
+      JOIN fynx_group_members gm ON gm.group_id=g.id
+      JOIN users member ON member.id=gm.user_id
+      WHERE mine.user_id=$1
+      ORDER BY g.updated_at DESC,g.id,
+               CASE gm.role WHEN 'ADMIN' THEN 0 WHEN 'MODERATOR' THEN 1 ELSE 2 END,
+               lower(member.username)
+    `,[req.user.sub])).rows;
+    const groups=new Map();
+    for(const row of rows){
+      const id=String(row.id);
+      if(!groups.has(id))groups.set(id,{
+        id,name:row.name,description:row.description||'',
+        visibility:String(row.visibility||'PRIVATE').toUpperCase(),
+        ownerUsername:row.owner_username,
+        groupPhotoMediaId:row.group_photo_media_id==null?null:String(row.group_photo_media_id),
+        members:[]
+      });
+      groups.get(id).members.push({username:row.member_username,role:row.member_role});
+    }
+    res.set('Cache-Control','no-store');
+    return res.json({groups:[...groups.values()]});
+  }catch(error){console.error('my groups lookup',error);return res.status(500).json({error:'group memberships lookup failed'});}});
 
   app.post('/api/groups/:groupId/sync',auth,async(req,res)=>{const client=await pool.connect();
     try{
@@ -57,6 +96,7 @@ export function registerGroupRoutes({ app }) {
       const users=await findUsers(req.body?.members); const requested=new Map(users.map(u=>[String(u.username).toLowerCase(),u])); requested.set(String(currentUser.username).toLowerCase(),{...currentUser,requestedRole:groupAccess?.role||'ADMIN'});
       await client.query('BEGIN');
       const existing=(await client.query(`SELECT id,owner_id,group_photo_media_id FROM fynx_groups WHERE id=$1 FOR UPDATE`,[groupId])).rows[0];
+      if(!existing && requested.size>500){await client.query('ROLLBACK');return res.status(409).json({error:'group member limit reached',code:'GROUP_MEMBER_LIMIT_REACHED'});}
       let groupOwner=currentUser;
       if(existing){
         groupOwner=(await client.query(`SELECT id,username FROM users WHERE id=$1 LIMIT 1`,[existing.owner_id])).rows[0] || currentUser;
@@ -80,19 +120,86 @@ export function registerGroupRoutes({ app }) {
   });
 
   app.patch('/api/groups/:groupId/photo',auth,async(req,res)=>{try{await ensureSchema();const groupId=String(req.params?.groupId||'');if(!validId(groupId))return res.status(400).json({error:'invalid group id'});const access=await member(groupId,req.user.sub);if(!access||!canManageMembers(access.role))return res.status(403).json({error:'group management permission required'});const value=req.body?.mediaId;const mediaId=value==null||String(value).trim()===''?null:Number(value);if(mediaId!==null){if(!Number.isInteger(mediaId)||mediaId<1)return res.status(400).json({error:'invalid group photo'});const owned=await pool.query(`SELECT id FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1`,[mediaId,req.user.sub]);if(!owned.rows[0])return res.status(403).json({error:'group photo is not owned by this account'});}const row=(await pool.query(`UPDATE fynx_groups SET group_photo_media_id=$1,updated_at=NOW() WHERE id=$2 RETURNING group_photo_media_id`,[mediaId,groupId])).rows[0];return res.json({groupPhotoMediaId:row?.group_photo_media_id==null?null:String(row.group_photo_media_id)});}catch(error){console.error('group photo update',error);return res.status(500).json({error:'group photo update failed'});}});
-  app.get('/api/groups/:groupId/messages',auth,async(req,res)=>{try{await ensureSchema();const groupId=String(req.params?.groupId||'');if(!validId(groupId))return res.status(400).json({error:'invalid group id'});if(!(await member(groupId,req.user.sub)))return res.status(403).json({error:'group membership required'});const limit=Math.min(Math.max(Number(req.query?.limit)||50,1),100);const rows=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.group_id=$1 ORDER BY m.created_at DESC LIMIT $2`,[groupId,limit])).rows.reverse();res.set('Cache-Control','no-store');return res.json({messages:rows.map(messageJson)});}catch(error){console.error('group messages get',error);return res.status(500).json({error:'group messages lookup failed'});}});
-  app.post('/api/groups/:groupId/messages',auth,async(req,res)=>{try{await ensureSchema();const groupId=String(req.params?.groupId||'');if(!validId(groupId))return res.status(400).json({error:'invalid group id'});const actor=await member(groupId,req.user.sub);if(!actor)return res.status(403).json({error:'group membership required'});const id=String(req.body?.id||'');if(!validId(id))return res.status(400).json({error:'invalid message id'});const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const attachmentMediaId=req.body?.attachmentMediaId==null?null:Number(req.body.attachmentMediaId);const attachmentType=req.body?.attachmentType==null?null:String(req.body.attachmentType).trim().toLowerCase().slice(0,20);const replyToId=req.body?.replyToId==null?null:String(req.body?.replyToId);if(!text&&attachmentMediaId==null)return res.status(400).json({error:'message content is required'});if(attachmentMediaId!==null&&(!Number.isInteger(attachmentMediaId)||attachmentMediaId<1))return res.status(400).json({error:'invalid attachment'});if(attachmentMediaId!==null&&(!attachmentType||!['image','video','video_note','audio','document'].includes(attachmentType)))return res.status(400).json({error:'invalid attachment type'});const groupSettings=(await pool.query('SELECT send_messages,send_media FROM fynx_groups WHERE id=$1 LIMIT 1',[groupId])).rows[0]||{send_messages:true,send_media:true};if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)return res.status(403).json({error:'group message sending is disabled',code:'GROUP_SEND_MESSAGES_DISABLED'});if(!canManageMembers(actor.role)&&attachmentMediaId!==null&&!groupSettings.send_media)return res.status(403).json({error:'group media sending is disabled',code:'GROUP_SEND_MEDIA_DISABLED'});if(attachmentMediaId!==null){const owned=await pool.query(`SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1`,[attachmentMediaId,req.user.sub]);if(!owned.rows[0])return res.status(403).json({error:'attachment is not owned by this account'});const mime=String(owned.rows[0].mime_type||'').toLowerCase();const compatible=attachmentType==='image'?mime.startsWith('image/'):attachmentType==='audio'?mime.startsWith('audio/'):attachmentType==='video'||attachmentType==='video_note'?mime.startsWith('video/'):!mime.startsWith('image/')&&!mime.startsWith('video/')&&!mime.startsWith('audio/');if(!compatible)return res.status(400).json({error:'attachment type does not match media'});}if(replyToId){const parent=await pool.query(`SELECT id FROM fynx_group_messages WHERE id=$1 AND group_id=$2 AND deleted_at IS NULL LIMIT 1`,[replyToId,groupId]);if(!parent.rows[0])return res.status(400).json({error:'reply target not found'});}const safety=(await pool.query(`SELECT message_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1`,[req.user.sub])).rows[0]||{message_safety:true,account_status:'ACTIVE'};if(String(safety.account_status)==='LOCKED')return res.status(403).json({error:'account is locked',code:'ACCOUNT_LOCKED'});if(String(safety.account_status)==='LIMITED')return res.status(403).json({error:'account is temporarily limited from sending group messages',code:'ACCOUNT_LIMITED'});if(safety.message_safety&&text){const safetyResult=inspectTrustSafetyText(text);if(safetyResult.shouldBlock)return res.status(422).json({error:'message blocked by safety protection',code:'SAFETY_BLOCK',safety:{risk:safetyResult.risk,scamSignals:safetyResult.scamSignals,spamSignals:safetyResult.spamSignals}});}await pool.query(`INSERT INTO fynx_group_messages(id,group_id,sender_id,text,attachment_media_id,attachment_type,reply_to_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING`,[id,groupId,req.user.sub,text,attachmentMediaId,attachmentType,replyToId]);const row=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[id,groupId])).rows[0];
+  app.get('/api/groups/:groupId/messages',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const groupId=String(req.params?.groupId||'');
+    if(!validId(groupId))return res.status(400).json({error:'invalid group id'});
+    const historyMember=await memberHistory(groupId,req.user.sub);
+     if(!historyMember)return res.status(403).json({error:'group membership required'});
+     const historyCutoff=historyMember.show_history_to_new_members?null:historyMember.joined_at;
+    // Stable marker for invalidating older pages if the administrator changes history visibility.
+    const historyScope=(historyMember.show_history_to_new_members?'ALL:':'FROM:') + new Date(historyMember.joined_at).getTime();
+    const rawQuery=req.query?.q;
+    const searchQuery=rawQuery===undefined?null:String(rawQuery).trim().replace(/\s+/g,' ');
+    if(searchQuery!==null&&(searchQuery.length<2||searchQuery.length>100))return res.status(400).json({error:'message search must contain between 2 and 100 characters'});
+    const limit=Math.min(Math.max(Number(req.query?.limit)||50,1),100);
+    const rawBeforeTimestamp=req.query?.beforeTimestamp;
+    const rawBeforeId=req.query?.beforeId;
+    const hasCursor=rawBeforeTimestamp!==undefined||rawBeforeId!==undefined;
+    const beforeTimestamp=hasCursor?Number(rawBeforeTimestamp):null;
+    const beforeId=hasCursor?String(rawBeforeId||''):'';
+    if(hasCursor&&(!Number.isSafeInteger(beforeTimestamp)||beforeTimestamp<1||!validId(beforeId)))return res.status(400).json({error:'invalid message history cursor'});
+    const rows=(await pool.query(
+      `SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username,COALESCE((SELECT json_agg(reader.username ORDER BY receipt.read_at) FROM fynx_group_message_reads receipt JOIN users reader ON reader.id=receipt.user_id WHERE receipt.message_id=m.id),'[]'::json) AS read_by
+       FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id
+       WHERE m.group_id=$1
+         AND ($2::text IS NULL OR to_tsvector('simple',COALESCE(m.text,'')) @@ plainto_tsquery('simple',$2))
+          AND ($6::timestamptz IS NULL OR m.created_at >= $6)
+         AND (
+           $3::bigint IS NULL OR m.created_at < to_timestamp($3::double precision / 1000.0)
+           OR (date_trunc('milliseconds',m.created_at)=to_timestamp($3::double precision / 1000.0) AND m.id < $4)
+         )
+       ORDER BY m.created_at DESC,m.id DESC LIMIT $5`,
+      [groupId,searchQuery,beforeTimestamp,beforeId,limit+1,historyCutoff]
+    )).rows;
+    const hasMore=rows.length>limit;
+    const pageRows=rows.slice(0,limit);
+    const oldest=pageRows[pageRows.length-1];
+    const nextCursor=oldest?{timestamp:new Date(oldest.created_at).getTime(),id:String(oldest.id)}:null;
+    res.set('Cache-Control','no-store');
+    return res.json({messages:pageRows.reverse().map(messageJson),hasMore,nextCursor,historyScope});
+  }catch(error){console.error('group messages get',error);return res.status(500).json({error:'group messages lookup failed'});}});
+  app.post('/api/groups/:groupId/read',auth,async(req,res)=>{try{
+    await ensureSchema();
+    const groupId=String(req.params?.groupId||'');
+    if(!validId(groupId))return res.status(400).json({error:'invalid group id'});
+    const historyMember=await memberHistory(groupId,req.user.sub);
+     if(!historyMember)return res.status(403).json({error:'group membership required'});
+     const historyCutoff=historyMember.show_history_to_new_members?null:historyMember.joined_at;
+    const messageIds=Array.isArray(req.body?.messageIds)?[...new Set(req.body.messageIds.map(value=>String(value||'')))]:[];
+    if(messageIds.length>100||messageIds.some(id=>!validId(id)))return res.status(400).json({error:'invalid group read receipt batch'});
+    if(!messageIds.length)return res.json({messages:[]});
+    const inserted=await pool.query(`INSERT INTO fynx_group_message_reads(message_id,user_id)
+      SELECT message.id,$3 FROM fynx_group_messages message
+      WHERE message.group_id=$1 AND message.id=ANY($2::text[]) AND message.sender_id<>$3 AND ($4::timestamptz IS NULL OR message.created_at >= $4)
+      ON CONFLICT(message_id,user_id) DO NOTHING RETURNING message_id`,[groupId,messageIds,req.user.sub,historyCutoff]);
+    const changedIds=inserted.rows.map(row=>String(row.message_id));
+    if(!changedIds.length)return res.json({messages:[]});
+    const changed=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username,
+      COALESCE((SELECT json_agg(reader.username ORDER BY receipt.read_at) FROM fynx_group_message_reads receipt JOIN users reader ON reader.id=receipt.user_id WHERE receipt.message_id=m.id),'[]'::json) AS read_by
+      FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.group_id=$1 AND m.id=ANY($2::text[])`,[groupId,changedIds])).rows;
+    const messages=changed.map(messageJson);
+    for(const message of messages)await broadcastGroupMessage(groupId,message);
+    return res.json({messages});
+  }catch(error){console.error('group read receipts',error);return res.status(500).json({error:'group read receipts could not be saved'});}});
+  app.post('/api/groups/:groupId/messages',auth,async(req,res)=>{try{await ensureSchema();const groupId=String(req.params?.groupId||'');if(!validId(groupId))return res.status(400).json({error:'invalid group id'});const actor=await member(groupId,req.user.sub);if(!actor)return res.status(403).json({error:'group membership required'});const groupHistory=await memberHistory(groupId,req.user.sub);if(!groupHistory)return res.status(403).json({error:'group membership required'});const id=String(req.body?.id||'');if(!validId(id))return res.status(400).json({error:'invalid message id'});const text=typeof req.body?.text==='string'?req.body.text.trim().slice(0,4000):'';const attachmentMediaId=req.body?.attachmentMediaId==null?null:Number(req.body.attachmentMediaId);const attachmentType=req.body?.attachmentType==null?null:String(req.body.attachmentType).trim().toLowerCase().slice(0,20);const replyToId=req.body?.replyToId==null?null:String(req.body?.replyToId);if(!text&&attachmentMediaId==null)return res.status(400).json({error:'message content is required'});if(attachmentMediaId!==null&&(!Number.isInteger(attachmentMediaId)||attachmentMediaId<1))return res.status(400).json({error:'invalid attachment'});if(attachmentMediaId!==null&&(!attachmentType||!['image','video','video_note','audio','document'].includes(attachmentType)))return res.status(400).json({error:'invalid attachment type'});const groupSettings=(await pool.query('SELECT send_messages,send_media FROM fynx_groups WHERE id=$1 LIMIT 1',[groupId])).rows[0]||{send_messages:true,send_media:true};if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)return res.status(403).json({error:'group message sending is disabled',code:'GROUP_SEND_MESSAGES_DISABLED'});if(!canManageMembers(actor.role)&&attachmentMediaId!==null&&!groupSettings.send_media)return res.status(403).json({error:'group media sending is disabled',code:'GROUP_SEND_MEDIA_DISABLED'});if(attachmentMediaId!==null){const owned=await pool.query(`SELECT id,mime_type FROM message_media WHERE id=$1 AND owner_id=$2 LIMIT 1`,[attachmentMediaId,req.user.sub]);if(!owned.rows[0])return res.status(403).json({error:'attachment is not owned by this account'});const mime=String(owned.rows[0].mime_type||'').toLowerCase();const compatible=attachmentType==='image'?mime.startsWith('image/'):attachmentType==='audio'?mime.startsWith('audio/'):attachmentType==='video'||attachmentType==='video_note'?mime.startsWith('video/'):!mime.startsWith('image/')&&!mime.startsWith('video/')&&!mime.startsWith('audio/');if(!compatible)return res.status(400).json({error:'attachment type does not match media'});}if(replyToId){const parent=await pool.query(`SELECT parent.id FROM fynx_group_messages parent JOIN fynx_group_members gm ON gm.group_id=parent.group_id AND gm.user_id=$3 JOIN fynx_groups g ON g.id=parent.group_id WHERE parent.id=$1 AND parent.group_id=$2 AND parent.deleted_at IS NULL AND (g.show_history_to_new_members IS DISTINCT FROM FALSE OR parent.created_at >= gm.created_at) LIMIT 1`,[replyToId,groupId,req.user.sub]);if(!parent.rows[0])return res.status(400).json({error:'reply target not found'});}const safety=(await pool.query(`SELECT message_safety,account_status FROM fynx_account_safety WHERE user_id=$1 LIMIT 1`,[req.user.sub])).rows[0]||{message_safety:true,account_status:'ACTIVE'};if(String(safety.account_status)==='LOCKED')return res.status(403).json({error:'account is locked',code:'ACCOUNT_LOCKED'});if(String(safety.account_status)==='LIMITED')return res.status(403).json({error:'account is temporarily limited from sending group messages',code:'ACCOUNT_LIMITED'});if(safety.message_safety&&text){const safetyResult=inspectTrustSafetyText(text);if(safetyResult.shouldBlock)return res.status(422).json({error:'message blocked by safety protection',code:'SAFETY_BLOCK',safety:{risk:safetyResult.risk,scamSignals:safetyResult.scamSignals,spamSignals:safetyResult.spamSignals}});}const insertedMessage=await pool.query(`INSERT INTO fynx_group_messages(id,group_id,sender_id,text,attachment_media_id,attachment_type,reply_to_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO NOTHING RETURNING id`,[id,groupId,req.user.sub,text,attachmentMediaId,attachmentType,replyToId]);
+      if(!insertedMessage.rowCount){
+        const existingMessage=(await pool.query(`SELECT sender_id,text,attachment_media_id,attachment_type,reply_to_id,created_at FROM fynx_group_messages WHERE id=$1 AND group_id=$2 LIMIT 1`,[id,groupId])).rows[0];
+        const samePayload=existingMessage&&String(existingMessage.sender_id)===String(req.user.sub)&&String(existingMessage.text||'')===text&&String(existingMessage.attachment_media_id??'')===String(attachmentMediaId??'')&&String(existingMessage.attachment_type||'')===String(attachmentType||'')&&String(existingMessage.reply_to_id||'')===String(replyToId||'');
+        const visibleForMember=existingMessage&&(groupHistory.show_history_to_new_members||new Date(existingMessage.created_at).getTime()>=new Date(groupHistory.joined_at).getTime());
+        if(!samePayload||!visibleForMember)return res.status(409).json({error:'message id conflict'});
+      }const row=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username,COALESCE((SELECT json_agg(reader.username ORDER BY receipt.read_at) FROM fynx_group_message_reads receipt JOIN users reader ON reader.id=receipt.user_id WHERE receipt.message_id=m.id),'[]'::json) AS read_by FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[id,groupId])).rows[0];
       const message = messageJson(row);
       await broadcastGroupMessage(groupId, message);
       res.status(201).json({message});}catch(error){console.error('group message send',error);return res.status(500).json({error:'group message send failed'});}});
 
-  const getMessage = async (groupId,messageId,userId) => (await pool.query(`SELECT m.*,gm.role FROM fynx_group_messages m JOIN fynx_group_members gm ON gm.group_id=m.group_id AND gm.user_id=$3 WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[messageId,groupId,userId])).rows[0] || null;
+  const getMessage = async (groupId,messageId,userId) => (await pool.query(`SELECT m.*,gm.role FROM fynx_group_messages m JOIN fynx_group_members gm ON gm.group_id=m.group_id AND gm.user_id=$3 JOIN fynx_groups g ON g.id=m.group_id WHERE m.id=$1 AND m.group_id=$2 AND (g.show_history_to_new_members IS DISTINCT FROM FALSE OR m.created_at >= gm.created_at) LIMIT 1`,[messageId,groupId,userId])).rows[0] || null;
   app.patch('/api/groups/:groupId/messages/:messageId',auth,async(req,res)=>{try{await ensureSchema();const groupId=String(req.params.groupId||''),messageId=String(req.params.messageId||'');const row=await getMessage(groupId,messageId,req.user.sub);if(!row)return res.status(404).json({error:'message not found'});if(row.deleted_at)return res.status(409).json({error:'message already deleted'});const role=String(row.role);const action=String(req.body?.action||'');if(action==='edit'){if(String(row.sender_id)!==String(req.user.sub))return res.status(403).json({error:'only the sender can edit this message'});const text=String(req.body?.text||'').trim().slice(0,4000);if(!text)return res.status(400).json({error:'message text is required'});await pool.query(`UPDATE fynx_group_messages SET text=$1,edited_at=NOW() WHERE id=$2 AND group_id=$3`,[text,messageId,groupId]);}
     else if(action==='reaction'){const reaction=req.body?.reaction==null?null:String(req.body.reaction).slice(0,16);await pool.query(`UPDATE fynx_group_messages SET reaction=$1 WHERE id=$2 AND group_id=$3`,[reaction,messageId,groupId]);}
     else if(action==='pin'){if(role!=='ADMIN'&&role!=='MODERATOR')return res.status(403).json({error:'moderator permission required'});await pool.query(`UPDATE fynx_group_messages SET pinned=$1 WHERE id=$2 AND group_id=$3`,[Boolean(req.body?.pinned),messageId,groupId]);}
     else if(action==='delete'){if(String(row.sender_id)!==String(req.user.sub)&&role!=='ADMIN'&&role!=='MODERATOR')return res.status(403).json({error:'message deletion permission required'});await pool.query(`UPDATE fynx_group_messages SET deleted_at=NOW(),text='',attachment_media_id=NULL,attachment_type=NULL WHERE id=$1 AND group_id=$2`,[messageId,groupId]);}
     else return res.status(400).json({error:'unsupported message action'});
-    const updated=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[messageId,groupId])).rows[0];
+    const updated=(await pool.query(`SELECT m.id,m.text,m.attachment_media_id,m.attachment_type,m.reply_to_id,m.reaction,m.edited_at,m.deleted_at,m.pinned,m.created_at,u.username AS sender_username,COALESCE((SELECT json_agg(reader.username ORDER BY receipt.read_at) FROM fynx_group_message_reads receipt JOIN users reader ON reader.id=receipt.user_id WHERE receipt.message_id=m.id),'[]'::json) AS read_by FROM fynx_group_messages m JOIN users u ON u.id=m.sender_id WHERE m.id=$1 AND m.group_id=$2 LIMIT 1`,[messageId,groupId])).rows[0];
     const message = messageJson(updated);
     await broadcastGroupMessage(groupId, message);
     return res.json({message});

@@ -37,10 +37,27 @@ for (const required of [
   "a.published = TRUE",
   "a.scheduled_at IS NULL OR a.scheduled_at <= NOW()"
 ]) assert.ok(announcementSqlFragment.includes(required), `announcement SQL fragment must enforce ${required}`);
+const groupMessageAccess = `EXISTS (
+  SELECT 1
+  FROM fynx_group_messages gm
+  JOIN fynx_group_members gmem ON gmem.group_id = gm.group_id
+  WHERE gm.attachment_media_id = mm.id
+    AND gm.deleted_at IS NULL
+    AND gmem.user_id = $2
+)`;
+const groupMessageAuthorization = `OR ${groupMessageAccess}`;
+const groupMessageMediaFlag = `${groupMessageAccess} AS group_message_media`;
+const ownerMediaAuthorization = `(mm.owner_id = $2 AND NOT EXISTS (
+  SELECT 1 FROM fynx_group_messages gm
+  WHERE gm.attachment_media_id = mm.id AND gm.deleted_at IS NULL
+))`;
 const sql = sqlTemplate
+  .replace("${ownerMediaAuthorization}", ownerMediaAuthorization)
+  .replace("${groupMessageAuthorization}", groupMessageAuthorization)
+  .replace("${groupMessageMediaFlag}", groupMessageMediaFlag)
   .replace("${seasonalMediaAuthorization}", seasonalSqlFragment)
   .replace("${announcementMediaAuthorization}", announcementSqlFragment);
-assert.ok(!sql.includes("${seasonalMediaAuthorization}") && !sql.includes("${announcementMediaAuthorization}"), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
+assert.ok(!/\$\{(?:ownerMediaAuthorization|groupMessageAuthorization|groupMessageMediaFlag|seasonalMediaAuthorization|announcementMediaAuthorization)\}/.test(sql), "PostgreSQL test query must not contain an unexpanded JavaScript placeholder");
 assert.ok(source.includes("to_regclass('public.marketplace_seasonal_promotions')"), "runtime media route must skip the optional campaign table until it exists");
 const db = new Client();
 await db.connect();
@@ -54,10 +71,12 @@ try {
     "CREATE TEMP TABLE privacy_settings (user_id BIGINT, profile_visibility TEXT)",
     "CREATE TEMP TABLE friendships (user_id BIGINT, friend_id BIGINT, status TEXT)",
     "CREATE TEMP TABLE statuses (media_id BIGINT, expires_at TIMESTAMPTZ, owner_id BIGINT, audience TEXT)",
+    "CREATE TEMP TABLE fynx_group_messages (group_id TEXT, attachment_media_id BIGINT, deleted_at TIMESTAMPTZ)",
+    "CREATE TEMP TABLE fynx_group_members (group_id TEXT, user_id BIGINT)",
     "CREATE TEMP TABLE fynx_announcements (media_id BIGINT, published BOOLEAN, scheduled_at TIMESTAMPTZ)",
     "CREATE TEMP TABLE marketplace_seasonal_promotions (artwork_media_id BIGINT, active BOOLEAN, starts_at TIMESTAMPTZ, ends_at TIMESTAMPTZ)"
   ].join(";"));
-  for (const row of [[100,1],[101,4],[106,1],[107,3],[108,2],[109,1],[110,1],[111,4],[112,5],[113,5],[114,99],[115,1],[116,1],[117,60],[118,61],[119,62],[120,63],[121,10],[122,10],[123,10]]) {
+  for (const row of [[100,1],[101,4],[106,1],[107,3],[108,2],[109,1],[110,1],[111,4],[112,5],[113,5],[114,99],[115,1],[116,1],[117,60],[118,61],[119,62],[120,63],[121,10],[122,10],[123,10],[124,70]]) {
     await db.query("INSERT INTO message_media(id,owner_id,mime_type) VALUES($1,$2,'image/jpeg')", row);
   }
   await db.query("INSERT INTO marketplace_listings(id,seller_id,active,quantity,currency,media_ids) VALUES (1,1,TRUE,3,'NGN','[\"100\",\"101\"]'), (2,1,FALSE,3,'NGN','[\"106\"]'), (3,3,TRUE,3,'USD','[\"107\"]'), (4,1,TRUE,0,'NGN','[\"115\"]'), (5,1,TRUE,2,'EUR','[\"116\"]')");
@@ -68,7 +87,11 @@ try {
   await db.query("INSERT INTO statuses VALUES(112,NOW()+INTERVAL '1 hour',5,'EVERYONE'),(113,NOW()+INTERVAL '1 hour',5,'FRIENDS')");
   await db.query("INSERT INTO marketplace_seasonal_promotions VALUES (117,TRUE,NOW()-INTERVAL '1 hour',NOW()+INTERVAL '1 hour'), (118,FALSE,NOW()-INTERVAL '1 hour',NOW()+INTERVAL '1 hour'), (119,TRUE,NOW()-INTERVAL '2 hours',NOW()-INTERVAL '1 hour'), (120,TRUE,NOW()+INTERVAL '1 hour',NOW()+INTERVAL '2 hours')");
   await db.query("INSERT INTO fynx_announcements VALUES (121,TRUE,NOW()-INTERVAL '1 hour'),(122,TRUE,NOW()+INTERVAL '1 hour'),(123,FALSE,NULL)");
+  await db.query("INSERT INTO fynx_group_messages(group_id,attachment_media_id,deleted_at) VALUES ('group-1',124,NULL)");
+  await db.query("INSERT INTO fynx_group_members(group_id,user_id) VALUES ('group-1',2)");
   const allowed = async (id, viewer) => (await db.query(sql,[id,viewer])).rows.length > 0;
+  const groupMemberMedia = (await db.query(sql,[124,2])).rows[0];
+  assert.equal(groupMemberMedia?.group_message_media,true,"current group membership must mark attachment as private group media");
   const cases = [
     [100,2,true,"seller-owned active listing"],
     [101,2,false,"foreign-owned image referenced by listing"],
@@ -90,7 +113,10 @@ try {
     [120,2,false,"future seasonal campaign artwork"],
     [121,2,true,"published announcement image"],
     [122,2,false,"future scheduled announcement image"],
-    [123,2,false,"unpublished announcement image"]
+    [123,2,false,"unpublished announcement image"],
+    [124,2,true,"current group member can retrieve group attachment"],
+    [124,70,false,"former uploader cannot bypass group membership for active group attachment"],
+    [124,3,false,"non-member cannot retrieve group attachment"]
   ];
   for (const [id,viewer,expected,name] of cases) assert.equal(await allowed(id,viewer),expected,name);
   console.log(`PostgreSQL media authorization integration tests passed (${cases.length} cases, including campaign and announcement publication windows).`);

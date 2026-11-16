@@ -14,6 +14,35 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   TEST_EXIT=$?
   adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
+  # Launch the actual FYNX app after the isolated offline test and capture its
+  # rendered first-run screen. This is a read-only visual proof; no login,
+  # backend request, account mutation, or publishing action is performed.
+  if [ -s app/build/outputs/apk/debug/app-debug.apk ]; then
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    INSTALL_EXIT=$?
+    if [ "$INSTALL_EXIT" -eq 0 ]; then
+      adb shell am force-stop com.fynx.app
+      adb shell am start -W -n com.fynx.app/.MainActivity
+      LAUNCH_EXIT=$?
+      if [ "$LAUNCH_EXIT" -eq 0 ]; then
+        sleep 4
+        adb exec-out screencap -p > fynx-runtime-screenshots/FYNX-app-launch-screen.png
+        adb shell uiautomator dump /sdcard/fynx-app-launch-screen.xml >/dev/null 2>&1
+        adb pull /sdcard/fynx-app-launch-screen.xml fynx-runtime-screenshots/FYNX-app-launch-screen.xml >/dev/null 2>&1
+        if [ -s fynx-runtime-screenshots/FYNX-app-launch-screen.png ]; then
+          echo "::notice::Captured the real FYNX app launch screen from the Android emulator."
+        else
+          echo "::warning::FYNX app launch screenshot was not created."
+        fi
+      else
+        echo "::warning::FYNX app launch screen could not be opened for visual capture."
+      fi
+    else
+      echo "::warning::FYNX debug APK could not be installed for visual capture."
+    fi
+  else
+    echo "::warning::FYNX debug APK was unavailable for visual capture."
+  fi
   {
     echo "# FYNX Chat offline attachment outbox instrumentation"
     echo
