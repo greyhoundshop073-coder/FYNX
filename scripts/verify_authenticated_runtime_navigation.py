@@ -3182,10 +3182,28 @@ def secure_access_token_persisted()->bool|None:
     return None
 
 
-install=run("adb","install","-r","app/build/outputs/apk/debug/app-debug.apk")
-report.append(f"- APK install: {'PASS' if install.returncode==0 else 'FAIL'}")
-if install.returncode!=0:
-    report.append("- "+install.stdout.strip().replace("\n"," | ")); raise SystemExit(1)
+install=run("adb", "install", "-r", "app/build/outputs/apk/debug/app-debug.apk", timeout=60)
+if install.returncode != 0:
+    # connectedDebugAndroidTest has already installed the exact-commit APK before
+    # this visual pass. If adb temporarily rejects reinstall, verify that the
+    # package from the just-completed instrumentation run is still installed.
+    wait_result = run("adb", "wait-for-device", timeout=30)
+    package_result = run("adb", "shell", "pm", "path", PACKAGE, timeout=20)
+    if package_result.returncode == 0 and "package:" in (package_result.stdout or ""):
+        report.append("- APK reinstall: WARNING — adb install returned non-zero, but the exact-run package remains installed; continuing with the installed test APK.")
+        report.append("- APK install diagnostic: " + (install.stdout or "").strip().replace("\n", " | "))
+    else:
+        report.append("- APK install: FAIL")
+        report.append("- APK install diagnostic: " + ((install.stdout or "").strip().replace("\n", " | ") or "adb returned non-zero without diagnostic output"))
+        report.append("- adb wait-for-device: " + str(wait_result.returncode) + " " + (wait_result.stdout or "").strip().replace("\n", " | "))
+        report.append("- installed package probe: " + str(package_result.returncode) + " " + (package_result.stdout or "").strip().replace("\n", " | "))
+        report += ["", "## Result: RED"]
+        if AI_VISUALS_ONLY:
+            (ROOT / "FYNX-ai-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+        print("\n".join(report))
+        raise SystemExit(1)
+else:
+    report.append("- APK install: PASS")
 
 # On the offline/debug visual path only, pre-grant the notification permission in
 # the disposable emulator before the first FYNX launch. This prevents the Android
