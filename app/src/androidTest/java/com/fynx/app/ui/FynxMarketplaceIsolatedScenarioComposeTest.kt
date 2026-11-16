@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -85,6 +86,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         )
         assertTrue("Great Deals fixture needs at least two eligible products", candidates.size >= 2)
         val expectedDealId = candidates[1].id
+        val firstDeal = dealListings.first { it.id == candidates.first().id }
+        val secondDeal = dealListings.first { it.id == expectedDealId }
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -138,14 +141,15 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // Manual carousel navigation must advance the actual production carousel and route the
-        // exact identity of the newly selected deal, not the first or a neighbouring listing.
-        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Next advertised product").performClick()
+        // Manual swipe must advance the real LazyRow and route the exact selected listing.
+        // The carousel uses featured listing titles and pagination dots, not a synthetic counter.
+        compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Marketplace promotions carousel")
+            .performTouchInput { swipeLeft() }
         compose.waitUntil(timeoutMillis = 2_000) {
-            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(secondDeal.title).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Product 2 of ${candidates.size}").assertIsDisplayed()
+        compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
@@ -192,10 +196,13 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
+        val firstDeal = dealListings.first { it.id == candidates.first().id }
+        val secondDeal = dealListings.first { it.id == candidates[1].id }
+        compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 6_500) {
-            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText(secondDeal.title).fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {
