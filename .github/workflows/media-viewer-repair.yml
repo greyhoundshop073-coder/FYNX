@@ -3,11 +3,14 @@ name: Media Viewer Repair
 on:
   workflow_dispatch:
   push:
+    branches:
+      - integration/fynx-single-apk-20261013
     paths:
       - media-viewer-repair.trigger
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   repair:
@@ -15,7 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: integration/fynx-single-apk-20261013
+          fetch-depth: 0
 
       - name: Apply guarded full-screen image viewer repair
         shell: python
@@ -44,15 +48,24 @@ jobs:
           git diff --check
           git diff -- app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt
 
-      - name: Commit repair
+      - name: Open reviewable integration pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if git diff --quiet; then
-            echo "No source change was required."
-            exit 0
-          fi
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt
+          git add -A -- app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt
+          if git diff --cached --quiet; then
+            echo "No media-viewer source change was produced; nothing to submit."
+            exit 0
+          fi
+          git diff --cached --check
+          BRANCH_NAME="automation/media-viewer-repair-${GITHUB_RUN_ID}"
+          git switch -c "$BRANCH_NAME"
           git commit -m "Fix chat image full-screen viewer"
-          git push origin main
+          git push origin "HEAD:refs/heads/$BRANCH_NAME"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base integration/fynx-single-apk-20261013 --head "$BRANCH_NAME" \
+            --title "fix(media): repair full-screen image viewer" \
+            --body "Automated guarded media-viewer repair. Review the exact source diff and Android CI before merging."
