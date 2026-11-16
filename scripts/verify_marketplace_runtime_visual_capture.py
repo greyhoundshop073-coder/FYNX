@@ -185,7 +185,10 @@ checks = [
         and '!= "2G"' in emulator_storage
         and "available_mb" in emulator_storage
         and "-lt 2500" in emulator_storage
-        and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
+        and "emulator-boot-timeout: 900" in workflow
+        and "ram-size: 3072M" in workflow
+        and "heap-size: 512M" in workflow
+        and "cores: 4" in workflow,
     ),
 ]
 
