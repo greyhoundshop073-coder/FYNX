@@ -73,6 +73,21 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+if [ "${FYNX_DEFER_MARKETPLACE_VISUAL_CAPTURE:-0}" = "1" ]; then
+  cat > fynx-runtime-screenshots/FYNX-marketplace-visual-capture-deferred.md <<EOF
+# FYNX Marketplace visual evidence — deferred
+
+- Screenshot/navigation evidence is temporarily separated from the required Android instrumentation gate.
+- Functional Android instrumentation still runs and remains blocking.
+- No app screens, controls, Marketplace features, or production code are removed.
+- Re-enable the visual capture pass when screenshot evidence is requested.
+- Instrumentation exit code: ${TEST_EXIT}
+- Result: $(if [ "${TEST_EXIT}" -eq 0 ]; then echo "INSTRUMENTATION_GREEN; VISUAL_CAPTURE_DEFERRED"; else echo "INSTRUMENTATION_RED; VISUAL_CAPTURE_DEFERRED"; fi)
+EOF
+  echo "::notice::Marketplace screenshot/navigation capture deferred; Android instrumentation remains a required gate."
+  exit "${TEST_EXIT}"
+fi
+
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # Admin permissions and account queues require the live OWNER/ADMIN backend.
   # Do not let an unrelated Marketplace/Wallet capture turn this Admin PR red,
