@@ -74,7 +74,7 @@ internal fun fynxBottomBarSpaceAboveInset(): Dp =
         .coerceAtLeast(0.dp)
 
 /**
- * Floating glass tab bar: a translucent capsule with a bright rim and a soft top highlight, and a
+ * Floating glass tab bar: a solid capsule with a bright rim and a soft top highlight, and a
  * glass pill that slides to the selected tab. Colors follow the app's light or dark surface.
  */
 @Composable
@@ -100,9 +100,9 @@ internal fun FynxGlassBottomBar(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
 
     val barFill = if (isLight) {
-        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.97f), Color(0xFFEAF0F7).copy(alpha = 0.95f)))
+        Brush.verticalGradient(listOf(Color.White, Color(0xFFEAF0F7)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFF28384F).copy(alpha = 0.96f), Color(0xFF0F1A2D).copy(alpha = 0.98f)))
+        Brush.verticalGradient(listOf(Color(0xFF28384F), Color(0xFF0F1A2D)))
     }
     val barRim = if (isLight) {
         Brush.linearGradient(listOf(Color.White, Color(0x2264748B), Color.White.copy(alpha = 0.75f)))
