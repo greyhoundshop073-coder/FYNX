@@ -141,10 +141,12 @@ internal fun FynxBuyerWalletPanel(
     val context = LocalContext.current
     var activeAction by rememberSaveable { mutableStateOf("HOME") }
     var fundingAmount by rememberSaveable { mutableStateOf("") }
-    var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
-    var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
-    var summaryLoading by remember { mutableStateOf(true) }
-    var activityLoading by remember { mutableStateOf(true) }
+    var summary by remember(testOnlySummary) {
+        mutableStateOf(testOnlySummary?.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false))
+    }
+    var activity by remember(testOnlyActivity) { mutableStateOf(testOnlyActivity) }
+    var summaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
+    var activityLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var summaryError by remember { mutableStateOf<String?>(null) }
     var activityError by remember { mutableStateOf<String?>(null) }
     var refreshVersion by remember { mutableIntStateOf(0) }
@@ -155,8 +157,8 @@ internal fun FynxBuyerWalletPanel(
     var hasMoreActivity by remember { mutableStateOf(false) }
     var loadingMoreActivity by remember { mutableStateOf(false) }
     var activityMoreError by remember { mutableStateOf<String?>(null) }
-    var sellerSummary by remember { mutableStateOf<FynxWalletSellerSummary?>(null) }
-    var sellerSummaryLoading by remember { mutableStateOf(true) }
+    var sellerSummary by remember(testOnlySellerSummary) { mutableStateOf(testOnlySellerSummary) }
+    var sellerSummaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var sellerSummaryError by remember { mutableStateOf<String?>(null) }
     var statementExporting by remember { mutableStateOf(false) }
     var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }
@@ -189,6 +191,17 @@ internal fun FynxBuyerWalletPanel(
     }
 
     LaunchedEffect(refreshVersion, activityFilter) {
+        if (testOnlySummary != null) {
+            summary = testOnlySummary.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false)
+            activity = testOnlyActivity
+            summaryLoading = false
+            activityLoading = false
+            summaryError = null
+            activityError = null
+            hasMoreActivity = false
+            nextActivityCursor = null
+            return@LaunchedEffect
+        }
         activityRequestGeneration += 1
         val requestGeneration = activityRequestGeneration
         summaryLoading = true
@@ -255,6 +268,12 @@ internal fun FynxBuyerWalletPanel(
     }
 
     LaunchedEffect(refreshVersion) {
+        if (testOnlySummary != null) {
+            sellerSummary = testOnlySellerSummary
+            sellerSummaryLoading = false
+            sellerSummaryError = null
+            return@LaunchedEffect
+        }
         sellerSummaryLoading = true
         sellerSummaryError = null
         if (testOnlySummary != null) {
@@ -964,7 +983,12 @@ private fun FynxWalletActivityRow(
                     )
                 }
                 Text(
-                    fynxWalletActivityDate(transaction.createdAt) + " · " + transaction.reference,
+                    fynxWalletActivityDate(transaction.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    transaction.reference,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Storefront
@@ -34,7 +35,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
-private const val MARKETPLACE_PROMO_ROTATION_MS = 6_500L
+private const val MARKETPLACE_PROMO_ROTATION_MS = 5_000L
 private const val MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS = 1_000L
 private const val MARKETPLACE_PROMO_BANNER_HEIGHT_DP = 224
 
@@ -95,7 +96,7 @@ fun MarketplacePromotionalBanner(
                 )
             },
             sellerSales
-        ).take(4).mapNotNull { index[it.id.trim()] }
+        ).take(6).mapNotNull { index[it.id.trim()] }
     }
     val lagosZone = remember { ZoneId.of("Africa/Lagos") }
     var localDate by remember(lagosZone) { mutableStateOf(LocalDate.now(lagosZone)) }
@@ -214,6 +215,21 @@ fun MarketplacePromotionalBanner(
         derivedStateOf { if (slides.isEmpty()) 0 else listState.firstVisibleItemIndex % slides.size }
     }
     val currentSlide = slides.getOrNull(currentIndex)
+    val currentFeaturedProductIndex = remember(currentSlide?.listing?.id, featuredListings) {
+        featuredListings.indexOfFirst { it.id == currentSlide?.listing?.id }
+    }
+
+    fun navigateFeaturedProduct(direction: Int) {
+        if (featuredListings.size < 2) return
+        val targetProductIndex = if (currentFeaturedProductIndex < 0) {
+            if (direction >= 0) 0 else featuredListings.lastIndex
+        } else {
+            (currentFeaturedProductIndex + direction + featuredListings.size) % featuredListings.size
+        }
+        val targetKey = "featured-" + featuredListings[targetProductIndex].id
+        val targetSlideIndex = slides.indexOfFirst { it.key == targetKey }
+        if (targetSlideIndex >= 0) scope.launch { listState.animateScrollToItem(targetSlideIndex) }
+    }
 
     LaunchedEffect(currentSlide?.key) {
         val campaignId = currentSlide?.campaignId
@@ -295,18 +311,32 @@ fun MarketplacePromotionalBanner(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            repeat(slides.size) { index ->
-                Box(
-                    Modifier
-                        .padding(horizontal = 3.dp)
-                        .width(if (index == currentIndex) 18.dp else 6.dp)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(
-                            if (index == currentIndex) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-                        )
+            if (currentFeaturedProductIndex >= 0 && featuredListings.isNotEmpty()) {
+                IconButton(onClick = { navigateFeaturedProduct(-1) }, enabled = featuredListings.size > 1) {
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "Previous advertised product")
+                }
+                Text(
+                    "Product " + (currentFeaturedProductIndex + 1) + " of " + featuredListings.size,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
+                IconButton(onClick = { navigateFeaturedProduct(1) }, enabled = featuredListings.size > 1) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Next advertised product")
+                }
+            } else {
+                repeat(slides.size) { index ->
+                    Box(
+                        Modifier
+                            .padding(horizontal = 3.dp)
+                            .width(if (index == currentIndex) 18.dp else 6.dp)
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(
+                                if (index == currentIndex) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                            )
+                    )
+                }
             }
         }
     }
