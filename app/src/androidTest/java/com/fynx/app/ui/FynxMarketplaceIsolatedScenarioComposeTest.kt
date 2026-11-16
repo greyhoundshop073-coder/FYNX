@@ -20,6 +20,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -134,18 +136,19 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         }
 
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
-        compose.onNodeWithText("Discover on FYNX").assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
+        compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // Manual carousel navigation must advance the actual production carousel and route the
-        // exact identity of the newly selected deal, not the first or a neighbouring listing.
-        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Next advertised product").performClick()
-        compose.waitUntil(timeoutMillis = 2_000) {
-            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
+        // The production promotional banner exposes real listing headlines in a swipeable
+        // LazyRow; it does not render the old "Product n of m" counter or a next-arrow button.
+        // Swipe the actual visible slide and verify that the next eligible listing is shown.
+        compose.onNodeWithText(candidates.first().title).performTouchInput { swipeLeft() }
+        compose.waitUntil(timeoutMillis = 3_000) {
+            compose.onAllNodesWithText(candidates[1].title).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Product 2 of ${candidates.size}").assertIsDisplayed()
+        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
         compose.onNodeWithText("Shop this product").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
@@ -192,10 +195,13 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        compose.onNodeWithText("Product 1 of ${candidates.size}").assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 6_500) {
-            compose.onAllNodesWithText("Product 2 of ${candidates.size}").fetchSemanticsNodes().isNotEmpty()
+        compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
+        // Rotation is 6.5 seconds in production. Assert the next real listing headline,
+        // rather than a counter that the production promotional banner does not render.
+        compose.waitUntil(timeoutMillis = 9_000) {
+            compose.onAllNodesWithText(candidates[1].title).fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {
