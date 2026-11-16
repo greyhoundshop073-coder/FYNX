@@ -447,7 +447,7 @@ private fun MarketplacePromotionalSlide(
                     onClick = onClick,
                     modifier = Modifier.semantics {
                         contentDescription = if (slide.listing != null && slide.actionLabel == "Shop this product") {
-                            "Shop this product: \${slide.headline}"
+                            "Shop this product: ${slide.headline}"
                         } else slide.actionLabel
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF12233C)),

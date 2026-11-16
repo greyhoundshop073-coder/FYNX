@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -204,7 +205,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             "External app files directory is unavailable for instrumentation screenshots."
         }
         val directory = File(externalFiles, "marketplace-test-fixtures")
-        android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=\${directory.absolutePath}")
+        android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=${directory.absolutePath}")
         check(directory.mkdirs() || directory.isDirectory)
         val file = File(directory, name)
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
