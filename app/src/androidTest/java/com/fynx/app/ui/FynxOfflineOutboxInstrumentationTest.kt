@@ -148,4 +148,57 @@ class FynxOfflineOutboxInstrumentationTest {
         assertEquals(null, result)
         assertTrue("A failed local copy must not enqueue a message that cannot be retried", FynxOfflineOutbox.load(context).isEmpty())
     }
+    @Test
+    fun structuredMessagesPersistAcrossReloadAndRemainAccountScoped() {
+        val types = listOf("location", "contact", "poll", "sticker", "gif")
+        val queued = types.map { type ->
+            val id = "offline-structured-$type-${UUID.randomUUID()}"
+            val mediaBacked = type == "sticker" || type == "gif"
+            FynxOfflineOutbox.Item(
+                id = id,
+                requestId = "request-$id",
+                recipient = "recipient@example",
+                text = "",
+                replyToId = null,
+                mediaId = if (mediaBacked) "12345" else null,
+                mediaType = if (mediaBacked) "image" else null,
+                voiceDurationMs = 0L,
+                createdAt = System.currentTimeMillis(),
+                messageType = type,
+                messagePayload = when (type) {
+                    "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
+                    "contact" -> mapOf("name" to "Test Contact", "phone" to "+2348000000000")
+                    "poll" -> mapOf("question" to "Choose?", "options" to "A\\u001FB")
+                    else -> mapOf("caption" to type)
+                }
+            )
+        }
+        try {
+            queued.forEach { item ->
+                assertTrue("Structured item $item.messageType must enqueue",
+                    FynxOfflineOutbox.enqueue(context, item, expectedAccountKey = testUsername))
+            }
+
+            // Re-reading SharedPreferences models process recreation: no in-memory queue is needed.
+            val restored = FynxOfflineOutbox.load(context).associateBy { it.messageType }
+            assertEquals(types.toSet(), restored.keys)
+            queued.forEach { original ->
+                val persisted = requireNotNull(restored[original.messageType])
+                assertEquals(original.id, persisted.id)
+                assertEquals(original.requestId, persisted.requestId)
+                assertEquals(original.messagePayload, persisted.messagePayload)
+                assertEquals(original.mediaId, persisted.mediaId)
+            }
+
+            val otherAccount = "offline-structured-other-${UUID.randomUUID()}"
+            assertTrue(authPreferences.edit().putString("username", otherAccount).commit())
+            assertTrue("A different account must not see structured pending messages",
+                FynxOfflineOutbox.load(context).isEmpty())
+        } finally {
+            assertTrue(authPreferences.edit().putString("username", testUsername).commit())
+            queued.forEach { FynxOfflineOutbox.remove(context, it.id, expectedAccountKey = testUsername) }
+        }
+        assertTrue(FynxOfflineOutbox.load(context).isEmpty())
+    }
+
 }
