@@ -265,6 +265,7 @@ object FynxChatStore {
         prefs.edit()
             .remove(key(context, chatKey))
             .remove(syncKey(context, chatKey))
+            .remove(outboxReplacementKey(context, chatKey))
             .putString(previewKey(context), array.toString())
             .apply()
     }
