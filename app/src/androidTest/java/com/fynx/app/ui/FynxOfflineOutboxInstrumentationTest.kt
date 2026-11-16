@@ -201,4 +201,60 @@ class FynxOfflineOutboxInstrumentationTest {
         assertTrue(FynxOfflineOutbox.load(context).isEmpty())
     }
 
+
+    @Test
+    fun serverAcceptedStructuredMessageReplacesPendingBubbleAndRejectsStaleSnapshot() {
+        val recipient = "structured-replacement-${UUID.randomUUID()}"
+        val types = listOf("location", "contact", "poll", "sticker", "gif")
+        try {
+            types.forEachIndexed { index, type ->
+                val localId = "offline-pending-$type-${UUID.randomUUID()}"
+                val serverId = (System.currentTimeMillis() * 10L + index).toString()
+                val payload = when (type) {
+                    "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
+                    "contact" -> mapOf("name" to "Test Contact", "phone" to "+2348000000000")
+                    "poll" -> mapOf("question" to "Choose?", "options" to "A\\u001FB")
+                    else -> mapOf("caption" to type)
+                }
+                val pending = ChatMessage(
+                    text = "",
+                    fromMe = true,
+                    id = localId,
+                    delivered = false,
+                    messageType = type,
+                    messagePayload = payload
+                )
+                FynxChatStore.save(context, recipient, listOf(pending))
+
+                val accepted = ChatMessage(
+                    text = "",
+                    fromMe = true,
+                    id = serverId,
+                    delivered = true,
+                    read = false,
+                    messageType = type,
+                    messagePayload = payload
+                )
+                FynxChatStore.replaceMessage(context, recipient, localId, accepted)
+
+                val afterAcceptance = FynxChatStore.load(context, recipient)
+                assertEquals("Only the server-accepted bubble should remain for $type", 1, afterAcceptance.size)
+                assertEquals(serverId, afterAcceptance.single().id)
+                assertTrue(afterAcceptance.single().delivered)
+                assertEquals(type, afterAcceptance.single().messageType)
+                assertEquals(payload, afterAcceptance.single().messagePayload)
+
+                // A late Compose snapshot containing the old local ID must not
+                // resurrect the pending bubble after server acceptance.
+                FynxChatStore.save(context, recipient, listOf(pending))
+                val afterStaleSnapshot = FynxChatStore.load(context, recipient)
+                assertEquals("Stale pending state must not replace accepted $type message", 1, afterStaleSnapshot.size)
+                assertEquals(serverId, afterStaleSnapshot.single().id)
+                assertEquals(type, afterStaleSnapshot.single().messageType)
+            }
+        } finally {
+            FynxChatStore.clear(context, recipient)
+        }
+    }
+
 }
