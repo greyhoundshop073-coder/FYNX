@@ -584,7 +584,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
         item {
             LazyRow(
                 state = shopSectionsScrollState,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("fynx-seller-center-section-tabs"),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(end = 12.dp)
             ) {
