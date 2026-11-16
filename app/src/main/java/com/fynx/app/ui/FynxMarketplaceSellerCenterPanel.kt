@@ -152,9 +152,9 @@ internal fun FynxMarketplaceSellerCenterPanel(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
-    var listings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var archivedListings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var loading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var listings by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings?.filter { it.active }.orEmpty()) }
+    var archivedListings by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings?.filterNot { it.active }.orEmpty()) }
+    var loading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var refreshGeneration by remember { mutableIntStateOf(0) }
     var error by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var deletingId by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
@@ -183,8 +183,8 @@ internal fun FynxMarketplaceSellerCenterPanel(
     var payoutAccount by remember(sellerAccountKey) { mutableStateOf<JSONObject?>(null) }
     var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
     var marketplacePayoutsEnabled by remember(sellerAccountKey) { mutableStateOf(false) }
-    var payoutReadinessNotice by remember(sellerAccountKey) { mutableStateOf("Checking seller payout eligibility…") }
-    var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var payoutReadinessNotice by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(if (testOnlyListings != null) "TEST MODE — payout verification and transfers are not active." else "Checking seller payout eligibility…") }
+    var accountLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var showPayoutAccount by remember(sellerAccountKey) { mutableStateOf(false) }
@@ -196,7 +196,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
     var payoutBankMenuOpen by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountNumber by remember(sellerAccountKey) { mutableStateOf("") }
     var accountName by remember(sellerAccountKey) { mutableStateOf("") }
-    var moneyLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var moneyLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var moneyRequestGeneration by remember { mutableIntStateOf(0) }
     var moneyError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var moneyRecords by remember(sellerAccountKey) { mutableStateOf(emptyList<SellerMoneyRecord>()) }
@@ -223,18 +223,18 @@ internal fun FynxMarketplaceSellerCenterPanel(
         editCategory.isNotBlank() &&
         standardMarketplaceCategories.none { it.equals(editCategory.trim(), ignoreCase = true) }
     ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
-    var shopName by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopDescription by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopName by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopName) { mutableStateOf(if (testOnlyListings != null) testOnlyShopName else "") }
+    var shopDescription by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopDescription) { mutableStateOf(if (testOnlyListings != null) testOnlyShopDescription else "") }
     var shopDescriptionAiBusy by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopDescriptionAiError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopDescriptionAiSuggestion by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
-    var shopLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopContactPhone by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var shopLocation by rememberSaveable(sellerAccountKey, testOnlyListings != null) { mutableStateOf(if (testOnlyListings != null) "Port Harcourt, Rivers State, Nigeria" else "") }
+    var shopContactPhone by rememberSaveable(sellerAccountKey, testOnlyListings != null) { mutableStateOf("") }
+    var shopLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
-    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopName, testOnlyShopDescription) { mutableStateOf(if (testOnlyListings != null) marketplaceShopProfileSignature(testOnlyShopName, testOnlyShopDescription, "Port Harcourt, Rivers State, Nigeria", "") else "") }
     val currentShopProfileSignature = marketplaceShopProfileSignature(
         shopName, shopDescription, shopLocation, shopContactPhone
     )
