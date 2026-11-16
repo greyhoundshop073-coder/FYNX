@@ -21,7 +21,10 @@ for (const character of normalized) {
 }
 assert.equal(depth, 0, "media authorization SQL parentheses must be balanced");
 assert.match(sql, /WHERE\s+mm\.id\s*=\s*\$1/i, "media lookup must be restricted to the requested media id");
-assert.match(sql, /mm\.owner_id\s*=\s*\$2/i, "media owner must be allowed to read their own media");
+assert.match(sql, /\$\{ownerMediaAuthorization\}/, "media query must use the schema-aware owner authorization fragment");
+assert.match(source, /let ownerMediaAuthorization = "mm\.owner_id = \$2"/, "ordinary media owners must retain access when the group schema is absent");
+assert.match(source, /ownerMediaAuthorization = `\(mm\.owner_id = \$2 AND NOT EXISTS \(/, "active group-message media ownership must not bypass current group membership");
+assert.match(source, /WHERE gm\.attachment_media_id = mm\.id AND gm\.deleted_at IS NULL/, "the owner bypass restriction must cover active group-message attachments");
 assert.match(sql, /privacy_settings/i, "profile-photo visibility rules must be enforced");
 assert.match(sql, /FROM\s+blocks/i, "blocked users must be excluded");
 assert.match(sql, /FROM\s+statuses/i, "status media must retain audience checks");
