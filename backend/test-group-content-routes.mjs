@@ -45,7 +45,7 @@ const auth = (req, res, next) => {
     const authorization = req.get("Authorization") || "";
     const bearer = authorization.replace(/^Bearer\s+/i, "");
     req.user = jwt.verify(bearer, process.env.JWT_SECRET);
-    next();
+    return next();
   } catch {
     return res.status(401).json({ error: "unauthorized" });
   }
