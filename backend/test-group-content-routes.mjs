@@ -325,8 +325,52 @@ try {
   const outsiderContent = await call("GET", contentPath, params, outsiderId);
   assert.equal(outsiderContent.statusCode, 403, "non-members must not read private group content");
 
-  console.log("GROUP MESSAGE + CONTENT POSTGRESQL ROUTE INTEGRATION: GREEN (two-account send/reply, idempotent retry, read receipts, search pagination, message permissions, new-member history privacy, poll creation/voting, event validation and RSVP)");
+  const contentReportPath = "/api/social/content-reports";
+  const postReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud", details: "This post advertises a suspicious offer."
+  });
+  assert.equal(postReport.statusCode, 201, "a member must be able to report a public social post");
+  assert.equal(postReport.body?.report?.targetType, "SOCIAL_POST");
+  const duplicatePostReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
+  });
+  assert.equal(duplicatePostReport.statusCode, 409, "duplicate open content reports must be rejected");
+  const selfReport = await call("POST", contentReportPath, {}, adminId, {
+    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
+  });
+  assert.equal(selfReport.statusCode, 400, "users must not report their own content");
+  const commentReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "SOCIAL_COMMENT", targetId: commentId.toString(), reason: "Harassment or bullying"
+  });
+  assert.equal(commentReport.statusCode, 201, "a member must be able to report a social comment");
+  const listingReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "MARKETPLACE_LISTING", targetId: activeListingId.toString(), reason: "Misleading product information"
+  });
+  assert.equal(listingReport.statusCode, 201, "a buyer must be able to report an active Marketplace listing");
+  const inactiveListingReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "MARKETPLACE_LISTING", targetId: inactiveListingId.toString(), reason: "Spam or duplicate listing"
+  });
+  assert.equal(inactiveListingReport.statusCode, 404, "inactive listings must not be reportable through the public content endpoint");
+  const hiddenAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
+  });
+  assert.equal(hiddenAudienceReport.statusCode, 404, "selected-audience content must not be reportable by non-friends");
+  await client.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
+  const visibleAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+    targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
+  });
+  assert.equal(visibleAudienceReport.statusCode, 201, "selected-audience content is reportable only when the viewer is also an accepted friend");
+  const myContentReports = await call("GET", "/api/social/content-reports/mine", {}, memberId);
+  assert.equal(myContentReports.statusCode, 200);
+  assert.equal(myContentReports.body?.reports?.length, 4, "report history must contain the reporter's four accepted content reports");
+  const outsiderContentReports = await call("GET", "/api/social/content-reports/mine", {}, outsiderId);
+  assert.equal(outsiderContentReports.statusCode, 200);
+  assert.equal(outsiderContentReports.body?.reports?.length, 0, "report history must be private to the authenticated reporter");
+
+  console.log("GROUP + USER CONTENT REPORTING POSTGRESQL ROUTE INTEGRATION: GREEN (group send/reply, offline privacy, polls/events, post/comment/listing reports, selected-audience visibility, duplicate/self-report protection and private report history)");
 } finally {
+  await client.query("DELETE FROM marketplace_listings WHERE id = ANY($1::bigint[])", [[activeListingId.toString(), inactiveListingId.toString()]]).catch(() => {});
+  await client.query("DELETE FROM social_posts WHERE id = ANY($1::bigint[])", [[publicPostId.toString(), selectedPostId.toString()]]).catch(() => {});
   await client.query("DELETE FROM fynx_groups WHERE id=$1", [groupId]).catch(() => {});
   await client.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [[adminId.toString(), memberId.toString(), outsiderId.toString()]]).catch(() => {});
   await client.end();
