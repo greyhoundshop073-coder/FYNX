@@ -260,7 +260,6 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         }
         }
     }
-}
 
 @Composable
 private fun FynxCreateGroupDialog(onDismiss: () -> Unit, onCreate: (String, String, FynxGroupVisibility) -> Unit) {

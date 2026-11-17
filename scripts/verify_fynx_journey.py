@@ -98,13 +98,13 @@ check("removed AI image/video generation is not reintroduced", "image generation
 # the explicit legacy instruction; R2 uses a token-free signed PUT and a session-bound
 # idempotent completion POST. Signed media GET redirects are allowlisted separately.
 put_start = media_backend_client.find("internal suspend fun putSignedMedia(")
-put_end = media_backend_client.find("\n\n    private fun isTrustedR2Host", put_start)
+put_end = media_backend_client.find("\n\n    suspend fun postJsonStream", put_start)
 put_method = media_backend_client[put_start:put_end] if put_start >= 0 and put_end > put_start else ""
 put_once_start = media_backend_client.find("private suspend fun putSignedMediaOnce")
 put_once_end = media_backend_client.find("\n\n    private suspend fun request(", put_once_start)
 put_once_method = media_backend_client[put_once_start:put_once_end] if put_once_start >= 0 and put_once_end > put_once_start else ""
 download_start = media_backend_client.find("private suspend fun downloadOnce(")
-download_end = media_backend_client.find("\\n\\n    private suspend fun request(", download_start)
+download_end = media_backend_client.find("\n\n    private suspend fun putSignedMediaOnce", download_start)
 download_method = media_backend_client[download_start:download_end] if download_start >= 0 and download_end > download_start else ""
 media_upload_start = media_shared_client.find("suspend fun uploadMedia(")
 media_upload_end = media_shared_client.find("\n\n    private fun readMediaBytes", media_upload_start)
