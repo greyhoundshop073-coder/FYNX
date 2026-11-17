@@ -55,6 +55,28 @@ object FynxAdminClient {
         val status: String,
         val createdAt: String
     )
+
+    data class ContentReport(
+        val id: String,
+        val targetType: String,
+        val targetId: String,
+        val targetOwnerId: String,
+        val ownerUsername: String,
+        val reporterUsername: String,
+        val reason: String,
+        val details: String,
+        val contentPreview: String,
+        val status: String,
+        val createdAt: String
+    )
+    data class ContentReportAudit(
+        val id: String,
+        val moderatorUsername: String,
+        val previousStatus: String,
+        val newStatus: String,
+        val decisionNote: String,
+        val createdAt: String
+    )
     data class AppealReview(
         val id: String,
         val userId: String,
@@ -278,6 +300,46 @@ object FynxAdminClient {
             "/api/admin/reports/${encode(reportId)}",
             JSONObject().put("status", status.trim().uppercase()).toString()
         ).map { Unit }
+
+    suspend fun contentReports(context: Context, status: String = "OPEN"): Result<List<ContentReport>> =
+        FynxBackendClient.get(context, "/api/admin/content-reports?status=${encode(status.trim().uppercase())}").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ContentReport(
+                        id = item.optString("id"), targetType = item.optString("targetType"),
+                        targetId = item.optString("targetId"), targetOwnerId = item.optString("targetOwnerId"),
+                        ownerUsername = item.optString("ownerUsername"), reporterUsername = item.optString("reporterUsername"),
+                        reason = item.optString("reason"), details = item.optString("details"),
+                        contentPreview = item.optString("contentPreview"), status = item.optString("status"),
+                        createdAt = item.optString("createdAt")
+                    ))
+                }
+            }
+        }
+
+    suspend fun reviewContentReport(context: Context, reportId: String, status: String, decisionNote: String): Result<Unit> =
+        FynxBackendClient.patchJson(
+            context,
+            "/api/admin/content-reports/${encode(reportId)}",
+            JSONObject().put("status", status.trim().uppercase()).put("decisionNote", decisionNote.take(1000)).toString()
+        ).map { Unit }
+
+    suspend fun contentReportAudit(context: Context, reportId: String): Result<List<ContentReportAudit>> =
+        FynxBackendClient.get(context, "/api/admin/content-reports/${encode(reportId)}/audit").mapCatching { raw ->
+            val array = JSONObject(raw).optJSONArray("audit") ?: return@mapCatching emptyList()
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.optJSONObject(i) ?: continue
+                    add(ContentReportAudit(
+                        id = item.optString("id"), moderatorUsername = item.optString("moderatorUsername"),
+                        previousStatus = item.optString("previousStatus"), newStatus = item.optString("newStatus"),
+                        decisionNote = item.optString("decisionNote"), createdAt = item.optString("createdAt")
+                    ))
+                }
+            }
+        }
 
     suspend fun appeals(context: Context, offset: Int = 0): Result<AdminPage<AppealReview>> =
         FynxBackendClient.get(context, "/api/admin/appeals?limit=50&offset=${offset.coerceIn(0, 10000)}").mapCatching { raw ->
