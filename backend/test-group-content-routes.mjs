@@ -104,45 +104,45 @@ async function runContentReportIntegration() {
     await contentClient.query("INSERT INTO social_post_audience(post_id,user_id) VALUES(102,2)");
     await contentClient.query("INSERT INTO marketplace_listings(id,seller_id,title,description,price,category,active) VALUES(301,1,'Active test listing','A listing used for moderation tests',100,'Test',TRUE),(302,1,'Inactive test listing','Not available to buyers',100,'Test',FALSE)");
     registerTrustSafetyRoutes({ app: contentApp, pool: contentClient, auth });
-    const contentReportPath
-    const postReport = await call("POST", contentReportPath, {}, memberId, {
+    const contentReportPath = "/api/social/content-reports";
+    const postReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud", details: "This post advertises a suspicious offer."
     });
     assert.equal(postReport.statusCode, 201, "a member must be able to report a public social post");
     assert.equal(postReport.body?.report?.targetType, "SOCIAL_POST");
-    const duplicatePostReport = await call("POST", contentReportPath, {}, memberId, {
+    const duplicatePostReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
     });
     assert.equal(duplicatePostReport.statusCode, 409, "duplicate open content reports must be rejected");
-    const selfReport = await call("POST", contentReportPath, {}, adminId, {
+    const selfReport = await contentCall("POST", contentReportPath, {}, adminId, {
       targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
     });
     assert.equal(selfReport.statusCode, 400, "users must not report their own content");
-    const commentReport = await call("POST", contentReportPath, {}, memberId, {
+    const commentReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "SOCIAL_COMMENT", targetId: commentId.toString(), reason: "Harassment or bullying"
     });
     assert.equal(commentReport.statusCode, 201, "a member must be able to report a social comment");
-    const listingReport = await call("POST", contentReportPath, {}, memberId, {
+    const listingReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "MARKETPLACE_LISTING", targetId: activeListingId.toString(), reason: "Misleading product information"
     });
     assert.equal(listingReport.statusCode, 201, "a buyer must be able to report an active Marketplace listing");
-    const inactiveListingReport = await call("POST", contentReportPath, {}, memberId, {
+    const inactiveListingReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "MARKETPLACE_LISTING", targetId: inactiveListingId.toString(), reason: "Spam or duplicate listing"
     });
     assert.equal(inactiveListingReport.statusCode, 404, "inactive listings must not be reportable through the public content endpoint");
-    const hiddenAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+    const hiddenAudienceReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
     });
     assert.equal(hiddenAudienceReport.statusCode, 404, "selected-audience content must not be reportable by non-friends");
-    await client.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
-    const visibleAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+    await contentClient.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
+    const visibleAudienceReport = await contentCall("POST", contentReportPath, {}, memberId, {
       targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
     });
     assert.equal(visibleAudienceReport.statusCode, 201, "selected-audience content is reportable only when the viewer is also an accepted friend");
-    const myContentReports = await call("GET", "/api/social/content-reports/mine", {}, memberId);
+    const myContentReports = await contentCall("GET", "/api/social/content-reports/mine", {}, memberId);
     assert.equal(myContentReports.statusCode, 200);
     assert.equal(myContentReports.body?.reports?.length, 4, "report history must contain the reporter's four accepted content reports");
-    const outsiderContentReports = await call("GET", "/api/social/content-reports/mine", {}, outsiderId);
+    const outsiderContentReports = await contentCall("GET", "/api/social/content-reports/mine", {}, outsiderId);
     assert.equal(outsiderContentReports.statusCode, 200);
     assert.equal(outsiderContentReports.body?.reports?.length, 0, "report history must be private to the authenticated reporter");
 
