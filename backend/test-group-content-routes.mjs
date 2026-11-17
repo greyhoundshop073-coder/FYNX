@@ -43,7 +43,7 @@ const token = id => jwt.sign({ sub: String(id) }, process.env.JWT_SECRET);
 const auth = (req, res, next) => {
   try {
     const authorization = req.get("Authorization") || "";
-    const bearer = authorization.replace(/^Bearer\\s+/i, "");
+    const bearer = authorization.replace(/^Bearer\s+/i, "");
     req.user = jwt.verify(bearer, process.env.JWT_SECRET);
     next();
   } catch {
