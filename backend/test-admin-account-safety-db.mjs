@@ -126,7 +126,7 @@ try {
       (4,'percent%match','Literal Percent Match',0),
       (5,'under_score_match','Literal Underscore Match',0),
       (6,'percentXmatch','Wildcard Percent Near Miss',0),
-      (7,'underXscore_match','Wildcard Underscore Near Miss',0);
+      (7,'underXscoreMatch','Wildcard Underscore Near Miss',0);
   `);
 
   registerAdminRoutes({ app, databasePool: pool, jwtApi, jwtSecret: secret });
