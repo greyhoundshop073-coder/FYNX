@@ -104,7 +104,14 @@ try {
   // A second pool/client must initialize its own schema; it must not reuse
   // the first client's completed initialization promise.
   const secondRoutes = new Map();
-  const secondApp = { get(path, ...handlers) { secondRoutes.set(`GET ${path}`, handlers.at(-1)); } };
+  const registerSecondRoute = method => (path, ...handlers) => {
+    secondRoutes.set(`${method} ${path}`, handlers.at(-1));
+  };
+  const secondApp = {
+    get: registerSecondRoute("GET"),
+    post: registerSecondRoute("POST"),
+    patch: registerSecondRoute("PATCH")
+  };
   await secondDb.query(`CREATE SCHEMA "${secondTestSchema}"; SET search_path TO "${secondTestSchema}"; CREATE TABLE users (id BIGINT PRIMARY KEY, username TEXT); INSERT INTO users(id,username) VALUES (7,'second-pool-user');`);
   registerTrustSafetyRoutes({ app: secondApp, pool: secondDb, auth: (_req, _res, next) => next?.() });
   const secondHistoryHandler = secondRoutes.get("GET /api/social/content-reports/mine");
