@@ -143,6 +143,12 @@ jobs:
         run: |
           node test-platform-admin-role.mjs
           node test-admin-auth-session-version.mjs
+      - name: Verify PostgreSQL IDs, content reporting and Admin safety routes
+        run: |
+          node test-postgres-id-validation.mjs
+          node test-content-reporting-db.mjs
+          node test-admin-account-safety-db.mjs
+          node test-admin-reports-appeals-db.mjs
       - name: Verify shared bounded database pool
         run: node verify-shared-database-pool.mjs
       - name: Check and test FYNX assistant request parsing and Gemini provider
