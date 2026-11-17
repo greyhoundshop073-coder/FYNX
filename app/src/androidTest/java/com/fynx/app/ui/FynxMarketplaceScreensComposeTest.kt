@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -77,7 +78,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.onNodeWithText("Search products, sellers or categories").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Search products, sellers or categories").assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 3_000) {
             compose.onAllNodesWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -145,7 +146,12 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Total: NGN 60,375.00").assertIsDisplayed()
         saveScreenshot("marketplace-checkout-pickup-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
-        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
+        compose.waitUntil(timeoutMillis = 3_000) {
+            compose.onAllNodesWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
+            .performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -248,7 +254,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Your shop at a glance").assertIsDisplayed()
         saveScreenshot("my-shop-overview-screen.png")
 
-        compose.onNodeWithText("Listings").performClick()
+        compose.onNodeWithTag("fynx-seller-center-section-listings").performClick()
         compose.onNodeWithText("Your listings").assertIsDisplayed()
         compose.onNodeWithText("FYNX Test Wireless Headphones").assertIsDisplayed()
         compose.onNodeWithTag("fynx-seller-center-list")

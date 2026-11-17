@@ -626,6 +626,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
                         selected = activeSection == section,
                         onClick = { activeSection = section },
                         label = { Text(section, maxLines = 1) },
+                        modifier = Modifier.testTag("fynx-seller-center-section-${section.lowercase(Locale.US).replace(' ', '-') }"),
                         colors = selectedChipColors
                     )
                 }
