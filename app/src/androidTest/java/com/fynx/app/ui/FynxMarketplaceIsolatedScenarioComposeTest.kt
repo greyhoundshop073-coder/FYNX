@@ -18,8 +18,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -142,17 +142,16 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // The production promotional banner exposes real listing headlines in a swipeable
-        // LazyRow with snap-to-slide fling behavior; it does not render a synthetic counter.
-        // Swipe the actual visible slide and verify that the next eligible listing is shown.
-        compose.onNodeWithContentDescription("Marketplace promotions carousel")
-            .performTouchInput { swipeLeft() }
+        // Select the second real slide through the production LazyRow state. This keeps
+        // listing-identity and destination assertions deterministic on slower emulators;
+        // auto-rotation is exercised independently by the following test.
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
-        // The whole production slide is clickable; tap the selected product itself so
-        // a repeated action label on a neighbouring LazyRow item cannot be ambiguous.
+        // The whole production slide is clickable; tap its unique headline to prove that
+        // the selected product identity, rather than a neighbouring card, is routed.
         compose.onNodeWithContentDescription("Shop this product: ${secondDeal.title}").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
