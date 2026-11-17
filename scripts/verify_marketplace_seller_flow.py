@@ -12,6 +12,7 @@ detail_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceRe
 marketplace_reference_components = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text()
 design_system = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt").read_text()
 product_card = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt").read_text()
+product_grid = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductGrid.kt").read_text()
 seller_center = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt").read_text()
 photo_enhancement = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePhotoEnhancement.kt").read_text()
 app_gradle = (ROOT / "app/build.gradle.kts").read_text()
@@ -152,7 +153,7 @@ checks = [
     ("active marketplace retains protected checkout", "FynxMarketplaceCheckoutDialog" in marketplace),
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
     ("marketplace header respects the status bar through the shared app header", "statusBarsPadding()" in app_shell and "Column(Modifier.fillMaxSize().statusBarsPadding()) {\n            MarketplaceReferenceSearchBar(" not in marketplace),
-    ("marketplace uses a responsive two-column product grid", "GridCells.Fixed(2)" in marketplace),
+    ("marketplace uses adaptive product grids for phone, tablet and landscape widths", "GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL)" in marketplace and "GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL)" in product_grid and "FYNX_MARKETPLACE_GRID_MIN_CELL = 138.dp" in design_system),
     ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
     ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
     ("marketplace product cards show the seller avatar and name", "FynxProfileRemoteClient.get" in marketplace and "l.sellerDisplayName" in marketplace),
