@@ -2,6 +2,7 @@ import { getFynxDatabasePool } from "./databasePool.js";
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
+import { ensureTrustSafetySchema } from "./trustSafety.js";
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || '';
@@ -126,6 +127,118 @@ export function registerAdminRoutes({ app }) {
   const recordAdminActivity = async (req, action, targetType = '', targetId = '', summary = '', metadata = {}, executor = pool) => {
     await executor.query(`INSERT INTO fynx_admin_activity(actor_user_id,actor_role,action,target_type,target_id,summary,metadata) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`, [req.user.sub, req.fynxAdminRole || 'OWNER', action, targetType, String(targetId || ''), String(summary || '').slice(0,500), JSON.stringify(metadata || {})]);
   };
+  app.get('/api/admin/content-reports', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      await ensureTrustSafetySchema(pool);
+      if (!(await requireAdmin(req, res))) return;
+      const status = typeof req.query?.status === 'string' ? req.query.status.trim().toUpperCase() : 'OPEN';
+      if (!['OPEN','UNDER_REVIEW','RESOLVED','DISMISSED','ALL'].includes(status)) {
+        return res.status(400).json({ error: 'invalid report status' });
+      }
+      const result = await pool.query(`SELECT r.id,r.target_type,r.target_id,r.target_owner_id,r.reason,r.details,r.status,r.created_at,r.updated_at,
+        reporter.username AS reporter_username,owner.username AS owner_username,
+        CASE r.target_type
+          WHEN 'SOCIAL_POST' THEN (SELECT p.text FROM social_posts p WHERE p.id=r.target_id)
+          WHEN 'SOCIAL_COMMENT' THEN (SELECT c.text FROM social_post_comments c WHERE c.id=r.target_id)
+          WHEN 'MARKETPLACE_LISTING' THEN (SELECT l.title || E'\\n' || l.description FROM marketplace_listings l WHERE l.id=r.target_id)
+          ELSE NULL
+        END AS content_preview
+        FROM safety_content_reports r
+        JOIN users reporter ON reporter.id=r.reporter_id
+        JOIN users owner ON owner.id=r.target_owner_id
+        WHERE ($1='ALL' OR r.status=$1)
+        ORDER BY CASE r.status WHEN 'OPEN' THEN 0 WHEN 'UNDER_REVIEW' THEN 1 ELSE 2 END,r.created_at ASC
+        LIMIT 200`, [status]);
+      res.set('Cache-Control', 'no-store');
+      return res.json({ reports: result.rows.map(row => ({
+        id: String(row.id), targetType: row.target_type, targetId: String(row.target_id),
+        targetOwnerId: String(row.target_owner_id), ownerUsername: row.owner_username || '',
+        reporterUsername: row.reporter_username || '', reason: row.reason, details: row.details,
+        contentPreview: row.content_preview || '', status: row.status, createdAt: row.created_at, updatedAt: row.updated_at
+      })) });
+    } catch (error) {
+      console.error('admin content reports', error);
+      return res.status(500).json({ error: 'content reports unavailable' });
+    }
+  });
+
+  app.patch('/api/admin/content-reports/:reportId', auth, async (req, res) => {
+    let client;
+    let transactionOpen = false;
+    try {
+      await ensureSchema();
+      await ensureTrustSafetySchema(pool);
+      if (!(await requireAdmin(req, res))) return;
+      const reportId = String(req.params?.reportId || '');
+      const status = typeof req.body?.status === 'string' ? req.body.status.trim().toUpperCase() : '';
+      const note = typeof req.body?.decisionNote === 'string' ? req.body.decisionNote.trim().slice(0, 1000) : '';
+      if (!isPositivePostgresBigint(reportId) || !['UNDER_REVIEW','RESOLVED','DISMISSED'].includes(status)) {
+        return res.status(400).json({ error: 'valid report id and moderation status are required' });
+      }
+      client = await pool.connect();
+      await client.query('BEGIN');
+      transactionOpen = true;
+      const current = (await client.query('SELECT id,status FROM safety_content_reports WHERE id=$1 FOR UPDATE', [reportId])).rows[0];
+      if (!current) {
+        await client.query('ROLLBACK');
+        transactionOpen = false;
+        return res.status(404).json({ error: 'content report not found' });
+      }
+      const allowedNextStatuses = {
+        OPEN: new Set(['UNDER_REVIEW','RESOLVED','DISMISSED']),
+        UNDER_REVIEW: new Set(['RESOLVED','DISMISSED']),
+        RESOLVED: new Set(),
+        DISMISSED: new Set()
+      };
+      if (!allowedNextStatuses[current.status]?.has(status)) {
+        await client.query('ROLLBACK');
+        transactionOpen = false;
+        return res.status(409).json({ error: 'invalid moderation status transition', code: 'INVALID_REPORT_STATUS_TRANSITION', currentStatus: current.status, requestedStatus: status });
+      }
+      const updated = await client.query('UPDATE safety_content_reports SET status=$1,updated_at=NOW() WHERE id=$2 RETURNING id,status,updated_at', [status, reportId]);
+      await client.query(`INSERT INTO safety_content_moderation_audit(report_id,moderator_id,previous_status,new_status,decision_note)
+        VALUES($1,$2,$3,$4,$5)`, [reportId, req.user.sub, current.status, status, note]);
+      await recordAdminActivity(req, 'CONTENT_REPORT_REVIEW', 'CONTENT_REPORT', reportId, 'Moderated user-submitted content report', {
+        previousStatus: current.status, newStatus: status, decisionNote: note
+      }, client);
+      await client.query('COMMIT');
+      transactionOpen = false;
+      const row = updated.rows[0];
+      res.set('Cache-Control', 'no-store');
+      return res.json({ report: { id: String(row.id), status: row.status, updatedAt: row.updated_at }, auditRecorded: true });
+    } catch (error) {
+      if (client && transactionOpen) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('content report rollback', rollbackError); }
+      }
+      console.error('admin content report decision', error);
+      return res.status(500).json({ error: 'content report review failed' });
+    } finally {
+      if (client) client.release();
+    }
+  });
+
+  app.get('/api/admin/content-reports/:reportId/audit', auth, async (req, res) => {
+    try {
+      await ensureSchema();
+      await ensureTrustSafetySchema(pool);
+      if (!(await requireAdmin(req, res))) return;
+      const reportId = String(req.params?.reportId || '');
+      if (!isPositivePostgresBigint(reportId)) return res.status(400).json({ error: 'valid report id is required' });
+      const result = await pool.query(`SELECT a.id,a.moderator_id,u.username,a.previous_status,a.new_status,a.decision_note,a.created_at
+        FROM safety_content_moderation_audit a JOIN users u ON u.id=a.moderator_id
+        WHERE a.report_id=$1 ORDER BY a.created_at ASC`, [reportId]);
+      res.set('Cache-Control', 'no-store');
+      return res.json({ audit: result.rows.map(row => ({
+        id: String(row.id), moderatorId: String(row.moderator_id), moderatorUsername: row.username || '',
+        previousStatus: row.previous_status, newStatus: row.new_status, decisionNote: row.decision_note, createdAt: row.created_at
+      })) });
+    } catch (error) {
+      console.error('admin content report audit', error);
+      return res.status(500).json({ error: 'moderation audit unavailable' });
+    }
+  });
+
   app.get('/api/admin/users/search', auth, async (req, res) => {
     try {
       await ensureSchema();
