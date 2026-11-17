@@ -15,7 +15,7 @@ const checks=[
  ['content report schema initialization is isolated per database pool',trustSafety.includes('new WeakMap()')&&trustSafety.includes('safetySchemaPromises.set(pool, schemaPromise)')],
  ['selected-audience content reports enforce accepted-friend visibility',trustSafety.includes("p.visibility='SELECTED_PEOPLE'")&&trustSafety.includes("f.status='accepted'")],
  ['open content reports are protected against duplicate submissions',trustSafety.includes('safety_content_reports_open_duplicate_idx')&&trustSafety.includes("status IN ('OPEN','UNDER_REVIEW')")],
- ['admin content report review is protected and audited',admin.includes('/api/admin/content-reports')&&admin.includes('ensureTrustSafetySchema(pool)')&&admin.includes('requireAdmin')&&admin.includes('safety_content_moderation_audit')],
+ ['admin content report review is protected and audited',admin.includes('/api/admin/content-reports')&&admin.includes('ensureTrustSafetySchema(routePool)')&&admin.includes('requireAdmin')&&admin.includes('safety_content_moderation_audit')],
  ['content report status transitions reject invalid state changes',admin.includes('allowedNextStatuses')&&admin.includes('INVALID_REPORT_STATUS_TRANSITION')&&admin.includes('CONTENT_REPORT_REVIEW')],
  ['no hardcoded API secret exists',!/sk-[A-Za-z0-9_-]{20,}/.test(admin)],
  ['support routes use the shared bounded PostgreSQL pool',support.includes('getFynxDatabasePool') && support.includes('createAdminAuthMiddleware') && !support.includes('new Pool(')],
