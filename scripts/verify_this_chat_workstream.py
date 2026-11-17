@@ -33,6 +33,10 @@ chat_store = read('app/src/main/java/com/fynx/app/ui/FynxChatStore.kt')
 runtime_navigation = read('scripts/verify_authenticated_runtime_navigation.py')
 chats_panel = read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt')
 groups_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+safety_client = read('app/src/main/java/com/fynx/app/ui/FynxSafetyRemoteClient.kt')
+admin_client = read('app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt')
+admin_panel = read('app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt')
+comments_panel = read('app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt')
 
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
@@ -120,6 +124,10 @@ check('no live Android screen reads the legacy device-local friend store', not l
 check('gift recipient cards use the shared remote avatar renderer', 'FynxRemoteProfileAvatar(person.profilePhotoMediaId' in read('app/src/main/java/com/fynx/app/ui/GiftsPanel.kt'))
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
+
+
+check('social posts, comments and Marketplace listings submit typed content reports to the authenticated safety API', all(x in safety_client for x in ['submitContentReport', '/api/social/content-reports']) and 'submitContentReport(context, "SOCIAL_POST"' in home_people and 'submitContentReport(context, "SOCIAL_COMMENT"' in comments_panel and 'submitContentReport(context, "MARKETPLACE_LISTING"' in market)
+check('owner/admin Safety queue separates content reports from account reports and exposes audit history', all(x in admin_client for x in ['contentReports(context', 'reviewContentReport(context', 'contentReportAudit(context']) and 'Text("Content reports")' in admin_panel and 'FynxAdminClient.contentReports(context)' in admin_panel and 'FynxAdminClient.contentReportAudit(context, reportId)' in admin_panel and 'FynxAdminClient.reviewContentReport(context' in admin_panel)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
