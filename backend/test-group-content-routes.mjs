@@ -26,12 +26,6 @@ const adminUsername = "content_owner_" + suffix.slice(0, 12);
 const memberUsername = "content_member_" + suffix.slice(0, 12);
 const outsiderUsername = "content_outsider_" + suffix.slice(0, 12);
 const groupId = "content_" + suffix.slice(0, 24);
-const contentBase = BigInt(Date.now()) * 1000n;
-const publicPostId = contentBase + 1n;
-const selectedPostId = contentBase + 2n;
-const commentId = contentBase + 3n;
-const activeListingId = contentBase + 4n;
-const inactiveListingId = contentBase + 5n;
 const routes = new Map();
 const app = {
   get: (path, ...handlers) => routes.set("GET " + path, handlers),
@@ -66,6 +60,99 @@ async function call(method, path, params, userId, body = {}, query = {}) {
   return res;
 }
 
+async function runContentReportIntegration() {
+  const schema = "content_report_" + suffix.slice(0, 16);
+  const quotedSchema = '"' + schema + '"';
+  const contentClient = new Client({ host, port, user, password, database });
+  const contentRoutes = new Map();
+  const contentApp = {
+    get: (path, ...handlers) => contentRoutes.set("GET " + path, handlers),
+    post: (path, ...handlers) => contentRoutes.set("POST " + path, handlers),
+    patch: (path, ...handlers) => contentRoutes.set("PATCH " + path, handlers),
+    delete: (path, ...handlers) => contentRoutes.set("DELETE " + path, handlers)
+  };
+  const contentCall = async (method, path, userId, body = {}, query = {}) => {
+    const handlers = contentRoutes.get(method + " " + path);
+    assert.ok(handlers, "registered " + method + " " + path);
+    const req = { params: {}, body, query, get: () => "Bearer " + token(userId) };
+    const res = {
+      statusCode: 200, body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(value) { this.body = value; return this; },
+      set() { return this; }
+    };
+    await handlers[0](req, res, () => handlers[1](req, res));
+    return res;
+  };
+  const adminId = 1n, memberId = 2n, outsiderId = 3n;
+  const publicPostId = 101n, selectedPostId = 102n, commentId = 201n;
+  const activeListingId = 301n, inactiveListingId = 302n;
+  try {
+    await contentClient.connect();
+    await contentClient.query("CREATE SCHEMA " + quotedSchema + "; SET search_path TO " + quotedSchema);
+    await contentClient.query(`
+      CREATE TABLE users (id BIGINT PRIMARY KEY, username TEXT NOT NULL UNIQUE);
+      CREATE TABLE social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'PUBLIC', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      CREATE TABLE social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+      CREATE TABLE social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(post_id,user_id));
+      CREATE TABLE friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(user_id,friend_id));
+      CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', price NUMERIC(14,2) NOT NULL CHECK (price > 0), category TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE);
+    `);
+    await contentClient.query("INSERT INTO users(id,username) VALUES(1,'content_owner'),(2,'content_member'),(3,'content_outsider')");
+    await contentClient.query("INSERT INTO social_posts(id,author_id,text,visibility) VALUES(101,1,'Public post for content reporting','PUBLIC'),(102,1,'Selected audience post','SELECTED_PEOPLE')");
+    await contentClient.query("INSERT INTO social_post_comments(id,post_id,author_id,text) VALUES(201,101,1,'Comment for content reporting')");
+    await contentClient.query("INSERT INTO social_post_audience(post_id,user_id) VALUES(102,2)");
+    await contentClient.query("INSERT INTO marketplace_listings(id,seller_id,title,description,price,category,active) VALUES(301,1,'Active test listing','A listing used for moderation tests',100,'Test',TRUE),(302,1,'Inactive test listing','Not available to buyers',100,'Test',FALSE)");
+    registerTrustSafetyRoutes({ app: contentApp, pool: contentClient, auth });
+    const contentReportPath
+    const postReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud", details: "This post advertises a suspicious offer."
+    });
+    assert.equal(postReport.statusCode, 201, "a member must be able to report a public social post");
+    assert.equal(postReport.body?.report?.targetType, "SOCIAL_POST");
+    const duplicatePostReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
+    });
+    assert.equal(duplicatePostReport.statusCode, 409, "duplicate open content reports must be rejected");
+    const selfReport = await call("POST", contentReportPath, {}, adminId, {
+      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
+    });
+    assert.equal(selfReport.statusCode, 400, "users must not report their own content");
+    const commentReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "SOCIAL_COMMENT", targetId: commentId.toString(), reason: "Harassment or bullying"
+    });
+    assert.equal(commentReport.statusCode, 201, "a member must be able to report a social comment");
+    const listingReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "MARKETPLACE_LISTING", targetId: activeListingId.toString(), reason: "Misleading product information"
+    });
+    assert.equal(listingReport.statusCode, 201, "a buyer must be able to report an active Marketplace listing");
+    const inactiveListingReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "MARKETPLACE_LISTING", targetId: inactiveListingId.toString(), reason: "Spam or duplicate listing"
+    });
+    assert.equal(inactiveListingReport.statusCode, 404, "inactive listings must not be reportable through the public content endpoint");
+    const hiddenAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
+    });
+    assert.equal(hiddenAudienceReport.statusCode, 404, "selected-audience content must not be reportable by non-friends");
+    await client.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
+    const visibleAudienceReport = await call("POST", contentReportPath, {}, memberId, {
+      targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
+    });
+    assert.equal(visibleAudienceReport.statusCode, 201, "selected-audience content is reportable only when the viewer is also an accepted friend");
+    const myContentReports = await call("GET", "/api/social/content-reports/mine", {}, memberId);
+    assert.equal(myContentReports.statusCode, 200);
+    assert.equal(myContentReports.body?.reports?.length, 4, "report history must contain the reporter's four accepted content reports");
+    const outsiderContentReports = await call("GET", "/api/social/content-reports/mine", {}, outsiderId);
+    assert.equal(outsiderContentReports.statusCode, 200);
+    assert.equal(outsiderContentReports.body?.reports?.length, 0, "report history must be private to the authenticated reporter");
+
+      console.log("USER CONTENT REPORTING POSTGRESQL ROUTE INTEGRATION: GREEN (post/comment/listing reports, selected-audience visibility, duplicate/self-report protection and private report history)");
+  } finally {
+    await contentClient.query("DROP SCHEMA IF EXISTS " + quotedSchema + " CASCADE").catch(() => {});
+    await contentClient.end().catch(() => {});
+  }
+}
+
 await client.connect();
 try {
   await client.query(
@@ -75,12 +162,7 @@ try {
     "ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS send_media BOOLEAN NOT NULL DEFAULT TRUE; " +
     "CREATE TABLE IF NOT EXISTS fynx_group_members (group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'MEMBER', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (group_id, user_id)); " +
     "ALTER TABLE fynx_group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); " +
-    "CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE'); " +
-    "CREATE TABLE IF NOT EXISTS social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'PUBLIC', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); " +
-    "CREATE TABLE IF NOT EXISTS social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); " +
-    "CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(post_id,user_id)); " +
-    "CREATE TABLE IF NOT EXISTS friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(user_id,friend_id)); " +
-    "CREATE TABLE IF NOT EXISTS marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', price NUMERIC(14,2) NOT NULL CHECK (price > 0), category TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE)"
+    "CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE')"
   );
 
   await client.query(
@@ -93,23 +175,8 @@ try {
     [groupId, adminId, memberId]
   );
 
-  await client.query(
-    "INSERT INTO social_posts(id,author_id,text,visibility) VALUES($1,$2,'Public post for content reporting','PUBLIC'),($3,$2,'Selected audience post','SELECTED_PEOPLE')",
-    [publicPostId.toString(), adminId.toString(), selectedPostId.toString()]
-  );
-  await client.query(
-    "INSERT INTO social_post_comments(id,post_id,author_id,text) VALUES($1,$2,$3,'Comment for content reporting')",
-    [commentId.toString(), publicPostId.toString(), adminId.toString()]
-  );
-  await client.query("INSERT INTO social_post_audience(post_id,user_id) VALUES($1,$2)", [selectedPostId.toString(), memberId.toString()]);
-  await client.query(
-    "INSERT INTO marketplace_listings(id,seller_id,title,description,price,category,active) VALUES($1,$2,'Active test listing','A listing used for moderation tests',100,'Test',TRUE),($3,$2,'Inactive test listing','Not available to buyers',100,'Test',FALSE)",
-    [activeListingId.toString(), adminId.toString(), inactiveListingId.toString()]
-  );
-
   registerGroupRoutes({ app });
   registerGroupContentRoutes({ app });
-  registerTrustSafetyRoutes({ app, pool: getFynxDatabasePool(), auth });
 
   const params = { groupId };
   const messagePath = "/api/groups/:groupId/messages";
@@ -325,52 +392,9 @@ try {
   const outsiderContent = await call("GET", contentPath, params, outsiderId);
   assert.equal(outsiderContent.statusCode, 403, "non-members must not read private group content");
 
-  const contentReportPath = "/api/social/content-reports";
-  const postReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud", details: "This post advertises a suspicious offer."
-  });
-  assert.equal(postReport.statusCode, 201, "a member must be able to report a public social post");
-  assert.equal(postReport.body?.report?.targetType, "SOCIAL_POST");
-  const duplicatePostReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
-  });
-  assert.equal(duplicatePostReport.statusCode, 409, "duplicate open content reports must be rejected");
-  const selfReport = await call("POST", contentReportPath, {}, adminId, {
-    targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
-  });
-  assert.equal(selfReport.statusCode, 400, "users must not report their own content");
-  const commentReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "SOCIAL_COMMENT", targetId: commentId.toString(), reason: "Harassment or bullying"
-  });
-  assert.equal(commentReport.statusCode, 201, "a member must be able to report a social comment");
-  const listingReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "MARKETPLACE_LISTING", targetId: activeListingId.toString(), reason: "Misleading product information"
-  });
-  assert.equal(listingReport.statusCode, 201, "a buyer must be able to report an active Marketplace listing");
-  const inactiveListingReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "MARKETPLACE_LISTING", targetId: inactiveListingId.toString(), reason: "Spam or duplicate listing"
-  });
-  assert.equal(inactiveListingReport.statusCode, 404, "inactive listings must not be reportable through the public content endpoint");
-  const hiddenAudienceReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
-  });
-  assert.equal(hiddenAudienceReport.statusCode, 404, "selected-audience content must not be reportable by non-friends");
-  await client.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
-  const visibleAudienceReport = await call("POST", contentReportPath, {}, memberId, {
-    targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
-  });
-  assert.equal(visibleAudienceReport.statusCode, 201, "selected-audience content is reportable only when the viewer is also an accepted friend");
-  const myContentReports = await call("GET", "/api/social/content-reports/mine", {}, memberId);
-  assert.equal(myContentReports.statusCode, 200);
-  assert.equal(myContentReports.body?.reports?.length, 4, "report history must contain the reporter's four accepted content reports");
-  const outsiderContentReports = await call("GET", "/api/social/content-reports/mine", {}, outsiderId);
-  assert.equal(outsiderContentReports.statusCode, 200);
-  assert.equal(outsiderContentReports.body?.reports?.length, 0, "report history must be private to the authenticated reporter");
-
-  console.log("GROUP + USER CONTENT REPORTING POSTGRESQL ROUTE INTEGRATION: GREEN (group send/reply, offline privacy, polls/events, post/comment/listing reports, selected-audience visibility, duplicate/self-report protection and private report history)");
+  await runContentReportIntegration();
+  console.log("GROUP MESSAGE + CONTENT POSTGRESQL ROUTE INTEGRATION: GREEN (two-account send/reply, idempotent retry, read receipts, search pagination, message permissions, new-member history privacy, poll creation/voting, event validation and RSVP)");
 } finally {
-  await client.query("DELETE FROM marketplace_listings WHERE id = ANY($1::bigint[])", [[activeListingId.toString(), inactiveListingId.toString()]]).catch(() => {});
-  await client.query("DELETE FROM social_posts WHERE id = ANY($1::bigint[])", [[publicPostId.toString(), selectedPostId.toString()]]).catch(() => {});
   await client.query("DELETE FROM fynx_groups WHERE id=$1", [groupId]).catch(() => {});
   await client.query("DELETE FROM users WHERE id = ANY($1::bigint[])", [[adminId.toString(), memberId.toString(), outsiderId.toString()]]).catch(() => {});
   await client.end();
