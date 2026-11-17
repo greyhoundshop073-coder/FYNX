@@ -98,6 +98,7 @@ private fun normalizedFynxGroupUsername(username: String): String =
 @Composable
 fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) -> Unit = {}) {
     val context = LocalContext.current
+    val accountKey = FynxAuthStore.accountStorageKey(context)
     val glassThemeId = FynxGlassThemeId.entries.firstOrNull { it.label == FynxPreferencesStore.loadChatWallpaper(context) } ?: FynxGlassThemeId.PURE_BLACK
     val glassPalette = fynxGlassPalette(glassThemeId)
     val scope = rememberCoroutineScope()
@@ -107,15 +108,15 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     var createError by remember { mutableStateOf<String?>(null) }
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
-    LaunchedEffect(currentUsername) {
-        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context) }
+    LaunchedEffect(currentUsername, accountKey) {
+        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, accountKey) }
         groups = localGroups
         if (FynxBackendClient.hasAccessToken(context)) {
             FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
-                val pendingIds = FynxGroupsStore.pendingSyncGroups(context)
+                val pendingIds = FynxGroupsStore.pendingSyncGroups(context, accountKey)
                 val unsyncedLocalGroups = localGroups.filter { it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id } }
                 val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
-                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled) }
+                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled, accountKey) }
                 groups = reconciled
             }
         }
@@ -191,9 +192,9 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
             scope.launch {
                 createError = null
                 val savedLocally = withContext(Dispatchers.IO) {
-                    val added = FynxGroupsStore.add(context, group)
-                    if (added) FynxGroupsStore.markPendingSync(context, group.id)
-                    added to FynxGroupsStore.load(context)
+                    val added = FynxGroupsStore.add(context, group, accountKey)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id, accountKey)
+                    added to FynxGroupsStore.load(context, accountKey)
                 }
                 if (!savedLocally.first) {
                     createError = "A group with this name already exists, or its details could not be saved."
@@ -202,7 +203,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 groups = savedLocally.second
                 showCreateDialog = false
                 FynxGroupRemoteClient.syncGroup(context, group)
-                    .onSuccess { FynxGroupsStore.markSynced(context, group.id) }
+                    .onSuccess { FynxGroupsStore.markSynced(context, group.id, accountKey) }
                     .onFailure { createError = "Group saved on this device. It will sync automatically when the connection returns." }
             }
         }
@@ -1559,12 +1560,12 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                             }
                                         )
                                         currentGroup = updatedGroup
-                                        FynxGroupsStore.updateGroup(context, updatedGroup)
-                                        FynxGroupsStore.markSynced(context, groupId)
+                                        FynxGroupsStore.updateGroup(context, updatedGroup, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                         FynxGroupRemoteClient.leaveGroup(context, groupId)
                                             .onSuccess {
-                                                FynxGroupsStore.removeGroup(context, groupId)
-                                                FynxGroupsStore.markSynced(context, groupId)
+                                                FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                                FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                                 showLeaveGroupDialog = false
                                                 onBack()
                                             }
@@ -1578,8 +1579,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                             } else {
                                 FynxGroupRemoteClient.leaveGroup(context, groupId)
                                     .onSuccess {
-                                        FynxGroupsStore.removeGroup(context, groupId)
-                                        FynxGroupsStore.markSynced(context, groupId)
+                                        FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
+                                        FynxGroupsStore.markSynced(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                         showLeaveGroupDialog = false
                                         onBack()
                                     }
@@ -1616,9 +1617,9 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
             hasServerAccess = hasRemoteAccessToken,
             onDismiss = { showMembers = false },
             onGroupChanged = { updated ->
-                if (FynxGroupsStore.updateGroup(context, updated)) {
+                if (FynxGroupsStore.updateGroup(context, updated, groupAccountKey.takeUnless { it == "signed_out" })) {
                     currentGroup = updated
-                    FynxGroupsStore.markSynced(context, updated.id)
+                    FynxGroupsStore.markSynced(context, updated.id, groupAccountKey.takeUnless { it == "signed_out" })
                 }
             }
         )
@@ -1636,7 +1637,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     val base = currentGroup ?: groupForDialogs
                     val updated = if (base.members.any { it.username.equals(remoteMember.username, true) }) base
                         else base.copy(members = base.members + FynxGroupMember(remoteMember.username, FynxGroupRole.MEMBER))
-                    if (FynxGroupsStore.updateGroup(context, updated)) currentGroup = updated
+                    if (FynxGroupsStore.updateGroup(context, updated, groupAccountKey.takeUnless { it == "signed_out" })) currentGroup = updated
                     else syncMessage = "Member was added on the server, but the local list could not refresh. Reopen the group."
                     Unit
                 }
