@@ -132,8 +132,8 @@ export function registerAdminRoutes({ app }) {
       await ensureSchema();
       await ensureTrustSafetySchema(pool);
       if (!(await requireAdmin(req, res))) return;
-      const status = typeof req.query?.status === 'string' ? req.query.status.trim().toUpperCase() : 'OPEN';
-      if (!['OPEN','UNDER_REVIEW','RESOLVED','DISMISSED','ALL'].includes(status)) {
+      const status = typeof req.query?.status === 'string' ? req.query.status.trim().toUpperCase() : 'ACTIVE';
+      if (!['OPEN','UNDER_REVIEW','RESOLVED','DISMISSED','ACTIVE','ALL'].includes(status)) {
         return res.status(400).json({ error: 'invalid report status' });
       }
       const result = await pool.query(`SELECT r.id,r.target_type,r.target_id,r.target_owner_id,r.reason,r.details,r.status,r.created_at,r.updated_at,
@@ -147,7 +147,7 @@ export function registerAdminRoutes({ app }) {
         FROM safety_content_reports r
         JOIN users reporter ON reporter.id=r.reporter_id
         JOIN users owner ON owner.id=r.target_owner_id
-        WHERE ($1='ALL' OR r.status=$1)
+        WHERE ($1='ALL' OR ($1='ACTIVE' AND r.status IN ('OPEN','UNDER_REVIEW')) OR r.status=$1)
         ORDER BY CASE r.status WHEN 'OPEN' THEN 0 WHEN 'UNDER_REVIEW' THEN 1 ELSE 2 END,r.created_at ASC
         LIMIT 200`, [status]);
       res.set('Cache-Control', 'no-store');
