@@ -45,7 +45,8 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             "You have a new message."
         } else body
         if (type == "MESSAGE" && chatUsername != null &&
-            !FynxConversationPreferences.chatNotifications(this, chatUsername)) return
+            (!FynxConversationPreferences.chatNotifications(this, chatUsername) ||
+                FynxPreferencesStore.isChatMuted(this, chatUsername))) return
 
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()
