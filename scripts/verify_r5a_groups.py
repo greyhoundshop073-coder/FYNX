@@ -48,7 +48,7 @@ check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeCl
 check('group message pages expose a stable server policy scope for invalidating cached history', "const historyScope=(historyMember.show_history_to_new_members?'ALL:':'FROM:')" in group and "nextCursor,historyScope" in group and 'historyScope:String="UNKNOWN"' in group_remote_client)
 check('group screen does not display cached delivered history before server authorization', 'messages = local.second.filterNot { it.delivered }' in active_group_panel)
 check('group refresh and older-page loading retain only messages authorized under the current history scope', 'mergeGroupMessageRefresh' in active_group_panel and 'authorizedGroupHistoryScope != pageHistoryScope' in active_group_panel and 'authorizedOlderGroupMessageIds' in active_group_panel)
-check('revoked group access clears account-scoped history and removes the inaccessible group', 'isAccessDeniedOrMissing(error)' in active_group_panel and 'FynxGroupsStore.removeGroup(context, groupId)' in active_group_panel and 'You no longer have access to this group.' in active_group_panel)
+check('revoked group access clears account-scoped history and removes the inaccessible group', 'isAccessDeniedOrMissing(error)' in active_group_panel and 'FynxChatStore.clear(context, "group_$groupId")' in active_group_panel and 'FynxGroupsStore.removeGroup(context, groupId)' in active_group_panel and 'You no longer have access to this group.' in active_group_panel)
 check('backend client identifies group membership 403/404 responses', 'fun isAccessDeniedOrMissing(error: Throwable)' in backend_client and 'httpError?.status == 403 || httpError?.status == 404' in backend_client)
 
 failed = [name for name, ok in checks if not ok]
