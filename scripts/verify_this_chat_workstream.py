@@ -15,6 +15,7 @@ remote_media = read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt')
 timeline = read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt')
 market = read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
 home_social = read('app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt')
+home_people = home_social
 market_compat = read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt')
 profile = read('app/src/main/java/com/fynx/app/ui/ProfilePanel.kt')
 profile_client = read('app/src/main/java/com/fynx/app/ui/FynxProfileRemoteClient.kt')
