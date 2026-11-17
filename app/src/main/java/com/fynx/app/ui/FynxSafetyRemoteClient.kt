@@ -88,9 +88,15 @@ object FynxSafetyRemoteClient {
     ): Result<ContentReport> {
         val normalizedType = targetType.trim().uppercase()
         val numericId = targetId.trim().toLongOrNull()
-        require(normalizedType in setOf("SOCIAL_POST", "SOCIAL_COMMENT", "MARKETPLACE_LISTING")) { "Unsupported content type" }
-        require(numericId != null && numericId > 0L) { "Invalid content identifier" }
-        require(reason.trim().length >= 3) { "Please select a report reason" }
+        if (normalizedType !in setOf("SOCIAL_POST", "SOCIAL_COMMENT", "MARKETPLACE_LISTING")) {
+            return Result.failure(IllegalArgumentException("Unsupported content type"))
+        }
+        if (numericId == null || numericId <= 0L) {
+            return Result.failure(IllegalArgumentException("Invalid content identifier"))
+        }
+        if (reason.trim().length < 3) {
+            return Result.failure(IllegalArgumentException("Please select a report reason"))
+        }
         return FynxBackendClient.postJson(
             context,
             "/api/social/content-reports",
