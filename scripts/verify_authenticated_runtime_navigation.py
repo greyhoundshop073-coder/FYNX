@@ -1251,6 +1251,8 @@ def marketplace_product_card_target(xml_text: str):
 def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
     """Wait for a real priced listing or an explicit empty/error state before capture."""
     deadline = time.monotonic() + timeout
+    started = deadline - timeout
+    probed_below_fold = False
     latest = ""
     terminal_markers = (
         "No products yet",
@@ -1267,6 +1269,36 @@ def wait_for_marketplace_settled(timeout: float = 20.0) -> tuple[str, str]:
             for marker in terminal_markers:
                 if find_control(latest, [marker]):
                     return latest, marker
+            # Short screens can place the actual listing/error state below the banner.
+            # Probe the real scroll container once and restore the original top position.
+            if not probed_below_fold and time.monotonic() - started >= 6.0:
+                probed_below_fold = True
+                found_state = ""
+                probe_xml = latest
+                swipes = 0
+                for _ in range(3):
+                    next_xml = swipe_vertical_scroll_container(
+                        probe_xml, "authenticated-marketplace-settle-probe.xml"
+                    )
+                    if not next_xml:
+                        break
+                    swipes += 1
+                    probe_xml = next_xml
+                    if marketplace_product_card_target(probe_xml) is not None:
+                        found_state = "real priced listing"
+                        break
+                    found_state = next(
+                        (marker for marker in terminal_markers if find_control(probe_xml, [marker])),
+                        ""
+                    )
+                    if found_state:
+                        break
+                for _ in range(swipes):
+                    probe_xml = swipe_vertical_scroll_container(
+                        probe_xml, "authenticated-marketplace-settle-return.xml", reverse=True
+                    ) or probe_xml
+                if found_state:
+                    return dump_ui("authenticated-marketplace-settled.xml") or latest, found_state
         time.sleep(0.5)
     return latest, "loading timeout"
 
@@ -3570,6 +3602,33 @@ def wallet_destination_ready(xml_text: str) -> bool:
     )
 
 
+def wallet_destination_ready_scrolling(xml_text: str, name: str) -> bool:
+    """Find the Wallet title and real balance buckets even when they start below the fold."""
+    if not xml_text:
+        return False
+    if wallet_destination_ready(xml_text):
+        return True
+    if not find_control(xml_text, ["FYNX Wallet"]):
+        return False
+    probe_xml = xml_text
+    swipes = 0
+    ready = False
+    for _ in range(3):
+        next_xml = swipe_vertical_scroll_container(probe_xml, name + ".xml")
+        if not next_xml:
+            break
+        swipes += 1
+        probe_xml = next_xml
+        if wallet_destination_ready(probe_xml):
+            ready = True
+            break
+    for _ in range(swipes):
+        probe_xml = swipe_vertical_scroll_container(
+            probe_xml, name + "-return.xml", reverse=True
+        ) or probe_xml
+    return ready
+
+
 def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple[bool,str,str]:
     """Read-only Wallet entry from the real Marketplace shortcut; return to Marketplace."""
     wallet_xml=tap_control(
@@ -3583,7 +3642,7 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     loading_markers=("Checking…", "Checking your wallet…", "Loading wallet activity…", "Loading…")
     while time.monotonic()<deadline:
         latest=dump_ui(prefix+"-marketplace-wallet-settled.xml")
-        if wallet_destination_ready(latest) and not any(marker in latest for marker in loading_markers):
+        if wallet_destination_ready_scrolling(latest, prefix + "-marketplace-wallet-probe") and not any(marker in latest for marker in loading_markers):
             screenshot("authenticated-wallet-marketplace-shortcut.png")
             (ROOT/"authenticated-wallet-marketplace-shortcut.xml").write_text(
                 latest+chr(10), encoding="utf-8"
@@ -3666,7 +3725,7 @@ def capture_wallet_from_features(prefix:str):
     for attempt in range(60):
         time.sleep(.5)
         wallet_xml=dump_ui(prefix+"-wallet-destination-"+str(attempt)+".xml")
-        wallet_shell_opened=wallet_destination_ready(wallet_xml)
+        wallet_shell_opened=wallet_destination_ready_scrolling(wallet_xml, prefix + "-wallet-probe-" + str(attempt))
         wallet_still_loading=bool(wallet_xml and any(marker in wallet_xml for marker in wallet_loading_markers))
         if wallet_shell_opened and not wallet_still_loading:
             wallet_settled=True
