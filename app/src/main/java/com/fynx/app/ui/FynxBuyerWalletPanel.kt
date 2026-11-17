@@ -422,6 +422,7 @@ internal fun FynxBuyerWalletPanel(
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -429,14 +430,15 @@ internal fun FynxBuyerWalletPanel(
                             )
                         ) {
                             Icon(Icons.Default.ArrowDownward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Add money", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Add money", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(
                             onClick = { activeAction = "WITHDRAW" },
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -444,8 +446,8 @@ internal fun FynxBuyerWalletPanel(
                             )
                         ) {
                             Icon(Icons.Default.ArrowUpward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Withdraw", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Withdraw", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                     }
                 }
