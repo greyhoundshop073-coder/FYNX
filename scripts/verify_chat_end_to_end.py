@@ -60,7 +60,7 @@ for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")
 require(
     conversation,
-    r"FynxProductionMessaging\.(?:history|historyPage)\(\s*context,"
+    r"FynxProductionMessaging\.(?:history|historyPage)\(\s*context,",
     "ConversationPanel must load production conversation history through the bounded API or its legacy compatibility method",
 )
 if "FynxProductionMessaging.historyPage(" in conversation:
