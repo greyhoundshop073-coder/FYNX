@@ -30,8 +30,7 @@ const checks=[
  ['case assignment and status changes create audit events',support.includes('STATUS_CHANGED')&&support.includes('ASSIGNED')&&support.includes('recordEvent(client')],
  ['support notifications use the FYNX notification service',support.includes('queueFynxNotification')&&support.includes('type: "SUPPORT"')],
  ['Admin People search treats percent and underscore as literal characters',admin.includes("POSITION(LOWER($1) IN LOWER(COALESCE(u.username, '')))>0")&&admin.includes("POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name, '')))>0")&&!admin.includes("u.username ILIKE $1")],
- ['Admin grant and revoke preserve exact PostgreSQL BIGINT identifiers',admin.includes("String(req.body?.userId??'').trim()")&&admin.includes("String(req.params.userId??'').trim()")&&admin.includes("isPositivePostgresBigint(userId)")&&!admin.includes("Number(req.body?.userId)")&&!admin.includes("Number(req.params.userId)")]
-],
+ ['Admin grant and revoke preserve exact PostgreSQL BIGINT identifiers',admin.includes("String(req.body?.userId??'').trim()")&&admin.includes("String(req.params.userId??'').trim()")&&admin.includes("isPositivePostgresBigint(userId)")&&!admin.includes("Number(req.body?.userId)")&&!admin.includes("Number(req.params.userId)")],
  ['support API contains no hardcoded provider secret',!/sk-[A-Za-z0-9_-]{20,}/.test(support)]
 ];
 for(const [name,ok] of checks){if(!ok)throw new Error(`Stage 15H verification failed: ${name}`);console.log(`PASS: ${name}`);}
