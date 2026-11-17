@@ -42,6 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -130,6 +132,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
+    var homeCameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
 
     // Clear transient UI state owned by the previous signed-in identity.
     // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
@@ -563,7 +566,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         FynxGlassIconButton(onClick = { selected = "Search" }, contentDescription = "Search FYNX") {
                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
-                        FynxGlassIconButton(onClick = { homeCameraRequest++ }, contentDescription = "Open FYNX camera") {
+                        FynxGlassIconButton(onClick = { homeCameraInitialMode = CameraMode.PHOTO; homeCameraRequest++ }, contentDescription = "Open FYNX camera") {
                             Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
@@ -668,7 +671,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             // post/content is covered. It reappears when the keyboard closes.
             if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden,
+                    visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden),
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
@@ -721,7 +724,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, cameraInitialMode = homeCameraInitialMode, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
                 onOpenProfile = { username -> profileUser = username; selected = "Home" },
                 onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
@@ -783,6 +786,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
+                onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 },
                 initialText = marketplaceStatusDraft,
                 onInitialTextAccepted = { marketplaceStatusDraft = null },
                 openOwnerUsername = statusOpenOwner,
@@ -913,11 +917,31 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             }
             }
                 if (selected == "Home" && statusCreatorRequested) {
-                    FynxStatusHubPanel(
-                        startWithCreator = true,
-                        onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
-                        onComposerVisibilityChange = { statusComposerImmersive = it }
-                    )
+                    Dialog(
+                        onDismissRequest = {
+                            statusCreatorRequested = false
+                            statusComposerImmersive = false
+                        },
+                        properties = DialogProperties(
+                            usePlatformDefaultWidth = false,
+                            decorFitsSystemWindows = false,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = false
+                        )
+                    ) {
+                        FynxStatusHubPanel(
+                            startWithCreator = true,
+                            onOpenUnifiedCamera = { mode ->
+                                homeCameraInitialMode = mode
+                                statusCreatorRequested = false
+                                statusComposerImmersive = false
+                                selected = "Home"
+                                homeCameraRequest += 1
+                            },
+                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
+                            onComposerVisibilityChange = { statusComposerImmersive = it }
+                        )
+                    }
                 }
         }
     }
