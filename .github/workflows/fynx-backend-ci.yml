@@ -151,6 +151,8 @@ jobs:
           node test-admin-reports-appeals-db.mjs
       - name: Verify shared bounded database pool
         run: node verify-shared-database-pool.mjs
+      - name: Test Owner/Admin Support Centre database routes
+        run: node --check supportRoutes.js && node test-support-routes.mjs
       - name: Check and test FYNX assistant request parsing and Gemini provider
         run: |
           node --check assistantJsonBodyParser.js
