@@ -80,7 +80,7 @@ try {
     "CREATE TABLE IF NOT EXISTS social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); " +
     "CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(post_id,user_id)); " +
     "CREATE TABLE IF NOT EXISTS friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(user_id,friend_id)); " +
-    "CREATE TABLE IF NOT EXISTS marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', active BOOLEAN NOT NULL DEFAULT TRUE)"
+    "CREATE TABLE IF NOT EXISTS marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', price NUMERIC(14,2) NOT NULL CHECK (price > 0), category TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE)"
   );
 
   await client.query(
@@ -103,7 +103,7 @@ try {
   );
   await client.query("INSERT INTO social_post_audience(post_id,user_id) VALUES($1,$2)", [selectedPostId.toString(), memberId.toString()]);
   await client.query(
-    "INSERT INTO marketplace_listings(id,seller_id,title,description,active) VALUES($1,$2,'Active test listing','A listing used for moderation tests',TRUE),($3,$2,'Inactive test listing','Not available to buyers',FALSE)",
+    "INSERT INTO marketplace_listings(id,seller_id,title,description,price,category,active) VALUES($1,$2,'Active test listing','A listing used for moderation tests',100,'Test',TRUE),($3,$2,'Inactive test listing','Not available to buyers',100,'Test',FALSE)",
     [activeListingId.toString(), adminId.toString(), inactiveListingId.toString()]
   );
 
