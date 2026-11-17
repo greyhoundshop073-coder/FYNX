@@ -114,6 +114,12 @@ assert.deepEqual(optionsSeen[2], {
 const r2Storage = createMediaStorage({
   env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "r2" },
   clientFactory(options) { optionsSeen.push(options); return fakeClient; },
+  async signUrlFactory(_client, command, options) {
+    calls.push(command);
+    assert.equal(options.expiresIn, 300);
+    assert.equal(command.constructor.name, "PutObjectCommand");
+    return "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write";
+  },
   idFactory: () => UUID
 });
 assert.equal(r2Storage.provider, "r2");
