@@ -791,6 +791,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         if (FynxBackendClient.isAccessDeniedOrMissing(error)) {
                             withContext(Dispatchers.IO) {
                                 if (isCurrentGroupAccount(groupAccountKey)) {
+                                    FynxChatStore.clear(context, "group_$groupId")
                                     FynxGroupsStore.removeGroup(context, groupId)
                                 }
                             }
