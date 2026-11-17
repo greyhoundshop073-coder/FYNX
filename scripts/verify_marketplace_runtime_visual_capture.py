@@ -116,7 +116,7 @@ checks = [
         '["View public Marketplace profile"]' in navigation
         and 'screenshot("authenticated-marketplace-public-profile.png")' in navigation
         and '["Marketplace profile"]' in navigation
-        and '["Products"]' in navigation
+        and '["Marketplace profile", "Products"]' in navigation
         and "This seller has no active products available right now." in navigation
         and "Contact seller" in navigation
         and "My Shop -> View public Marketplace profile" in navigation
