@@ -1646,7 +1646,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
                     LazyVerticalGrid(
                         state = productsGridState,
-                        columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
+                        columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
