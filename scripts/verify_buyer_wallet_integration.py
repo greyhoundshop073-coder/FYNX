@@ -199,7 +199,7 @@ checks.extend([
  ("Marketplace -> Wallet runtime helper waits for settled Wallet buckets, saves the screenshot, and verifies Marketplace return",
   "tap_control(" in wallet_shortcut_helper
   and 'marketplace_xml, ["Wallet"]' in wallet_shortcut_helper
-  and "wallet_destination_ready(latest)" in wallet_shortcut_helper
+  and "wallet_destination_ready_scrolling(latest, prefix + \"-marketplace-wallet-probe\")" in wallet_shortcut_helper
   and "authenticated-wallet-marketplace-shortcut.png" in wallet_shortcut_helper
   and 'find_control(back_xml, ["Search products, sellers or categories"])' in wallet_shortcut_helper),
  ("Marketplace -> Wallet screenshot is mandatory in authenticated runtime",
