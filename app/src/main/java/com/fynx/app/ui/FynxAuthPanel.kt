@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 enum class FynxAuthPage { WELCOME, REGISTER, VERIFY, LOGIN, EMAIL_VERIFY, PASSWORD_RESET }
@@ -40,6 +41,15 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
     var resetCodeRequested by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     val localDebugLoginAvailable = localDebugAccountForLogin(context, username) != null
+    // The sign-in card is always dark, so keep light status bar icons whatever the system theme is.
+    val authView = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(authView) {
+        val window = (authView.context as? android.app.Activity)?.window
+        val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, authView) }
+        val previous = controller?.isAppearanceLightStatusBars
+        controller?.isAppearanceLightStatusBars = false
+        onDispose { if (previous != null) controller?.isAppearanceLightStatusBars = previous }
+    }
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -196,11 +206,13 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                             TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy) { Text("Back") }
                         }
                         FynxAuthPage.LOGIN -> {
+                            Text("FYNX", color = Color(0xFF4DA3FF), style = MaterialTheme.typography.headlineMedium.copy(letterSpacing = 3.sp), fontWeight = FontWeight.ExtraBold)
+                            Spacer(Modifier.height(6.dp))
                             Text("Welcome back", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(18.dp))
                             FynxAuthField(username, { username = it.replace(" ", "").removePrefix("@") }, "Username", "@")
                             Spacer(Modifier.height(10.dp))
-                            FynxAuthField(password, { password = it }, "Password (optional for saved-device entry)", keyboardType = KeyboardType.Password, password = true)
+                            FynxAuthField(password, { password = it }, if (localDebugLoginAvailable) "Password (optional for saved-device entry)" else "Password", keyboardType = KeyboardType.Password, password = true)
                             Spacer(Modifier.height(6.dp))
                             if (localDebugLoginAvailable) {
                                 Text("Leave password blank for quick local entry. Enter it to connect this account to the live FYNX backend.", color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.bodySmall)
@@ -240,8 +252,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                 }
                             }, Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(26.dp), enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238AF2))) { Text(if (busy) "Signing in…" else "Sign In") }
                             TextButton(onClick = { error = null; resetEmail = ""; resetCode = ""; resetCodeRequested = false; page = FynxAuthPage.PASSWORD_RESET }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF9BCFFF))) { Text("Forgot password?") }
-                            TextButton(onClick = { error = null; pendingRegistration = null; verificationCode = ""; page = FynxAuthPage.EMAIL_VERIFY }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Verify email address") }
-                            TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = .8f))) { Text("Create a new account") }
+                            TextButton(onClick = { error = null; pendingRegistration = null; verificationCode = ""; page = FynxAuthPage.EMAIL_VERIFY }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF9BCFFF))) { Text("Verify email address") }
+                            TextButton(onClick = { error = null; page = FynxAuthPage.REGISTER }, enabled = !busy, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF9BCFFF))) { Text("Create a new account") }
                         }
                         FynxAuthPage.EMAIL_VERIFY -> {
                             val accountEmail = pendingRegistration?.email?.takeIf { it.isNotBlank() } ?: email

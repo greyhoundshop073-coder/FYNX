@@ -33,7 +33,7 @@ internal fun FynxMarketplaceReferenceProductGrid(
     modifier: Modifier = Modifier
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
         modifier = modifier.fillMaxSize().background(FynxMarketplaceReferenceStyle.background),
         contentPadding = PaddingValues(16.dp, 6.dp, 16.dp, 132.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

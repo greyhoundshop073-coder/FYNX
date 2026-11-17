@@ -165,7 +165,8 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
         Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text(if (section == "Chats") "Chats" else "Groups", style = MaterialTheme.typography.headlineSmall)
+                // The app header already says "Chats", so only the Groups view needs its own heading.
+                if (section != "Chats") Text("Groups", style = MaterialTheme.typography.headlineSmall)
                 Text(if (showArchived) "Archived conversations" else "Messages and groups in one place", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = { section = if (section == "Chats") "Groups" else "Chats" }) {
@@ -198,7 +199,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp + LocalFynxBottomBarSpace.current)) {
                     if (visibleChats.isNotEmpty()) {
                         item {
                             Text(
@@ -381,7 +382,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 Text("No groups yet", style = MaterialTheme.typography.titleMedium)
                 Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp + LocalFynxBottomBarSpace.current)) {
                     items(groups, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
@@ -398,7 +399,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     }
         FloatingActionButton(
             onClick = onOpenContacts,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp + LocalFynxBottomBarSpace.current),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White
         ) {
