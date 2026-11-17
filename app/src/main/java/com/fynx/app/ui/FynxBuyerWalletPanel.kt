@@ -348,7 +348,7 @@ internal fun FynxBuyerWalletPanel(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag("fynx-wallet-list"),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-wallet-list"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {

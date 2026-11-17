@@ -54,7 +54,7 @@ internal fun FynxMarketplaceSellerReferenceProfile(
         }
         MarketplaceReferenceSectionTitle("Products")
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

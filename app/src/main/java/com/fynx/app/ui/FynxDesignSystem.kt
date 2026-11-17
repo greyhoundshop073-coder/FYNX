@@ -15,6 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalTime
@@ -33,6 +39,13 @@ enum class FynxAccent(
     // Legacy stored value only; the accent picker now offers Green instead.
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
+
+/** Minimum product-card width; retains two columns on narrow phones and expands on larger screens. */
+internal val FYNX_MARKETPLACE_GRID_MIN_CELL = 138.dp
+
+/** Centers content and prevents wide screens from stretching phone-oriented surfaces. */
+internal fun Modifier.fynxAdaptiveContentWidth(maxWidth: Dp = 720.dp): Modifier =
+    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = maxWidth).fillMaxWidth()
 
 object FynxDesign {
     /** User-approved primary FYNX blue, used by the default accent and themed primary controls. */

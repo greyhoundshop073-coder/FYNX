@@ -600,7 +600,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(12.dp).testTag("fynx-seller-center-list"),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().padding(12.dp).testTag("fynx-seller-center-list"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
