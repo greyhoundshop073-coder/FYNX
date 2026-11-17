@@ -120,8 +120,11 @@ require("app.get('/api/admin/reports'" in backend and "app.get('/api/admin/appea
         backend.count("LIMIT $1 OFFSET $2") >= 2 and backend.count("limit+1") >= 2 and
         backend.count("Math.min(10000" ) >= 2,
         "report and appeal APIs must enforce bounded database pagination")
-require("account reports; content-report types are not presented as account reports" in source,
-        "moderation queue must not misrepresent account reports as content reports")
+require('Text("Reported accounts"' in source and 'Text("Content reports"' in source and
+        "Review account reports and content reports in separate queues" in source and
+        "FynxAdminClient.contentReports(context)" in source and
+        "FynxAdminClient.reviewContentReport(context" in source,
+        "account reports and content reports must remain in distinct, separately actionable moderation queues")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
 require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
