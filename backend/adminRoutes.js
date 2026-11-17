@@ -246,10 +246,10 @@ export function registerAdminRoutes({ app, databasePool = pool, jwtApi = jwt, jw
         `SELECT u.id, u.username, u.display_name, COALESCE(s.account_status, 'ACTIVE') AS account_status
          FROM users u
          LEFT JOIN fynx_account_safety s ON s.user_id=u.id
-         WHERE u.id::text<>$2 AND (u.id::text=$3 OR u.username ILIKE $1 OR COALESCE(u.display_name, '') ILIKE $1)
+         WHERE u.id::text<>$2 AND (u.id::text=$3 OR POSITION(LOWER($1) IN LOWER(COALESCE(u.username, '')))>0 OR POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name, '')))>0)
          ORDER BY CASE WHEN LOWER(u.username)=LOWER($4) THEN 0 ELSE 1 END, u.username
          LIMIT 20`,
-        [`%${query}%`, String(req.user.sub), query, query]
+        [query.toLowerCase(), String(req.user.sub), query, query]
       );
       res.set('Cache-Control', 'no-store');
       return res.json({ users: result.rows.map(user => ({

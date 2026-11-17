@@ -72,6 +72,19 @@ async function invokeAdmins(offset = 0) {
   return res;
 }
 
+async function invokePeopleSearch(q) {
+  const handlers = routes.get("GET /api/admin/users/search");
+  assert.ok(handlers && handlers.length === 2, "Admin People search route must be registered");
+  const [authenticate, handler] = handlers;
+  const req = {
+    query: { q },
+    get(name) { return name.toLowerCase() === "authorization" ? "Bearer owner" : ""; }
+  };
+  const res = response();
+  await authenticate(req, res, () => handler(req, res));
+  return res;
+}
+
 async function accountState(userId) {
   const result = await db.query(`
     SELECT u.session_version,
@@ -109,12 +122,24 @@ try {
     INSERT INTO users(id,username,display_name,session_version) VALUES
       (1,'owner','FYNX Owner',0),
       (2,'admin-two','Admin Two',0),
-      (3,'regular-user','Regular User',0);
+      (3,'regular-user','Regular User',0),
+      (4,'percent%match','Literal Percent Match',0),
+      (5,'under_score_match','Literal Underscore Match',0),
+      (6,'percentXmatch','Wildcard Percent Near Miss',0),
+      (7,'underXscore_match','Wildcard Underscore Near Miss',0);
   `);
 
   registerAdminRoutes({ app, databasePool: pool, jwtApi, jwtSecret: secret });
   const dashboard = await invokeDashboard();
   assert.equal(dashboard.statusCode, 200);
+  const literalPercent = await invokePeopleSearch("%m");
+  assert.equal(literalPercent.statusCode, 200);
+  assert.deepEqual(literalPercent.body.users.map(user => user.id), ["4"], "percent must be searched literally, not expanded as an ILIKE wildcard");
+  assert.equal(literalPercent.headers["cache-control"], "no-store");
+  const literalUnderscore = await invokePeopleSearch("_m");
+  assert.equal(literalUnderscore.statusCode, 200);
+  assert.deepEqual(literalUnderscore.body.users.map(user => user.id), ["5"], "underscore must be searched literally, not expanded as an ILIKE wildcard");
+  console.log("ADMIN_PEOPLE_SEARCH_DB=GREEN (literal percent/underscore matching; wildcard near-misses excluded)");
   await db.query("INSERT INTO fynx_admin_roles(user_id,role) VALUES(2,'ADMIN')");
   await db.query(`
     INSERT INTO users(id,username,display_name,session_version)
