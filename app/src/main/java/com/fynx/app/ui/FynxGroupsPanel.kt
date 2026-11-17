@@ -109,15 +109,34 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
     val visible = groups.filter { it.name.contains(query, true) || it.description.contains(query, true) }
 
     LaunchedEffect(currentUsername, accountKey) {
-        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, accountKey) }
+        val expectedAccountKey = accountKey
+        val requestToken = FynxBackendClient.accessToken(context)
+        fun sessionIsCurrent(): Boolean = if (expectedAccountKey.isNullOrBlank()) {
+            FynxAuthStore.accountStorageKey(context).isNullOrBlank() &&
+                FynxBackendClient.accessToken(context) == requestToken
+        } else {
+            FynxBackendClient.isRequestSessionCurrent(
+                expectedAccountKey,
+                FynxAuthStore.accountStorageKey(context),
+                requestToken,
+                FynxBackendClient.accessToken(context)
+            )
+        }
+
+        val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, expectedAccountKey) }
+        if (!sessionIsCurrent()) return@LaunchedEffect
         groups = localGroups
-        if (FynxBackendClient.hasAccessToken(context)) {
-            FynxGroupRemoteClient.loadMyGroups(context).onSuccess { remoteGroups ->
-                val pendingIds = FynxGroupsStore.pendingSyncGroups(context, accountKey)
-                val unsyncedLocalGroups = localGroups.filter { it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id } }
-                val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
-                withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled, accountKey) }
-                groups = reconciled
+        if (!expectedAccountKey.isNullOrBlank() && !requestToken.isNullOrBlank()) {
+            FynxGroupRemoteClient.loadMyGroups(context, expectedAccountKey, requestToken).onSuccess { remoteGroups ->
+                if (sessionIsCurrent()) {
+                    val pendingIds = FynxGroupsStore.pendingSyncGroups(context, expectedAccountKey)
+                    val unsyncedLocalGroups = localGroups.filter {
+                        it.id in pendingIds && remoteGroups.none { remote -> remote.id == it.id }
+                    }
+                    val reconciled = (remoteGroups + unsyncedLocalGroups).distinctBy { it.id }
+                    withContext(Dispatchers.IO) { FynxGroupsStore.save(context, reconciled, expectedAccountKey) }
+                    if (sessionIsCurrent()) groups = reconciled
+                }
             }
         }
     }
@@ -188,24 +207,57 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
 
     if (showCreateDialog) {
         FynxCreateGroupDialog({ showCreateDialog = false }) { name, description, visibility ->
-            val group = FynxGroup(UUID.randomUUID().toString(), name.trim(), description.trim(), visibility, currentUsername, listOf(FynxGroupMember(currentUsername, FynxGroupRole.ADMIN)))
+            val expectedAccountKey = accountKey
+            val requestToken = FynxBackendClient.accessToken(context)
+            fun sessionIsCurrent(): Boolean = if (expectedAccountKey.isNullOrBlank()) {
+                FynxAuthStore.accountStorageKey(context).isNullOrBlank() &&
+                    FynxBackendClient.accessToken(context) == requestToken
+            } else {
+                FynxBackendClient.isRequestSessionCurrent(
+                    expectedAccountKey,
+                    FynxAuthStore.accountStorageKey(context),
+                    requestToken,
+                    FynxBackendClient.accessToken(context)
+                )
+            }
+            val group = FynxGroup(
+                UUID.randomUUID().toString(),
+                name.trim(),
+                description.trim(),
+                visibility,
+                currentUsername,
+                listOf(FynxGroupMember(currentUsername, FynxGroupRole.ADMIN))
+            )
             scope.launch {
                 createError = null
+                if (!sessionIsCurrent()) return@launch
                 val savedLocally = withContext(Dispatchers.IO) {
-                    val added = FynxGroupsStore.add(context, group, accountKey)
-                    if (added) FynxGroupsStore.markPendingSync(context, group.id, accountKey)
-                    added to FynxGroupsStore.load(context, accountKey)
+                    val added = FynxGroupsStore.add(context, group, expectedAccountKey)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id, expectedAccountKey)
+                    added to FynxGroupsStore.load(context, expectedAccountKey)
                 }
+                if (!sessionIsCurrent()) return@launch
                 if (!savedLocally.first) {
                     createError = "A group with this name already exists, or its details could not be saved."
                     return@launch
                 }
                 groups = savedLocally.second
                 showCreateDialog = false
-                FynxGroupRemoteClient.syncGroup(context, group)
-                    .onSuccess { FynxGroupsStore.markSynced(context, group.id, accountKey) }
-                    .onFailure { createError = "Group saved on this device. It will sync automatically when the connection returns." }
+                if (expectedAccountKey.isNullOrBlank() || requestToken.isNullOrBlank()) {
+                    createError = "Group saved on this device. Sign in to sync it with your account."
+                    return@launch
+                }
+                FynxGroupRemoteClient.syncGroup(context, group, expectedAccountKey, requestToken)
+                    .onSuccess {
+                        if (sessionIsCurrent()) FynxGroupsStore.markSynced(context, group.id, expectedAccountKey)
+                    }
+                    .onFailure {
+                        if (sessionIsCurrent()) {
+                            createError = "Group saved on this device. It will sync automatically when the connection returns."
+                        }
+                    }
             }
+        }
         }
     }
 }
