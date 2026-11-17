@@ -90,6 +90,13 @@ checks = [
     ("supporting palette usage rules are documented",
      all(token in guidelines for token in ("#F5F7FA", "#1C2434", "#64748B", "#D4AF37", "#E8EEFA"))),
 ]
+bar_fill = glass_bar[glass_bar.index("val barFill ="):glass_bar.index("val barRim =")]
+checks.append((
+    "floating glass bottom bar uses an opaque surface in light and dark themes",
+    "Brush.verticalGradient(listOf(Color.White, Color(0xFFEAF0F7)))" in bar_fill
+    and "Brush.verticalGradient(listOf(Color(0xFF28384F), Color(0xFF0F1A2D)))" in bar_fill,
+))
+
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
 failed = [name for name, ok in checks if not ok]
