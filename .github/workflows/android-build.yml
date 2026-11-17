@@ -370,7 +370,7 @@ jobs:
           cores: 4
           ram-size: 3072M
           heap-size: 512M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back environment -camera-front none
           pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: |
             bash -c 'set +e; bash scripts/prepare_android_runtime_emulator.sh; preflight_status=$?; if [ "$preflight_status" -eq 0 ]; then bash scripts/run_android_runtime_certification.sh; runtime_status=$?; else runtime_status=$preflight_status; fi; mkdir -p fynx-runtime-screenshots/marketplace-test-fixtures; adb pull /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; adb pull /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; exit "$runtime_status"'
