@@ -42,6 +42,7 @@ object FynxNotificationControlsBatch3 {
             FynxNotificationType.GROUP -> preferences.groupEnabled
             FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> preferences.marketplaceEnabled
             FynxNotificationType.WALLET_ACTIVITY -> preferences.walletEnabled
+            FynxNotificationType.SUPPORT -> true
         }
 
     fun shouldPush(preferences: FynxNotificationPreferences, type: FynxNotificationType): Boolean =

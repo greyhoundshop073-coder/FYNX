@@ -484,6 +484,13 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
 
+            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
+                Spacer(Modifier.height(20.dp))
+                Text("FYNX Support Centre", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Text("Handle private user complaints and monitor your support team.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                FynxSupportHubPanel(staffOnly = true)
+            }
             if (activeSection == "Overview" && d.role == "OWNER") {
                 Spacer(Modifier.height(20.dp))
                 Text("Music Library", style = MaterialTheme.typography.titleMedium)

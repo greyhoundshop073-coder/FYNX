@@ -294,6 +294,7 @@ private fun typeLabel(type: FynxNotificationType): String = when (type) {
     FynxNotificationType.COMMENT -> "Comments"
     FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> "Marketplace"
     FynxNotificationType.WALLET_ACTIVITY -> "Money"
+    FynxNotificationType.SUPPORT -> "Support"
 }
 
 private fun notificationIcon(type: FynxNotificationType) = when (type) {
@@ -308,4 +309,5 @@ private fun notificationIcon(type: FynxNotificationType) = when (type) {
     FynxNotificationType.COMMENT -> Icons.Default.Comment
     FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> Icons.Default.ShoppingBag
     FynxNotificationType.WALLET_ACTIVITY -> Icons.Default.AccountBalanceWallet
+    FynxNotificationType.SUPPORT -> Icons.Default.HelpOutline
 }
