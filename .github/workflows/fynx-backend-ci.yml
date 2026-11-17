@@ -103,6 +103,7 @@ jobs:
           node --check postVisibility.js
           node --check verify-post-visibility-contract.mjs
           node --check verify-background-timers-guarded.mjs
+          node --check verify-call-and-friend-guards.mjs
           node --check test-marketplace-advertising-schema-db.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
@@ -203,6 +204,8 @@ jobs:
         run: node verify-post-visibility-contract.mjs
       - name: Verify background timers cannot crash the server
         run: node verify-background-timers-guarded.mjs
+      - name: Verify call and friend request guards
+        run: node verify-call-and-friend-guards.mjs
       - name: Verify post and upload size limits agree
         working-directory: .
         run: python3 scripts/verify_post_upload_limits.py

@@ -176,15 +176,23 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) { console.error("friend request", error); return res.status(500).json({ error: "friend request failed" }); }
   });
 
-  app.post("/api/friends/requests/:id/accept", auth, async (req, res) => {
+  // A request id is a database number; anything else is a client mistake, not a server failure.
+  const numericRequestId = (req, res, next) => /^\d{1,18}$/.test(String(req.params.id)) ? next() : res.status(400).json({ error: "invalid request id" });
+
+  app.post("/api/friends/requests/:id/accept", auth, numericRequestId, async (req, res) => {
     try {
       const result = await pool.query(`UPDATE friendships SET status = 'accepted' WHERE id = $1 AND friend_id = $2 AND status = 'pending' RETURNING id, user_id, friend_id, status, created_at`, [req.params.id, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "request not found" });
+      // Messaging on the default "My friends" setting needs both people to follow each other, so new friends follow
+      // each other. Without this an accepted friend shows an "Open chat" button that is then refused.
+      try {
+        await pool.query(`INSERT INTO social_follows (follower_id, followed_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING`, [result.rows[0].user_id, result.rows[0].friend_id]);
+      } catch (error) { console.error("follow on friend accept", error?.message || error); }
       return res.json({ request: result.rows[0] });
     } catch (error) { console.error("accept friend", error); return res.status(500).json({ error: "accept failed" }); }
   });
 
-  app.post("/api/friends/requests/:id/reject", auth, async (req, res) => {
+  app.post("/api/friends/requests/:id/reject", auth, numericRequestId, async (req, res) => {
     try {
       const result = await pool.query(`DELETE FROM friendships WHERE id = $1 AND friend_id = $2 AND status = 'pending' RETURNING id`, [req.params.id, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "request not found" });
@@ -192,7 +200,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
     } catch (error) { console.error("reject friend", error); return res.status(500).json({ error: "reject failed" }); }
   });
 
-  app.delete("/api/friends/requests/:id", auth, async (req, res) => {
+  app.delete("/api/friends/requests/:id", auth, numericRequestId, async (req, res) => {
     try {
       const result = await pool.query(`DELETE FROM friendships WHERE id = $1 AND user_id = $2 AND status = 'pending' RETURNING id`, [req.params.id, req.user.sub]);
       if (!result.rows[0]) return res.status(404).json({ error: "outgoing request not found" });

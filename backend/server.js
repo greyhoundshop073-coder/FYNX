@@ -1171,9 +1171,19 @@ if (wss) {
           if (signalType === "invite") {
             if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const mediaType = body?.callType === "video" ? "video" : "voice";
+            // A blocked pair cannot ring each other. The caller hears the same "unavailable" as for an offline user,
+            // so a block is never revealed. If the blocks table does not exist yet nobody has blocked anyone.
+            try {
+              const blocked = await pool.query("SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1", [userId, targetUserId]);
+              if (blocked.rows.length) return sendSocket(socket, { type: "call", callId: validCallId(body?.callId) ? body.callId : "", callType: body?.callType === "video" ? "video" : "voice", fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" });
+            } catch (error) {
+              if (error?.code !== "42P01") { console.error("call block check", error?.message || error); return sendSocket(socket, { type: "call", signalType: "error", error: "call service unavailable" }); }
+            }
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
+            // A live call id belongs to its two people; reusing it would replace their call.
+            if (activeCalls.has(callId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call id already in use" });
             const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
