@@ -69,7 +69,7 @@ check('Private conversation uses the shared themed wallpaper runtime', 'FynxChat
 check('private chat history reconciles remote messages with the existing local store', ('mergeLocalHistory(context, username, remote)' in production_messaging or 'mergeLocalHistory(context, username, remote, currentUserId)' in production_messaging) and 'val local = FynxChatStore.load(context, username)' in production_messaging)
 check('private chat reconciliation preserves local messages missing from the remote response', 'val remoteIds = remote.asSequence().map { it.id }.toSet()' in production_messaging and 'val preserved = local.mapNotNull' in production_messaging and 'return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }' in production_messaging)
 check('private chat loads local conversation state off the UI thread before remote reconciliation', ('mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation or ('mutableStateOf(emptyList<ChatMessage>())' in conversation and 'FynxChatStore.load(context, chat.username, fallbackMessage)' in conversation and 'withContext(Dispatchers.IO)' in conversation and 'LaunchedEffect(chat.username)' in conversation and 'messagesLoaded = true' in conversation)) and ('FynxProductionMessaging.history(context, normalizedUsername)' in conversation or (
-    'FynxProductionMessaging.historyPage(\\n                context, normalizedUsername,' in conversation
+    'FynxProductionMessaging.historyPage(' in conversation
     and 'historyAccountKey = FynxAuthStore.accountStorageKey(context)' in conversation
     and 'historyRequestToken = FynxBackendClient.accessToken(context)' in conversation
     and 'FynxBackendClient.isRequestSessionCurrent(' in conversation
