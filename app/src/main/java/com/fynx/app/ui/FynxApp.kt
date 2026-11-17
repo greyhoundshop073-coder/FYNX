@@ -682,14 +682,27 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 }
             }
         }) { padding ->
+            // Primary tabs scroll under the floating glass bar and reserve their own content inset.
+            val primaryTab = selected in mainNav.map { it.key }
+            val bottomBarSpace = if (primaryTab) padding.calculateBottomPadding() else 0.dp
+            val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
             val screenContentModifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(
+                    start = padding.calculateStartPadding(layoutDirection),
+                    top = padding.calculateTopPadding(),
+                    end = padding.calculateEndPadding(layoutDirection),
+                    bottom = if (primaryTab) 0.dp else padding.calculateBottomPadding()
+                )
                 // Individual screens own their intentional horizontal content spacing.
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
-                .padding(vertical = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp)
-                .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
+                .padding(
+                    top = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp,
+                    bottom = if (primaryTab || (selected == "Home" && statusCreatorRequested)) 0.dp else 6.dp
+                )
+                .then(if (primaryTab) Modifier else Modifier.navigationBarsPadding())
+            CompositionLocalProvider(LocalFynxBottomBarSpace provides bottomBarSpace) {
             Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
@@ -890,6 +903,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)
                     }
                 }
+            }
             }
                 if (selected == "Home" && statusCreatorRequested) {
                     FynxStatusHubPanel(

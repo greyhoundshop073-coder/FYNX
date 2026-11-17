@@ -10,6 +10,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -48,12 +52,22 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 internal data class FynxBottomBarItem(val key: String, val label: String, val icon: ImageVector)
+
+/** Height of the floating bar and its outer/system insets, used to let primary-tab content scroll beneath it. */
+internal val LocalFynxBottomBarSpace = compositionLocalOf { 0.dp }
+
+/** Space above the system inset for floating controls that already apply navigationBarsPadding(). */
+@Composable
+internal fun fynxBottomBarSpaceAboveInset(): Dp =
+    (LocalFynxBottomBarSpace.current - WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+        .coerceAtLeast(0.dp)
 
 /**
  * Floating glass tab bar: a translucent capsule with a bright rim and a soft top highlight, and a
@@ -82,9 +96,9 @@ internal fun FynxGlassBottomBar(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
 
     val barFill = if (isLight) {
-        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.90f), Color(0xFFEAF0F7).copy(alpha = 0.82f)))
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.97f), Color(0xFFEAF0F7).copy(alpha = 0.95f)))
     } else {
-        Brush.verticalGradient(listOf(Color(0xFF28384F).copy(alpha = 0.90f), Color(0xFF0F1A2D).copy(alpha = 0.94f)))
+        Brush.verticalGradient(listOf(Color(0xFF28384F).copy(alpha = 0.96f), Color(0xFF0F1A2D).copy(alpha = 0.98f)))
     }
     val barRim = if (isLight) {
         Brush.linearGradient(listOf(Color.White, Color(0x2264748B), Color.White.copy(alpha = 0.75f)))
