@@ -71,10 +71,10 @@ async function runContentReportIntegration() {
     patch: (path, ...handlers) => contentRoutes.set("PATCH " + path, handlers),
     delete: (path, ...handlers) => contentRoutes.set("DELETE " + path, handlers)
   };
-  const contentCall = async (method, path, userId, body = {}, query = {}) => {
+  const contentCall = async (method, path, params, userId, body = {}, query = {}) => {
     const handlers = contentRoutes.get(method + " " + path);
     assert.ok(handlers, "registered " + method + " " + path);
-    const req = { params: {}, body, query, get: () => "Bearer " + token(userId) };
+    const req = { params, body, query, get: () => "Bearer " + token(userId) };
     const res = {
       statusCode: 200, body: null,
       status(code) { this.statusCode = code; return this; },
