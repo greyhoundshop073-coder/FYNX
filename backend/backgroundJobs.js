@@ -282,8 +282,8 @@ export function createBackgroundJobQueue({ connectionString = process.env.DATABA
     if (stopped) return;
     await ensureSchemaOnce();
     await reclaimExpired();
-    timer = setInterval(() => { void tick(); }, pollMs).unref();
-    void tick();
+    timer = setInterval(() => { void Promise.resolve().then(() => tick()).catch((error) => console.error("[fynx-jobs] background job tick failed", error?.message || error)); }, pollMs).unref();
+    void Promise.resolve().then(() => tick()).catch((error) => console.error("[fynx-jobs] background job tick failed", error?.message || error));
   }
 
   async function runOnce() {

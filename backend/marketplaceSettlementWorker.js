@@ -525,9 +525,9 @@ export function registerMarketplaceSettlementWorker({ jobs, logger = console, st
     }
   };
   if (startTimer) {
-    settlementReconciliationTimer = setInterval(() => { void scan(); }, 15_000);
+    settlementReconciliationTimer = setInterval(() => { void Promise.resolve().then(() => scan()).catch((error) => console.error("[fynx-marketplace] settlement reconciliation scan failed", error?.message || error)); }, 15_000);
     settlementReconciliationTimer.unref();
-    void scan();
+    void Promise.resolve().then(() => scan()).catch((error) => console.error("[fynx-marketplace] settlement reconciliation scan failed", error?.message || error));
   }
   logger.log('[fynx-marketplace] settlement worker handlers registered');
   return scan;
