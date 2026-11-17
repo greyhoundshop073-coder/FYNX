@@ -11,7 +11,7 @@ import java.io.File
 
 object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false,val readBy:List<String> = emptyList())
-    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean,val supportsServerSearch:Boolean=false)
+    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean,val supportsServerSearch:Boolean=false,val historyScope:String="UNKNOWN")
     private val sendMutex = Mutex()
     private val rsvpMutex = Mutex()
     @Volatile private var groupReadReceiptsSupported = false
@@ -116,7 +116,9 @@ object FynxGroupRemoteClient {
                 }.getOrNull()?.let(::add)
             }
         }.distinctBy { it.id }
-        RemoteMessagePage(parsed,root.optBoolean("hasMore",false),serverHistorySearchSupported)
+        val historyScope = root.optString("historyScope", "UNKNOWN")
+            .takeIf { it.startsWith("ALL:") || it.startsWith("FROM:") } ?: "UNKNOWN"
+        RemoteMessagePage(parsed,root.optBoolean("hasMore",false),serverHistorySearchSupported,historyScope)
     }
     suspend fun markMessagesRead(context:Context,groupId:String,messageIds:List<String>):Result<List<RemoteMessage>> = runCatching {
         if (!groupReadReceiptsSupported) return@runCatching emptyList()
