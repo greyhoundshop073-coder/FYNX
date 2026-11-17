@@ -18,8 +18,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -86,6 +85,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         )
         assertTrue("Great Deals fixture needs at least two eligible products", candidates.size >= 2)
         val expectedDealId = candidates[1].id
+        val firstDeal = dealListings.first { it.id == candidates.first().id }
+        val secondDeal = dealListings.first { it.id == expectedDealId }
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -137,20 +138,21 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
         // The production promotional banner exposes real listing headlines in a swipeable
         // LazyRow; it does not render the old "Product n of m" counter or a next-arrow button.
         // Swipe the actual visible slide and verify that the next eligible listing is shown.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
+        compose.onNodeWithContentDescription("Marketplace promotions carousel")
+            .performTouchInput { swipeLeft() }
         compose.waitUntil(timeoutMillis = 3_000) {
-            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
+            runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
-        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
+        compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
         // The whole production slide is clickable; tap the selected product itself so
         // a repeated action label on a neighbouring LazyRow item cannot be ambiguous.
-        compose.onNodeWithText(candidates[1].title).performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${secondDeal.title}").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
         compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()

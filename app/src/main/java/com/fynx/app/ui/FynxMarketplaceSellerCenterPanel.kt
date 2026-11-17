@@ -600,7 +600,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-seller-center-list"),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-seller-center-scroll-container"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 36.dp)
     ) {
@@ -623,7 +623,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
         item {
             LazyRow(
                 state = shopSectionsScrollState,
-                modifier = Modifier.fillMaxWidth().fynxFadeEnd(shopSectionsScrollState.canScrollForward).testTag("fynx-seller-center-sections"),
+                modifier = Modifier.fillMaxWidth().fynxFadeEnd(shopSectionsScrollState.canScrollForward).testTag("fynx-seller-center-section-tabs"),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(end = 12.dp)
             ) {

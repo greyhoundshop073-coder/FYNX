@@ -348,7 +348,7 @@ internal fun FynxBuyerWalletPanel(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-wallet-list"),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-wallet-scroll-container"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -968,7 +968,12 @@ private fun FynxWalletActivityRow(
                     )
                 }
                 Text(
-                    fynxWalletActivityDate(transaction.createdAt) + " · " + transaction.reference,
+                    fynxWalletActivityDate(transaction.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    transaction.reference,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

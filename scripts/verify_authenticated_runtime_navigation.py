@@ -4181,8 +4181,21 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
 
             # Exercise the exact owner route added by the Marketplace-profile update.
             # This is read-only: it does not save shop details or mutate listings/orders.
+            # My Shop is a long LazyColumn. Scroll the real screen until its public-profile
+            # action is exposed rather than treating an off-screen button as a missing control.
+            public_profile_navigation_xml = shop_xml
+            for attempt in range(10):
+                if find_control(public_profile_navigation_xml, ["View public Marketplace profile"]):
+                    break
+                scrolled_xml = swipe_vertical_scroll_container(
+                    public_profile_navigation_xml,
+                    "marketplace-public-profile-scroll-" + str(attempt) + ".xml"
+                )
+                if not scrolled_xml or scrolled_xml == public_profile_navigation_xml:
+                    break
+                public_profile_navigation_xml = scrolled_xml
             public_profile_xml = tap_control(
-                shop_xml,
+                public_profile_navigation_xml,
                 ["View public Marketplace profile"],
                 "marketplace-public-profile",
                 ["Marketplace profile", "Available products"]

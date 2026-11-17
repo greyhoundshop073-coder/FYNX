@@ -1,6 +1,5 @@
 package com.fynx.app.ui
 
-import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
@@ -12,15 +11,16 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
-import java.io.FileOutputStream
 
 /**
  * Screen-level instrumentation for the real production Marketplace, Seller Center,
@@ -124,7 +124,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 2_000) {
@@ -141,9 +141,9 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Checkout").assertIsDisplayed()
         compose.onNodeWithText("Review exact total").performClick()
-        compose.onNodeWithText("FYNX fee: NGN 2,875.00").assertIsDisplayed()
-        compose.onNodeWithText("Delivery: NGN 0.00").assertIsDisplayed()
-        compose.onNodeWithText("Total: NGN 60,375.00").assertIsDisplayed()
+        compose.onNodeWithText("FYNX fee: NGN 2,875.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Delivery: NGN 0.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Total: NGN 60,375.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-pickup-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
         compose.waitUntil(timeoutMillis = 3_000) {
@@ -166,7 +166,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
         compose.onNodeWithText("Full name").performTextInput("FYNX Test Buyer")
@@ -259,19 +259,19 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Your shop at a glance").assertIsDisplayed()
         saveScreenshot("my-shop-overview-screen.png")
 
-        compose.onNodeWithTag("fynx-seller-center-section-listings").performClick()
+        compose.onNodeWithTag("fynx-seller-center-section-tabs").performClick()
         compose.onNodeWithText("Your listings").assertIsDisplayed()
         compose.onNodeWithText("FYNX Test Wireless Headphones").assertIsDisplayed()
-        compose.onNodeWithTag("fynx-seller-center-list")
+        compose.onNodeWithTag("fynx-seller-center-scroll-container")
             .performScrollToNode(hasText("FYNX Test Android Smartphone"))
         compose.onNodeWithText("FYNX Test Android Smartphone").assertIsDisplayed()
         saveScreenshot("my-shop-listings-screen.png")
 
         // The previous product scroll moved the outer LazyColumn past its header,
         // which disposes the nested section LazyRow. Bring that real header back first.
-        compose.onNodeWithTag("fynx-seller-center-list")
-            .performScrollToNode(hasText("Orders"))
-        compose.onNodeWithText("Orders").performScrollTo().performClick()
+        compose.onNodeWithTag("fynx-seller-center-scroll-container").performScrollToIndex(1)
+        compose.onNodeWithTag("fynx-seller-center-section-tabs").performScrollToNode(hasText("Orders"))
+        compose.onNodeWithText("Orders").performClick()
         compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
         compose.onNodeWithText("Seller orders").performClick()
         compose.onNodeWithText("FYNX Test Delivery Order").assertIsDisplayed()
@@ -392,10 +392,10 @@ class FynxMarketplaceScreensComposeTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("TEST MODE — simulated balance; cannot spend or withdraw").assertIsDisplayed()
-        compose.onNodeWithTag("fynx-wallet-list")
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
             .performScrollToNode(hasText("FYNX-TEST-FUND-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-FUND-001", substring = true).assertIsDisplayed()
-        compose.onNodeWithTag("fynx-wallet-list")
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
             .performScrollToNode(hasText("Wallet security & PIN"))
         compose.onNodeWithText("Wallet security & PIN").assertIsDisplayed()
         assertTrue(FynxMarketplaceIsolatedTestFixtures.wallet.isReconciled())
@@ -440,8 +440,9 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("US Dollar").assertIsDisplayed()
         compose.onAllNodesWithText("\$1,234.50")[0].assertIsDisplayed()
-        compose.onNodeWithText("\$250.00").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("fynx-wallet-list")
+        compose.onNodeWithTag("fynx-wallet-scroll-container").performScrollToNode(hasText("\$250.00"))
+        compose.onNodeWithText("\$250.00").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
             .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
@@ -450,17 +451,16 @@ class FynxMarketplaceScreensComposeTest {
     private fun saveScreenshot(name: String) {
         // Visual evidence is optional: screenshot capture must never fail a functional test.
         runCatching {
-            val directory = File(
-                compose.activity.getExternalFilesDir(null),
-                "marketplace-test-fixtures"
-            )
+            val externalFiles = requireNotNull(compose.activity.getExternalFilesDir(null)) {
+                "External app files directory is unavailable for instrumentation screenshots."
+            }
+            val directory = File(externalFiles, "marketplace-test-fixtures")
+            android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=${directory.absolutePath}")
             check(directory.mkdirs() || directory.isDirectory)
             val file = File(directory, name)
-            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-                ?: error("Could not capture the Android device display")
-            FileOutputStream(file).use { output ->
-                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-            }
+            compose.waitForIdle()
+            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            check(device.takeScreenshot(file)) { "Android could not capture the full device display." }
             check(file.isFile && file.length() > 0L)
         }.onFailure { error ->
             android.util.Log.w("FYNXMarketplaceTest", "Optional screenshot '$name' was not captured", error)
