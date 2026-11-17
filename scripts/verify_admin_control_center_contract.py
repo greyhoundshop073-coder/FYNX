@@ -127,7 +127,7 @@ require('Text("Reported accounts"' in source and 'Text("Content reports"' in sou
         "account reports and content reports must remain in distinct, separately actionable moderation queues")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
-require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
+require("executor = routePool" in backend, "audit helper cannot use a transaction-scoped executor")
 require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminActivity(req,'APPEAL_DECIDED'" in backend,
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
