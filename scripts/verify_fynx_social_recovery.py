@@ -26,7 +26,7 @@ check("post deep-link is one-shot when leaving Home", 'if (selected != "Home")' 
 check("post/comment target is consumed only after the target post exists", 'LaunchedEffect(posts, initialPostId, initialCommentId)' in home and 'posts.firstOrNull { it.id == target }' in home and 'onInitialPostConsumed()' in home)
 check("comment deep-link reaches the comments panel", 'FynxHomeCommentsPanel(post = post, initialCommentId = initialCommentId' in home)
 check("Home feed keeps its single state-owned list and bottom system inset", 'LazyColumn(\n        state = feedListState,' in home and '.navigationBarsPadding()' in home)
-check("floating Home navigation owns system bottom inset", '.navigationBarsPadding()' in app and 'NavigationBar(' in app and 'windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)' in app)
+check("floating Home navigation owns system bottom inset", '.navigationBarsPadding()' in app and 'FynxGlassBottomBar(' in app)
 check("client delete uses authenticated social post route", 'suspend fun deletePost' in social and 'FynxBackendClient.delete(context, "/api/social/posts/$numericId")' in social)
 check("server delete is owner-authorized", 'app.delete(\'/api/social/posts/:id\',auth' in backend and 'DELETE FROM social_posts WHERE id=$1 AND author_id=$2' in backend)
 check("audience editor exposes all four supported audiences", 'FynxPostVisibility.PUBLIC' in audience and 'FynxPostVisibility.FRIENDS_ONLY' in audience and 'FynxPostVisibility.SELECTED_PEOPLE' in audience and 'FynxPostVisibility.ONLY_ME' in audience)
