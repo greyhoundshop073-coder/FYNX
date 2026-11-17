@@ -19,6 +19,9 @@ server = read('backend/server.js')
 realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
 group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
+active_group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+group_remote_client = read('app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt')
+backend_client = read('app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)
 check('group membership is required to read messages', "group membership required" in group and ("if(!(await member(groupId,req.user.sub)))" in group or ("const actor=await member(groupId,req.user.sub)" in group and "if(!actor)return res.status(403).json({error:'group membership required'})" in group)))
@@ -40,6 +43,13 @@ check('backend exposes an authenticated group realtime broadcast hub', 'app.loca
 check('group message send/action routes publish realtime updates', 'broadcastGroupMessage(groupId, message)' in group)
 check('realtime client accepts group message events', '"group_message" in realtime and "GroupMessage" in realtime')
 check('group chat subscribes to authenticated realtime updates', 'FynxRealtimeClient(' in group_panel and 'Event.GroupMessage' in group_panel)
+
+
+check('group message pages expose a stable server policy scope for invalidating cached history', "const historyScope=(historyMember.show_history_to_new_members?'ALL:':'FROM:')" in group and "nextCursor,historyScope" in group and 'historyScope:String="UNKNOWN"' in group_remote_client)
+check('group screen does not display cached delivered history before server authorization', 'messages = local.second.filterNot { it.delivered }' in active_group_panel)
+check('group refresh and older-page loading retain only messages authorized under the current history scope', 'mergeGroupMessageRefresh' in active_group_panel and 'authorizedGroupHistoryScope != pageHistoryScope' in active_group_panel and 'authorizedOlderGroupMessageIds' in active_group_panel)
+check('revoked group access clears account-scoped history and removes the inaccessible group', 'isAccessDeniedOrMissing(error)' in active_group_panel and 'FynxGroupsStore.removeGroup(context, groupId)' in active_group_panel and 'You no longer have access to this group.' in active_group_panel)
+check('backend client identifies group membership 403/404 responses', 'fun isAccessDeniedOrMissing(error: Throwable)' in backend_client and 'httpError?.status == 403 || httpError?.status == 404' in backend_client)
 
 failed = [name for name, ok in checks if not ok]
 for index, (name, ok) in enumerate(checks, 1):
