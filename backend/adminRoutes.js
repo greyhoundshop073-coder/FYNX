@@ -141,7 +141,7 @@ export function registerAdminRoutes({ app }) {
         CASE r.target_type
           WHEN 'SOCIAL_POST' THEN (SELECT p.text FROM social_posts p WHERE p.id=r.target_id)
           WHEN 'SOCIAL_COMMENT' THEN (SELECT c.text FROM social_post_comments c WHERE c.id=r.target_id)
-          WHEN 'MARKETPLACE_LISTING' THEN (SELECT l.title || E'\\n' || l.description FROM marketplace_listings l WHERE l.id=r.target_id)
+          WHEN 'MARKETPLACE_LISTING' THEN (SELECT COALESCE(l.title,'') || ' - ' || COALESCE(l.description,'') FROM marketplace_listings l WHERE l.id=r.target_id)
           ELSE NULL
         END AS content_preview
         FROM safety_content_reports r
