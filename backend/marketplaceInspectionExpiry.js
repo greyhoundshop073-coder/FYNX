@@ -79,9 +79,9 @@ let inspectionExpiryTimer = null;
 
 export function registerMarketplaceInspectionExpiryWorker({ logger = console } = {}) {
   if (inspectionExpiryTimer) return;
-  inspectionExpiryTimer = setInterval(() => { void autoCompleteExpiredMarketplaceInspections({ logger }); }, AUTO_COMPLETE_INTERVAL_MS);
+  inspectionExpiryTimer = setInterval(() => { void Promise.resolve().then(() => autoCompleteExpiredMarketplaceInspections({ logger })).catch((error) => logger.error?.("[fynx-marketplace] inspection expiry scan failed", error?.message || error)); }, AUTO_COMPLETE_INTERVAL_MS);
   inspectionExpiryTimer.unref();
-  void autoCompleteExpiredMarketplaceInspections({ logger });
+  void Promise.resolve().then(() => autoCompleteExpiredMarketplaceInspections({ logger })).catch((error) => logger.error?.("[fynx-marketplace] inspection expiry scan failed", error?.message || error));
   logger.log('[fynx-marketplace] 48-hour inspection expiry worker enabled');
 }
 

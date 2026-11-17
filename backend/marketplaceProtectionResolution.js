@@ -124,9 +124,9 @@ async function resolveOrderPaymentReference(client, orderId, currentReference) {
 export function registerMarketplaceProtectionResolutionRoutes({ app }) {
   if (!pool) return;
   void ensureProtectionSchema().catch(error => console.error('marketplace protection schema', error));
-  const reconcileTimer = setInterval(() => { void reconcileOpenDisputes(); }, 15_000);
+  const reconcileTimer = setInterval(() => { void Promise.resolve().then(() => reconcileOpenDisputes()).catch((error) => console.error("[fynx-marketplace] dispute reconciliation failed", error?.message || error)); }, 15_000);
   reconcileTimer.unref();
-  void reconcileOpenDisputes();
+  void Promise.resolve().then(() => reconcileOpenDisputes()).catch((error) => console.error("[fynx-marketplace] dispute reconciliation failed", error?.message || error));
 
   app.get('/api/admin/marketplace/protection/cases', auth, async (req, res) => {
     try {
