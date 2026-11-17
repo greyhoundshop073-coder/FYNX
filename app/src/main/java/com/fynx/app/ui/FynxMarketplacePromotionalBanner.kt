@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -279,6 +280,7 @@ fun MarketplacePromotionalBanner(
             val bannerWidth = maxWidth
             LazyRow(
                 state = listState,
+                flingBehavior = rememberSnapFlingBehavior(lazyListState = listState),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("fynx-marketplace-promo-carousel")

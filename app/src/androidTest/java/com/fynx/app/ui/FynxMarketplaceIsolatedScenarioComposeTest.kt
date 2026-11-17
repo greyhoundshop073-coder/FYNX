@@ -143,7 +143,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         saveScreenshot("marketplace-test-great-deals.png")
 
         // The production promotional banner exposes real listing headlines in a swipeable
-        // LazyRow; it does not render the old "Product n of m" counter or a next-arrow button.
+        // LazyRow with snap-to-slide fling behavior; it does not render a synthetic counter.
         // Swipe the actual visible slide and verify that the next eligible listing is shown.
         compose.onNodeWithContentDescription("Marketplace promotions carousel")
             .performTouchInput { swipeLeft() }

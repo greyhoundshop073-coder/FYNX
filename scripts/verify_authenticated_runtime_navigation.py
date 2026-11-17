@@ -4257,7 +4257,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 public_profile_navigation_xml,
                 ["View public Marketplace profile"],
                 "marketplace-public-profile",
-                ["Marketplace profile", "Available products"]
+                ["Marketplace profile", "Products"]
             )
             if public_profile_xml:
                 profile_deadline = time.monotonic() + 25.0
@@ -4271,7 +4271,9 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                 while time.monotonic() < profile_deadline:
                     profile_ready_xml = dump_ui("marketplace-public-profile-settled.xml") or profile_ready_xml
                     has_header = bool(find_control(profile_ready_xml, ["Marketplace profile"]))
-                    has_count = bool(find_control(profile_ready_xml, ["Available products"]))
+                    # The public storefront UI labels this section "Products" in the
+                    # rendered screen; older verifier revisions expected "Available products".
+                    has_count = bool(find_control(profile_ready_xml, ["Available products", "Products"]))
                     has_product_state = any(
                         find_control(profile_ready_xml, [marker])
                         for marker in profile_terminal_markers
@@ -4281,7 +4283,7 @@ if os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1":
                     time.sleep(0.5)
                 if (
                     find_control(profile_ready_xml, ["Marketplace profile"])
-                    and find_control(profile_ready_xml, ["Available products"])
+                    and find_control(profile_ready_xml, ["Available products", "Products"])
                     and (
                         any(find_control(profile_ready_xml, [marker]) for marker in profile_terminal_markers)
                         or find_control(profile_ready_xml, ["NGN", "USD"])
