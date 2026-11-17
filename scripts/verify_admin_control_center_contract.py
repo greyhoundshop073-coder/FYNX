@@ -266,9 +266,10 @@ require("function parseCampaignTimestamp(value)" in advertising and
         "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
         "(Z|([+-])(\\d{2}):(\\d{2}))" in advertising,
         "seasonal promotion create/edit must require explicit timezone and validate calendar timestamps")
-require("MAX_POSTGRES_BIGINT" in backend and "function isPositivePostgresBigint(value)" in backend and
+postgres_ids = (ROOT / "backend/postgresIds.js").read_text(encoding="utf-8")
+require("MAX_POSTGRES_BIGINT" in postgres_ids and "export function isPositivePostgresBigint(value)" in postgres_ids and
         "isPositivePostgresBigint(mediaIdRaw)" in backend and "isPositivePostgresBigint(raw)" in backend,
-        "announcement image IDs must be bounded to positive PostgreSQL BIGINT before database access")
+        "announcement image IDs must use the shared positive PostgreSQL BIGINT validator before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
 # OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
