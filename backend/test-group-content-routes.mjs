@@ -14,6 +14,7 @@ process.env.JWT_SECRET ||= "fynx-group-content-test-secret";
 
 const { registerGroupContentRoutes } = await import("./groupContentRoutes.js");
 const { registerGroupRoutes } = await import("./groupRoutes.js");
+const { registerTrustSafetyRoutes } = await import("./trustSafety.js");
 const { getFynxDatabasePool } = await import("./databasePool.js");
 const client = new Client({ host, port, user, password, database });
 const suffix = randomUUID().replaceAll("-", "");
@@ -25,6 +26,12 @@ const adminUsername = "content_owner_" + suffix.slice(0, 12);
 const memberUsername = "content_member_" + suffix.slice(0, 12);
 const outsiderUsername = "content_outsider_" + suffix.slice(0, 12);
 const groupId = "content_" + suffix.slice(0, 24);
+const contentBase = BigInt(Date.now()) * 1000n;
+const publicPostId = contentBase + 1n;
+const selectedPostId = contentBase + 2n;
+const commentId = contentBase + 3n;
+const activeListingId = contentBase + 4n;
+const inactiveListingId = contentBase + 5n;
 const routes = new Map();
 const app = {
   get: (path, ...handlers) => routes.set("GET " + path, handlers),
@@ -33,6 +40,16 @@ const app = {
   delete: (path, ...handlers) => routes.set("DELETE " + path, handlers)
 };
 const token = id => jwt.sign({ sub: String(id) }, process.env.JWT_SECRET);
+const auth = (req, res, next) => {
+  try {
+    const authorization = req.get("Authorization") || "";
+    const bearer = authorization.replace(/^Bearer\\s+/i, "");
+    req.user = jwt.verify(bearer, process.env.JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+};
 
 async function call(method, path, params, userId, body = {}, query = {}) {
   const handlers = routes.get(method + " " + path);
@@ -58,7 +75,12 @@ try {
     "ALTER TABLE fynx_groups ADD COLUMN IF NOT EXISTS send_media BOOLEAN NOT NULL DEFAULT TRUE; " +
     "CREATE TABLE IF NOT EXISTS fynx_group_members (group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'MEMBER', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (group_id, user_id)); " +
     "ALTER TABLE fynx_group_members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); " +
-    "CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE')"
+    "CREATE TABLE IF NOT EXISTS fynx_account_safety (user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, message_safety BOOLEAN NOT NULL DEFAULT TRUE, account_status TEXT NOT NULL DEFAULT 'ACTIVE'); " +
+    "CREATE TABLE IF NOT EXISTS social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'PUBLIC', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); " +
+    "CREATE TABLE IF NOT EXISTS social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()); " +
+    "CREATE TABLE IF NOT EXISTS social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(post_id,user_id)); " +
+    "CREATE TABLE IF NOT EXISTS friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(user_id,friend_id)); " +
+    "CREATE TABLE IF NOT EXISTS marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '', active BOOLEAN NOT NULL DEFAULT TRUE)"
   );
 
   await client.query(
@@ -71,8 +93,23 @@ try {
     [groupId, adminId, memberId]
   );
 
+  await client.query(
+    "INSERT INTO social_posts(id,author_id,text,visibility) VALUES($1,$2,'Public post for content reporting','PUBLIC'),($3,$2,'Selected audience post','SELECTED_PEOPLE')",
+    [publicPostId.toString(), adminId.toString(), selectedPostId.toString()]
+  );
+  await client.query(
+    "INSERT INTO social_post_comments(id,post_id,author_id,text) VALUES($1,$2,$3,'Comment for content reporting')",
+    [commentId.toString(), publicPostId.toString(), adminId.toString()]
+  );
+  await client.query("INSERT INTO social_post_audience(post_id,user_id) VALUES($1,$2)", [selectedPostId.toString(), memberId.toString()]);
+  await client.query(
+    "INSERT INTO marketplace_listings(id,seller_id,title,description,active) VALUES($1,$2,'Active test listing','A listing used for moderation tests',TRUE),($3,$2,'Inactive test listing','Not available to buyers',FALSE)",
+    [activeListingId.toString(), adminId.toString(), inactiveListingId.toString()]
+  );
+
   registerGroupRoutes({ app });
   registerGroupContentRoutes({ app });
+  registerTrustSafetyRoutes({ app, pool: getFynxDatabasePool(), auth });
 
   const params = { groupId };
   const messagePath = "/api/groups/:groupId/messages";
