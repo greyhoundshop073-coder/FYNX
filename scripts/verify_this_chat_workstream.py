@@ -129,7 +129,7 @@ check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z
 
 
 check('social posts, comments and Marketplace listings submit typed content reports to the authenticated safety API', all(x in safety_client for x in ['submitContentReport', '/api/social/content-reports']) and 'submitContentReport(context, "SOCIAL_POST"' in home_social and 'submitContentReport(context, "SOCIAL_COMMENT"' in comments_panel and 'submitContentReport(context, "MARKETPLACE_LISTING"' in market)
-check('owner/admin Safety queue separates content reports from account reports and exposes audit history', all(x in admin_client for x in ['contentReports(context', 'reviewContentReport(context', 'contentReportAudit(context']) and 'Text("Content reports")' in admin_panel and 'FynxAdminClient.contentReports(context)' in admin_panel and 'FynxAdminClient.contentReportAudit(context, reportId)' in admin_panel and 'FynxAdminClient.reviewContentReport(context' in admin_panel)
+check('owner/admin Safety queue separates content reports from account reports and exposes audit history', all(x in admin_client for x in ['contentReports(context', 'reviewContentReport(context', 'contentReportAudit(context']) and 'Text("Content reports"' in admin_panel and 'FynxAdminClient.contentReports(context)' in admin_panel and 'FynxAdminClient.contentReportAudit(context, reportId)' in admin_panel and 'FynxAdminClient.reviewContentReport(context' in admin_panel)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
