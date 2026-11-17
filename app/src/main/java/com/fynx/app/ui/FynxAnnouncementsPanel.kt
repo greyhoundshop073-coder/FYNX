@@ -585,35 +585,37 @@ fun FynxAdminControlCenterPanel() {
                                     Text("Reason: ${report.reason}")
                                     if (report.contentPreview.isNotBlank()) Text(report.contentPreview, maxLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     if (report.details.isNotBlank()) Text(report.details, maxLines = 3)
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        if (report.status == "OPEN") OutlinedButton(onClick = {
-                                            requestAdminConfirmation("Start content report review?", "Report #${report.id} will move to the active moderation queue.", "Start review") {
-                                                scope.launch {
-                                                    FynxAdminClient.reviewContentReport(context, report.id, "UNDER_REVIEW", "Assigned for moderation review.")
-                                                        .onSuccess { statusMessage = "Content report moved to review."; refreshContentReports++ }
-                                                        .onFailure { statusMessage = it.message ?: "Could not update content report." }
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (report.status == "OPEN") OutlinedButton(onClick = {
+                                                requestAdminConfirmation("Start content report review?", "Report #${report.id} will move to the active moderation queue.", "Start review") {
+                                                    scope.launch {
+                                                        FynxAdminClient.reviewContentReport(context, report.id, "UNDER_REVIEW", "Assigned for moderation review.")
+                                                            .onSuccess { statusMessage = "Content report moved to review."; refreshContentReports++ }
+                                                            .onFailure { statusMessage = it.message ?: "Could not update content report." }
+                                                    }
                                                 }
-                                            }
-                                        }) { Text("Review") }
-                                        Button(onClick = {
-                                            requestAdminConfirmation("Resolve this content report?", "Mark report #${report.id} resolved after completing the moderation review.", "Resolve report") {
-                                                scope.launch {
-                                                    FynxAdminClient.reviewContentReport(context, report.id, "RESOLVED", "Resolved after moderation review.")
-                                                        .onSuccess { statusMessage = "Content report resolved."; refreshContentReports++; refreshDashboard++ }
-                                                        .onFailure { statusMessage = it.message ?: "Could not resolve content report." }
+                                            }) { Text("Review") }
+                                            Button(onClick = {
+                                                requestAdminConfirmation("Resolve this content report?", "Mark report #${report.id} resolved after completing the moderation review.", "Resolve report") {
+                                                    scope.launch {
+                                                        FynxAdminClient.reviewContentReport(context, report.id, "RESOLVED", "Resolved after moderation review.")
+                                                            .onSuccess { statusMessage = "Content report resolved."; refreshContentReports++; refreshDashboard++ }
+                                                            .onFailure { statusMessage = it.message ?: "Could not resolve content report." }
+                                                    }
                                                 }
-                                            }
-                                        }) { Text("Resolve") }
-                                        OutlinedButton(onClick = {
-                                            requestAdminConfirmation("Dismiss this content report?", "Dismiss report #${report.id} only if the content does not require action.", "Dismiss report") {
-                                                scope.launch {
-                                                    FynxAdminClient.reviewContentReport(context, report.id, "DISMISSED", "Dismissed after moderation review.")
-                                                        .onSuccess { statusMessage = "Content report dismissed."; refreshContentReports++; refreshDashboard++ }
-                                                        .onFailure { statusMessage = it.message ?: "Could not dismiss content report." }
+                                            }) { Text("Resolve") }
+                                            OutlinedButton(onClick = {
+                                                requestAdminConfirmation("Dismiss this content report?", "Dismiss report #${report.id} only if the content does not require action.", "Dismiss report") {
+                                                    scope.launch {
+                                                        FynxAdminClient.reviewContentReport(context, report.id, "DISMISSED", "Dismissed after moderation review.")
+                                                            .onSuccess { statusMessage = "Content report dismissed."; refreshContentReports++; refreshDashboard++ }
+                                                            .onFailure { statusMessage = it.message ?: "Could not dismiss content report." }
+                                                    }
                                                 }
-                                            }
-                                        }) { Text("Dismiss") }
-                                        TextButton(onClick = { contentReportAuditId = report.id; contentReportAudit = emptyList() }) { Text("Audit") }
+                                            }) { Text("Dismiss") }
+                                        }
+                                        TextButton(onClick = { contentReportAuditId = report.id; contentReportAudit = emptyList() }) { Text("View moderation audit") }
                                     }
                                     if (contentReportAuditId == report.id) {
                                         if (contentReportAuditLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
