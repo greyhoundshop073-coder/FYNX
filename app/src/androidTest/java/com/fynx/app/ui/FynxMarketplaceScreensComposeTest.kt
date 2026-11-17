@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -85,8 +84,11 @@ class FynxMarketplaceScreensComposeTest {
         }
         // This status notice is rendered above the scrollable feed, not inside its LazyColumn.
         // Assert that it exists; scrolling is reserved for actual feed content below.
-        compose.onNodeWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
-            .assertExists()
+        assertTrue(
+            "Marketplace test-data status notice should exist",
+            compose.onAllNodesWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
+                .fetchSemanticsNodes().isNotEmpty()
+        )
         saveScreenshot("marketplace-screen.png")
 
         compose.onNodeWithText("My Shop").performClick()
