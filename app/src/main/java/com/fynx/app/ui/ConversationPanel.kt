@@ -133,6 +133,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
+    var remoteSearchMessages by remember(chat.username) { mutableStateOf<List<ChatMessage>>(emptyList()) }
+    var remoteSearchHasMore by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchCursor by remember(chat.username) { mutableStateOf<String?>(null) }
+    var remoteSearchLoading by remember(chat.username) { mutableStateOf(false) }
+    var remoteSearchError by remember(chat.username) { mutableStateOf<String?>(null) }
+    var hasOlderMessages by remember(chat.username) { mutableStateOf(false) }
+    var olderMessagesCursor by remember(chat.username) { mutableStateOf<String?>(null) }
+    var loadingOlderMessages by remember(chat.username) { mutableStateOf(false) }
     var menuMessageId by remember { mutableStateOf<String?>(null) }
     var showForwardDialog by remember { mutableStateOf(false) }
     var forwardMessageId by remember { mutableStateOf<String?>(null) }
@@ -304,23 +312,32 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 realtimeState = state
                 if (state == FynxRealtimeClient.State.CONNECTED && !currentUserIdLatest.isNullOrBlank()) {
                     conversationScope.launch {
-                        FynxProductionMessaging.history(context, chat.username.removePrefix("@"))
-                            .onSuccess { remoteMessages ->
-                                val myId = currentUserIdLatest ?: return@onSuccess
-                                val authoritative = remoteMessages.mapIndexedNotNull { index, remote ->
-                                    runCatching {
-                                        FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
-                                            if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
-                                        }
-                                    }.getOrNull()?.let { message ->
-                                        if (message.id.isBlank()) message.copy(id = "remote-" + index + "-" + message.timestamp) else message
+                        val expectedAccountKey = FynxAuthStore.accountStorageKey(context)
+                        val expectedToken = FynxBackendClient.accessToken(context)
+                        FynxProductionMessaging.historyPage(
+                            context, chat.username.removePrefix("@"),
+                            expectedAccountKey = expectedAccountKey, requestToken = expectedToken
+                        ).onSuccess { page ->
+                            if (!FynxBackendClient.isRequestSessionCurrent(
+                                    expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                                    expectedToken, FynxBackendClient.accessToken(context)
+                                )
+                            ) return@onSuccess
+                            val myId = currentUserIdLatest ?: return@onSuccess
+                            val authoritative = page.messages.mapNotNull { remote ->
+                                runCatching {
+                                    FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
+                                        if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUriLatest)
                                     }
-                                }.distinctBy { it.id }
-                                val byId = (messages + authoritative).associateBy { it.id }
-                                messages = byId.values.sortedBy { it.timestamp }
-                                networkError = null
-                            }
-                            .onFailure { networkError = "Messages could not refresh yet. Your saved conversation is still here; check your connection and retry." }
+                                }.getOrNull()
+                            }.distinctBy { it.id }
+                            messages = (messages + authoritative).distinctBy { it.id }.sortedBy { it.timestamp }
+                            hasOlderMessages = page.hasMore
+                            olderMessagesCursor = page.nextBeforeId
+                            networkError = null
+                        }.onFailure {
+                            networkError = "Messages could not refresh yet. Your saved conversation is still here; check your connection and retry."
+                        }
                     }
                 }
             },
@@ -372,6 +389,52 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
+    suspend fun loadPrivateSearchPage(query: String, beforeId: String? = null, append: Boolean = false) {
+        val cleanQuery = query.trim().take(100)
+        if (cleanQuery.length < 2) return
+        val expectedAccountKey = FynxAuthStore.accountStorageKey(context)
+        val expectedToken = FynxBackendClient.accessToken(context)
+        val myId = currentUserId ?: FynxBackendClient.currentUserId(context).getOrNull()
+        remoteSearchLoading = true
+        remoteSearchError = null
+        try {
+            FynxProductionMessaging.searchHistoryPage(
+                context, chat.username.removePrefix("@"), cleanQuery, beforeId,
+                expectedAccountKey = expectedAccountKey, requestToken = expectedToken
+            ).onSuccess { page ->
+                if (searchQuery.trim() != cleanQuery || !searchOpen) return@onSuccess
+                if (!FynxBackendClient.isRequestSessionCurrent(
+                        expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                        expectedToken, FynxBackendClient.accessToken(context)
+                    )
+                ) return@onSuccess
+                if (myId.isNullOrBlank()) {
+                    remoteSearchError = "Your account could not be verified for message search."
+                } else {
+                    val found = page.messages.mapNotNull { remote ->
+                        runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull()
+                    }
+                    remoteSearchMessages = if (append) {
+                        (found + remoteSearchMessages).distinctBy { it.id }.sortedBy { it.timestamp }
+                    } else found.sortedBy { it.timestamp }
+                    remoteSearchHasMore = page.hasMore
+                    remoteSearchCursor = page.nextBeforeId
+                }
+            }.onFailure {
+                if (searchQuery.trim() == cleanQuery && searchOpen &&
+                    FynxBackendClient.isRequestSessionCurrent(
+                        expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                        expectedToken, FynxBackendClient.accessToken(context)
+                    )
+                ) {
+                    remoteSearchError = "Message history search is unavailable. Showing only matching messages saved on this device."
+                }
+            }
+        } finally {
+            if (searchQuery.trim() == cleanQuery) remoteSearchLoading = false
+        }
+    }
+
     // Resolve identity, profile and history exactly once per conversation. Previously
     // this effect was keyed by currentUserId, recipientUserId and resolvedAvatarUri —
     // values that the effect itself mutates — so Compose cancelled and restarted it
@@ -402,36 +465,64 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 ?.let { "/api/media/$it" }
                 ?: if (profileResult.isFailure) chat.avatarUri else null
 
-            FynxProductionMessaging.history(context, normalizedUsername)
-                .onSuccess { remoteMessages ->
-                    isNewConversation = remoteMessages.isEmpty()
-                    if (loadedCurrentUserId != null) {
-                        messages = remoteMessages.map { remote ->
-                            FynxProductionMessaging.toChatMessage(remote, loadedCurrentUserId).let { message ->
-                                if (message.fromMe) message else message.copy(senderAvatarUri = historyAvatarUri)
-                            }
+            val historyAccountKey = FynxAuthStore.accountStorageKey(context)
+            val historyRequestToken = FynxBackendClient.accessToken(context)
+            FynxProductionMessaging.historyPage(
+                context, normalizedUsername,
+                expectedAccountKey = historyAccountKey, requestToken = historyRequestToken
+            ).onSuccess { page ->
+                if (!FynxBackendClient.isRequestSessionCurrent(
+                        historyAccountKey, FynxAuthStore.accountStorageKey(context),
+                        historyRequestToken, FynxBackendClient.accessToken(context)
+                    )
+                ) return@onSuccess
+                val remoteMessages = page.messages
+                hasOlderMessages = page.hasMore
+                olderMessagesCursor = page.nextBeforeId
+                isNewConversation = remoteMessages.isEmpty() && messages.isEmpty()
+                if (loadedCurrentUserId != null) {
+                    val authoritative = remoteMessages.map { remote ->
+                        FynxProductionMessaging.toChatMessage(remote, loadedCurrentUserId).let { message ->
+                            if (message.fromMe) message else message.copy(senderAvatarUri = historyAvatarUri)
                         }
                     }
-                    val unread = remoteMessages
-                        .filter { it.recipientId == loadedCurrentUserId && !it.read }
-                        .map { it.id }
-                    if (unread.isNotEmpty() && FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
-                        // The stable connection effect can connect while history is loading;
-                        // send the realtime acknowledgement and retain HTTP as the durable path.
-                        realtimeClient.sendRead(unread)
-                        conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
-                    }
+                    messages = (messages + authoritative).distinctBy { it.id }.sortedBy { it.timestamp }
                 }
-                .onFailure {
-                    isNewConversation = false
-                    networkError = "Messages could not load yet. Check your connection and retry."
+                val unread = remoteMessages
+                    .filter { it.recipientId == loadedCurrentUserId && !it.read }
+                    .map { it.id }
+                if (unread.isNotEmpty() && FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
+                    realtimeClient.sendRead(unread)
+                    conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                 }
+            }.onFailure {
+                isNewConversation = messages.isEmpty()
+                networkError = "Messages could not load yet. Check your connection and retry."
+            }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
             networkError = "This conversation could not connect yet. Check your connection and try again."
             isNewConversation = false
         }
+    }
+
+    LaunchedEffect(chat.username, searchOpen, searchQuery, currentUserId) {
+        val query = searchQuery.trim()
+        if (!searchOpen || query.length < 2) {
+            remoteSearchMessages = emptyList()
+            remoteSearchHasMore = false
+            remoteSearchCursor = null
+            remoteSearchError = null
+            remoteSearchLoading = false
+            return@LaunchedEffect
+        }
+        remoteSearchMessages = emptyList()
+        remoteSearchHasMore = false
+        remoteSearchCursor = null
+        remoteSearchError = null
+        delay(350L)
+        loadPrivateSearchPage(query)
     }
 
     LaunchedEffect(isNewConversation, chat.username, relationshipRefresh) {
@@ -852,7 +943,15 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
     }
 
-    val visibleMessages = if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
+    val localSearchMatches = if (searchQuery.isBlank()) emptyList() else messages.filter {
+        it.text.contains(searchQuery.trim(), ignoreCase = true)
+    }
+    val visibleMessages = when {
+        searchQuery.isBlank() -> messages
+        searchQuery.trim().length < 2 -> emptyList()
+        remoteSearchError != null -> localSearchMatches
+        else -> remoteSearchMessages
+    }
     val pinnedMessage = messages.lastOrNull { it.pinned }
     val messageListState = rememberLazyListState()
 
@@ -1012,7 +1111,41 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             }
         }
 
-        if (searchOpen) OutlinedTextField(searchQuery, { searchQuery = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), singleLine = true, placeholder = { Text("Search messages…") })
+        if (searchOpen) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it.take(100) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true,
+                placeholder = { Text("Search all messages…") }
+            )
+            when {
+                searchQuery.trim().length == 1 -> Text(
+                    "Enter at least 2 characters to search message history.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = glassPalette.messageMuted,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                )
+                searchQuery.trim().length >= 2 && remoteSearchLoading -> Text(
+                    "Searching message history…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = glassPalette.messageMuted,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                )
+                searchQuery.trim().length >= 2 && remoteSearchError != null -> Text(
+                    "Offline search: ${localSearchMatches.size} matching messages saved on this device.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                )
+                searchQuery.trim().length >= 2 -> Text(
+                    "${remoteSearchMessages.size} matches loaded",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = glassPalette.messageMuted,
+                    modifier = Modifier.padding(horizontal = 18.dp)
+                )
+            }
+        }
         pinnedMessage?.let { pinned ->
             Surface(onClick = { searchQuery = ""; val index = messages.indexOfFirst { it.id == pinned.id }; if (index >= 0) conversationScope.launch { messageListState.animateScrollToItem(index) } }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), color = glassPalette.backgroundMid.copy(alpha = 0.96f), contentColor = glassPalette.messageText, shape = RoundedCornerShape(12.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1039,6 +1172,73 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
 
         LazyColumn(state = messageListState, modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            if (hasOlderMessages && searchQuery.isBlank()) {
+                item(key = "load_older_private_messages") {
+                    TextButton(
+                        enabled = !loadingOlderMessages,
+                        onClick = {
+                            val cursor = olderMessagesCursor ?: return@TextButton
+                            conversationScope.launch {
+                                val expectedAccountKey = FynxAuthStore.accountStorageKey(context)
+                                val expectedToken = FynxBackendClient.accessToken(context)
+                                loadingOlderMessages = true
+                                try {
+                                    FynxProductionMessaging.historyPage(
+                                        context, chat.username.removePrefix("@"), cursor,
+                                        expectedAccountKey = expectedAccountKey, requestToken = expectedToken
+                                    ).onSuccess { page ->
+                                        if (!FynxBackendClient.isRequestSessionCurrent(
+                                                expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                                                expectedToken, FynxBackendClient.accessToken(context)
+                                            )
+                                        ) return@onSuccess
+                                        val myId = currentUserId ?: return@onSuccess
+                                        val older = page.messages.mapNotNull { remote ->
+                                            runCatching { FynxProductionMessaging.toChatMessage(remote, myId) }.getOrNull()
+                                        }
+                                        messages = (older + messages).distinctBy { it.id }.sortedBy { it.timestamp }
+                                        hasOlderMessages = page.hasMore
+                                        olderMessagesCursor = page.nextBeforeId
+                                    }.onFailure {
+                                        networkError = "Older messages could not be loaded. Please retry."
+                                    }
+                                } finally {
+                                    loadingOlderMessages = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (loadingOlderMessages) "Loading older messages…" else "Load older messages") }
+                }
+            }
+            if (searchQuery.trim().length >= 2 && remoteSearchHasMore && remoteSearchError == null) {
+                item(key = "load_more_private_search_results") {
+                    TextButton(
+                        enabled = !remoteSearchLoading,
+                        onClick = {
+                            val cursor = remoteSearchCursor ?: return@TextButton
+                            conversationScope.launch { loadPrivateSearchPage(searchQuery.trim(), cursor, append = true) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (remoteSearchLoading) "Loading matches…" else "Load more matches") }
+                }
+            }
+            if (visibleMessages.isEmpty() && searchQuery.isNotBlank()) {
+                item(key = "fynx-private-search-empty") {
+                    Text(
+                        when {
+                            searchQuery.trim().length < 2 -> "Enter at least two characters to search message history."
+                            remoteSearchLoading -> "Searching all messages…"
+                            remoteSearchError != null && localSearchMatches.isEmpty() -> "No matching messages are available in messages saved on this device while offline."
+                            remoteSearchError != null -> "Showing matching messages saved on this device only."
+                            else -> "No matching messages found in this conversation."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = glassPalette.messageMuted,
+                        modifier = Modifier.fillMaxWidth().padding(24.dp)
+                    )
+                }
+            }
             if (isNewConversation && searchQuery.isBlank()) {
                 item(key = "fynx_first_contact_intro") {
                     FynxFirstContactIntro(glassPalette, recipientProfile, recipientCreatedAt, chat.name, chat.username, chat.avatarUri)
