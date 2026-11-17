@@ -178,6 +178,14 @@ fun FynxAdminControlCenterPanel() {
     var reportsLoading by remember { mutableStateOf(false) }
     var reportsError by remember { mutableStateOf<String?>(null) }
     var refreshReports by remember { mutableIntStateOf(0) }
+    var contentReports by remember { mutableStateOf<List<FynxAdminClient.ContentReport>>(emptyList()) }
+    var contentReportsLoading by remember { mutableStateOf(false) }
+    var contentReportsError by remember { mutableStateOf<String?>(null) }
+    var refreshContentReports by remember { mutableIntStateOf(0) }
+    var contentReportAudit by remember { mutableStateOf<List<FynxAdminClient.ContentReportAudit>>(emptyList()) }
+    var contentReportAuditId by remember { mutableStateOf<String?>(null) }
+    var contentReportAuditLoading by remember { mutableStateOf(false) }
+    var contentReportAuditError by remember { mutableStateOf<String?>(null) }
     var appeals by remember { mutableStateOf<List<FynxAdminClient.AppealReview>>(emptyList()) }
     var appealsOffset by remember { mutableIntStateOf(0) }
     var appealsHasMore by remember { mutableStateOf(false) }
@@ -294,6 +302,25 @@ fun FynxAdminControlCenterPanel() {
                 .onFailure { reportsError = it.message ?: "Reports unavailable." }
             reportsLoading = false
         }
+    }
+    LaunchedEffect(refreshContentReports, dashboard?.role, activeSection) {
+        if (dashboard != null && activeSection == "Safety") {
+            contentReportsLoading = true
+            contentReportsError = null
+            FynxAdminClient.contentReports(context)
+                .onSuccess { contentReports = it }
+                .onFailure { contentReportsError = it.message ?: "Content reports unavailable." }
+            contentReportsLoading = false
+        }
+    }
+    LaunchedEffect(contentReportAuditId, dashboard?.role) {
+        val reportId = contentReportAuditId ?: return@LaunchedEffect
+        contentReportAuditLoading = true
+        contentReportAuditError = null
+        FynxAdminClient.contentReportAudit(context, reportId)
+            .onSuccess { contentReportAudit = it }
+            .onFailure { contentReportAuditError = it.message ?: "Moderation audit unavailable." }
+        contentReportAuditLoading = false
     }
     LaunchedEffect(refreshAppeals, dashboard?.role, activeSection, appealsOffset) {
         if (dashboard != null && activeSection == "Safety") {
@@ -472,7 +499,7 @@ fun FynxAdminControlCenterPanel() {
                 Text("Reported accounts", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Review account reports submitted by FYNX users. This queue currently covers account reports; content-report types are not presented as account reports.",
+                    "Review account reports and content reports in separate queues so posts, comments and Marketplace listings are not mistaken for account cases.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
@@ -532,6 +559,74 @@ fun FynxAdminControlCenterPanel() {
                                 TextButton(enabled = reportsHasMore && reportsOffset < 10000, onClick = { reportsOffset = (reportsOffset + 50).coerceAtMost(10000) }) { Text("Next") }
                             }
                         }
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
+                Text("Content reports", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text("Review reports about social posts, comments and Marketplace listings. Each decision is recorded in the moderation audit.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                when {
+                    contentReportsLoading -> CircularProgressIndicator()
+                    contentReportsError != null -> {
+                        Text(contentReportsError!!, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { refreshContentReports++ }) { Text("Retry content reports") }
+                    }
+                    contentReports.isEmpty() -> Text("No content reports currently require review.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> {
+                        contentReports.forEach { report ->
+                            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("${report.targetType.replace('_', ' ')} #${report.targetId}", style = MaterialTheme.typography.titleMedium)
+                                    Text("Report #${report.id} • ${report.status}", color = MaterialTheme.colorScheme.primary)
+                                    Text("Content owner: @${report.ownerUsername.ifBlank { report.targetOwnerId }}")
+                                    Text("Submitted by: @${report.reporterUsername}")
+                                    Text("Reason: ${report.reason}")
+                                    if (report.contentPreview.isNotBlank()) Text(report.contentPreview, maxLines = 3, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    if (report.details.isNotBlank()) Text(report.details, maxLines = 3)
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        if (report.status == "OPEN") OutlinedButton(onClick = {
+                                            requestAdminConfirmation("Start content report review?", "Report #${report.id} will move to the active moderation queue.", "Start review") {
+                                                scope.launch {
+                                                    FynxAdminClient.reviewContentReport(context, report.id, "UNDER_REVIEW", "Assigned for moderation review.")
+                                                        .onSuccess { statusMessage = "Content report moved to review."; refreshContentReports++ }
+                                                        .onFailure { statusMessage = it.message ?: "Could not update content report." }
+                                                }
+                                            }
+                                        }) { Text("Review") }
+                                        Button(onClick = {
+                                            requestAdminConfirmation("Resolve this content report?", "Mark report #${report.id} resolved after completing the moderation review.", "Resolve report") {
+                                                scope.launch {
+                                                    FynxAdminClient.reviewContentReport(context, report.id, "RESOLVED", "Resolved after moderation review.")
+                                                        .onSuccess { statusMessage = "Content report resolved."; refreshContentReports++; refreshDashboard++ }
+                                                        .onFailure { statusMessage = it.message ?: "Could not resolve content report." }
+                                                }
+                                            }
+                                        }) { Text("Resolve") }
+                                        OutlinedButton(onClick = {
+                                            requestAdminConfirmation("Dismiss this content report?", "Dismiss report #${report.id} only if the content does not require action.", "Dismiss report") {
+                                                scope.launch {
+                                                    FynxAdminClient.reviewContentReport(context, report.id, "DISMISSED", "Dismissed after moderation review.")
+                                                        .onSuccess { statusMessage = "Content report dismissed."; refreshContentReports++; refreshDashboard++ }
+                                                        .onFailure { statusMessage = it.message ?: "Could not dismiss content report." }
+                                                }
+                                            }
+                                        }) { Text("Dismiss") }
+                                        TextButton(onClick = { contentReportAuditId = report.id; contentReportAudit = emptyList() }) { Text("Audit") }
+                                    }
+                                    if (contentReportAuditId == report.id) {
+                                        if (contentReportAuditLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                                        contentReportAuditError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                        contentReportAudit.forEach { audit ->
+                                            Text("${audit.previousStatus} → ${audit.newStatus} by @${audit.moderatorUsername}", style = MaterialTheme.typography.bodySmall)
+                                            if (audit.decisionNote.isNotBlank()) Text(audit.decisionNote, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(onClick = { refreshContentReports++ }) { Text("Refresh content reports") }
                     }
                 }
 
