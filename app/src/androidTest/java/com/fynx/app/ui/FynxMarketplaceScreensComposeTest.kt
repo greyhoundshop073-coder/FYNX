@@ -259,7 +259,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Your shop at a glance").assertIsDisplayed()
         saveScreenshot("my-shop-overview-screen.png")
 
-        compose.onNodeWithTag("fynx-seller-center-section-tabs").performClick()
+        compose.onNodeWithTag("fynx-seller-center-section-listings").performClick()
         compose.onNodeWithText("Your listings").assertIsDisplayed()
         compose.onNodeWithText("FYNX Test Wireless Headphones").assertIsDisplayed()
         compose.onNodeWithTag("fynx-seller-center-scroll-container")

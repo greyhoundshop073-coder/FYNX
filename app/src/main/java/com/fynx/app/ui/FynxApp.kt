@@ -603,21 +603,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
+                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        FynxLargeHeaderTitle(
                             when (selected) {
                                 "Chats" -> "Chats"
                                 "Marketplace" -> "Marketplace"
                                 "Features" -> "More"
                                 else -> selected
-                            },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            }
                         )
                     }
-                    Spacer(Modifier.size(48.dp))
                 }
             } else {
                 Row(
@@ -655,9 +650,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                 "Admin" -> "Admin Control Center"
                                 else -> selected
                             },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                     Spacer(Modifier.size(48.dp))
@@ -932,5 +930,9 @@ private fun FynxFeaturesPanel(isAdmin: Boolean, onSelect: (String) -> Unit) {
         add(Triple("Marketplace", "Marketplace", Icons.Default.ShoppingBag)); add(Triple("Wallet", "FYNX Wallet", Icons.Default.AccountBalanceWallet)); add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call)); add(Triple("Notifications", "Notifications", Icons.Default.Notifications)); add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard)); add(Triple("Share", "Share & Invite", Icons.Default.Share)); add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle)); add(Triple("Calendar", "Calendar", Icons.Default.DateRange)); add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet)); add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build)); add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock)); add(Triple("Saved Posts", "Saved Posts", Icons.Default.Bookmark)); add(Triple("Saved Products", "Saved Marketplace Products", Icons.Default.BookmarkBorder)); add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2)); add(Triple("Business Account", "Business & Creator Profile", Icons.Default.Storefront)); add(Triple("Advertising", "Create & Manage Advertising", Icons.Default.Campaign)); add(Triple("Advertising Dashboard", "Advertising Analytics Dashboard", Icons.Default.Analytics)); add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome)); add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign)); if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
     }
     val visible = features.filter { it.second.contains(query.trim(), true) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = LocalFynxBottomBarSpace.current + 8.dp)
+    ) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
 }
