@@ -353,7 +353,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         groupLoadComplete = false
         if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
         val local = withContext(Dispatchers.IO) {
-            FynxGroupsStore.load(context).firstOrNull { it.id == groupId } to
+            FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" }).firstOrNull { it.id == groupId } to
                 FynxChatStore.load(context, "group_$groupId", null)
         }
         if (!isCurrentGroupAccount(groupAccountKey)) return@LaunchedEffect
@@ -791,8 +791,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         if (FynxBackendClient.isAccessDeniedOrMissing(error)) {
                             withContext(Dispatchers.IO) {
                                 if (isCurrentGroupAccount(groupAccountKey)) {
-                                    FynxChatStore.clear(context, "group_$groupId")
-                                    FynxGroupsStore.removeGroup(context, groupId)
+                                    FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })
                                 }
                             }
                             if (!isCurrentGroupAccount(groupAccountKey)) return@onFailure
@@ -947,7 +946,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         }
     }
 
-    if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context).firstOrNull { it.id == groupId }; groupNotificationsEnabled = FynxConversationPreferences.groupNotifications(context, groupId); groupMuted = FynxConversationPreferences.groupMuted(context, groupId); showSettings = false }, onClearHistory = { messages = emptyList() }); return }
+    if (showSettings && selectedGroup != null) { FynxGroupSettingsPanel(groupId = selectedGroup.id, groupName = selectedGroup.name, isAdmin = isAdmin, onBack = { currentGroup = FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" }).firstOrNull { it.id == groupId }; groupNotificationsEnabled = FynxConversationPreferences.groupNotifications(context, groupId); groupMuted = FynxConversationPreferences.groupMuted(context, groupId); showSettings = false }, onClearHistory = { messages = emptyList() }); return }
     FynxGroupWallpaperBackground(groupId = groupId, modifier = Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         Box(
