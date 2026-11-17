@@ -301,7 +301,7 @@ object FynxAdminClient {
             JSONObject().put("status", status.trim().uppercase()).toString()
         ).map { Unit }
 
-    suspend fun contentReports(context: Context, status: String = "OPEN"): Result<List<ContentReport>> =
+    suspend fun contentReports(context: Context, status: String = "ACTIVE"): Result<List<ContentReport>> =
         FynxBackendClient.get(context, "/api/admin/content-reports?status=${encode(status.trim().uppercase())}").mapCatching { raw ->
             val array = JSONObject(raw).optJSONArray("reports") ?: return@mapCatching emptyList()
             buildList {
