@@ -34,6 +34,7 @@ check("FCM retry and invalid-token cleanup", 'response.status !== 429' in push a
 check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'body: String(message)' in push)
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
 check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
+check("per-chat mute suppresses its FCM banner in addition to the conversation notification switch", 'FynxConversationPreferences.chatNotifications(this, chatUsername)' in service and 'FynxPreferencesStore.isChatMuted(this, chatUsername)' in service)
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
 check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
 check("private message push hook", ('message-${message.id}' in bootstrap or 'notificationId: "message-" + message.id' in bootstrap) and 'type: "MESSAGE"' in bootstrap)
