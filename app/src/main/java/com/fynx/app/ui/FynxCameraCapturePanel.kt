@@ -527,6 +527,21 @@ private fun FynxCameraWindowStyleEffect(cameraWindowView: View) {
     }
 }
 
+/**
+ * Named SAM contract for returning edited media from the camera to the Home composer.
+ * Avoids a high-arity Kotlin FunctionN parameter in the generated Compose method.
+ */
+fun interface FynxCameraEditedCaptureCallback {
+    fun onCapturedWithTextEdits(
+        uri: Uri,
+        mediaType: String,
+        sourceUri: Uri,
+        overlays: List<FynxCameraTextOverlay>,
+        videoStyle: String,
+        captionText: String
+    )
+}
+
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
@@ -551,7 +566,7 @@ fun FynxCameraCapturePanel(
     initialVideoStyle: String = "NATURAL",
     initialVideoCaptionText: String = "",
     /** Returns both the final shareable file and the clean editable media source/state. */
-    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
+    onCapturedWithTextEdits: FynxCameraEditedCaptureCallback? = null
 ) {
     val context = LocalContext.current
     val cameraOrientation = LocalConfiguration.current.orientation
@@ -1183,7 +1198,7 @@ fun FynxCameraCapturePanel(
                     if (editCallback != null) {
                         releaseUnneededInitialMediaCopies(setOf(finalUri, editSource))
                         initialMediaHandedOff = true
-                        editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
+                        editCallback.onCapturedWithTextEdits(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
                     } else {
                         releaseUnneededInitialMediaCopies(setOf(finalUri))
                         initialMediaHandedOff = true
