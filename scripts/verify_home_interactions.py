@@ -253,8 +253,13 @@ require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnl
 require_normalized(app_source, 'FynxGlassIconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }, contentDescription = "Notifications")', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
-if 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' not in app_source and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' not in app_source:
-    raise SystemExit("HOME INTERACTIONS RED: Home and Marketplace scroll hiding must preserve the Status-creator navigation exception and keep navigation visible on other tabs")
+# The Status creator is an overlay on Home, while the actual composer is immersive.
+# Keep navigation visible on the creator hub and non-feed tabs, but hide it over the composer.
+require_normalized(
+    app_source,
+    'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)',
+    "Home/Marketplace scroll hiding preserves the Status creator and non-feed navigation while keeping the immersive composer unobstructed"
+)
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
