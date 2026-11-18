@@ -860,9 +860,10 @@ fun FynxCameraCapturePanel(
         }
         while (recording == active) {
             recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
-            val sizeLimitReached = statusCapture && (activeRecordingFile?.length() ?: 0L) >= FYNX_STATUS_MAX_VIDEO_BYTES
+            val maximumBytes = if (statusCapture) FYNX_STATUS_MAX_VIDEO_BYTES else FYNX_UPLOAD_SAFE_VIDEO_BYTES
+            val sizeLimitReached = (activeRecordingFile?.length() ?: 0L) >= maximumBytes
             if (sizeLimitReached) {
-                recordingNotice = "Status video reached the upload-size limit. Your clip is ready to preview."
+                recordingNotice = if (statusCapture) "Status video reached the upload-size limit. Your clip is ready to preview." else "Video reached the upload-size limit. Your clip is ready to preview."
                 active.stop()
                 break
             }
@@ -903,10 +904,10 @@ fun FynxCameraCapturePanel(
                 val qualitySelector = if (statusCapture) {
                     QualitySelector.fromOrderedList(listOf(Quality.SD, Quality.HD), FallbackStrategy.lowerQualityOrHigherThan(Quality.HD))
                 } else {
-                    QualitySelector.fromOrderedList(listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD), FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD))
+                    QualitySelector.fromOrderedList(listOf(Quality.HD, Quality.SD), FallbackStrategy.lowerQualityOrHigherThan(Quality.HD))
                 }
                 val recorderBuilder = Recorder.Builder().setQualitySelector(qualitySelector)
-                if (statusCapture) recorderBuilder.setTargetVideoEncodingBitRate(700_000)
+                recorderBuilder.setTargetVideoEncodingBitRate(if (statusCapture) 700_000 else FYNX_UPLOAD_SAFE_VIDEO_BITRATE)
                 val recorder = recorderBuilder.build()
                 val video = VideoCapture.Builder(recorder)
                     .setTargetRotation(targetRotation)

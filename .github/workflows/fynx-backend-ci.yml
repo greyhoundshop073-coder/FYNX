@@ -4,7 +4,7 @@ on:
   push:
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
-    branches: [ "main", "integration/fynx-single-apk-20261013" ]
+    branches: [ "main", "integration/fynx-single-apk-20261013", "integration/fynx-single-apk-consolidation-20261117" ]
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
     inputs:
@@ -100,6 +100,11 @@ jobs:
           node --check verify-marketplace-seasonal-promotions.mjs
           node --check verify-marketplace-sponsored-feed.mjs
           node --check verify-marketplace-weekly-sellers.mjs
+          node --check postVisibility.js
+          node --check privacyRoutes.js
+          node --check socialHardening.js
+          node --check verify-post-visibility-contract.mjs
+          node --check verify-background-timers-guarded.mjs
           node --check test-marketplace-advertising-schema-db.mjs
           node --check verify-marketplace-fulfillment-integrity.mjs
           node --check verify-marketplace-batch2.mjs
@@ -204,6 +209,13 @@ jobs:
         run: node verify-marketplace-seasonal-promotions.mjs
       - name: Run Marketplace weekly-seller awards verification
         run: node verify-marketplace-weekly-sellers.mjs
+      - name: Verify post-audience privacy contract
+        run: node verify-post-visibility-contract.mjs
+      - name: Verify background timer failures are contained
+        run: node verify-background-timers-guarded.mjs
+      - name: Verify camera video upload size limits
+        working-directory: .
+        run: python3 scripts/verify_post_upload_limits.py
 
       - name: Verify notification bootstrap idempotency
         run: node verify-notification-bootstrap-idempotency.mjs
