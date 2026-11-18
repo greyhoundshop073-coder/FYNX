@@ -142,6 +142,17 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
   };
 
   const createCall = async ({ callerId, calleeId, callId, mediaType }) => {
+    // A blocked pair cannot ring each other. The caller hears "unavailable", the same as for an offline user, so a
+    // block is never revealed. If the blocks table does not exist yet nobody has blocked anyone.
+    try {
+      const blocked = await pool.query(
+        "SELECT 1 FROM blocks WHERE (blocker_id = $1 AND blocked_id = $2) OR (blocker_id = $2 AND blocked_id = $1) LIMIT 1",
+        [String(callerId), String(calleeId)]
+      );
+      if (blocked.rowCount) return { unavailable: true };
+    } catch (error) {
+      if (error?.code !== "42P01") throw error;
+    }
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
