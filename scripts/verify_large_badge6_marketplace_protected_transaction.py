@@ -15,6 +15,7 @@ transactions = (ROOT / "backend/marketplaceTransactions.js").read_text(encoding=
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+emulator_wrapper = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 
 checks = [
     ("buyer checkout creates a protected order before payment", "createProtectedMarketplaceCheckoutOrder" in checkout and "paymentOrder" in panel),
@@ -41,7 +42,7 @@ checks = [
     ("payment order creation remains idempotent", "clientOrderId" in transactions and "idempotent:true" in transactions),
     ("inventory reservation occurs inside the transaction", "reserved_quantity=reserved_quantity+$1" in transactions and "BEGIN" in transactions),
     ("existing marketplace protection gates remain in CI", "verify_r6a_marketplace_protection.py" in workflow and "verify_marketplace_integration_security.py" in workflow and "verify_marketplace_seller_flow.py" in workflow),
-    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in runtime_script and "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow),
+    ("real Android instrumentation remains in CI", "connectedDebugAndroidTest" in runtime_script and "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_emulator_certification.sh" in workflow and "bash scripts/run_android_runtime_certification.sh" in emulator_wrapper),
 ]
 
 failed = []
