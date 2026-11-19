@@ -13,6 +13,7 @@ chat_messaging = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessag
 chat_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatStore.kt").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
+normalized_settings = "".join(settings.split())
 
 checks = {
     "server blocks text sends when group send_messages is disabled": "GROUP_SEND_MESSAGES_DISABLED" in group_routes and "if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)" in normalized_group_routes,
@@ -22,8 +23,8 @@ checks = {
     "non-manager member adds respect the server add_members setting": "!canManageMembers(actor.role) && !settings?.add_members" in membership_routes,
     "direct member adds cannot bypass admin approval": "GROUP_APPROVAL_REQUIRED" in membership_routes and "settings?.approve_new_members" in membership_routes,
     "active group UI respects the approval-required setting": "remotePermissions?.approveNewMembers != true" in active,
-    "pending join-request UI is hidden until the backend advertises request storage and review": "approveNewMembers&&joinRequestApprovalSupported" in settings and "if(!isAdmin||!approveNewMembers||!joinRequestApprovalSupported)return" in settings,
-    "invite-link creation and revocation are exposed only when the server advertises invite preview support": "if(invitePreviewSupported)" in settings and "FynxGroupRemoteClient.createInvite(context,groupId)" in settings and "FynxGroupRemoteClient.revokeInvite(context,groupId,token)" in settings and "Group invite links are unavailable until this server supports invite preview" in settings,
+    "pending join-request UI is shown only after the server permission snapshot is loaded and explicitly enables approval": "if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&approveNewMembers)" in normalized_settings,
+    "invite-link creation and revocation require a loaded server permission snapshot and explicit invite support": "if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&inviteLinks)" in normalized_settings and "FynxGroupRemoteClient.createInvite(context,groupId)" in normalized_settings and "FynxGroupRemoteClient.revokeInvite(context,groupId,token)" in normalized_settings and "Group invite links are unavailable until this server supports invite preview" in settings,
     "Android client uses the dedicated member-add endpoint": '"/api/groups/$groupId/members"' in client and "suspend fun addMember" in client,
     "active group chat loads and uses remote send/media/member permissions": "FynxGroupRemoteClient.loadPermissions(context, groupId)" in active and "remotePermissions?.sendMessages" in active and "remotePermissions?.sendMedia" in active and "remotePermissions?.addMembers" in active,
     "authenticated group actions fail closed until server permissions load": "val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMessages == true" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMedia == true" in active and "remotePermissions?.addMembers == true" in active and "permissionLoadError" in active,
