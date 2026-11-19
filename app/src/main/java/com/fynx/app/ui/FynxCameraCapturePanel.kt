@@ -1300,8 +1300,9 @@ fun FynxCameraCapturePanel(
             }
         }
     }
-    FynxCameraIsolatedContent {
-if(previewUri!=null && previewType!=null){
+    if(previewUri!=null && previewType!=null){
+        FynxCameraIsolatedContent {
+
         MaterialTheme(
             colorScheme = darkColorScheme(
                 primary = Color(0xFF007FFF),
@@ -1815,9 +1816,10 @@ if(previewUri!=null && previewType!=null){
             }
         }
         }
-        };return
+        }
+        }
+        return
     }
-}
     // Camera UI is deliberately dark so preview controls remain legible on bright or dark
     // camera feeds, and so Material chips use high-contrast labels over the preview.
     MaterialTheme(
