@@ -528,6 +528,11 @@ private fun FynxCameraWindowStyleEffect(cameraWindowView: View) {
 }
 
 @Composable
+private fun FynxCameraIsolatedContent(content: @Composable () -> Unit) {
+    content()
+}
+
+@Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
     fastCapture: Boolean = false,
@@ -1295,7 +1300,8 @@ fun FynxCameraCapturePanel(
             }
         }
     }
-    if(previewUri!=null && previewType!=null){
+    FynxCameraIsolatedContent {
+if(previewUri!=null && previewType!=null){
         MaterialTheme(
             colorScheme = darkColorScheme(
                 primary = Color(0xFF007FFF),
@@ -1811,6 +1817,7 @@ fun FynxCameraCapturePanel(
         }
         };return
     }
+}
     // Camera UI is deliberately dark so preview controls remain legible on bright or dark
     // camera feeds, and so Material chips use high-contrast labels over the preview.
     MaterialTheme(
@@ -1996,7 +2003,8 @@ fun FynxCameraCapturePanel(
             }
         }
 
-        if (showCaptureControls || recording != null) Column(
+        FynxCameraIsolatedContent {
+if (showCaptureControls || recording != null) Column(
             Modifier.align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .heightIn(max = LocalConfiguration.current.screenHeightDp.dp * 0.68f)
@@ -2322,6 +2330,7 @@ fun FynxCameraCapturePanel(
             }
 
         }
+}
     }
     }
     }
