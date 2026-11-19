@@ -14,6 +14,7 @@ chat_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatStore.kt").read_
 
 normalized_group_routes = "".join(group_routes.split())
 normalized_settings = "".join(settings.split())
+normalized_active = "".join(active.split())
 
 checks = {
     "server blocks text sends when group send_messages is disabled": "GROUP_SEND_MESSAGES_DISABLED" in group_routes and "if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)" in normalized_group_routes,
@@ -31,6 +32,7 @@ checks = {
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
     "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in normalized_settings and "approveNewMembers,disappearingSeconds" in normalized_settings,
     "new-member history visibility is disabled until the server advertises support": "canEditPermissions&&showHistoryPolicySupported" in normalized_settings and "This server does not yet support saving and enforcing new-member history visibility" in settings,
+    "group media saving uses the local gallery preference for received media only": normalized_active.count("autoSaveToGallery=FynxConversationPreferences.groupSaveMedia(context,groupId)&&!message.fromMe") >= 2,
     "story-to-group is not advertised as a text-only message until a real Status share flow exists": "onStoryShare" not in active and "Share a story to group" not in active and "Story shared to group" not in active and "onStoryShare" not in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8"),
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
     "production startup registers group, membership and content routes exactly once": all(token in scalability for token in ["registerGroupRoutes({ app })", "registerGroupMembershipRoutes({ app })", "registerGroupContentRoutes({ app })"]) and "registerGroupInviteRoutes" not in scalability,
