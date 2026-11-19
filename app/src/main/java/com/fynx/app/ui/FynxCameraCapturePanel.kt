@@ -532,6 +532,30 @@ private fun FynxCameraIsolatedContent(content: @Composable () -> Unit) {
     content()
 }
 
+private class FynxCameraCapturePanelConfig(
+    val onCaptured: (Uri, String) -> Unit,
+    val fastCapture: Boolean,
+    val initialMode: CameraMode,
+    val videoNoteMode: Boolean,
+    val liveProofMode: Boolean,
+    val liveProofListingTitle: String,
+    val liveProofSellerUsername: String,
+    val onLiveProofStart: () -> Unit,
+    val onDismiss: () -> Unit,
+    val statusCapture: Boolean,
+    val selectedMusic: FynxMusicCatalogueTrack?,
+    val onChooseMusic: () -> Unit,
+    val onClearMusic: () -> Unit,
+    val showYourStoryAction: Boolean,
+    val onShareToStatus: (Uri, String) -> Unit,
+    val initialMediaUri: Uri?,
+    val initialMediaType: String?,
+    val initialTextOverlays: List<FynxCameraTextOverlay>,
+    val initialVideoStyle: String,
+    val initialVideoCaptionText: String,
+    val onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)?
+)
+
 @Composable
 fun FynxCameraCapturePanel(
     onCaptured: (Uri, String) -> Unit,
@@ -558,6 +582,56 @@ fun FynxCameraCapturePanel(
     /** Returns both the final shareable file and the clean editable media source/state. */
     onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
 ) {
+    FynxCameraCapturePanelContent(
+        FynxCameraCapturePanelConfig(
+            onCaptured = onCaptured,
+            fastCapture = fastCapture,
+            initialMode = initialMode,
+            videoNoteMode = videoNoteMode,
+            liveProofMode = liveProofMode,
+            liveProofListingTitle = liveProofListingTitle,
+            liveProofSellerUsername = liveProofSellerUsername,
+            onLiveProofStart = onLiveProofStart,
+            onDismiss = onDismiss,
+            statusCapture = statusCapture,
+            selectedMusic = selectedMusic,
+            onChooseMusic = onChooseMusic,
+            onClearMusic = onClearMusic,
+            showYourStoryAction = showYourStoryAction,
+            onShareToStatus = onShareToStatus,
+            initialMediaUri = initialMediaUri,
+            initialMediaType = initialMediaType,
+            initialTextOverlays = initialTextOverlays,
+            initialVideoStyle = initialVideoStyle,
+            initialVideoCaptionText = initialVideoCaptionText,
+            onCapturedWithTextEdits = onCapturedWithTextEdits
+        )
+    )
+}
+
+@Composable
+private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) {
+    val onCaptured = config.onCaptured
+    val fastCapture = config.fastCapture
+    val initialMode = config.initialMode
+    val videoNoteMode = config.videoNoteMode
+    val liveProofMode = config.liveProofMode
+    val liveProofListingTitle = config.liveProofListingTitle
+    val liveProofSellerUsername = config.liveProofSellerUsername
+    val onLiveProofStart = config.onLiveProofStart
+    val onDismiss = config.onDismiss
+    val statusCapture = config.statusCapture
+    val selectedMusic = config.selectedMusic
+    val onChooseMusic = config.onChooseMusic
+    val onClearMusic = config.onClearMusic
+    val showYourStoryAction = config.showYourStoryAction
+    val onShareToStatus = config.onShareToStatus
+    val initialMediaUri = config.initialMediaUri
+    val initialMediaType = config.initialMediaType
+    val initialTextOverlays = config.initialTextOverlays
+    val initialVideoStyle = config.initialVideoStyle
+    val initialVideoCaptionText = config.initialVideoCaptionText
+    val onCapturedWithTextEdits = config.onCapturedWithTextEdits
     val context = LocalContext.current
     val cameraOrientation = LocalConfiguration.current.orientation
     val lifecycleOwner = LocalLifecycleOwner.current
