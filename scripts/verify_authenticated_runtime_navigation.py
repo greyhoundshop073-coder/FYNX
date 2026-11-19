@@ -2757,44 +2757,16 @@ def wait_for_my_shop_section_settled(slug: str, timeout: float = 20.0) -> tuple[
     return latest, False
 
 def backend_real_chat_target()->str:
-    """Find an existing FYNX user without creating test accounts or application data."""
-    base=os.environ.get("FYNX_PRODUCTION_BASE_URL","https://fynx-backend-testing-testing.up.railway.app").rstrip("/")
-    try:
-        login_body=json.dumps({"username":USERNAME,"password":PASSWORD}).encode("utf-8")
-        login_req=urllib.request.Request(
-            base+"/api/auth/login",
-            data=login_body,
-            headers={"Content-Type":"application/json","Accept":"application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(login_req,timeout=20) as response:
-            login_data=json.loads(response.read().decode("utf-8","replace"))
-        token=str(login_data.get("accessToken") or "").strip()
-        if not token:
-            return ""
-        self_name=USERNAME.removeprefix("@").strip().lower()
-        queries=[]
-        prefix=self_name[:2]
-        if len(prefix)>=2: queries.append(prefix)
-        queries.extend(["a","e","i","o","u","n","m"])
-        seen=set()
-        for query in queries:
-            if query in seen: continue
-            seen.add(query)
-            url=base+"/api/users/search?"+urllib.parse.urlencode({"q":query,"mode":"username"})
-            request=urllib.request.Request(
-                url,
-                headers={"Authorization":"Bearer "+token,"Accept":"application/json"},
-                method="GET",
-            )
-            with urllib.request.urlopen(request,timeout=20) as response:
-                data=json.loads(response.read().decode("utf-8","replace"))
-            for user in data.get("users",[]):
-                username=str(user.get("username") or "").removeprefix("@").strip()
-                if username and username.lower()!=self_name:
-                    return username
-    except Exception as error:
-        report.append("- Real chat target discovery unavailable: "+type(error).__name__)
+    """Remote chat-target discovery is intentionally disabled for backend-free app-side certification.
+
+    The focused consolidation workflow seeds a disposable local private-chat fixture
+    inside the installed FYNX app and opens that account through the explicit debug-local
+    entry. Do not sign in to a server, query users, or contact a configured backend here.
+    """
+    if FORCE_LOCAL_VISUALS or CHAT_GROUPS_VISUALS_ONLY:
+        report.append("- PASS remote chat discovery skipped; Chat/Groups use the disposable local fixture only")
+    else:
+        report.append("- BLOCKED remote chat discovery disabled while backend services are postponed")
     return ""
 
 def input_text(value:str):
