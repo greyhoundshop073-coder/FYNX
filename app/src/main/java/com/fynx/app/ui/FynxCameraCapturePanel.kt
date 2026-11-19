@@ -532,7 +532,7 @@ private fun FynxCameraIsolatedContent(content: @Composable () -> Unit) {
     content()
 }
 
-private fun interface FynxCameraEditedCaptureCallback {
+fun interface FynxCameraEditedCaptureCallback {
     fun onCapturedWithTextEdits(
         uri: Uri,
         mediaType: String,
@@ -592,7 +592,7 @@ fun FynxCameraCapturePanel(
     initialVideoStyle: String = "NATURAL",
     initialVideoCaptionText: String = "",
     /** Returns both the final shareable file and the clean editable media source/state. */
-    onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)? = null
+    onCapturedWithTextEdits: FynxCameraEditedCaptureCallback? = null
 ) {
     FynxCameraCapturePanelContent(
         FynxCameraCapturePanelConfig(
@@ -616,11 +616,7 @@ fun FynxCameraCapturePanel(
             initialTextOverlays = initialTextOverlays,
             initialVideoStyle = initialVideoStyle,
             initialVideoCaptionText = initialVideoCaptionText,
-            onCapturedWithTextEdits = onCapturedWithTextEdits?.let { callback ->
-                FynxCameraEditedCaptureCallback { uri, mediaType, sourceUri, overlays, videoStyle, captionText ->
-                    callback(uri, mediaType, sourceUri, overlays, videoStyle, captionText)
-                }
-            }
+            onCapturedWithTextEdits = onCapturedWithTextEdits
         )
     )
 }

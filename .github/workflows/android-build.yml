@@ -162,6 +162,7 @@ jobs:
         run: python3 scripts/verify_camera_post_journey.py
       - name: Validate camera runtime certification script syntax
         run: |
+          python3 scripts/verify_android_runtime_capture_harness.py
           python3 -m py_compile scripts/verify_authenticated_runtime_navigation.py scripts/verify_marketplace_runtime_visual_capture.py scripts/verify_status_creator_runtime.py scripts/verify_status_creator_runtime_contract.py
           bash -n scripts/run_android_runtime_certification.sh
       - name: Verify Batch 11 chat expressions and reactions
@@ -375,7 +376,35 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back environment -camera-front none
           pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: |
-            bash -c 'set +e; bash scripts/prepare_android_runtime_emulator.sh; preflight_status=$?; if [ "$preflight_status" -eq 0 ]; then bash scripts/run_android_runtime_certification.sh; runtime_status=$?; else runtime_status=$preflight_status; fi; mkdir -p fynx-runtime-screenshots/marketplace-test-fixtures; adb pull /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; adb pull /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures/. fynx-runtime-screenshots/marketplace-test-fixtures/ || true; exit "$runtime_status"'
+            set +e
+            bash scripts/prepare_android_runtime_emulator.sh
+            preflight_status=$?
+            runtime_status=0
+            if [ "$preflight_status" -eq 0 ]; then
+              bash scripts/run_android_runtime_certification.sh
+              runtime_status=$?
+            else
+              runtime_status="$preflight_status"
+            fi
+
+            fixture_dir="fynx-runtime-screenshots/marketplace-test-fixtures"
+            mkdir -p "$fixture_dir"
+            fixture_status_file="$fixture_dir/capture-status.txt"
+            : > "$fixture_status_file"
+            for fixture_remote in \
+              /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures \
+              /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures; do
+              if adb shell test -d "$fixture_remote" >/dev/null 2>&1; then
+                if adb pull "$fixture_remote/." "$fixture_dir/" >/dev/null 2>&1; then
+                  echo "CAPTURED: $fixture_remote" >> "$fixture_status_file"
+                else
+                  echo "NOT_CAPTURED: adb pull failed for $fixture_remote" >> "$fixture_status_file"
+                fi
+              else
+                echo "NOT_CAPTURED: remote fixture directory was absent: $fixture_remote" >> "$fixture_status_file"
+              fi
+            done
+            exit "$runtime_status"
         env:
           FYNX_DISPLAY_PROFILE: ${{ github.event.inputs.display_profile || 'default' }}
           FYNX_MARKETPLACE_VISUALS_ONLY: ${{ ((github.event_name == 'pull_request' && (contains(github.event.pull_request.head.ref, 'fix/real-wallet-runtime-screen-capture-20261101') || github.event.pull_request.head.ref == 'work1/seller-profile-port-20261110' || github.event.pull_request.head.ref == 'feat/local-business-discovery-20261111' || github.event.pull_request.head.ref == 'feat/business-profile-details-20261111' || github.event.pull_request.head.ref == 'fix/marketplace-cards-quickcart-rebased-20261115' || github.event.pull_request.base.ref == 'integration/fynx-single-apk-consolidation-20261117')) || github.ref == 'refs/heads/fix/real-wallet-runtime-screen-capture-20261101' || github.ref == 'refs/heads/feat/local-business-discovery-20261111' || github.ref == 'refs/heads/feat/business-profile-details-20261111') && '1' || '0' }}

@@ -185,8 +185,10 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
       printf '%s\n' "${FIXTURE_DISK}"
       exit 1
     fi
-    echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before UI login."
-    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py  NAV_EXIT=$?
+    echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before app-side visual capture."
+    NAV_EXIT=0
+    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "${NAV_EXIT}" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${NAV_EXIT}"; fi
   if [ "${FYNX_APP_SIDE_VISUALS_ONLY:-0}" = "1" ]; then
