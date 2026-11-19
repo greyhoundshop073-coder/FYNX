@@ -51,6 +51,21 @@ object FynxDesign {
     /** User-approved primary FYNX blue, used by the default accent and themed primary controls. */
     val AzureBlue = Color(0xFF007FFF)
 
+    // Raised secondary actions: pale Azure companion in light mode and a restrained
+    // deep-blue surface in dark mode. Danger actions retain semantic crimson styling.
+    val SoftActionLightContainer = Color(0xFFE3F2FC)
+    val SoftActionLightForeground = Color(0xFF102A3A)
+    val SoftActionLightOutline = Color(0xFF4C87A4)
+    val SoftActionDarkContainer = Color(0xFF17365D)
+    val SoftActionDarkForeground = Color(0xFFEAF1FF)
+    val SoftActionDarkOutline = Color(0xFF6BAED6)
+    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
+    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
+    val SoftActionDangerLightOutline = CrimsonRed
+    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
+    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
+    val SoftActionDangerDarkOutline = DarkModeError
+
     // Supporting palette: neutral surfaces, secondary content and premium-only details.
     val SoftCloudWhite = Color(0xFFF5F7FA)
     val MidnightSlate = Color(0xFF1C2434)
