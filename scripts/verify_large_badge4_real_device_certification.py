@@ -26,7 +26,36 @@ check("Home, Chat, Friends, Stories and Features are reachable", all(x in app fo
 check("major secondary surfaces have real navigation routes", all(x in app for x in ['"Marketplace"', '"Calls"', '"Groups"', '"Notifications"', '"Privacy"', '"Money Tools"', '"AI"']))
 check("runtime audit captures screenshots", "screencap" in runtime)
 check("runtime audit captures UI hierarchy", "uiautomator" in runtime)
-check("runtime audit uses the real authenticated CI account", 'fynx_e2e_username' in runtime and 'fynx_e2e_password' in runtime and 'backend_real_chat_target' in runtime and '/api/auth/login' in runtime)
+check(
+    "runtime audit retains explicit CI credentials and an honest debug-local mode",
+    "fynx_e2e_username" in runtime
+    and "fynx_e2e_password" in runtime
+    and "debug-local" in runtime
+    and "not server-authenticated" in runtime
+)
+check(
+    "backend-free Chat/Groups visual capture uses the disposable account-scoped local fixture",
+    "fynx_chat_groups_visuals_only" in runtime
+    and "fynx_local_visuals_only" in runtime
+    and "fynx offline private fixture: hello from the test peer" in runtime
+    and "fynx local reply: the private conversation history restored" in runtime
+    and "expected_history_present" in runtime
+    and "account_matches" in runtime
+)
+chat_discovery = runtime.split("def backend_real_chat_target()->str:", 1)[1].split("\ndef input_text", 1)[0] if "def backend_real_chat_target()->str:" in runtime else ""
+check(
+    "local Chat target discovery makes no backend or credential request",
+    bool(chat_discovery)
+    and "return \"\"" in chat_discovery
+    and "urllib.request.urlopen" not in chat_discovery
+    and "/api/auth/login" not in chat_discovery
+    and "/api/users/search" not in chat_discovery
+)
+check(
+    "disposable group creation requires emulator network isolation",
+    "set_emulator_network_enabled(false)" in runtime
+    and "refusing to create a ci fixture that might reach production" in runtime
+)
 check("runtime audit does not create test accounts or application data", '/api/auth/register' not in runtime and 'create test account' not in runtime and 'fake account' not in runtime)
 
 for path in [
