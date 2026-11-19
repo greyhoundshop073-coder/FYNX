@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import {
-  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -14,7 +12,6 @@ const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
 const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const UPLOAD_OBJECT_KEY_PATTERN = /^uploads\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OBJECT_PROVIDERS = new Set(["neon", "r2"]);
 
 export class MediaStorageConfigurationError extends Error {
@@ -136,20 +133,6 @@ export function createMediaStorage({
     return key;
   }
 
-  function validateUploadObjectKey(objectKey) {
-    const key = String(objectKey || "").trim();
-    if (!UPLOAD_OBJECT_KEY_PATTERN.test(key)) throw new Error("Invalid FYNX temporary upload object key.");
-    return key;
-  }
-
-  function validateStoredObjectKey(objectKey) {
-    const key = String(objectKey || "").trim();
-    if (!MEDIA_OBJECT_KEY_PATTERN.test(key) && !UPLOAD_OBJECT_KEY_PATTERN.test(key)) {
-      throw new Error("Invalid FYNX stored media object key.");
-    }
-    return key;
-  }
-
   async function createDownloadUrl(objectKey, sourceProvider = provider, expiresInSeconds = DEFAULT_DOWNLOAD_URL_TTL_SECONDS) {
     const config = configFor(sourceProvider);
     const key = validateObjectKey(objectKey);
@@ -171,7 +154,7 @@ export function createMediaStorage({
 
   async function deleteMediaObject(objectKey, sourceProvider = provider) {
     const config = configFor(sourceProvider);
-    const key = sourceProvider === "r2" ? validateStoredObjectKey(objectKey) : validateObjectKey(objectKey);
+    const key = validateObjectKey(objectKey);
     await getClient(sourceProvider).send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
   }
 
@@ -193,52 +176,6 @@ export function createMediaStorage({
       }));
       return { storageProvider: provider, objectKey };
     },
-    async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
-      const config = configFor("r2");
-      const key = validateUploadObjectKey(objectKey);
-      const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
-      if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
-        throw new Error("Unsupported FYNX media type.");
-      }
-      if (!Number.isInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 600) {
-        throw new RangeError("Media upload URL expiry must be between 60 and 600 seconds.");
-      }
-      const command = new PutObjectCommand({
-        Bucket: config.bucket,
-        Key: key,
-        ContentType: normalizedMimeType,
-        CacheControl: "private, max-age=60"
-      });
-      const url = await signUrlFactory(getClient("r2"), command, { expiresIn: expiresInSeconds });
-      if (typeof url !== "string" || !url.startsWith("https://")) {
-        throw new Error("Object storage returned an invalid upload URL.");
-      }
-      return url;
-    },
-
-    async promoteUploadedObject(sourceObjectKey, destinationObjectKey) {
-      const config = configFor("r2");
-      const sourceKey = validateUploadObjectKey(sourceObjectKey);
-      const destinationKey = validateObjectKey(destinationObjectKey);
-      await getClient("r2").send(new CopyObjectCommand({
-        Bucket: config.bucket,
-        Key: destinationKey,
-        CopySource: config.bucket + "/" + sourceKey,
-        MetadataDirective: "COPY"
-      }));
-      return { objectKey: destinationKey };
-    },
-
-    async inspectMediaObject(objectKey) {
-      const config = configFor("r2");
-      const key = validateStoredObjectKey(objectKey);
-      const result = await getClient("r2").send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
-      return {
-        byteSize: Number(result?.ContentLength || 0),
-        mimeType: String(result?.ContentType || "").split(";")[0].trim().toLowerCase()
-      };
-    },
-
     createDownloadUrl,
     getMediaObjectBytes,
     deleteMediaObject

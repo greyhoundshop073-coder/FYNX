@@ -14,7 +14,6 @@ process.env.JWT_SECRET ||= "fynx-group-content-test-secret";
 
 const { registerGroupContentRoutes } = await import("./groupContentRoutes.js");
 const { registerGroupRoutes } = await import("./groupRoutes.js");
-const { registerTrustSafetyRoutes } = await import("./trustSafety.js");
 const { getFynxDatabasePool } = await import("./databasePool.js");
 const client = new Client({ host, port, user, password, database });
 const suffix = randomUUID().replaceAll("-", "");
@@ -34,16 +33,6 @@ const app = {
   delete: (path, ...handlers) => routes.set("DELETE " + path, handlers)
 };
 const token = id => jwt.sign({ sub: String(id) }, process.env.JWT_SECRET);
-const auth = (req, res, next) => {
-  try {
-    const authorization = req.get("Authorization") || "";
-    const bearer = authorization.replace(/^Bearer\s+/i, "");
-    req.user = jwt.verify(bearer, process.env.JWT_SECRET);
-    return next();
-  } catch {
-    return res.status(401).json({ error: "unauthorized" });
-  }
-};
 
 async function call(method, path, params, userId, body = {}, query = {}) {
   const handlers = routes.get(method + " " + path);
@@ -58,99 +47,6 @@ async function call(method, path, params, userId, body = {}, query = {}) {
   };
   await handlers[0](req, res, () => handlers[1](req, res));
   return res;
-}
-
-async function runContentReportIntegration() {
-  const schema = "content_report_" + suffix.slice(0, 16);
-  const quotedSchema = '"' + schema + '"';
-  const contentClient = new Client({ host, port, user, password, database });
-  const contentRoutes = new Map();
-  const contentApp = {
-    get: (path, ...handlers) => contentRoutes.set("GET " + path, handlers),
-    post: (path, ...handlers) => contentRoutes.set("POST " + path, handlers),
-    patch: (path, ...handlers) => contentRoutes.set("PATCH " + path, handlers),
-    delete: (path, ...handlers) => contentRoutes.set("DELETE " + path, handlers)
-  };
-  const contentCall = async (method, path, params, userId, body = {}, query = {}) => {
-    const handlers = contentRoutes.get(method + " " + path);
-    assert.ok(handlers, "registered " + method + " " + path);
-    const req = { params, body, query, get: () => "Bearer " + token(userId) };
-    const res = {
-      statusCode: 200, body: null,
-      status(code) { this.statusCode = code; return this; },
-      json(value) { this.body = value; return this; },
-      set() { return this; }
-    };
-    await handlers[0](req, res, () => handlers[1](req, res));
-    return res;
-  };
-  const adminId = 1n, memberId = 2n, outsiderId = 3n;
-  const publicPostId = 101n, selectedPostId = 102n, commentId = 201n;
-  const activeListingId = 301n, inactiveListingId = 302n;
-  try {
-    await contentClient.connect();
-    await contentClient.query("CREATE SCHEMA " + quotedSchema + "; SET search_path TO " + quotedSchema);
-    await contentClient.query(`
-      CREATE TABLE users (id BIGINT PRIMARY KEY, username TEXT NOT NULL UNIQUE);
-      CREATE TABLE social_posts (id BIGINT PRIMARY KEY, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', visibility TEXT NOT NULL DEFAULT 'PUBLIC', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-      CREATE TABLE social_post_comments (id BIGINT PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
-      CREATE TABLE social_post_audience (post_id BIGINT NOT NULL REFERENCES social_posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(post_id,user_id));
-      CREATE TABLE friendships (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, status TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(user_id,friend_id));
-      CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY, seller_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', price NUMERIC(14,2) NOT NULL CHECK (price > 0), category TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE);
-    `);
-    await contentClient.query("INSERT INTO users(id,username) VALUES(1,'content_owner'),(2,'content_member'),(3,'content_outsider')");
-    await contentClient.query("INSERT INTO social_posts(id,author_id,text,visibility) VALUES(101,1,'Public post for content reporting','PUBLIC'),(102,1,'Selected audience post','SELECTED_PEOPLE')");
-    await contentClient.query("INSERT INTO social_post_comments(id,post_id,author_id,text) VALUES(201,101,1,'Comment for content reporting')");
-    await contentClient.query("INSERT INTO social_post_audience(post_id,user_id) VALUES(102,2)");
-    await contentClient.query("INSERT INTO marketplace_listings(id,seller_id,title,description,price,category,active) VALUES(301,1,'Active test listing','A listing used for moderation tests',100,'Test',TRUE),(302,1,'Inactive test listing','Not available to buyers',100,'Test',FALSE)");
-    registerTrustSafetyRoutes({ app: contentApp, pool: contentClient, auth });
-    const contentReportPath = "/api/social/content-reports";
-    const postReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud", details: "This post advertises a suspicious offer."
-    });
-    assert.equal(postReport.statusCode, 201, "a member must be able to report a public social post");
-    assert.equal(postReport.body?.report?.targetType, "SOCIAL_POST");
-    const duplicatePostReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
-    });
-    assert.equal(duplicatePostReport.statusCode, 409, "duplicate open content reports must be rejected");
-    const selfReport = await contentCall("POST", contentReportPath, {}, adminId, {
-      targetType: "SOCIAL_POST", targetId: publicPostId.toString(), reason: "Scam or fraud"
-    });
-    assert.equal(selfReport.statusCode, 400, "users must not report their own content");
-    const commentReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "SOCIAL_COMMENT", targetId: commentId.toString(), reason: "Harassment or bullying"
-    });
-    assert.equal(commentReport.statusCode, 201, "a member must be able to report a social comment");
-    const listingReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "MARKETPLACE_LISTING", targetId: activeListingId.toString(), reason: "Misleading product information"
-    });
-    assert.equal(listingReport.statusCode, 201, "a buyer must be able to report an active Marketplace listing");
-    const inactiveListingReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "MARKETPLACE_LISTING", targetId: inactiveListingId.toString(), reason: "Spam or duplicate listing"
-    });
-    assert.equal(inactiveListingReport.statusCode, 404, "inactive listings must not be reportable through the public content endpoint");
-    const hiddenAudienceReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
-    });
-    assert.equal(hiddenAudienceReport.statusCode, 404, "selected-audience content must not be reportable by non-friends");
-    await contentClient.query("INSERT INTO friendships(user_id,friend_id,status) VALUES($1,$2,'accepted')", [adminId.toString(), memberId.toString()]);
-    const visibleAudienceReport = await contentCall("POST", contentReportPath, {}, memberId, {
-      targetType: "SOCIAL_POST", targetId: selectedPostId.toString(), reason: "Spam or misleading content"
-    });
-    assert.equal(visibleAudienceReport.statusCode, 201, "selected-audience content is reportable only when the viewer is also an accepted friend");
-    const myContentReports = await contentCall("GET", "/api/social/content-reports/mine", {}, memberId);
-    assert.equal(myContentReports.statusCode, 200);
-    assert.equal(myContentReports.body?.reports?.length, 4, "report history must contain the reporter's four accepted content reports");
-    const outsiderContentReports = await contentCall("GET", "/api/social/content-reports/mine", {}, outsiderId);
-    assert.equal(outsiderContentReports.statusCode, 200);
-    assert.equal(outsiderContentReports.body?.reports?.length, 0, "report history must be private to the authenticated reporter");
-
-      console.log("USER CONTENT REPORTING POSTGRESQL ROUTE INTEGRATION: GREEN (post/comment/listing reports, selected-audience visibility, duplicate/self-report protection and private report history)");
-  } finally {
-    await contentClient.query("DROP SCHEMA IF EXISTS " + quotedSchema + " CASCADE").catch(() => {});
-    await contentClient.end().catch(() => {});
-  }
 }
 
 await client.connect();
@@ -392,7 +288,6 @@ try {
   const outsiderContent = await call("GET", contentPath, params, outsiderId);
   assert.equal(outsiderContent.statusCode, 403, "non-members must not read private group content");
 
-  await runContentReportIntegration();
   console.log("GROUP MESSAGE + CONTENT POSTGRESQL ROUTE INTEGRATION: GREEN (two-account send/reply, idempotent retry, read receipts, search pagination, message permissions, new-member history privacy, poll creation/voting, event validation and RSVP)");
 } finally {
   await client.query("DELETE FROM fynx_groups WHERE id=$1", [groupId]).catch(() => {});

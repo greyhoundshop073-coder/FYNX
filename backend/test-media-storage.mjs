@@ -8,10 +8,6 @@ const optionsSeen = [];
 const fakeClient = {
   async send(command) {
     calls.push(command);
-    if (command.constructor.name === "CopyObjectCommand") return {};
-    if (command.constructor.name === "HeadObjectCommand") {
-      return { ContentLength: 15, ContentType: "image/webp; charset=binary" };
-    }
     if (command.constructor.name === "GetObjectCommand") {
       return { Body: (async function* () { yield Buffer.from("FYNX-"); yield Buffer.from("media-bytes"); })() };
     }
@@ -35,13 +31,6 @@ const storage = createMediaStorage({
   clientFactory(options) { optionsSeen.push(options); return fakeClient; },
   async signUrlFactory(_client, command, options) {
     calls.push(command);
-    if (command.constructor.name === "PutObjectCommand") {
-      assert.equal(options.expiresIn, 300);
-      assert.equal(command.input.Bucket, "fynx-r2-media");
-      assert.equal(command.input.Key, "uploads/" + UUID);
-      assert.equal(command.input.ContentType, "image/webp");
-      return "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write";
-    }
     assert.equal(command.constructor.name, "GetObjectCommand");
     assert.equal(options.expiresIn, 120);
     return "https://signed.example/fynx-media";
@@ -114,12 +103,6 @@ assert.deepEqual(optionsSeen[2], {
 const r2Storage = createMediaStorage({
   env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "r2" },
   clientFactory(options) { optionsSeen.push(options); return fakeClient; },
-  async signUrlFactory(_client, command, options) {
-    calls.push(command);
-    assert.equal(options.expiresIn, 300);
-    assert.equal(command.constructor.name, "PutObjectCommand");
-    return "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write";
-  },
   idFactory: () => UUID
 });
 assert.equal(r2Storage.provider, "r2");
@@ -131,39 +114,6 @@ assert.equal(calls.at(-1).constructor.name, "PutObjectCommand");
 assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
 assert.equal(optionsSeen[3].region, "auto");
 assert.equal(optionsSeen[3].forcePathStyle, undefined);
-
-const uploadUrl = await r2Storage.createUploadUrl({
-  objectKey: "uploads/" + UUID,
-  mimeType: "image/webp"
-});
-assert.equal(uploadUrl, "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write");
-assert.deepEqual(await r2Storage.inspectMediaObject("uploads/" + UUID), {
-  byteSize: 15,
-  mimeType: "image/webp"
-});
-await r2Storage.promoteUploadedObject("uploads/" + UUID, "media/" + UUID);
-assert.equal(calls.at(-1).constructor.name, "CopyObjectCommand");
-assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
-assert.equal(calls.at(-1).input.Key, "media/" + UUID);
-assert.equal(calls.at(-1).input.CopySource, "fynx-r2-media/uploads/" + UUID);
-assert.deepEqual(await r2Storage.inspectMediaObject("media/" + UUID), {
-  byteSize: 15,
-  mimeType: "image/webp"
-});
-await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp" }),
-  /Invalid FYNX temporary upload object key/
-);
-await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "image/webp", expiresInSeconds: 30 }),
-  /expiry must be between 60 and 600 seconds/
-);
-await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "application/pdf" }),
-  /Unsupported FYNX media type/
-);
-await r2Storage.deleteMediaObject("uploads/" + UUID, "r2");
-assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
 
 await assert.rejects(storage.createDownloadUrl("../private-file"), /Invalid FYNX media object key/);
 await assert.rejects(storage.createDownloadUrl("media/" + UUID, "neon", 301), /expiry must be between 30 and 300 seconds/);
