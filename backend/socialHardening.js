@@ -1,4 +1,5 @@
 import { getFynxDatabasePool } from "./databasePool.js";
+import { normalizePostVisibility } from "./postVisibility.js";
 import pg from "pg";
 import jwt from "jsonwebtoken";
 
@@ -48,7 +49,7 @@ export function installSocialHardening(app) {
 
     if (req.method === "POST" && path === "/api/social/posts") {
       const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
-      const visibility = typeof req.body?.visibility === "string" ? req.body.visibility.trim().toUpperCase() : "";
+      const visibility = normalizePostVisibility(req.body?.visibility);
       const mediaId = req.body?.mediaId;
       const mediaType = req.body?.mediaType == null ? "" : String(req.body.mediaType).trim().toLowerCase();
 
@@ -56,9 +57,11 @@ export function installSocialHardening(app) {
         return res.status(400).json({ error: "post content is required" });
       }
       if (text.length > 4000) return res.status(413).json({ error: "post text is too long" });
-      if (!["PUBLIC", "FRIENDS", "ONLY_ME"].includes(visibility)) {
+      if (!visibility) {
         return res.status(400).json({ error: "invalid post visibility" });
       }
+      // Hand the next layers the canonical audience name, including legacy FRIENDS aliases.
+      req.body = { ...req.body, visibility };
       if (mediaId != null && mediaId !== "") {
         const numericMediaId = Number(mediaId);
         if (!Number.isInteger(numericMediaId) || numericMediaId < 1) {
