@@ -59,13 +59,6 @@ object FynxDesign {
     val SoftActionDarkContainer = Color(0xFF17365D)
     val SoftActionDarkForeground = Color(0xFFEAF1FF)
     val SoftActionDarkOutline = Color(0xFF6BAED6)
-    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
-    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
-    val SoftActionDangerLightOutline = CrimsonRed
-    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
-    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
-    val SoftActionDangerDarkOutline = DarkModeError
-
     // Supporting palette: neutral surfaces, secondary content and premium-only details.
     val SoftCloudWhite = Color(0xFFF5F7FA)
     val MidnightSlate = Color(0xFF1C2434)
@@ -101,6 +94,12 @@ object FynxDesign {
     val CrimsonRed = Color(0xFFDC143C)
     /** Brighter counterpart used for error text on dark surfaces to preserve contrast. */
     val DarkModeError = Color(0xFFFF7086)
+    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
+    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
+    val SoftActionDangerLightOutline = CrimsonRed
+    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
+    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
+    val SoftActionDangerDarkOutline = DarkModeError
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)

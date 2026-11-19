@@ -58,6 +58,12 @@ checks = {
         chat_command + "\n    NAV_EXIT=$?" in RUNNER
         and chat_command + "  NAV_EXIT=$?" not in RUNNER
     ),
+    "failed phone-number lookups are not presented as users missing from FYNX": (
+        "failedContactNumbers" in CONTACTS_PANEL
+        and "FynxContactMatchState.UNAVAILABLE" in CONTACTS_PANEL
+        and 'FynxContactMatchState.UNAVAILABLE -> "Could not check"' in CONTACTS_PANEL
+        and 'Text("Match unavailable"' in CONTACTS_PANEL
+    ),
     "contacts disclosure copy explains the data flow before allowing access": (
         "normalised phone number to FYNX servers over HTTPS" in CONTACTS_PANEL
         and "The saved contact name is not included" in CONTACTS_PANEL
