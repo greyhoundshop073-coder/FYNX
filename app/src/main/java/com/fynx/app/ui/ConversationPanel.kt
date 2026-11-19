@@ -1438,11 +1438,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                                     Modifier.fillMaxSize(),
                                                     rounded = false,
                                                     loopVideo = true,
-                                                    autoPlay = false
+                                                    autoPlay = false,
+                                                    autoSaveToGallery = FynxConversationPreferences.chatSaveGallery(context, chat.username) && !message.fromMe
                                                 )
                                             }
                                         } else {
-                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = if (message.messageType == "gif") "gif" else (message.attachmentType ?: "image"), modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false)
+                                            FynxRemoteMedia(mediaUrl = message.attachmentUri, type = if (message.messageType == "gif") "gif" else (message.attachmentType ?: "image"), modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(bottom = if (message.text.isBlank()) 0.dp else 5.dp), autoPlay = false, autoSaveToGallery = FynxConversationPreferences.chatSaveGallery(context, chat.username) && !message.fromMe)
                                         }
                                     }
                                     if (message.text.isNotBlank()) SelectionContainer { Text(message.text, color = glassPalette.messageText, fontSize = messageTextSizeSp.sp) }

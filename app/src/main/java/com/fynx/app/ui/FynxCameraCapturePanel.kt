@@ -532,7 +532,19 @@ private fun FynxCameraIsolatedContent(content: @Composable () -> Unit) {
     content()
 }
 
-private class FynxCameraCapturePanelConfig(
+private fun interface FynxCameraEditedCaptureCallback {
+    fun onCapturedWithTextEdits(
+        uri: Uri,
+        mediaType: String,
+        sourceUri: Uri,
+        overlays: List<FynxCameraTextOverlay>,
+        videoStyle: String,
+        captionText: String
+    )
+}
+
+@Immutable
+private data class FynxCameraCapturePanelConfig(
     val onCaptured: (Uri, String) -> Unit,
     val fastCapture: Boolean,
     val initialMode: CameraMode,
@@ -553,7 +565,7 @@ private class FynxCameraCapturePanelConfig(
     val initialTextOverlays: List<FynxCameraTextOverlay>,
     val initialVideoStyle: String,
     val initialVideoCaptionText: String,
-    val onCapturedWithTextEdits: ((Uri, String, Uri, List<FynxCameraTextOverlay>, String, String) -> Unit)?
+    val onCapturedWithTextEdits: FynxCameraEditedCaptureCallback?
 )
 
 @Composable
@@ -604,7 +616,11 @@ fun FynxCameraCapturePanel(
             initialTextOverlays = initialTextOverlays,
             initialVideoStyle = initialVideoStyle,
             initialVideoCaptionText = initialVideoCaptionText,
-            onCapturedWithTextEdits = onCapturedWithTextEdits
+            onCapturedWithTextEdits = onCapturedWithTextEdits?.let { callback ->
+                FynxCameraEditedCaptureCallback { uri, mediaType, sourceUri, overlays, videoStyle, captionText ->
+                    callback(uri, mediaType, sourceUri, overlays, videoStyle, captionText)
+                }
+            }
         )
     )
 }
@@ -924,9 +940,10 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
         }
         while (recording == active) {
             recordingElapsed = (System.currentTimeMillis() - recordingStartedAt).coerceAtLeast(0L)
-            val sizeLimitReached = statusCapture && (activeRecordingFile?.length() ?: 0L) >= FYNX_STATUS_MAX_VIDEO_BYTES
+            val maximumBytes = if (statusCapture) FYNX_STATUS_MAX_VIDEO_BYTES else FYNX_UPLOAD_SAFE_VIDEO_BYTES
+            val sizeLimitReached = (activeRecordingFile?.length() ?: 0L) >= maximumBytes
             if (sizeLimitReached) {
-                recordingNotice = "Status video reached the upload-size limit. Your clip is ready to preview."
+                recordingNotice = if (statusCapture) "Status video reached the upload-size limit. Your clip is ready to preview." else "Video reached the upload-size limit. Your clip is ready to preview."
                 active.stop()
                 break
             }
@@ -967,10 +984,10 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
                 val qualitySelector = if (statusCapture) {
                     QualitySelector.fromOrderedList(listOf(Quality.SD, Quality.HD), FallbackStrategy.lowerQualityOrHigherThan(Quality.HD))
                 } else {
-                    QualitySelector.fromOrderedList(listOf(Quality.UHD, Quality.FHD, Quality.HD, Quality.SD), FallbackStrategy.lowerQualityOrHigherThan(Quality.FHD))
+                    QualitySelector.fromOrderedList(listOf(Quality.HD, Quality.SD), FallbackStrategy.lowerQualityOrHigherThan(Quality.HD))
                 }
                 val recorderBuilder = Recorder.Builder().setQualitySelector(qualitySelector)
-                if (statusCapture) recorderBuilder.setTargetVideoEncodingBitRate(700_000)
+                recorderBuilder.setTargetVideoEncodingBitRate(if (statusCapture) 700_000 else FYNX_UPLOAD_SAFE_VIDEO_BITRATE)
                 val recorder = recorderBuilder.build()
                 val video = VideoCapture.Builder(recorder)
                     .setTargetRotation(targetRotation)
@@ -1262,7 +1279,7 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
                     if (editCallback != null) {
                         releaseUnneededInitialMediaCopies(setOf(finalUri, editSource))
                         initialMediaHandedOff = true
-                        editCallback(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
+                        editCallback.onCapturedWithTextEdits(finalUri, mediaType, editSource, editableOverlays, videoStyle.name, videoCaptionText)
                     } else {
                         releaseUnneededInitialMediaCopies(setOf(finalUri))
                         initialMediaHandedOff = true

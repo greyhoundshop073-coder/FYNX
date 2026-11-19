@@ -5,6 +5,12 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Videos recorded for posts and chats stop just under the 12 MB upload limit, leaving room for container overhead. */
+internal const val FYNX_UPLOAD_SAFE_VIDEO_BYTES = 11L * 1024L * 1024L
+
+/** Target video bitrate for post and chat recordings: about 40 seconds of HD with audio fit in the limit. */
+internal const val FYNX_UPLOAD_SAFE_VIDEO_BITRATE = 2_000_000
+
 /** Uploads selected assets through the existing authenticated media path, then creates one real post. */
 object FynxMultiMediaPostClient {
     private const val MAX_MEDIA = 4
