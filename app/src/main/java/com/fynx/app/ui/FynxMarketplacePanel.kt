@@ -773,10 +773,18 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
         }
     }
-    var listings by remember { mutableStateOf<List<FynxRemoteSocialClient.MarketplaceListing>>(emptyList()) }
-    var hasMoreListings by remember { mutableStateOf(false) }
+    // Isolated instrumentation records are already available locally; render them immediately
+    // instead of making UI tests race the first LaunchedEffect refresh.
+    var listings by remember(testOnlyListings) {
+        mutableStateOf(testOnlyListings?.take(24).orEmpty())
+    }
+    var hasMoreListings by remember(testOnlyListings) {
+        mutableStateOf((testOnlyListings?.size ?: 0) > 24)
+    }
     var loadingMoreListings by remember { mutableStateOf(false) }
-    var nextListingsOffset by remember { mutableIntStateOf(0) }
+    var nextListingsOffset by remember(testOnlyListings) {
+        mutableIntStateOf(minOf(testOnlyListings?.size ?: 0, 24))
+    }
     // Invalidates in-flight search/filter and pagination responses when the active listing query changes.
     var listingRequestGeneration by remember { mutableIntStateOf(0) }
     val productsGridState = rememberLazyGridState()
@@ -798,9 +806,15 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     }
     var showAllProducts by remember { mutableStateOf(false) }
     var category by remember { mutableStateOf("All") }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember(testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var discoveryFallbackWarning by remember { mutableStateOf<String?>(null) }
+    var discoveryFallbackWarning by remember(testOnlyListings) {
+        mutableStateOf(
+            if (testOnlyListings != null) {
+                "FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed."
+            } else null
+        )
+    }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sellerStoreUsername by remember(currentUsername) { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
@@ -2227,12 +2241,25 @@ private fun MarketplaceDetails(
 ) {
     val context = LocalContext.current
     val reviewScope = rememberCoroutineScope()
-    var productReviews by remember(l.id) { mutableStateOf(emptyList<FynxRemoteSocialClient.MarketplaceProductReview>()) }
-    var productReviewCount by remember(l.id) { mutableIntStateOf(l.productReviewCount) }
-    var productReviewAverage by remember(l.id) { mutableDoubleStateOf(l.productAverageRating) }
+    var productReviews by remember(l.id, testOnlyReviews) {
+        mutableStateOf(testOnlyReviews.orEmpty())
+    }
+    var productReviewCount by remember(l.id, testOnlyReviews) {
+        mutableIntStateOf(testOnlyReviews?.size ?: l.productReviewCount)
+    }
+    var productReviewAverage by remember(l.id, testOnlyReviews) {
+        mutableDoubleStateOf(
+            testOnlyReviews?.map { it.rating.toDouble() }?.average()?.takeIf { it.isFinite() }
+                ?: l.productAverageRating
+        )
+    }
     var productReviewsHasMore by remember(l.id) { mutableStateOf(false) }
-    var productReviewsOffset by remember(l.id) { mutableIntStateOf(0) }
-    var productReviewsLoading by remember(l.id) { mutableStateOf(true) }
+    var productReviewsOffset by remember(l.id, testOnlyReviews) {
+        mutableIntStateOf(testOnlyReviews?.size ?: 0)
+    }
+    var productReviewsLoading by remember(l.id, testOnlyReviews) {
+        mutableStateOf(testOnlyReviews == null)
+    }
     var productReviewsError by remember(l.id) { mutableStateOf<String?>(null) }
     var productReviewsReloadKey by remember(l.id) { mutableIntStateOf(0) }
     LaunchedEffect(l.id, productReviewsReloadKey) {

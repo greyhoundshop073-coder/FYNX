@@ -141,10 +141,16 @@ internal fun FynxBuyerWalletPanel(
     val context = LocalContext.current
     var activeAction by rememberSaveable { mutableStateOf("HOME") }
     var fundingAmount by rememberSaveable { mutableStateOf("") }
-    var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
-    var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
-    var summaryLoading by remember { mutableStateOf(true) }
-    var activityLoading by remember { mutableStateOf(true) }
+    var summary by remember(testOnlySummary) {
+        mutableStateOf(
+            testOnlySummary?.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false)
+        )
+    }
+    var activity by remember(testOnlySummary, testOnlyActivity) {
+        mutableStateOf(if (testOnlySummary != null) testOnlyActivity else emptyList())
+    }
+    var summaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
+    var activityLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var summaryError by remember { mutableStateOf<String?>(null) }
     var activityError by remember { mutableStateOf<String?>(null) }
     var refreshVersion by remember { mutableIntStateOf(0) }
@@ -155,8 +161,10 @@ internal fun FynxBuyerWalletPanel(
     var hasMoreActivity by remember { mutableStateOf(false) }
     var loadingMoreActivity by remember { mutableStateOf(false) }
     var activityMoreError by remember { mutableStateOf<String?>(null) }
-    var sellerSummary by remember { mutableStateOf<FynxWalletSellerSummary?>(null) }
-    var sellerSummaryLoading by remember { mutableStateOf(true) }
+    var sellerSummary by remember(testOnlySummary, testOnlySellerSummary) {
+        mutableStateOf(if (testOnlySummary != null) testOnlySellerSummary else null)
+    }
+    var sellerSummaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var sellerSummaryError by remember { mutableStateOf<String?>(null) }
     var statementExporting by remember { mutableStateOf(false) }
     var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }

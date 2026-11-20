@@ -76,7 +76,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.onNodeWithText("Search products, sellers or categories").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Search products, sellers or categories").assertIsDisplayed()
         compose.onNodeWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
             .assertIsDisplayed()
         saveScreenshot("marketplace-screen.png")
@@ -115,9 +115,9 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("Shop this product").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
-        compose.onNodeWithText("Product reviews").assertIsDisplayed()
-        compose.onNodeWithText("FYNX TEST BUYER A").assertIsDisplayed()
-        compose.onNodeWithText("Sample review content — not a customer review.").assertIsDisplayed()
+        compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX TEST BUYER A").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Sample review content — not a customer review.").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-product-details-test-reviews.png")
 
         compose.onNodeWithText("Save product").performScrollTo().performClick()
@@ -153,9 +153,9 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("City").performTextInput("Port Harcourt")
         compose.onNodeWithText("State").performTextInput("Rivers")
         compose.onNodeWithText("Review exact total").performClick()
-        compose.onNodeWithText("Delivery: NGN 1,500.00").assertIsDisplayed()
-        compose.onNodeWithText("FYNX fee: NGN 2,875.00").assertIsDisplayed()
-        compose.onNodeWithText("Total: NGN 61,875.00").assertIsDisplayed()
+        compose.onNodeWithText("Delivery: NGN 1,500.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX fee: NGN 2,875.00").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Total: NGN 61,875.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-delivery-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
         compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
@@ -279,6 +279,10 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollTo().performClick()
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name)
             .assertIsDisplayed()
+        compose.waitUntil(timeoutMillis = 2_000) {
+            compose.onAllNodesWithText("FYNX TEST DATA — sample business directory record 1.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("FYNX TEST DATA — sample business directory record 1.").assertIsDisplayed()
     }
 
@@ -348,7 +352,8 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("FYNX Wallet").assertIsDisplayed()
         compose.onNodeWithText("TEST MODE — simulated balance; cannot spend or withdraw").assertIsDisplayed()
-        compose.onNodeWithText("FYNX-TEST-FUND-001", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Recent activity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX-TEST-FUND-001", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Wallet security & PIN").performScrollTo().assertIsDisplayed()
         assertTrue(FynxMarketplaceIsolatedTestFixtures.wallet.isReconciled())
         saveScreenshot("wallet-simulated-test-ledger-screen.png")
@@ -393,7 +398,8 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("US Dollar").assertIsDisplayed()
         compose.onAllNodesWithText("\$1,234.50")[0].assertIsDisplayed()
         compose.onNodeWithText("\$250.00").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("FYNX-TEST-USD-001").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Recent activity").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).performScrollTo().assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
     }
 
