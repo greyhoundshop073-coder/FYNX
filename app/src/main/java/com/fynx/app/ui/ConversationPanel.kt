@@ -1065,8 +1065,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
                 }
             }.distinctBy { it.id }.sortedBy { it.timestamp }
-            hasMorePrivateSearch = page.hasMore
-            nextPrivateSearchBeforeId = page.nextBeforeId ?: page.messages.minByOrNull { it.timestamp }?.id
+            val searchCursor = page.nextBeforeId ?: page.messages.minByOrNull { it.timestamp }?.id
+            hasMorePrivateSearch = page.hasMore && !searchCursor.isNullOrBlank()
+            nextPrivateSearchBeforeId = searchCursor
             privateSearchNotice = null
         }.onFailure {
             remoteSearchResults = emptyList()
