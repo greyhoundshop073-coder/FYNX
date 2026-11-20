@@ -474,7 +474,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 }
             }.onFailure {
                 isNewConversation = messages.filterNot { message -> message.id == "initial" }.isEmpty()
-                networkError = "Messages could not load yet. Check your connection and retry."
+                networkError = if (historyRequestToken.isNullOrBlank()) null
+                else "Messages could not load yet. Check your connection and retry."
             }
         } catch (cancel: CancellationException) {
             throw cancel
