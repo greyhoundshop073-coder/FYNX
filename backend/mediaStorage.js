@@ -67,7 +67,7 @@ function readProviderConfig(provider, env) {
     let endpointValid = false;
     try {
       const parsed = new URL(endpoint);
-      endpointValid = parsed.protocol === "https:" && parsed.hostname.endsWith(".neon.tech") &&
+      endpointValid = parsed.protocol === "https:" && /^[a-z0-9][a-z0-9-]{1,62}\.storage\.c-[a-z0-9-]+\.[a-z0-9-]+\.aws\.neon\.tech$/i.test(parsed.hostname) &&
         !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
     } catch {}
     return {
@@ -171,13 +171,14 @@ export function createMediaStorage({
 
   async function deleteMediaObject(objectKey, sourceProvider = provider) {
     const config = configFor(sourceProvider);
-    const key = sourceProvider === "r2" ? validateStoredObjectKey(objectKey) : validateObjectKey(objectKey);
+    const key = OBJECT_PROVIDERS.has(sourceProvider) ? validateStoredObjectKey(objectKey) : validateObjectKey(objectKey);
     await getClient(sourceProvider).send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
   }
 
   return Object.freeze({
     provider,
     isObjectStorageEnabled: OBJECT_PROVIDERS.has(provider),
+    supportsDirectUpload: OBJECT_PROVIDERS.has(provider) && Boolean(configs.get(provider)?.configured),
     isConfigured: provider === "postgres" || Boolean(configs.get(provider)?.configured),
     async putMediaObject({ data, mimeType }) {
       if (provider === "postgres") return { storageProvider: "postgres", objectKey: null };
@@ -194,7 +195,7 @@ export function createMediaStorage({
       return { storageProvider: provider, objectKey };
     },
     async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
-      const config = configFor("r2");
+      const config = configFor(provider);
       const key = validateUploadObjectKey(objectKey);
       const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
       if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
@@ -209,7 +210,7 @@ export function createMediaStorage({
         ContentType: normalizedMimeType,
         CacheControl: "private, max-age=60"
       });
-      const url = await signUrlFactory(getClient("r2"), command, { expiresIn: expiresInSeconds });
+      const url = await signUrlFactory(getClient(provider), command, { expiresIn: expiresInSeconds });
       if (typeof url !== "string" || !url.startsWith("https://")) {
         throw new Error("Object storage returned an invalid upload URL.");
       }
@@ -217,10 +218,10 @@ export function createMediaStorage({
     },
 
     async promoteUploadedObject(sourceObjectKey, destinationObjectKey) {
-      const config = configFor("r2");
+      const config = configFor(provider);
       const sourceKey = validateUploadObjectKey(sourceObjectKey);
       const destinationKey = validateObjectKey(destinationObjectKey);
-      await getClient("r2").send(new CopyObjectCommand({
+      await getClient(provider).send(new CopyObjectCommand({
         Bucket: config.bucket,
         Key: destinationKey,
         CopySource: config.bucket + "/" + sourceKey,
@@ -230,9 +231,9 @@ export function createMediaStorage({
     },
 
     async inspectMediaObject(objectKey) {
-      const config = configFor("r2");
+      const config = configFor(provider);
       const key = validateStoredObjectKey(objectKey);
-      const result = await getClient("r2").send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+      const result = await getClient(provider).send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
       return {
         byteSize: Number(result?.ContentLength || 0),
         mimeType: String(result?.ContentType || "").split(";")[0].trim().toLowerCase()
