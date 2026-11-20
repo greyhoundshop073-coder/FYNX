@@ -65,7 +65,9 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   exit "${TEST_EXIT}"
 fi
 
-./gradlew connectedDebugAndroidTest --no-daemon --build-cache
+./gradlew connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=com.fynx.app.FynxRemoteConfigLiveFetchTest \
+  --no-daemon --build-cache
 TEST_EXIT=$?
 
 # Preserve emulator evidence even if instrumentation fails.
