@@ -58,7 +58,10 @@ for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
 
 # 1. Android conversation entry and authenticated identity resolution.
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")
-require(conversation, r"FynxProductionMessaging\.history\(context,", "ConversationPanel must load production conversation history")
+require(conversation, r"FynxProductionMessaging\.historyPage\(context,", "ConversationPanel must load production conversation history through session-bound cursor pages")
+require(conversation, r"applyPrivateHistoryPage", "ConversationPanel must merge authoritative history pages with locally saved messages")
+require(conversation, r"FynxProductionMessaging\.searchHistoryPage\(context,", "ConversationPanel must search the complete server-backed private history")
+require(conversation, r"Load older matching messages", "ConversationPanel must expose cursor pagination for full-history search results")
 require(conversation, r"realtimeClient\.connect\(\)", "ConversationPanel must connect its realtime transport")
 require(conversation, r"realtimeClient\.close\(\)", "ConversationPanel must close realtime transport on disposal")
 require(conversation, r"FynxProductionMessaging\.sendText\(context,", "ConversationPanel must send through production messaging")
