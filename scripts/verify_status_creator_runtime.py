@@ -182,7 +182,7 @@ def main() -> int:
     # than stopping at Android's first-run permission dialog. Permission-denial
     # recovery remains covered by the app's dedicated source/contract checks.
     camera_grant = adb("shell", "pm", "grant", PACKAGE, "android.permission.CAMERA")
-    camera_check = adb("shell", "cmd", "package", "check-permission", "android.permission.CAMERA", PACKAGE, "0")
+    camera_check = adb("shell", "pm", "check-permission", "android.permission.CAMERA", PACKAGE)
     if camera_grant.returncode != 0 or "granted" not in (camera_check.stdout or "").strip().casefold():
         FAILURES.append(
             "CI emulator could not grant and verify CAMERA permission before the Status camera journey: "
