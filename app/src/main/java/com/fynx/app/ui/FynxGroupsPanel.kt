@@ -1203,7 +1203,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                     Text(formatMessageClock(message.timestamp), style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                     if (message.fromMe) {
                                         Spacer(Modifier.width(4.dp))
-                                        // Group history has no per-member delivery/read receipts.
+                                        // Group read indicators are based on the server-authoritative readBy list.
                                         Text(if (message.readBy.isNotEmpty()) "✓✓" else if (message.delivered) "✓" else "◷", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted)
                                         if (message.readBy.isNotEmpty()) {
                                             Spacer(Modifier.width(4.dp))
