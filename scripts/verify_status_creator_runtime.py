@@ -177,6 +177,22 @@ def main() -> int:
     if pid.returncode != 0 or not (pid.stdout or "").strip():
         FAILURES.append("FYNX is not running in the existing emulator session; refusing to cold-start or reset the local UI session.")
 
+    # This is a disposable CI emulator. Grant CAMERA before entering the shared
+    # CameraX surface so this test certifies camera navigation and preview rather
+    # than stopping at Android's first-run permission dialog. Permission-denial
+    # recovery remains covered by the app's dedicated source/contract checks.
+    camera_grant = adb("shell", "pm", "grant", PACKAGE, "android.permission.CAMERA")
+    camera_check = adb("shell", "cmd", "package", "check-permission", "android.permission.CAMERA", PACKAGE, "0")
+    if camera_grant.returncode != 0 or "granted" not in (camera_check.stdout or "").strip().casefold():
+        FAILURES.append(
+            "CI emulator could not grant and verify CAMERA permission before the Status camera journey: "
+            + (camera_grant.stdout or "").strip()
+            + " "
+            + (camera_check.stdout or "").strip()
+        )
+    else:
+        report.append("- PASS disposable CI emulator CAMERA permission preflight; runtime flow tests the actual CameraX destination.")
+
     current = dump_ui("status-runtime-start.xml")
     if not FAILURES and not is_home(current):
         # Unwind real nested app surfaces first. A group conversation exposes
