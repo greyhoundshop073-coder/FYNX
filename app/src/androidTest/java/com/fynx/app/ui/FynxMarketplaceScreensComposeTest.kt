@@ -7,11 +7,16 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -113,7 +118,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("FYNX TEST BUYER A").performScrollTo().assertIsDisplayed()
@@ -144,7 +149,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
         compose.onNodeWithText("Full name").performTextInput("FYNX Test Buyer")
@@ -232,13 +237,19 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Your shop at a glance").assertIsDisplayed()
         saveScreenshot("my-shop-overview-screen.png")
 
-        compose.onNodeWithText("Listings").performClick()
+        compose.onNodeWithTag("fynx-seller-center-section-listings").performClick()
         compose.onNodeWithText("Your listings").assertIsDisplayed()
-        compose.onNodeWithText("FYNX Test Wireless Headphones").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("FYNX Test Android Smartphone").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-seller-center-scroll-container")
+            .performScrollToNode(hasText("FYNX Test Wireless Headphones"))
+        compose.onNodeWithText("FYNX Test Wireless Headphones").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-seller-center-scroll-container")
+            .performScrollToNode(hasText("FYNX Test Android Smartphone"))
+        compose.onNodeWithText("FYNX Test Android Smartphone").assertIsDisplayed()
         saveScreenshot("my-shop-listings-screen.png")
 
-        compose.onAllNodesWithText("Orders")[0].performClick()
+        compose.onNodeWithTag("fynx-seller-center-scroll-container").performScrollToIndex(1)
+        compose.onNodeWithTag("fynx-seller-center-section-tabs").performScrollToNode(hasText("Orders"))
+        compose.onNodeWithTag("fynx-seller-center-section-orders").performClick()
         compose.onNodeWithText("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.").assertIsDisplayed()
         compose.onNodeWithText("Seller orders").performClick()
         compose.onNodeWithText("FYNX Test Delivery Order").assertIsDisplayed()
@@ -271,12 +282,14 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("Search businesses, services or names").assertIsDisplayed()
         compose.onNodeWithText("Area, city or neighbourhood").assertIsDisplayed()
-        compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name)
-            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-local-business-list")
+            .performScrollToNode(hasText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name))
+        compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name).assertIsDisplayed()
         saveScreenshot("local-store-directory-screen.png")
 
-        compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name)
-            .performScrollTo().performClick()
+        compose.onNodeWithTag("fynx-local-business-list")
+            .performScrollToNode(hasText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name))
+        compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name).performClick()
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.localBusiness.name)
             .assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 2_000) {
@@ -352,9 +365,10 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("FYNX Wallet").assertIsDisplayed()
         compose.onNodeWithText("TEST MODE — simulated balance; cannot spend or withdraw").assertIsDisplayed()
-        compose.onNodeWithText("Recent activity").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("FYNX-TEST-FUND-001", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Wallet security & PIN").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
+            .performScrollToNode(hasText("FYNX-TEST-FUND-001", substring = true))
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
+            .performScrollToNode(hasText("Wallet security & PIN"))
         assertTrue(FynxMarketplaceIsolatedTestFixtures.wallet.isReconciled())
         saveScreenshot("wallet-simulated-test-ledger-screen.png")
     }
@@ -397,9 +411,10 @@ class FynxMarketplaceScreensComposeTest {
 
         compose.onNodeWithText("US Dollar").assertIsDisplayed()
         compose.onAllNodesWithText("\$1,234.50")[0].assertIsDisplayed()
-        compose.onNodeWithText("\$250.00").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Recent activity").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
+            .performScrollToNode(hasText("\$250.00"))
+        compose.onNodeWithTag("fynx-wallet-scroll-container")
+            .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         saveScreenshot("wallet-usd-simulated-test-screen.png")
     }
 

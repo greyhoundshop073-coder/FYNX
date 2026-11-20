@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -252,7 +253,7 @@ fun FynxLocalBusinessesPanel(
                 if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             }
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("fynx-local-business-list"),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
@@ -260,22 +261,23 @@ fun FynxLocalBusinessesPanel(
                     Surface(
                         onClick = {
                             selectedBusiness = business
+                        if (testOnlyBusinesses != null) {
+                            businessDetails = JSONObject()
+                                .put("testOnly", true)
+                                .put("businessName", business.businessName)
+                                .put("description", business.description)
+                                .put("location", business.location)
+                            loadingDetails = false
+                        } else {
                             businessDetails = null
                             loadingDetails = true
                             scope.launch {
-                                if (testOnlyBusinesses != null) {
-                                    businessDetails = JSONObject()
-                                        .put("testOnly", true)
-                                        .put("businessName", business.businessName)
-                                        .put("description", business.description)
-                                        .put("location", business.location)
-                                } else {
-                                    FynxBusinessDirectoryClient.details(context, business.username)
-                                        .onSuccess { businessDetails = it }
-                                        .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
-                                }
+                                FynxBusinessDirectoryClient.details(context, business.username)
+                                    .onSuccess { businessDetails = it }
+                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
                                 loadingDetails = false
                             }
+                        }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),

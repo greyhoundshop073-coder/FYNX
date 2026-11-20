@@ -17,10 +17,11 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollToIndex
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -143,15 +144,14 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // The production carousel is swipe-driven and uses position dots rather than
-        // accessibility buttons or a textual "Product N of M" counter.
-        compose.onNodeWithText(featuredTitles[0]).assertIsDisplayed()
-        compose.onNodeWithText(featuredTitles[0]).performTouchInput { swipeLeft() }
-        compose.waitUntil(timeoutMillis = 2_500) {
+        // Scroll the real production LazyRow to the next slide; snapping keeps the
+        // product fully visible and verifies the selected listing identity.
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
+        compose.waitUntil(timeoutMillis = 3_000) {
             compose.onAllNodesWithText(featuredTitles[1]).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(featuredTitles[1]).assertIsDisplayed()
-        compose.onNodeWithText("Shop this product").performClick()
+        compose.onNodeWithContentDescription("Shop this product: ${featuredTitles[1]}").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
         compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()
