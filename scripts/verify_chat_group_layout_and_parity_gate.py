@@ -220,6 +220,13 @@ runtime_shell_syntax = subprocess.run(
     text=True,
 )
 require("Android runtime certification shell runner has valid syntax", runtime_shell_syntax.returncode == 0)
+require(
+    "focused Chat/Groups runtime sends a private message offline and verifies it after reopening",
+    "def send_and_reopen_local_private_fixture" in RUNTIME_NAV
+    and "private-chat-sent-offline.png" in RUNTIME_NAV
+    and "private-chat-reopened-offline.png" in RUNTIME_NAV
+    and "set_emulator_network_enabled(False)" in RUNTIME_NAV
+)
 
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
