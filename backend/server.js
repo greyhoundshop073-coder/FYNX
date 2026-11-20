@@ -553,7 +553,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(intentId)) {
       return res.status(400).json({ error: "invalid media upload intent" });
     }
-    if (!mediaStorage.supportsDirectUpload) {
+    if (!mediaStorage.supportsDirectUpload || !mediaStorage.isConfigured) {
       return res.status(503).json({ error: "media object storage is unavailable" });
     }
     requireConfig("DATABASE_URL", DATABASE_URL);
@@ -1427,7 +1427,7 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 
 async function cleanupExpiredMediaUploadIntents() {
-  if (!pool || !mediaStorage.supportsDirectUpload) return;
+  if (!pool || !mediaStorage.supportsDirectUpload || !mediaStorage.isConfigured) return;
   const client = await pool.connect();
   let inTransaction = false;
   let removed = 0;
