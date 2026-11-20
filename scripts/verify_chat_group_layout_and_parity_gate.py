@@ -37,6 +37,11 @@ require(
     and "applyPrivateHistoryPage" in PRIVATE
 )
 require(
+    "private server search hits merge into conversation state so message actions and offline history remain authoritative",
+    "messages = (messages + mappedSearchResults)" in PRIVATE
+    and "messages = (messages + older)" in PRIVATE
+)
+require(
     "private conversation searches server history with a cursor and preserves offline local matches",
     "FynxProductionMessaging.searchHistoryPage(" in PRIVATE
     and "Load older matching messages" in PRIVATE
