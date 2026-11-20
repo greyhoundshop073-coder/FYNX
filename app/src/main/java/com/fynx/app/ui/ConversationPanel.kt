@@ -913,7 +913,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         }
         val requestAccountKey = FynxAuthStore.accountStorageKey(context)
         val requestToken = FynxBackendClient.accessToken(context)
-        if (requestAccountKey.isBlank() || requestToken.isNullOrBlank()) {
+        if (requestAccountKey.isNullOrBlank() || requestToken.isNullOrBlank()) {
             networkError = "Reconnect to load older messages. Your saved conversation is still available."
             return
         }
@@ -963,7 +963,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
         if (query.length < 2 || beforeId.isNullOrBlank() || loadingPrivateSearch) return
         val requestAccountKey = FynxAuthStore.accountStorageKey(context)
         val requestToken = FynxBackendClient.accessToken(context)
-        if (requestAccountKey.isBlank() || requestToken.isNullOrBlank()) {
+        if (requestAccountKey.isNullOrBlank() || requestToken.isNullOrBlank()) {
             privateSearchNotice = "Offline: showing messages already saved on this device."
             hasMorePrivateSearch = false
             return
