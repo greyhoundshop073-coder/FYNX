@@ -375,7 +375,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Create group" }) { Text("＋ Create group") }
         } else {
-            Button(onClick = onCreateGroup) { Text("＋ New group") }
+            Button(onClick = onCreateGroup, modifier = Modifier.semantics { contentDescription = "Create group" }) { Text("＋ New group") }
             Spacer(Modifier.height(10.dp))
             if (groups.isEmpty()) {
                 Text("No groups yet", style = MaterialTheme.typography.titleMedium)

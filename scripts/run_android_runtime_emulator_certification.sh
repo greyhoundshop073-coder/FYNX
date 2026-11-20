@@ -19,18 +19,24 @@ mkdir -p "$fixture_dir"
 fixture_status_file="$fixture_dir/capture-status.txt"
 : > "$fixture_status_file"
 
-for fixture_remote in \
-  /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures \
-  /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures; do
-  if adb shell test -d "$fixture_remote" >/dev/null 2>&1; then
-    if adb pull "$fixture_remote/." "$fixture_dir/" >/dev/null 2>&1; then
-      echo "CAPTURED: $fixture_remote" >> "$fixture_status_file"
-    else
-      echo "NOT_CAPTURED: adb pull failed for $fixture_remote" >> "$fixture_status_file"
+fixture_remote="/sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures"
+if adb shell test -d "$fixture_remote" >/dev/null 2>&1; then
+  if adb pull "$fixture_remote/." "$fixture_dir/" >/dev/null 2>&1; then
+    echo "CAPTURED: $fixture_remote" >> "$fixture_status_file"
+    if ! find "$fixture_dir" -maxdepth 1 -type f -name '*.png' -size +0c | grep -q .; then
+      echo "NOT_CAPTURED: target app screenshot directory contained no PNG files" >> "$fixture_status_file"
+      echo "::error::Marketplace instrumentation did not produce screenshot PNGs."
+      runtime_status=1
     fi
   else
-    echo "NOT_CAPTURED: remote fixture directory was absent: $fixture_remote" >> "$fixture_status_file"
+    echo "NOT_CAPTURED: adb pull failed for $fixture_remote" >> "$fixture_status_file"
+    echo "::error::Marketplace instrumentation screenshots could not be pulled from $fixture_remote"
+    runtime_status=1
   fi
-done
+else
+  echo "NOT_CAPTURED: target app screenshot directory was absent: $fixture_remote" >> "$fixture_status_file"
+  echo "::error::Marketplace instrumentation screenshot directory was absent: $fixture_remote"
+  runtime_status=1
+fi
 
 exit "$runtime_status"
