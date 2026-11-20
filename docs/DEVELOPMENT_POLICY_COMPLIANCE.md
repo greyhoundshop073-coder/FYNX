@@ -156,3 +156,23 @@ Every new chat/agent must be told to read:
 The next contributor must inspect the latest canonical branch and current PRs, then continue unresolved items. Do not duplicate work, create competing APK branches, or assume checklist entries are complete.
 
 **Definition of done:** feature works as intended, required policy/security controls are implemented, tests/evidence pass, disclosures are updated, and unresolved risks are explicitly reported. A policy checklist is not a substitute for legal advice or Google approval.
+
+
+## 13. Firebase Remote Config — SDK data-flow and rollout requirements
+
+FYNX may use Firebase Remote Config only for typed, allowlisted configuration and optional experiences whose implementation is already present in the installed APK.
+
+- Account for Firebase Installations and the installation identifier used by Remote Config fetches in the complete app/SDK data inventory, privacy policy assessment and Google Play Data safety review.
+- This feature adds the Firebase Remote Config SDK only. It does not add Firebase Analytics, Analytics audiences, analytics user properties or personalization.
+- Treat every client-delivered parameter and value as public. Never place secrets, tokens, personal data, balances, payment or account histories in Remote Config.
+- Maintain a reviewed allowlist and safe in-app defaults. Unknown parameters must fail closed.
+- Do not make login, account recovery, reporting/blocking, authorization, Wallet, payment verification, orders, refunds, disputes or other core protections remotely controllable.
+- Preserve offline startup and last-known activated values. Remote Config failure must not block the app or grant access.
+- Test both flag states, offline behavior, stale cached values, lifecycle activation and rollback before enabling a flag consumer.
+- A remote flag cannot install new native code, screens, SDKs, permissions or resources. These still require an ordinary APK/AAB release.
+- Before public release, verify Firebase Console template publication and Realtime Remote Config API configuration, then update the privacy/data inventory and Play Console disclosures with evidence.
+
+Official references:
+- Firebase Android Remote Config: https://firebase.google.com/docs/remote-config/android/get-started
+- Firebase client parameters and data types: https://firebase.google.com/docs/remote-config/parameters/client
+- Firebase client template versioning and rollback: https://firebase.google.com/docs/remote-config/templates/client
