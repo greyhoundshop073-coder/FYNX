@@ -1463,6 +1463,8 @@ def local_private_fixture_state() -> dict:
         "expected_history_key_present": False,
         "expected_preview_key_present": False,
         "expected_history_present": False,
+        "expected_history_message_count": 0,
+        "large_history_fixture_ready": False,
         "expected_preview_present": False,
         "stored_namespace_history_present": False,
         "stored_namespace_preview_present": False,
@@ -1541,9 +1543,11 @@ def local_private_fixture_state() -> dict:
                 for item in previews
             )
 
-        expected_history, _ = history_for(expected_username)
+        expected_history, expected_history_message_count = history_for(expected_username)
         expected_preview = preview_for(expected_username)
         state["expected_history_present"] = expected_history
+        state["expected_history_message_count"] = expected_history_message_count
+        state["large_history_fixture_ready"] = expected_history and expected_history_message_count >= 1_002
         state["expected_preview_present"] = expected_preview
         if normalized_stored:
             stored_history, _ = history_for(stored_username)
@@ -1579,6 +1583,7 @@ def local_private_fixture_state() -> dict:
         and state["chat_store_xml_parse_ok"]
         and state["account_matches"]
         and state["expected_history_present"]
+        and state["large_history_fixture_ready"]
         and state["expected_preview_present"]
     )
     return state
@@ -3698,11 +3703,15 @@ if CHAT_GROUPS_VISUALS_ONLY:
                 for key in (
                     "fixture_ready", "auth_file_readable", "chat_store_file_readable",
                     "chat_store_file_listed", "signed_in", "account_matches",
-                    "expected_history_present", "expected_preview_present",
-                    "matching_history_namespace_count"
+                    "expected_history_present", "large_history_fixture_ready",
+                    "expected_preview_present", "matching_history_namespace_count"
                 )
             )
         )
+        if fixture_after.get("large_history_fixture_ready"):
+            report.append(f"- PASS: restored {fixture_after.get('expected_history_message_count')} locally persisted private messages in the installed app before exercising pagination/navigation.")
+        else:
+            FAILURES.append("The private-chat large-history fixture did not restore at least 1,002 messages.")
         if not fixture_after.get("fixture_ready"):
             FAILURES.append("The account-scoped disposable private-chat fixture was not durably readable after local UI entry; see chat-local-fixture-state-before-theme.json and chat-local-fixture-state-after-theme.json.")
     
