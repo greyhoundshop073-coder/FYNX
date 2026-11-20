@@ -182,13 +182,18 @@ def main() -> int:
     # than stopping at Android's first-run permission dialog. Permission-denial
     # recovery remains covered by the app's dedicated source/contract checks.
     camera_grant = adb("shell", "pm", "grant", PACKAGE, "android.permission.CAMERA")
-    camera_check = adb("shell", "pm", "check-permission", "android.permission.CAMERA", PACKAGE)
-    if camera_grant.returncode != 0 or "granted" not in (camera_check.stdout or "").strip().casefold():
+    camera_state = adb("shell", "dumpsys", "package", PACKAGE)
+    camera_granted = re.search(
+        r"android\\.permission\\.CAMERA:\\s*granted=true",
+        camera_state.stdout or "",
+        re.IGNORECASE
+    )
+    if camera_grant.returncode != 0 or camera_state.returncode != 0 or camera_granted is None:
         FAILURES.append(
             "CI emulator could not grant and verify CAMERA permission before the Status camera journey: "
             + (camera_grant.stdout or "").strip()
             + " "
-            + (camera_check.stdout or "").strip()
+            + (camera_state.stdout or "").strip()[-1200:]
         )
     else:
         report.append("- PASS disposable CI emulator CAMERA permission preflight; runtime flow tests the actual CameraX destination.")
