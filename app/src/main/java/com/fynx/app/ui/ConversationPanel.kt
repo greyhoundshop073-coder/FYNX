@@ -242,10 +242,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 .toList()
             (stored + pendingBubbles).distinctBy { it.id }.sortedBy { it.timestamp } to queued.isNotEmpty()
         }
-        messages = restored.first
+        messages = (restored.first + messages.filterNot { it.id == "initial" })
+            .associateBy { it.id }.values.sortedBy { it.timestamp }
         hasPendingOutbox = restored.second
     }
-    LaunchedEffect(chat.username) {
+    LaunchedEffect(chat.username, messagesLoaded) {
+        if (!messagesLoaded) return@LaunchedEffect
         val normalizedRecipient = chat.username.trim().removePrefix("@").lowercase()
         restorePendingOutboxMessages()
         FynxOfflineOutbox.updates.collect { updatedRecipient ->
@@ -335,7 +337,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             },
             onStateChanged = { state ->
                 realtimeState = state
-                if (state == FynxRealtimeClient.State.CONNECTED && !currentUserIdLatest.isNullOrBlank()) {
+                if (state == FynxRealtimeClient.State.CONNECTED && messagesLoaded && !currentUserIdLatest.isNullOrBlank()) {
                     val requestAccountKey = FynxAuthStore.accountStorageKey(context)
                     val requestToken = FynxBackendClient.accessToken(context)
                     conversationScope.launch {
@@ -420,7 +422,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
     // this effect was keyed by currentUserId, recipientUserId and resolvedAvatarUri —
     // values that the effect itself mutates — so Compose cancelled and restarted it
     // mid-request, repeatedly recreating the realtime socket and interrupting setup.
-    LaunchedEffect(chat.username) {
+    LaunchedEffect(chat.username, messagesLoaded) {
+        if (!messagesLoaded) return@LaunchedEffect
         val normalizedUsername = chat.username.removePrefix("@").trim()
         if (normalizedUsername.isBlank()) {
             networkError = "This conversation has no valid username."
