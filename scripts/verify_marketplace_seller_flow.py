@@ -154,7 +154,7 @@ checks = [
     ("active marketplace retains payment verification", "verifyMarketplacePayment" in marketplace),
     ("marketplace header respects the status bar through the shared app header", "statusBarsPadding()" in app_shell and "Column(Modifier.fillMaxSize().statusBarsPadding()) {\n            MarketplaceReferenceSearchBar(" not in marketplace),
     ("marketplace uses adaptive product grids for phone, tablet and landscape widths", "GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL)" in marketplace and "GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL)" in product_grid and "FYNX_MARKETPLACE_GRID_MIN_CELL = 138.dp" in design_system),
-    ("marketplace leaves free bottom scroll space above navigation", "bottom = 132.dp" in marketplace),
+    ("marketplace leaves measured free bottom scroll space above navigation", "bottom = LocalFynxBottomBarSpace.current + 8.dp" in marketplace and "bottom = 132.dp" not in marketplace),
     ("marketplace sell button respects navigation and keyboard insets", "navigationBarsPadding().imePadding()" in marketplace),
     ("marketplace product cards show the seller avatar and name", "FynxProfileRemoteClient.get" in marketplace and "l.sellerDisplayName" in marketplace),
     ("Marketplace product cards use reference-style landscape media bounded to card width", ".aspectRatio(1.42f)" in product_card and "RemoteMarketMedia(" in product_card),
