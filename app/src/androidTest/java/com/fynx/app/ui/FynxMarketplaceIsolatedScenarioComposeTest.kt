@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -19,7 +20,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
@@ -147,7 +147,13 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // Select the second real slide through the production LazyRow state. This keeps
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
-        compose.onNodeWithContentDescription("Marketplace promotions carousel").performTouchInput { swipeLeft() }
+        compose.onNodeWithContentDescription("Marketplace promotions carousel").performTouchInput {
+            val widthPx = size.width.toFloat()
+            val centerY = size.height / 2f
+            down(Offset(widthPx * 0.85f, centerY))
+            moveTo(Offset(widthPx * 0.15f, centerY), delayMillis = 250L)
+            up()
+        }
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
