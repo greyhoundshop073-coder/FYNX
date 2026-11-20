@@ -58,6 +58,7 @@ require(
     and "groupReadReceiptScope(context, groupId)" in GROUP_REMOTE
     and "FynxAuthStore.accountStorageKey(context)" in GROUP_REMOTE
     and "supportsReadReceipts" in GROUP_REMOTE
+    and 'root.optBoolean("supportsServerSearch", false)' in GROUP_REMOTE
     and "groupReadReceiptsSupported" not in GROUP_REMOTE
 )
 require(
