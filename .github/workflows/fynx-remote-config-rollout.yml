@@ -46,16 +46,16 @@ jobs:
           node --check scripts/publish_fynx_remote_config.mjs
           node --test scripts/publish_fynx_remote_config.test.mjs
       - name: Set up JDK 17
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Gradle
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
+      - name: Compile live Remote Config instrumentation without requiring an emulator
+        run: ./gradlew compileDebugAndroidTestKotlin --no-daemon --build-cache
       - name: Authenticate to FYNX Firebase project
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
         uses: google-github-actions/auth@v3
