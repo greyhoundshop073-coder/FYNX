@@ -178,7 +178,7 @@ export function createMediaStorage({
   return Object.freeze({
     provider,
     isObjectStorageEnabled: OBJECT_PROVIDERS.has(provider),
-    supportsDirectUpload: OBJECT_PROVIDERS.has(provider) && Boolean(configs.get(provider)?.configured),
+    supportsDirectUpload: OBJECT_PROVIDERS.has(provider),
     isConfigured: provider === "postgres" || Boolean(configs.get(provider)?.configured),
     async putMediaObject({ data, mimeType }) {
       if (provider === "postgres") return { storageProvider: "postgres", objectKey: null };
