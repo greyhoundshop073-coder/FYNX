@@ -424,11 +424,8 @@ class FynxMarketplaceScreensComposeTest {
             "marketplace-test-fixtures"
         )
         check(directory.mkdirs() || directory.isDirectory)
-        val file = File(directory, name)
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        FileOutputStream(file).use { output ->
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        FynxTestScreenshots.save(directory, name) {
+            compose.onRoot().captureToImage().asAndroidBitmap()
         }
-        assertTrue(file.isFile && file.length() > 0L)
     }
 }
