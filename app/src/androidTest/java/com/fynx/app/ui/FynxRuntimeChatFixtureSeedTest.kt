@@ -86,7 +86,19 @@ class FynxRuntimeChatFixtureSeedTest {
             senderUsername = username
         )
 
-        FynxChatStore.save(context, peerUsername, listOf(peerMessage, ownerReply))
+        val historyStressMessages = (0 until 1_000).map { index ->
+            val fromMe = index % 2 == 1
+            peerMessage.copy(
+                text = "FYNX runtime history stress item $index",
+                fromMe = fromMe,
+                id = "runtime-history-$index",
+                timestamp = now - ((1_002L - index.toLong()) * 60_000L),
+                senderName = if (fromMe) "FYNX Runtime Owner" else "FYNX Runtime Peer",
+                senderUsername = if (fromMe) username else peerUsername
+            )
+        }
+        val seededHistory = historyStressMessages + listOf(peerMessage, ownerReply)
+        FynxChatStore.save(context, peerUsername, seededHistory)
         FynxChatStore.savePreview(
             context,
             ChatPreview(
@@ -99,7 +111,10 @@ class FynxRuntimeChatFixtureSeedTest {
             )
         )
 
-        assertEquals(listOf(peerMessage, ownerReply), FynxChatStore.load(context, peerUsername))
+        val restoredHistory = FynxChatStore.load(context, peerUsername)
+        assertEquals(1_002, restoredHistory.size)
+        assertEquals(peerMessage.id, restoredHistory[1_000].id)
+        assertEquals(ownerReply.id, restoredHistory[1_001].id)
         assertEquals(peerUsername, FynxChatStore.loadPreviews(context).firstOrNull()?.username)
 
         // save()/savePreview() intentionally use apply() for normal UI writes.
@@ -144,7 +159,7 @@ class FynxRuntimeChatFixtureSeedTest {
         assertTrue("The persisted XML must contain the owner reply", diskSnapshot.contains(ownerReply.text))
         assertTrue("The persisted XML must contain the account-scoped preview", diskSnapshot.contains("chat_previews_" + normalizedUsername))
 
-        assertEquals(2, FynxChatStore.load(context, peerUsername).size)
+        assertEquals(1_002, FynxChatStore.load(context, peerUsername).size)
         assertNull("Tokenless local entry must remain independent of a backend credential", FynxBackendClient.accessToken(context))
 
         // Exercise the exact local sign-in transition used by FynxApp's auth gate.
