@@ -389,6 +389,64 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             return ""
     return after
 
+def send_and_reopen_local_private_fixture(private_xml: str) -> str:
+    """Send a private message with emulator networking disabled and prove it survives reopening."""
+    run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
+    if not run_suffix:
+        run_suffix = str(int(time.time()))
+    private_message = "FYNX_private_offline_QA_" + run_suffix
+
+    focused = tap_control(
+        private_xml, ["Message composer"], "private-offline-composer-focus"
+    )
+    if not focused:
+        FAILURES.append("The private conversation did not expose its accessible message composer.")
+        return ""
+    if input_text(private_message).returncode != 0:
+        FAILURES.append("The private offline test message could not be entered in the real composer.")
+        return ""
+    time.sleep(0.5)
+    ready = dump_ui("private-offline-send-ready.xml")
+    if not find_control(ready, ["Send message"], exact_only=True):
+        FAILURES.append("Typing a private message did not expose the real Send message action.")
+        screenshot("private-offline-send-action-missing.png")
+        return ""
+
+    sent = tap_control(
+        ready,
+        ["Send message"],
+        "private-offline-send",
+        ["Hold to record voice message"],
+        exact_only=True,
+    )
+    if not sent:
+        return ""
+    if private_message not in sent or find_control(sent, ["Send message"], exact_only=True):
+        FAILURES.append("The private message did not leave the composer and appear as a sent conversation item.")
+        screenshot("private-offline-send-not-confirmed.png")
+        return ""
+    screenshot("private-chat-sent-offline.png")
+    report.append("- PASS: sent a new private message while emulator Wi-Fi and mobile data were disabled; the composer cleared and the message appeared in the conversation.")
+
+    run("adb", "shell", "input", "keyevent", "4")
+    time.sleep(1.0)
+    chat_list = dump_ui("private-chat-list-after-offline-send.xml")
+    reopened = tap_first_real_chat_or_group_if_present(
+        chat_list, "private-chat-reopen-after-offline-send"
+    )
+    if not reopened:
+        FAILURES.append("The private conversation could not be reopened after the offline send.")
+        return ""
+    if private_message not in reopened or not find_control(reopened, ["Message composer", "Edit message composer"]):
+        FAILURES.append("The offline private message did not survive leaving and reopening the conversation.")
+        screenshot("private-chat-offline-reopen-failed.png")
+        return ""
+    screenshot("private-chat-reopened-offline.png")
+    (ROOT / "private-chat-reopened-offline.xml").write_text(reopened + "\n", encoding="utf-8")
+    report.append("- PASS: the newly sent private message remained visible after leaving and reopening the conversation, proving local conversation persistence.")
+    return reopened
+
+
 def find_edit_fields(xml_text:str):
     fields=[]
     for node in nodes(xml_text):
@@ -3665,6 +3723,15 @@ if CHAT_GROUPS_VISUALS_ONLY:
                 screenshot("private-chat-inside.png")
                 (ROOT / "private-chat-inside.xml").write_text(private_xml + "\n", encoding="utf-8")
                 report.append("- PASS: opened the real private ConversationPanel and restored both persisted peer/owner messages.")
+                if FORCE_LOCAL_VISUALS:
+                    if not set_emulator_network_enabled(False):
+                        FAILURES.append("Could not disable emulator Wi-Fi and mobile data for the private offline-send journey.")
+                    else:
+                        try:
+                            private_xml = send_and_reopen_local_private_fixture(private_xml)
+                        finally:
+                            if not set_emulator_network_enabled(True):
+                                FAILURES.append("Could not restore emulator Wi-Fi and mobile data after the private offline-send journey.")
         else:
             FAILURES.append("The Chat list did not open the seeded private ConversationPanel.")
 
@@ -3710,6 +3777,8 @@ if CHAT_GROUPS_VISUALS_ONLY:
     required_images = [
         "authenticated-chat.png",
         "private-chat-inside.png",
+        "private-chat-sent-offline.png",
+        "private-chat-reopened-offline.png",
         "authenticated-groups.png",
         "chat-groups-create-dialog.png",
         "chat-groups-created-fixture.png",
