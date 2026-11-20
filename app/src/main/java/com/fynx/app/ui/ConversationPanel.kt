@@ -1003,8 +1003,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
                             if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
                         }
-                    }
+                    }.distinctBy { it.id }
                     remoteSearchResults = (remoteSearchResults.orEmpty() + older).distinctBy { it.id }.sortedBy { it.timestamp }
+                    messages = (messages + older).associateBy { it.id }.values.sortedBy { it.timestamp }
                     hasMorePrivateSearch = page.hasMore
                     nextPrivateSearchBeforeId = nextCursor
                     privateSearchNotice = null
@@ -1061,11 +1062,13 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
             return@LaunchedEffect
         }
         result.onSuccess { page ->
-            remoteSearchResults = page.messages.map { remote ->
+            val mappedSearchResults = page.messages.map { remote ->
                 FynxProductionMessaging.toChatMessage(remote, myId).let { message ->
                     if (message.fromMe) message else message.copy(senderAvatarUri = resolvedAvatarUri)
                 }
             }.distinctBy { it.id }.sortedBy { it.timestamp }
+            remoteSearchResults = mappedSearchResults
+            messages = (messages + mappedSearchResults).associateBy { it.id }.values.sortedBy { it.timestamp }
             val searchCursor = page.nextBeforeId ?: page.messages.minByOrNull { it.timestamp }?.id
             hasMorePrivateSearch = page.hasMore && !searchCursor.isNullOrBlank()
             nextPrivateSearchBeforeId = searchCursor
