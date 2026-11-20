@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxRuntimeChatFixtureSeedTest.kt").read_text(encoding="utf-8")
 CAMERA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 EMULATOR_WRAPPER = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 CONTACTS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxContactsPanel.kt").read_text(encoding="utf-8")
@@ -36,6 +37,10 @@ checks = {
     "offline fixture opens a local signed-in debug session": (
         '.putBoolean("signed_in", true)' in FIXTURE
         and 'FynxAuthStore.load(context).state == AuthState.SIGNED_IN' in FIXTURE
+    ),
+    "local-only visual capture uses the exact disposable fixture identity, not server E2E credentials": (
+        'USERNAME="fynx_local_runtime" if FORCE_LOCAL_VISUALS else os.environ.get("FYNX_E2E_USERNAME","").strip()' in RUNTIME_NAV
+        and '-e username "fynx_local_runtime"' in RUNNER
     ),
     "contacts screen gates previously granted permissions behind an account-scoped disclosure": (
         "FynxContactsDisclosure.PREFERENCES_NAME" in CONTACTS_PANEL

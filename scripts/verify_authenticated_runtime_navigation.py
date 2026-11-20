@@ -10,7 +10,10 @@ from pathlib import Path
 
 ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
-USERNAME=os.environ.get("FYNX_E2E_USERNAME","").strip()
+# Local visual captures must use the same disposable identity seeded by FynxRuntimeChatFixtureSeedTest.
+# Never substitute the separate server E2E username for this tokenless local account.
+FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
+USERNAME="fynx_local_runtime" if FORCE_LOCAL_VISUALS else os.environ.get("FYNX_E2E_USERNAME","").strip()
 PASSWORD=os.environ.get("FYNX_E2E_PASSWORD","")
 AI_VISUALS_ONLY=os.environ.get("FYNX_AI_VISUALS_ONLY") == "1"
 HOME_FEED_VISUALS_ONLY=os.environ.get("FYNX_HOME_FEED_VISUALS_ONLY") == "1"
@@ -19,7 +22,6 @@ MUSIC_VISUALS_ONLY=os.environ.get("FYNX_MUSIC_VISUALS_ONLY") == "1"
 CAMERA_VISUALS_ONLY=os.environ.get("FYNX_CAMERA_VISUALS_ONLY") == "1"
 HOME_FEED_FIXTURES_SEEDED=False
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or CAMERA_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
-FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
 FAILURES=[]
 BLOCKED=[]
 MESSAGE_TAP_SKIPPED=False
