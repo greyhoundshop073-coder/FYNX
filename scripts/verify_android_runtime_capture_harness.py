@@ -28,10 +28,11 @@ checks = {
         and "if [ \"$preflight_status\" -eq 0 ]; then" in EMULATOR_WRAPPER
         and 'exit "$runtime_status"' in EMULATOR_WRAPPER
     ),
-    "emulator wrapper records optional fixture capture truthfully": (
-        'if adb shell test -d "$fixture_remote"' in EMULATOR_WRAPPER
-        and "NOT_CAPTURED: remote fixture directory was absent:" in EMULATOR_WRAPPER
-        and 'fixture_status_file="$fixture_dir/capture-status.txt"' in EMULATOR_WRAPPER
+    "emulator wrapper pulls the exact Marketplace screenshot directory reported by instrumentation": (
+        'fixture_status_file="$fixture_dir/capture-status.txt"' in EMULATOR_WRAPPER
+        and "FYNX_MARKETPLACE_TEST_SCREENSHOT" in EMULATOR_WRAPPER
+        and 'CAPTURED: $screenshot_dir' in EMULATOR_WRAPPER
+        and "NOT_CAPTURED: no Marketplace instrumentation screenshot directory was reported" in EMULATOR_WRAPPER
     ),
     "offline fixture clears backend credentials": (
         'remove("access_token")' in FIXTURE
