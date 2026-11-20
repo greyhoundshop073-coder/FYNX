@@ -63,6 +63,19 @@ The source-controlled client template is `firebase/remoteconfig.template.json`. 
 6. Roll back an optional experiment by publishing its flag as `false`. Connected clients can receive realtime changes; offline clients retain their last activated value until they reconnect.
 7. Keep Data safety and privacy disclosures synchronized with the complete app/SDK inventory before production release.
 
+## Automated safe publication and live-client verification
+
+The canonical branch includes a guarded rollout workflow at `.github/workflows/fynx-remote-config-rollout.yml`.
+
+- Pull requests run the publisher's offline policy tests only; they do not change Firebase.
+- A push to the canonical branch authenticates with the repository's existing Google Workload Identity Federation service account and reads the current Firebase Remote Config template.
+- The publisher merges only missing FYNX parameters into the existing template, preserving unrelated parameters, conditions and groups. It uses the returned ETag, validates the proposed template before publishing, and reads the template again after publication.
+- It refuses to overwrite a non-BOOLEAN parameter, a non-false default, or any conditional value that enables one of these flags. It never uses a forced `If-Match: *` update.
+- After publication, an Android 15 emulator performs a live fetch and verifies that all three values came from the remote template and remain false.
+- If Firebase API access, IAM permission, template validation, publication or live fetch fails, the rollout workflow reports that failure; it does not silently mark the remote system as ready.
+
+This automation is part of the canonical release workflow. The actual published template version and live-fetch result must be read from the successful GitHub Actions run; the presence of this workflow alone is not proof of publication.
+
 ## Verification status
 
 - Repository has the existing Firebase project configuration for `com.fynx.app`: verified from `app/google-services.json`.
