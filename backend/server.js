@@ -508,7 +508,7 @@ app.post("/api/media/upload-intent", auth, async (req, res) => {
       return res.status(413).json({ error: "media is too large" });
     }
 
-    // Neon and PostgreSQL retain the existing authenticated server-upload path.
+    // PostgreSQL retains the legacy server-upload path; Neon and R2 use signed direct uploads.
     if (!mediaStorage.supportsDirectUpload) return res.json({ useLegacyUpload: true });
     if (!mediaStorage.isConfigured) return res.status(503).json({ error: "media object storage is not configured" });
     requireConfig("DATABASE_URL", DATABASE_URL);
@@ -1458,7 +1458,7 @@ async function cleanupExpiredMediaUploadIntents() {
     );
     for (const intent of completedTemporary.rows) {
       try {
-        await mediaStorage.deleteMediaObject(intent.upload_object_key, "r2");
+        await mediaStorage.deleteMediaObject(intent.upload_object_key, mediaStorage.provider);
         await client.query(
           "UPDATE message_media_upload_intents SET upload_object_key = object_key WHERE id = $1 AND completed_at IS NOT NULL",
           [intent.id]
