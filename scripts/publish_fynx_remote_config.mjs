@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const API_ROOT = "https://firebaseremoteconfig.googleapis.com/v1";
 const REQUIRED_TEMPLATE_PATH = new URL("../firebase/remoteconfig.template.json", import.meta.url);
@@ -131,7 +133,7 @@ async function main() {
   console.log(`REMOTE_CONFIG_TEMPLATE=published project=${projectId} version=${verified.template.version?.versionNumber ?? published.version?.versionNumber ?? "unknown"} parameters=${Object.keys(desired.parameters ?? {}).length}`);
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
