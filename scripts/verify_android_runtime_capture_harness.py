@@ -31,18 +31,15 @@ checks = {
     ),
     "Marketplace carousel test performs a real swipe and verifies the next product identity": (
         "performTouchInput" in MARKETPLACE_TEST
-        and "val carouselBounds = carousel.fetchSemanticsNode().boundsInRoot" in MARKETPLACE_TEST
-        and "down(Offset(carouselBounds.width * 0.85f, centerY))" in MARKETPLACE_TEST
-        and "moveTo(Offset(carouselBounds.width * 0.15f, centerY), delayMillis = 250L)" in MARKETPLACE_TEST
-        and "up()" in MARKETPLACE_TEST
+        and "swipeLeft()" in MARKETPLACE_TEST
         and "compose.onNodeWithText(secondDeal.title).assertIsDisplayed()" in MARKETPLACE_TEST
         and "compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }" in MARKETPLACE_TEST
     ),
     "emulator wrapper pulls the exact Marketplace screenshot directory reported by instrumentation": (
-        'fixture_status_file="$fixture_dir/capture-status.txt"' in EMULATOR_WRAPPER
-        and "FYNX_MARKETPLACE_TEST_SCREENSHOT" in EMULATOR_WRAPPER
-        and 'CAPTURED: $screenshot_dir' in EMULATOR_WRAPPER
-        and "NOT_CAPTURED: no Marketplace instrumentation screenshot directory was reported" in EMULATOR_WRAPPER
+        'fixture_remote="/sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures"' in EMULATOR_WRAPPER
+        and "targetContext.getExternalFilesDir(null)" in MARKETPLACE_TEST
+        and 'CAPTURED: $fixture_remote' in EMULATOR_WRAPPER
+        and "NOT_CAPTURED: target app screenshot directory was absent" in EMULATOR_WRAPPER
     ),
     "offline fixture clears backend credentials": (
         'remove("access_token")' in FIXTURE
