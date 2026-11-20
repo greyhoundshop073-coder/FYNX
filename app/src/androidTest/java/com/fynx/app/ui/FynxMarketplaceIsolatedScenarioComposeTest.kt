@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
@@ -145,7 +146,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // Select the second real slide through the production LazyRow state. This keeps
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
+        compose.onNodeWithContentDescription("Marketplace promotions carousel").performTouchInput { swipeLeft() }
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
@@ -208,22 +209,18 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
     }
 
     private fun saveScreenshot(name: String) {
-        // Visual evidence is optional: screenshot capture must never fail a functional test.
-        runCatching {
-            val directory = File(
-                compose.activity.getExternalFilesDir(null),
-                "marketplace-test-fixtures"
-            )
-            check(directory.mkdirs() || directory.isDirectory)
-            val file = File(directory, name)
-            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-                ?: error("Could not capture the Android device display")
-            FileOutputStream(file).use { output ->
-                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-            }
-            check(file.isFile && file.length() > 0L)
-        }.onFailure { error ->
-            android.util.Log.w("FYNXMarketplaceTest", "Optional screenshot '$name' was not captured", error)
+        val externalFiles = requireNotNull(compose.activity.getExternalFilesDir(null)) {
+            "External app files directory is unavailable for instrumentation screenshots."
         }
+        val directory = File(externalFiles, "marketplace-test-fixtures")
+        android.util.Log.i("FYNX_MARKETPLACE_TEST_SCREENSHOT", "directory=${directory.absolutePath}")
+        check(directory.mkdirs() || directory.isDirectory)
+        val file = File(directory, name)
+        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            ?: error("Could not capture the Android device display")
+        FileOutputStream(file).use { output ->
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        }
+        check(file.isFile && file.length() > 0L)
     }
 }
