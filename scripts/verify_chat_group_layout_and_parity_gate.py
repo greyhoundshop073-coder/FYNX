@@ -22,6 +22,13 @@ require("app routes group conversations to the active FynxGroupConversationPanel
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
 
 require(
+    "private history and outbox restoration are sequenced to prevent remote pages from overwriting pending local messages",
+    "LaunchedEffect(chat.username, messagesLoaded)" in PRIVATE
+    and "if (!messagesLoaded) return@LaunchedEffect" in PRIVATE
+    and '(restored.first + messages.filterNot { it.id == "initial" })' in PRIVATE
+    and "&& messagesLoaded" in PRIVATE
+)
+require(
     "private conversation loads cursor-paginated history and exposes an older-messages action",
     PRIVATE.count("FynxProductionMessaging.historyPage(") >= 3
     and "nextPrivateHistoryBeforeId" in PRIVATE
