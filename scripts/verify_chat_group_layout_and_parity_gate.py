@@ -121,6 +121,36 @@ require("active Group More menu exposes Leave group or transfer ownership for ow
 require("non-owner Leave group calls the authenticated backend leave endpoint before local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in ACTIVE_GROUP and "FynxGroupsStore.removeGroup(context, groupId)" in ACTIVE_GROUP and "onBack()" in ACTIVE_GROUP)
 require("group owner must transfer ownership to another current member before leaving", "FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)" in ACTIVE_GROUP and "transferCandidates" in ACTIVE_GROUP and "member.copy(role = FynxGroupRole.MODERATOR)" in ACTIVE_GROUP)
 require("Android group remote client wraps authenticated ownership and leave endpoints", "suspend fun transferOwnership" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "suspend fun leaveGroup" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+
+RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+RUNTIME_RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+ANDROID_WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+CHAT_FIXTURE = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxRuntimeChatFixtureSeedTest.kt").read_text(encoding="utf-8")
+require(
+    "focused Chat/Groups runtime certification is a distinct local-only mode with required real-app screenshots",
+    "CHAT_GROUPS_VISUALS_ONLY" in RUNTIME_NAV
+    and "FYNX-chat-groups-visual-capture.md" in RUNTIME_NAV
+    and all(name in RUNTIME_NAV for name in [
+        "authenticated-chat.png", "private-chat-inside.png", "authenticated-groups.png",
+        "chat-groups-create-dialog.png", "chat-groups-created-fixture.png", "group-chat-inside.png"
+    ])
+    and "Debug-local entry proves rendered UI, navigation and local persistence only" in RUNTIME_NAV
+)
+require(
+    "Chat/Groups runtime seeds a disposable private conversation into the exact installed app and never uses server credentials",
+    "FynxRuntimeChatFixtureSeedTest" in RUNTIME_RUNNER
+    and 'FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in RUNTIME_RUNNER
+    and "FYNX offline private fixture: hello from the test peer" in CHAT_FIXTURE
+    and "FYNX local reply: the private conversation history restored" in CHAT_FIXTURE
+    and 'remove("access_token")' in CHAT_FIXTURE
+)
+require(
+    "the Chat/Groups-only runtime is enabled and its genuine screenshot artifact is uploaded for the dedicated PR",
+    "FYNX_CHAT_GROUPS_VISUALS_ONLY" in ANDROID_WORKFLOW
+    and "fix/fynx-chat-groups-runtime-cert-20261120" in ANDROID_WORKFLOW
+    and "Upload FYNX runtime screenshots and UI hierarchies" in ANDROID_WORKFLOW
+)
+
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:
