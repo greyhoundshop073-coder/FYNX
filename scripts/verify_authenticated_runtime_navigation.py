@@ -1618,7 +1618,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     # separate plus button, which opens the actual creation dialog.
     manager_xml = tap_control(
         groups_xml,
-        ["New group"],
+        ["New group", "Create group"],
         "chat-groups-open-groups-manager",
         ["Your communities in one place"],
     )
