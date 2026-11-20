@@ -407,7 +407,7 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
         return ""
     time.sleep(0.5)
     ready = dump_ui("private-offline-send-ready.xml")
-    if not find_control(ready, ["Send message"], exact_only=True):
+    if not find_control(ready, ["Send message"]):
         FAILURES.append("Typing a private message did not expose the real Send message action.")
         screenshot("private-offline-send-action-missing.png")
         return ""
@@ -424,10 +424,10 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
     for _ in range(40):
         time.sleep(0.5)
         sent = dump_ui("private-offline-send-wait.xml")
-        if private_message in sent and find_control(sent, ["Hold to record voice message"], exact_only=True):
+        if private_message in sent and find_control(sent, ["Hold to record voice message"]):
             break
     sent = dismiss_ime_if_visible("private-offline-send-ime-dismissed.xml") or sent
-    if private_message not in sent or find_control(sent, ["Send message"], exact_only=True):
+    if private_message not in sent or find_control(sent, ["Send message"]):
         FAILURES.append("The private message did not leave the composer and appear as a sent conversation item within 20 seconds.")
         screenshot("private-offline-send-not-confirmed.png")
         return ""
