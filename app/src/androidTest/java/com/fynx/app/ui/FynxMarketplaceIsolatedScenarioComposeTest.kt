@@ -216,7 +216,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
     }
 
     private fun saveScreenshot(name: String) {
-        val externalFiles = requireNotNull(compose.activity.getExternalFilesDir(null)) {
+        val externalFiles = requireNotNull(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null)) {
             "External app files directory is unavailable for instrumentation screenshots."
         }
         val directory = File(externalFiles, "marketplace-test-fixtures")
