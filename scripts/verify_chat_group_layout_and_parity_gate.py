@@ -1,4 +1,6 @@
 from pathlib import Path
+import ast
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
@@ -18,6 +20,41 @@ def require(label, condition):
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
+
+require(
+    "private conversation loads cursor-paginated history and exposes an older-messages action",
+    PRIVATE.count("FynxProductionMessaging.historyPage(") >= 3
+    and "nextPrivateHistoryBeforeId" in PRIVATE
+    and "Load older messages" in PRIVATE
+    and "Load older private messages" in PRIVATE
+    and "applyPrivateHistoryPage" in PRIVATE
+)
+require(
+    "private conversation searches server history with a cursor and preserves offline local matches",
+    "FynxProductionMessaging.searchHistoryPage(" in PRIVATE
+    and "Load older matching messages" in PRIVATE
+    and "Load older matching private messages" in PRIVATE
+    and "Offline: showing messages already saved on this device." in PRIVATE
+    and "localSearchMatches" in PRIVATE
+)
+GROUP_REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
+GROUP_CONTENT_TEST = (ROOT / "backend/test-group-content-routes.mjs").read_text(encoding="utf-8")
+require(
+    "group read-receipt capability is explicit and scoped to the signed-in account and group",
+    "ConcurrentHashMap<String, Boolean>" in GROUP_REMOTE
+    and "groupReadReceiptScope(context, groupId)" in GROUP_REMOTE
+    and "FynxAuthStore.accountStorageKey(context)" in GROUP_REMOTE
+    and "supportsReadReceipts" in GROUP_REMOTE
+    and "groupReadReceiptsSupported" not in GROUP_REMOTE
+)
+require(
+    "backend group history explicitly advertises and tests server search and read-receipt capabilities",
+    "supportsServerSearch:true" in GROUP_ROUTES
+    and "supportsReadReceipts:true" in GROUP_ROUTES
+    and "assert.equal(firstPage.body.supportsServerSearch, true" in GROUP_CONTENT_TEST
+    and "assert.equal(firstPage.body.supportsReadReceipts, true" in GROUP_CONTENT_TEST
+)
 
 require(
     "group cards in both Chat and Groups lists expose stable accessible Open group labels",
@@ -162,6 +199,20 @@ require(
     and "fix/fynx-chat-groups-runtime-cert-20261120" in ANDROID_WORKFLOW
     and "Upload FYNX runtime screenshots and UI hierarchies" in ANDROID_WORKFLOW
 )
+
+
+try:
+    ast.parse(RUNTIME_NAV)
+    runtime_python_syntax_ok = True
+except SyntaxError:
+    runtime_python_syntax_ok = False
+require("dedicated Chat/Groups runtime Python script has valid syntax", runtime_python_syntax_ok)
+runtime_shell_syntax = subprocess.run(
+    ["bash", "-n", str(ROOT / "scripts/run_android_runtime_certification.sh")],
+    capture_output=True,
+    text=True,
+)
+require("Android runtime certification shell runner has valid syntax", runtime_shell_syntax.returncode == 0)
 
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
