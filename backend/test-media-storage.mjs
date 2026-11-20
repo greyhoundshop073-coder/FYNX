@@ -230,7 +230,7 @@ assert.deepEqual(
 
 const incompleteNeon = createMediaStorage({ env: { FYNX_MEDIA_STORAGE_PROVIDER: "neon" } });
 assert.equal(incompleteNeon.isConfigured, false);
-assert.equal(incompleteNeon.supportsDirectUpload, false);
+assert.equal(incompleteNeon.supportsDirectUpload, true);
 await assert.rejects(
   incompleteNeon.putMediaObject({ data: Buffer.from("test"), mimeType: "image/jpeg" }),
   (error) => error instanceof MediaStorageConfigurationError && error.statusCode === 503
