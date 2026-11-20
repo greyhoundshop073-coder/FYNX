@@ -122,7 +122,7 @@ object FynxGroupRemoteClient {
                     }.getOrNull()?.let(::add)
                 }
             }.distinctBy { it.id }
-            val supportsServerSearch = root.optBoolean("supportsServerSearch", root.has("hasMore") && root.has("nextCursor"))
+            val supportsServerSearch = root.optBoolean("supportsServerSearch", false)
             val supportsReadReceipts = root.optBoolean("supportsReadReceipts", parsed.any { it.readBy.isNotEmpty() })
             receiptScope?.let { groupReadReceiptSupportByScope[it] = supportsReadReceipts }
             RemoteMessagePage(parsed,root.optBoolean("hasMore",false),supportsServerSearch,supportsReadReceipts)
