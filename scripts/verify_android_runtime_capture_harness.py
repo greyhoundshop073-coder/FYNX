@@ -8,6 +8,10 @@ FIXTURE = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxRuntimeChatFixtu
 CAMERA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt").read_text(encoding="utf-8")
 RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+STATUS_RUNTIME = (ROOT / "scripts/verify_status_creator_runtime.py").read_text(encoding="utf-8")
+CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+GROUPS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
+GROUP_CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt").read_text(encoding="utf-8")
 EMULATOR_WRAPPER = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 CONTACTS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxContactsPanel.kt").read_text(encoding="utf-8")
@@ -47,6 +51,21 @@ checks = {
         and "FynxContactsDisclosure.preferenceKey(accountKey)" in CONTACTS_PANEL
         and "permission && disclosureAccepted" in CONTACTS_PANEL
         and 'Text("Before you use contact matching"' in CONTACTS_PANEL
+    ),
+    "Groups-tab capture waits for the Groups-specific action, not the Chats-section New group button": (
+        'groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])' in RUNTIME_NAV
+        and 'contentDescription = "Create group"' in CHAT_PANEL
+        and 'Text("＋ New group")' in CHAT_PANEL
+    ),
+    "Groups manager and dialog use the actual Create group accessibility label": (
+        '["Create group"],\n        "chat-groups-open-groups-manager"' in RUNTIME_NAV
+        and '["Create group"],\n        "chat-groups-open-create-dialog"' in RUNTIME_NAV
+        and 'Icon(Icons.Default.Add, "Create group")' in GROUPS_PANEL
+    ),
+    "Status runtime unwinds group and chat screens using visible controls before Home": (
+        'for back_label in ("Back", "Back to Chats", "Back to Marketplace")' in STATUS_RUNTIME
+        and 'find_click_target(current, back_label)' in STATUS_RUNTIME
+        and 'IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back"' in GROUP_CHAT_PANEL
     ),
     "camera callback uses a public SAM interface": (
         "fun interface FynxCameraEditedCaptureCallback" in CAMERA

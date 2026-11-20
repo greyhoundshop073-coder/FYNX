@@ -179,14 +179,20 @@ def main() -> int:
 
     current = dump_ui("status-runtime-start.xml")
     if not FAILURES and not is_home(current):
-        # My Shop is nested under Marketplace; return through its own control first.
-        back = find_click_target(current, "Back to Marketplace")
-        if back:
-            adb("shell", "input", "tap", str(back[0]), str(back[1]))
-            time.sleep(1.0)
-            current = dump_ui("status-return-marketplace.xml") or current
+        # Unwind real nested app surfaces first. A group conversation exposes
+        # "Back"; the dedicated Groups manager exposes "Back to Chats"; My Shop
+        # exposes "Back to Marketplace". Never restart or reset the app session.
+        for back_label in ("Back", "Back to Chats", "Back to Marketplace"):
+            if is_home(current):
+                break
+            back = find_click_target(current, back_label)
+            if back:
+                adb("shell", "input", "tap", str(back[0]), str(back[1]))
+                time.sleep(0.8)
+                stage_label = back_label.lower().replace(" ", "-")
+                current = dump_ui(f"status-return-{stage_label}.xml") or current
 
-        # Use the visible Home tab, never guessed screen coordinates or app restarts.
+        # Use the visible Home tab after nested screens have been closed.
         if not is_home(current):
             home = find_click_target(current, "Home")
             if home:

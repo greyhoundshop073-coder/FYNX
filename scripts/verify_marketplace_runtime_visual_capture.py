@@ -8,8 +8,14 @@ navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_tex
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
 wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
+marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 
 checks = [
+    (
+        "Marketplace feed states reserve measured floating navigation space instead of a fixed 132dp gap",
+        marketplace_source.count("bottom = LocalFynxBottomBarSpace.current + 8.dp") == 5
+        and "bottom = 132.dp" not in marketplace_source,
+    ),
     (
         "Marketplace seller-flow capture dismisses only a confirmed visible Android keyboard before scrolling",
         "def dismiss_ime_if_visible(name: str) -> str:" in navigation

@@ -3054,23 +3054,23 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not run_suffix:
         run_suffix = str(int(time.time()))
     group_name = "FYNX CI Group " + run_suffix
-    # ChatsPanel's Groups tab first opens the dedicated Groups manager. Its
-    # "New group" action is navigation, not the create dialog itself. Require
-    # the manager's unique subtitle before locating its separate create button.
+    # The Groups section's unique "Create group" action opens the dedicated
+    # Groups manager. Require its unique subtitle before locating the manager's
+    # separate plus button, which opens the actual creation dialog.
     manager_xml = tap_control(
         groups_xml,
-        ["New group", "Create group"],
+        ["Create group"],
         "chat-groups-open-groups-manager",
         ["Your communities in one place"],
     )
     if not manager_xml:
         FAILURES.append("Chat -> Groups -> New group did not open the dedicated Groups manager.")
         return ""
-    # The manager's plus button is a second action. Its unique accessibility
-    # label prevents the underlying Groups list from satisfying the wait.
+    # Match the actual accessibility label on FynxGroupsPanel's plus button.
+    # The Group name input is required before this counts as an opened dialog.
     dialog = tap_control(
         manager_xml,
-        ["Open create group dialog"],
+        ["Create group"],
         "chat-groups-open-create-dialog",
         ["Group name input"],
     )
@@ -5745,7 +5745,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         chat_again = tap_control(home_again, ["Chat"], "chat-groups-reopen-chat", ["Messages and groups in one place"])
     else:
         chat_again = ""
-    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["New group", "Create group"])
+    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])
     if not groups_xml:
         FAILURES.append("Chat -> Groups did not expose the real Groups list.")
     else:

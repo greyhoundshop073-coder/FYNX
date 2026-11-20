@@ -1449,7 +1449,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             when {
                 loading && listings.isEmpty() -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     // Keep the promotional experience visible while live listings are loading.
@@ -1520,7 +1520,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
                 listings.isEmpty() && error != null -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-offline-hero") {
@@ -1583,7 +1583,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
                 listings.isEmpty() -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     // The empty catalogue is still the Marketplace home: keep the promo card visible here too.
@@ -1653,7 +1653,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         state = productsGridState,
                         columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -1710,7 +1710,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                 } else LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-hero") {
