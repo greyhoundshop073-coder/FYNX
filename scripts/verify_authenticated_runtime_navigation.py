@@ -421,6 +421,7 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
     )
     if not sent:
         return ""
+    sent = dismiss_ime_if_visible("private-offline-send-ime-dismissed.xml") or sent
     if private_message not in sent or find_control(sent, ["Send message"], exact_only=True):
         FAILURES.append("The private message did not leave the composer and appear as a sent conversation item.")
         screenshot("private-offline-send-not-confirmed.png")
@@ -3661,7 +3662,7 @@ if AI_VISUALS_ONLY:
     raise SystemExit(1 if FAILURES else 0)
 xml,error=login()
 if CHAT_GROUPS_VISUALS_ONLY:
-    report.append("- Focused Chat and Groups visual mode: exercises the installed production Chat list, a persisted disposable private conversation, Groups navigation, group creation and an offline group message. This is local UI evidence, not server authentication.")
+    report.append("- Focused Chat and Groups visual mode: exercises the installed production Chat list, a persisted disposable private conversation, an offline private send/reopen, Groups navigation, group creation and an offline group message. This is local UI evidence, not server authentication.")
     if error:
         report += ["", "## Result: BLOCKED", "- Local Chat/Groups UI entry could not reach Home: " + error]
         (ROOT / "FYNX-chat-groups-visual-capture.md").write_text("\n".join(report) + "\n", encoding="utf-8")
