@@ -53,6 +53,12 @@ assert.equal(storage.provider, "neon");
 assert.equal(storage.isObjectStorageEnabled, true);
 assert.equal(storage.isConfigured, true);
 assert.equal(storage.supportsDirectUpload, true);
+assert.equal(storage.isObjectStorageProvider("neon"), true);
+assert.equal(storage.isObjectStorageProvider("r2"), true);
+assert.equal(storage.isObjectStorageProvider("postgres"), false);
+assert.equal(storage.isConfiguredFor("neon"), true);
+assert.equal(storage.isConfiguredFor("r2"), true);
+assert.equal(storage.isConfiguredFor("unknown"), false);
 const stored = await storage.putMediaObject({ data: Buffer.from("new-media-bytes"), mimeType: "image/webp" });
 assert.deepEqual(stored, { storageProvider: "neon", objectKey: "media/" + UUID });
 assert.equal(calls[0].constructor.name, "PutObjectCommand");
@@ -105,6 +111,9 @@ assert.deepEqual(optionsSeen[1], {
 const r2Url = await storage.createDownloadUrl("media/" + UUID, "r2");
 assert.equal(r2Url, "https://signed.example/fynx-media");
 await storage.getMediaObjectBytes("media/" + UUID, "r2");
+await storage.inspectMediaObject("uploads/" + UUID, "r2");
+await storage.promoteUploadedObject("uploads/" + UUID, "media/" + UUID, "r2");
+assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
 await storage.deleteMediaObject("media/" + UUID, "r2");
 assert.deepEqual(optionsSeen[2], {
   region: "auto",
