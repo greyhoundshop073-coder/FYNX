@@ -227,6 +227,13 @@ runtime_shell_syntax = subprocess.run(
 )
 require("Android runtime certification shell runner has valid syntax", runtime_shell_syntax.returncode == 0)
 require(
+    "installed-app runtime seeds and restores a 1,002-message private history for large-history navigation coverage",
+    "0 until 1_000" in CHAT_FIXTURE
+    and "assertEquals(1_002, restoredHistory.size)" in CHAT_FIXTURE
+    and "expected_history_message_count >= 1_002" in RUNTIME_NAV
+    and "large_history_fixture_ready" in RUNTIME_NAV
+)
+require(
     "focused Chat/Groups runtime sends a private message offline and verifies it after reopening",
     "def send_and_reopen_local_private_fixture" in RUNTIME_NAV
     and "private-chat-sent-offline.png" in RUNTIME_NAV
