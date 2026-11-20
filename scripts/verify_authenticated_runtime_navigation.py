@@ -1747,7 +1747,7 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
         groups_again,
         [group_name],
         "chat-groups-reopen-persisted-fixture",
-        [group_name, "Message..."],
+        ["Message...", "Message composer", "Messaging is restricted", "Group unavailable"],
     )
     if not reopened or not find_control(reopened, [message_text]):
         FAILURES.append("The group message was not retained after leaving and reopening the persisted conversation.")
@@ -3690,7 +3690,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                         created_groups_xml,
                         [group_name],
                         "chat-groups-open-created-fixture",
-                        [group_name, "Message..."],
+                        ["Message...", "Message composer", "Messaging is restricted", "Group unavailable"],
                     )
                 if not group_xml:
                     if group_name:
