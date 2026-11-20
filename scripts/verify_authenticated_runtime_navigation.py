@@ -1686,10 +1686,10 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     latest = ""
     while time.monotonic() < deadline:
         latest = dump_ui("chat-groups-created-local-fixture.xml")
-        if find_control(latest, [group_name]):
+        if find_control(latest, [f"Open group {group_name}"]):
             break
         time.sleep(0.4)
-    if not find_control(latest, [group_name]):
+    if not find_control(latest, [f"Open group {group_name}"]):
         FAILURES.append("The app did not show the newly created group in its Groups list.")
         return ""
     screenshot("chat-groups-created-fixture.png")
@@ -1737,15 +1737,15 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
     deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         groups_again = dump_ui("chat-groups-groups-after-conversation.xml")
-        if find_control(groups_again, [group_name]):
+        if find_control(groups_again, [f"Open group {group_name}"]):
             break
         time.sleep(0.4)
-    if not find_control(groups_again, [group_name]):
+    if not find_control(groups_again, [f"Open group {group_name}"]):
         FAILURES.append("Back navigation did not return to the Groups list with the persisted fixture.")
         return ""
     reopened = tap_control(
         groups_again,
-        [group_name],
+        [f"Open group {group_name}"],
         "chat-groups-reopen-persisted-fixture",
         ["Message...", "Message composer", "Messaging is restricted", "Group unavailable"],
     )
@@ -3688,7 +3688,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                     created_groups_xml = dump_ui("chat-groups-created-fixture-list.xml")
                     group_xml = tap_control(
                         created_groups_xml,
-                        [group_name],
+                        [f"Open group {group_name}"],
                         "chat-groups-open-created-fixture",
                         ["Message...", "Message composer", "Messaging is restricted", "Group unavailable"],
                     )
