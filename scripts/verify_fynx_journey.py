@@ -94,9 +94,9 @@ check("Send a Gift remains connected to conversations", "GiftsPanel" in conversa
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
 check("removed AI image/video generation is not reintroduced", "image generation" not in app.lower() and "video generation" not in app.lower())
 
-# Media upload is routed through an owner-bound intent. PostgreSQL/Neon still return
-# the explicit legacy instruction; R2 uses a token-free signed PUT and a session-bound
-# idempotent completion POST. Signed media GET redirects are allowlisted separately.
+# Media upload is routed through an owner-bound intent. PostgreSQL retains the explicit
+# legacy upload path; Neon and R2 use token-free signed PUTs and session-bound completion.
+# Signed media GET redirects are allowlisted separately.
 put_start = media_backend_client.find("internal suspend fun putSignedMedia(")
 put_end = media_backend_client.find("    suspend fun postJsonStream", put_start)
 put_method = media_backend_client[put_start:put_end] if put_start >= 0 and put_end > put_start else ""
