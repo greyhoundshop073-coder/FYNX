@@ -163,7 +163,11 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Total: NGN 61,875.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-delivery-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
-        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.").assertIsDisplayed()
+        // The delivery quote adds address and fee rows, so the confirmation message sits
+        // below the visible area of the dialog's scroll column on small screens.
+        compose.onNodeWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
