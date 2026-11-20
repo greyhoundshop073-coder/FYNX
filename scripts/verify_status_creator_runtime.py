@@ -184,7 +184,7 @@ def main() -> int:
     camera_grant = adb("shell", "pm", "grant", PACKAGE, "android.permission.CAMERA")
     camera_state = adb("shell", "dumpsys", "package", PACKAGE)
     camera_granted = re.search(
-        r"android\\.permission\\.CAMERA:\\s*granted=true",
+        r"android\.permission\.CAMERA:\s*granted=true",
         camera_state.stdout or "",
         re.IGNORECASE
     )
