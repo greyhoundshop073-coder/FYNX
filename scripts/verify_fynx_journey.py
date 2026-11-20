@@ -111,12 +111,12 @@ media_upload_end = media_shared_client.find("\n\n    private fun readMediaBytes"
 media_upload_method = media_shared_client[media_upload_start:media_upload_end] if media_upload_start >= 0 and media_upload_end > media_upload_start else ""
 
 check("shared media uploader requests an authenticated upload intent", '"/api/media/upload-intent"' in media_upload_method and "postJsonForSession" in media_upload_method)
-check("R2 upload falls back to existing server upload on Neon/PostgreSQL", "useLegacyUpload" in media_upload_method and '"/api/media"' in media_upload_method and "dataBase64" in media_upload_method)
-check("R2 uploads use HTTPS Cloudflare host allowlist", "isTrustedR2Host(target.host)" in put_method and "r2\\\\.cloudflarestorage\\\\.com" in media_backend_client)
-check("direct R2 PUT never forwards FYNX bearer authorization", "putSignedMediaOnce" in put_method and "Authorization" not in put_once_method and "accessToken(context)" not in put_once_method)
-check("direct R2 PUT enforces size, MIME, fixed content length and no redirect", "12 * 1024 * 1024" in put_method and "normalizedMime" in put_method and "setFixedLengthStreamingMode(bytes.size)" in put_once_method and "instanceFollowRedirects = false" in put_once_method)
+check("PostgreSQL retains the legacy server-upload fallback", "useLegacyUpload" in media_upload_method and '"/api/media"' in media_upload_method and "dataBase64" in media_upload_method)
+check("Neon and R2 uploads use HTTPS trusted storage host allowlist", "isTrustedObjectStorageHost(target.host)" in put_method and "r2\\\\.cloudflarestorage\\\\.com" in media_backend_client and "storage\\\\.c-" in media_backend_client and "aws\\\\.neon\\\\.tech" in media_backend_client)
+check("direct object-storage PUT never forwards FYNX bearer authorization", "putSignedMediaOnce" in put_method and "Authorization" not in put_once_method and "accessToken(context)" not in put_once_method)
+check("direct object-storage PUT enforces size, MIME, fixed content length and no redirect", "12 * 1024 * 1024" in put_method and "normalizedMime" in put_method and "setFixedLengthStreamingMode(bytes.size)" in put_once_method and "instanceFollowRedirects = false" in put_once_method)
 check("media upload completion is session-bound and idempotent", '"/api/media/upload-complete"' in media_upload_method and "postJsonIdempotentForSession" in media_upload_method and "isRequestSessionCurrent" in media_upload_method)
-check("R2 GET redirects are allowlisted and never receive the FYNX token", "HTTP_MOVED_TEMP" in download_method and "isTrustedR2Host(signedTarget.host)" in download_method and "openConnection(signedTarget, false)" in download_method)
+check("Neon/R2 GET redirects are allowlisted and never receive the FYNX token", "HTTP_MOVED_TEMP" in download_method and "isTrustedObjectStorageHost(signedTarget.host)" in download_method and "openConnection(signedTarget, false)" in download_method)
 check("HTTP retry logic does not retry permanent status codes", "retrySafePost" in media_backend_client and "current is FynxHttpException" in media_backend_client and "current.status in setOf(408, 425, 429, 500, 502, 503, 504)" in media_backend_client)
 check("Status media uses the shared authenticated uploader", "FynxProductionMessaging.uploadMedia(context, uri, normalizedMime)" in media_status_client)
 status_timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
