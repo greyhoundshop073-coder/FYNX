@@ -1,0 +1,26 @@
+{
+  "conditions": [],
+  "parameters": {
+    "home_feed_experiment_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Reserved optional Home Feed experiment. Keep disabled until a reviewed in-APK consumer and regression tests are merged.",
+      "valueType": "BOOLEAN"
+    },
+    "marketplace_discovery_experiment_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Reserved optional Marketplace discovery experiment. Keep disabled until a reviewed in-APK consumer and regression tests are merged.",
+      "valueType": "BOOLEAN"
+    },
+    "ai_voice_experiment_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Reserved optional AI voice experiment. Keep disabled until a reviewed in-APK consumer and regression tests are merged.",
+      "valueType": "BOOLEAN"
+    }
+  }
+}
