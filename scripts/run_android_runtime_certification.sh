@@ -70,6 +70,9 @@ fi
   --no-daemon --build-cache
 TEST_EXIT=$?
 
+# Name the failing tests as CI annotations; this never alters TEST_EXIT.
+python3 scripts/report_instrumentation_failures.py || true
+
 # Preserve emulator evidence even if instrumentation fails.
 adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1

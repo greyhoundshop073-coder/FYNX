@@ -460,6 +460,40 @@ jobs:
             FYNX-Android-Official-build.txt
           if-no-files-found: error
           retention-days: 14
+      # Investigation build: delivered even when emulator certification is red, as long
+      # as the APK was reassembled and verified against the exact checked-out commit.
+      # It is NOT the Official APK and says so in its build info; the Official upload
+      # above still requires every check to pass.
+      - name: Prepare investigation APK (not certified)
+        id: investigation_apk
+        if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && steps.apk_integrity.outcome == 'success' && github.ref == 'refs/heads/integration/fynx-single-apk-20261013' }}
+        env:
+          CERT_RESULT: ${{ job.status }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk FYNX-Investigation-Debug.apk
+          {
+            echo "TYPE: INVESTIGATION BUILD - NOT THE CERTIFIED OFFICIAL APK"
+            echo "branch=${GITHUB_REF_NAME}"
+            echo "commit=${GITHUB_SHA}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "build_date_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "apk_size_bytes=$(stat -c %s FYNX-Investigation-Debug.apk)"
+            echo "apk_sha256=$(sha256sum FYNX-Investigation-Debug.apk | awk '{print $1}')"
+            echo "job_status_at_packaging=${CERT_RESULT}"
+            echo "login=debug offline/test login left open as instructed"
+          } > FYNX-Investigation-build.txt
+          cat FYNX-Investigation-build.txt
+          cat FYNX-Investigation-build.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload investigation APK
+        if: ${{ !cancelled() && steps.investigation_apk.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: FYNX-investigation-apk-${{ github.sha }}
+          path: |
+            FYNX-Investigation-Debug.apk
+            FYNX-Investigation-build.txt
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload pull-request validation APK
         if: ${{ !cancelled() && steps.debug_apk.outputs.exists == 'true' && steps.apk_integrity.outcome == 'success' && ((github.ref == 'refs/heads/feat/home-feed-professional-feed-conversations-20261103' || github.ref == 'refs/heads/fix/bitmap-preview-memory-navigation-20261115') || github.ref == 'refs/heads/work/camera-post-reference-integration-20261108' || (github.event_name == 'pull_request' && ((github.event.pull_request.head.ref == 'feat/home-feed-professional-feed-conversations-20261103' || github.event.pull_request.head.ref == 'fix/bitmap-preview-memory-navigation-20261115') || github.event.pull_request.head.ref == 'work/camera-post-reference-integration-20261108'))) }}
         uses: actions/upload-artifact@v4
