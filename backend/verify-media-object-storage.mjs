@@ -35,6 +35,7 @@ assert.match(server, /mediaStorage\.createUploadUrl/);
 assert.match(server, /mediaStorage\.inspectMediaObject\(intent\.upload_object_key\)/);
 assert.match(server, /mediaStorage\.promoteUploadedObject\(intent\.upload_object_key/);
 assert.match(server, /if \(!mediaStorage\.supportsDirectUpload\)/);
+assert.match(server, /if \(!mediaStorage\.supportsDirectUpload \|\| !mediaStorage\.isConfigured\)/);
 assert.match(server, /storage_provider, object_key\) VALUES \(\$1,\$2,NULL,\$3,\$4,\$5\)/);
 assert.match(server, /mediaStorage\.provider/);
 assert.match(server, /const permanentInfo = await mediaStorage\.inspectMediaObject/);
