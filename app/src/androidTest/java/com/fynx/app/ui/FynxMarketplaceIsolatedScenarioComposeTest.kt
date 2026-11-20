@@ -146,11 +146,12 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
 
         // Swipe the production LazyRow with real touch input, then verify the second
         // slide's unique product identity and destination; auto-rotation is tested separately.
-        compose.onNodeWithContentDescription("Marketplace promotions carousel").performTouchInput {
-            val widthPx = size.width.toFloat()
-            val centerY = size.height / 2f
-            down(Offset(widthPx * 0.85f, centerY))
-            moveTo(Offset(widthPx * 0.15f, centerY), delayMillis = 250L)
+        val carousel = compose.onNodeWithContentDescription("Marketplace promotions carousel")
+        val carouselBounds = carousel.fetchSemanticsNode().boundsInRoot
+        carousel.performTouchInput {
+            val centerY = carouselBounds.height / 2f
+            down(Offset(carouselBounds.width * 0.85f, centerY))
+            moveTo(Offset(carouselBounds.width * 0.15f, centerY), delayMillis = 250L)
             up()
         }
         compose.waitUntil(timeoutMillis = 3_000) {
