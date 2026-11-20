@@ -60,6 +60,7 @@ for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")
 require(conversation, r"FynxProductionMessaging\.historyPage\(\s*context,", "ConversationPanel must load production conversation history through session-bound cursor pages")
 require(conversation, r"applyPrivateHistoryPage", "ConversationPanel must merge authoritative history pages with locally saved messages")
+require(conversation, r"LaunchedEffect\(chat\.username, messagesLoaded\)", "ConversationPanel must wait for local history restoration before remote reconciliation")
 require(conversation, r"FynxProductionMessaging\.searchHistoryPage\(\s*context,", "ConversationPanel must search the complete server-backed private history")
 require(conversation, r"Load older matching messages", "ConversationPanel must expose cursor pagination for full-history search results")
 require(conversation, r"realtimeClient\.connect\(\)", "ConversationPanel must connect its realtime transport")
