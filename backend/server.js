@@ -509,7 +509,7 @@ app.post("/api/media/upload-intent", auth, async (req, res) => {
     }
 
     // Neon and PostgreSQL retain the existing authenticated server-upload path.
-    if (mediaStorage.provider !== "r2") return res.json({ useLegacyUpload: true });
+    if (!mediaStorage.supportsDirectUpload) return res.json({ useLegacyUpload: true });
     if (!mediaStorage.isConfigured) return res.status(503).json({ error: "media object storage is not configured" });
     requireConfig("DATABASE_URL", DATABASE_URL);
 
@@ -553,7 +553,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(intentId)) {
       return res.status(400).json({ error: "invalid media upload intent" });
     }
-    if (mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) {
+    if (!mediaStorage.supportsDirectUpload) {
       return res.status(503).json({ error: "media object storage is unavailable" });
     }
     requireConfig("DATABASE_URL", DATABASE_URL);
@@ -632,8 +632,8 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     }
 
     const inserted = await client.query(
-      "INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1,$2,NULL,$3,'r2',$4) RETURNING id, mime_type, byte_size",
-      [req.user.sub, intent.mime_type, intent.byte_size, intent.object_key]
+      "INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1,$2,NULL,$3,$4,$5) RETURNING id, mime_type, byte_size",
+      [req.user.sub, intent.mime_type, intent.byte_size, mediaStorage.provider, intent.object_key]
     );
     const media = inserted.rows[0];
     await client.query(
@@ -650,7 +650,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
   } catch (error) {
     if (inTransaction && client) await client.query("ROLLBACK").catch(() => {});
     if (!committed && promotedObjectKey) {
-      await mediaStorage.deleteMediaObject(promotedObjectKey, "r2").catch((cleanupError) => {
+      await mediaStorage.deleteMediaObject(promotedObjectKey, mediaStorage.provider).catch((cleanupError) => {
         console.error("media permanent object rollback cleanup failed", cleanupError);
       });
     }
@@ -1427,7 +1427,7 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 
 async function cleanupExpiredMediaUploadIntents() {
-  if (!pool || mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) return;
+  if (!pool || !mediaStorage.supportsDirectUpload) return;
   const client = await pool.connect();
   let inTransaction = false;
   let removed = 0;
@@ -1440,8 +1440,8 @@ async function cleanupExpiredMediaUploadIntents() {
     for (const intent of expired.rows) {
       try {
         // Incomplete intents own no message_media row; both allocated keys are temporary to this intent.
-        await mediaStorage.deleteMediaObject(intent.upload_object_key, "r2");
-        await mediaStorage.deleteMediaObject(intent.object_key, "r2");
+        await mediaStorage.deleteMediaObject(intent.upload_object_key, mediaStorage.provider);
+        await mediaStorage.deleteMediaObject(intent.object_key, mediaStorage.provider);
         const result = await client.query(
           "DELETE FROM message_media_upload_intents WHERE id = $1 AND completed_at IS NULL",
           [intent.id]
