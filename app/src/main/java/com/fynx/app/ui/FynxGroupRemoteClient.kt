@@ -17,7 +17,7 @@ object FynxGroupRemoteClient {
     private val rsvpMutex = Mutex()
     private val groupReadReceiptSupportByScope = ConcurrentHashMap<String, Boolean>()
     private fun groupReadReceiptScope(context: Context, groupId: String): String? {
-        val accountKey = FynxAuthStore.accountStorageKey(context).trim()
+        val accountKey = FynxAuthStore.accountStorageKey(context)?.trim().orEmpty()
         val safeGroupId = groupId.trim()
         return if (accountKey.isNotBlank() && safeGroupId.isNotBlank()) "$accountKey:$safeGroupId" else null
     }
