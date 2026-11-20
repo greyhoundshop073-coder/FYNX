@@ -144,9 +144,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // Select the second real slide through the production LazyRow state. This keeps
-        // listing-identity and destination assertions deterministic on slower emulators;
-        // auto-rotation is exercised independently by the following test.
+        // Swipe the production LazyRow with real touch input, then verify the second
+        // slide's unique product identity and destination; auto-rotation is tested separately.
         compose.onNodeWithContentDescription("Marketplace promotions carousel").performTouchInput {
             val widthPx = size.width.toFloat()
             val centerY = size.height / 2f
