@@ -24,6 +24,10 @@ HOME_FEED_FIXTURES_SEEDED=False
 VISUALS_ONLY=os.environ.get("FYNX_MARKETPLACE_VISUALS_ONLY") == "1" or AI_VISUALS_ONLY or HOME_FEED_VISUALS_ONLY or CAMERA_VISUALS_ONLY or MUSIC_VISUALS_ONLY or CHAT_GROUPS_VISUALS_ONLY
 FAILURES=[]
 BLOCKED=[]
+# Defined for every capture mode. It was previously assigned only inside the
+# Chat-and-Groups-only branch, so every other mode (AI, Home Feed, Camera, Marketplace)
+# raised NameError when it built its "## Result" line.
+GROUP_RUNTIME_BLOCKED=False
 MESSAGE_TAP_SKIPPED=False
 LOGIN_MODE="server credential login"
 

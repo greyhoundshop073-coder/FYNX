@@ -192,7 +192,10 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
     fi
     echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before app-side visual capture."
     NAV_EXIT=0
-    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    # Run exactly one capture mode. The workflow can export other FYNX_*_VISUALS_ONLY flags
+    # (for example the AI mode on canonical-branch pushes); the Python verifier checks AI first,
+    # so an inherited flag would silently run the wrong capture instead of Chat and Groups.
+    FYNX_AI_VISUALS_ONLY=0 FYNX_HOME_FEED_VISUALS_ONLY=0 FYNX_CAMERA_VISUALS_ONLY=0 FYNX_MUSIC_VISUALS_ONLY=0 FYNX_MARKETPLACE_VISUALS_ONLY=0 FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
     NAV_EXIT=$?
   adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
   if [ "${NAV_EXIT}" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${NAV_EXIT}"; fi
@@ -201,7 +204,11 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
       local label="$1"
       shift
       echo "::notice::Capturing local-only ${label} UI; no backend request or publish action is used."
-      "$@"
+      # Isolate each capture from mode flags inherited from the workflow environment; the
+      # command passed in sets its own mode after these resets.
+      env FYNX_AI_VISUALS_ONLY=0 FYNX_HOME_FEED_VISUALS_ONLY=0 FYNX_CAMERA_VISUALS_ONLY=0 \
+        FYNX_MUSIC_VISUALS_ONLY=0 FYNX_MARKETPLACE_VISUALS_ONLY=0 FYNX_CHAT_GROUPS_VISUALS_ONLY=0 \
+        "$@"
       local capture_status=$?
       if [ "$capture_status" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="$capture_status"; fi
     }
