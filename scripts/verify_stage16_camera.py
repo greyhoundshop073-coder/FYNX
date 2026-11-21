@@ -10,16 +10,29 @@ camera = read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")
 home = read("app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt")
 remote = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
 manifest = read("app/src/main/AndroidManifest.xml")
+runtime = read("scripts/verify_authenticated_runtime_navigation.py")
 
 # Keep verification implementation-oriented rather than formatting-oriented. Compose/Kotlin
 # permits equivalent callback formatting, so do not require one exact source-string layout.
-caption_limit = "take(4000)" in home and "What's on your mind?" in home
+caption_limit = "take(4000)" in home and "Add description..." in home and "# Hashtags" in home and "@ Mention" in home
+
+video_caption_field_position = camera.find("value = videoCaptionText,")
+video_style_controls_position = camera.find('Text("Video styles", style = MaterialTheme.typography.labelLarge)')
 
 checks = [
+    ("camera and microphone permissions are refreshed when FYNX returns from Android Settings", "LifecycleEventObserver" in camera and "Lifecycle.Event.ON_RESUME" in camera and "hasAudio = audioGranted" in camera),
+    ("permanently denied camera access has an app-settings recovery route", "Settings.ACTION_APPLICATION_DETAILS_SETTINGS" in camera and "Open app settings" in camera),
+    ("camera orientation changes trigger a fresh CameraX bind", "cameraOrientation = LocalConfiguration.current.orientation" in camera and "cameraOrientation, faceAnalysisEnabled" in camera),
+    ("post link input uses a URI keyboard with autocorrect disabled", "KeyboardType.Uri" in home and "autoCorrect = false" in home),
+    ("video caption runtime check accepts a field aligned with the top of its scroll viewport without scrolling it away", runtime.count('bottom_margin=72, top_margin=0') >= 2),
     ("camera permission", 'Manifest.permission.CAMERA' in camera and 'android.permission.CAMERA' in manifest),
     ("microphone permission", 'Manifest.permission.RECORD_AUDIO' in camera and 'android.permission.RECORD_AUDIO' in manifest),
-    ("front/back camera switching", 'LENS_FACING_FRONT' in camera and 'Cameraswitch' in camera),
+    ("front/back camera switching", 'LENS_FACING_FRONT' in camera and 'LENS_FACING_BACK' in camera and 'Cameraswitch' in camera),
+    ("CameraX uses the SurfaceView-backed performance preview and rear-first lens fallback", 'PreviewView.ImplementationMode.PERFORMANCE' in camera and 'No camera is available on this device.' in camera),
+    ("camera capture and editor docks reserve additional bottom safe area", camera.count("bottom = 84.dp") >= 2),
     ("photo capture", 'ImageCapture' in camera and 'takePicture' in camera),
+    ("manual video caption field precedes video style carousel in the editor scroll viewport",
+     video_caption_field_position >= 0 and video_style_controls_position > video_caption_field_position),
     ("video capture", 'VideoCapture' in camera and 'VideoRecordEvent.Finalize' in camera),
     ("capture preview", 'pendingUri' in camera and 'Preview before' not in camera),
     ("photo filters", 'CameraFilter' in camera and 'FilterChip' in camera),

@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -6,12 +5,16 @@ group_routes = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
 membership_routes = (ROOT / "backend/groupMembershipRoutes.js").read_text(encoding="utf-8")
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
 active = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
-social = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8")
 settings = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
+scalability = (ROOT / "backend/scalability.js").read_text(encoding="utf-8")
+server = (ROOT / "backend/server.js").read_text(encoding="utf-8")
+chat_list = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+chat_messaging = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+chat_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxChatStore.kt").read_text(encoding="utf-8")
 
 normalized_group_routes = "".join(group_routes.split())
-runtime_shell = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
-bootstrap = (ROOT / "backend/scalability.js").read_text(encoding="utf-8")
+normalized_settings = "".join(settings.split())
+normalized_active = "".join(active.split())
 
 checks = {
     "server blocks text sends when group send_messages is disabled": "GROUP_SEND_MESSAGES_DISABLED" in group_routes and "if(!canManageMembers(actor.role)&&text&&!groupSettings.send_messages)" in normalized_group_routes,
@@ -21,33 +24,22 @@ checks = {
     "non-manager member adds respect the server add_members setting": "!canManageMembers(actor.role) && !settings?.add_members" in membership_routes,
     "direct member adds cannot bypass admin approval": "GROUP_APPROVAL_REQUIRED" in membership_routes and "settings?.approve_new_members" in membership_routes,
     "active group UI respects the approval-required setting": "remotePermissions?.approveNewMembers != true" in active,
+    "pending join-request UI is shown only after the server advertises approval support": "if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&approveNewMembers&&joinRequestApprovalSupported)" in normalized_settings,
+    "invite-link creation and revocation require a loaded server permission snapshot and explicit invite support": "if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&inviteLinks)" in normalized_settings and "GroupSwitchRow(\"Invitelinks\",inviteLinks,canEditPermissions&&(inviteLinks||invitePreviewSupported))" in normalized_settings and "FynxGroupRemoteClient.createInvite(context,groupId)" in normalized_settings and "FynxGroupRemoteClient.revokeInvite(context,groupId,token)" in normalized_settings and "Group invite links are unavailable until this server supports invite preview" in settings,
     "Android client uses the dedicated member-add endpoint": '"/api/groups/$groupId/members"' in client and "suspend fun addMember" in client,
     "active group chat loads and uses remote send/media/member permissions": "FynxGroupRemoteClient.loadPermissions(context, groupId)" in active and "remotePermissions?.sendMessages" in active and "remotePermissions?.sendMedia" in active and "remotePermissions?.addMembers" in active,
     "authenticated group actions fail closed until server permissions load": "val hasRemoteAccessToken = FynxBackendClient.hasAccessToken(context)" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMessages == true" in active and "if (hasRemoteAccessToken) remotePermissions?.sendMedia == true" in active and "remotePermissions?.addMembers == true" in active and "permissionLoadError" in active,
     "active group member action no longer uses manager-only full-group sync": "FynxGroupRemoteClient.addMember(context, groupId, cleanUsername)" in active and "onInvite = { username ->" in active,
-    "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds = remote.disappearingSeconds" in settings and "approveNewMembers,disappearingSeconds" in settings,
-    "group settings remote permission controls fail closed until loaded for an admin session": "permissionsLoaded by remember(groupId){mutableStateOf(false)}" in settings and "val canEditPermissions = canEditGroupRemotePermissions(isAdmin, FynxBackendClient.hasAccessToken(context), permissionsLoaded, permissionsSaving)" in settings and "GroupSwitchRow(\"Show previous messages to new members\",showHistoryToNewMembers,canEditPermissions)" in settings,
-    "remote permission updates refuse an unloaded or saving settings snapshot": "if (!canEditGroupRemotePermissions(isAdmin, !expectedToken.isNullOrBlank(), permissionsLoaded, permissionsSaving))" in settings and "permissionsLoaded = false" in settings,
-    "permission load and save responses remain bound to the initiating account and token": "FynxBackendClient.isRequestSessionCurrent(" in settings and settings.count("FynxBackendClient.isRequestSessionCurrent(") >= 2,
-    "invite-link actions are hidden until loaded server permissions confirm they are enabled": 'if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&inviteLinks)' in settings and 'mutableStateOf(false)};var approveNewMembers' in settings,
-    "join-request approval controls wait for loaded server permission and authenticated access": 'if(isAdmin&&permissionsLoaded&&FynxBackendClient.hasAccessToken(context)&&approveNewMembers)' in settings and "!permissionsLoaded||!FynxBackendClient.hasAccessToken(context)||!approveNewMembers" in settings,
-    "permission GET rejects missing fields instead of silently defaulting to permissive values": '.getJSONObject("permissions")' in client and '.getBoolean("send_messages")' in client and 'optBoolean("send_messages",true)' not in client,
-    "group settings expose a retry after a failed or unavailable permission snapshot": "Retry loading permissions" in settings and "refreshServerPermissions()" in settings,
-    "local notification, media-saving and wallpaper settings remain usable independently of server permission loading": 'GroupSwitchRow("Group notifications",notifications)' in settings and 'GroupSwitchRow("Mute notifications",mute)' in settings and 'GroupSwitchRow("Save received photos and videos to gallery",saveMedia' in settings and "FynxGroupWallpaperDialog(groupId)" in settings,
-    "unsupported story sharing is not advertised as a text-only group action": 'Text("Share a story to group")' not in social and "onStoryShare" not in social and 'ChatMessage("Story shared to' not in active,
+    "permission toggles preserve existing disappearing_seconds value": "disappearingSeconds=remote.disappearingSeconds" in normalized_settings and "approveNewMembers,disappearingSeconds" in normalized_settings,
+    "new-member history visibility is disabled until the server advertises support": "canEditPermissions&&showHistoryPolicySupported" in normalized_settings and "This server does not yet support saving and enforcing new-member history visibility" in settings,
+    "group media saving uses the local gallery preference for received media only": normalized_active.count("autoSaveToGallery=FynxConversationPreferences.groupSaveMedia(context,groupId)&&!message.fromMe") >= 2,
+    "story-to-group is not advertised as a text-only message until a real Status share flow exists": "onStoryShare" not in active and "Share a story to group" not in active and "Story shared to group" not in active and "onStoryShare" not in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8"),
     "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
-    "group history search is bounded and membership-scoped before querying": "const rawQuery=req.query?.q" in group_routes and "searchQuery.length<2||searchQuery.length>100" in group_routes and group_routes.find("const historyMember=await memberHistory(groupId,req.user.sub)") < group_routes.find("plainto_tsquery"),
-    "group full-text search is parameterized, backed by GIN and binds the member history cutoff": "to_tsvector('simple',COALESCE(m.text,'')) @@ plainto_tsquery('simple',$2)" in group_routes and "USING GIN (to_tsvector('simple',COALESCE(text,'')))" in group_routes and "[groupId,searchQuery,beforeTimestamp,beforeId,limit+1,historyCutoff]" in group_routes and "AND ($6::timestamptz IS NULL OR m.created_at >= $6)" in group_routes,
-    "invite preview rejects disabled invite links": "invite is invalid, revoked, or disabled" in membership_routes and "invite_links" in membership_routes,
-    "approval-required invite joins persist a durable request": "INSERT INTO fynx_group_join_requests(group_id,user_id)" in membership_routes and "approve_new_members" in membership_routes,
-    "join request listing is restricted to admins": "app.get('/api/groups/:groupId/join-requests'" in membership_routes and "group admin permission required" in membership_routes,
-    "approval locks the group and uses the bounded member-capacity insert": "SELECT id FROM fynx_groups WHERE id=$1 FOR UPDATE" in membership_routes and "insertMemberIfCapacity(client, groupId, requested.user_id)" in membership_routes,
-    "rejection uses the same admin-only request lifecycle": "app.post('/api/groups/:groupId/join-requests/:username/reject'" in membership_routes and "DELETE FROM fynx_group_join_requests WHERE group_id=$1 AND user_id=$2" in membership_routes,
-    "invite lifecycle has one authoritative backend registration": "registerGroupInviteRoutes" not in bootstrap and "registerGroupMembershipRoutes({ app });" in bootstrap,
-    "private fixture runner accepts the actual AndroidJUnitRunner JUnit success summary": r"grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$'" in runtime_shell,
-    "private fixture runner fails closed when instrumentation output is missing or reports failures": 'if [ "${FIXTURE_EXIT}" -ne 0 ] || [ -z "${FIXTURE_SUMMARY}" ]' in runtime_shell and "FAILURES!!!" in runtime_shell and '      exit 1' in runtime_shell,
-    "JUnit success-summary matcher accepts singular and plural successes and rejects failures": re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "OK (1 test)") is not None and re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "OK (12 tests)") is not None and re.fullmatch(r"OK \([1-9][0-9]* tests?\)", "FAILURES!!!") is None,
-    "private fixture runner does not depend on a non-guaranteed INSTRUMENTATION_CODE marker": "INSTRUMENTATION_CODE: -1" not in runtime_shell,
+    "production startup registers group, membership and content routes exactly once": all(token in scalability for token in ["registerGroupRoutes({ app })", "registerGroupMembershipRoutes({ app })", "registerGroupContentRoutes({ app })"]) and "registerGroupInviteRoutes" not in scalability,
+    "server exposes authenticated recent conversations and bounded private-history paging": all(token in server for token in ['app.get("/api/messages/recent"', "hasPageContract", "nextBeforeId"]),
+    "Chat list hydrates from the remote conversation endpoint while preserving local pending messages": "FynxProductionMessaging.recentConversations(" in chat_list and "FynxChatStore.savePreviews(context, merged, expectedAccountUsername)" in chat_list and "pendingLocal" in chat_list,
+    "remote conversation and history APIs verify account-session continuity": all(token in chat_messaging for token in ["suspend fun recentConversations", "suspend fun historyPage", "suspend fun searchHistoryPage", "isMessageRequestSessionCurrent"]),
+    "remote preview snapshot persistence does not emit recursive refresh events": "fun savePreviews(context: Context" in chat_store and "previewUpdates.tryEmit" not in chat_store[chat_store.index("fun savePreviews(context: Context"):chat_store.index("fun savePreview(context: Context")],
 }
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():

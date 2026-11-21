@@ -137,8 +137,7 @@ internal object FynxMediaCache {
         val width = options.outWidth
         val height = options.outHeight
         if (width <= 0 || height <= 0 || (width <= MAX_IMAGE_DIMENSION && height <= MAX_IMAGE_DIMENSION)) return
-        var sample = 1
-        while (width / sample > MAX_IMAGE_DIMENSION || height / sample > MAX_IMAGE_DIMENSION) sample *= 2
+        val sample = FynxBitmapSampling.computeInSampleSize(width, height, MAX_IMAGE_DIMENSION)
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
         val bitmap = BitmapFactory.decodeFile(source.absolutePath, decodeOptions) ?: return
         try {

@@ -44,7 +44,7 @@ checks = [
     ("Marketplace checkout remains protected", "FynxMarketplaceCheckoutDialog" in panel and "MarketplaceProtectedOrderDialog" in panel),
     ("Marketplace payment verification remains connected", "verifyMarketplacePayment" in panel),
     ("Marketplace order lifecycle remains connected", "FynxMarketplaceOrderLifecycle" in panel),
-    ("Marketplace cart prevents duplicate listing IDs", "cart.none { it.id == listing.id }" in panel),
+    ("Marketplace cart prevents duplicate listing IDs and opens the existing cart instead of adding a second copy", "fun addMarketplaceListingToCart(listing:" in panel and "if (cart.any { it.id == listing.id })" in panel and "showCart = true" in panel and "cart = cart + listing" in panel),
     ("Marketplace product media remains bounded to 12", "mediaIds.take(12)" in panel),
     ("Marketplace has no hardcoded payment secret in the active panel", "sk_live_" not in panel and "PAYSTACK_SECRET" not in panel and "STRIPE_SECRET" not in panel),
     ("Buyer checkout sends an idempotency order ID", "put(\"orderId\", orderId)" in checkout),

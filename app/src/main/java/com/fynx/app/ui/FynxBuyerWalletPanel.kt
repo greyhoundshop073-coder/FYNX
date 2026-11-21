@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.time.Instant
@@ -65,8 +66,14 @@ import java.time.OffsetDateTime
 import java.util.Date
 import kotlinx.coroutines.launch
 
-private fun fynxWalletMoney(amount: Double): String =
-    "₦" + String.format(Locale.US, "%,.2f", amount)
+private fun fynxWalletMoney(amount: Double, currency: String = "NGN"): String =
+    fynxWalletCurrencyMoney(amount, currency)
+
+internal fun fynxWalletCurrencySymbol(currency: String?): String =
+    if (currency.equals("USD", ignoreCase = true)) "\$" else "₦"
+
+internal fun fynxWalletCurrencyLabel(currency: String?): String =
+    if (currency.equals("USD", ignoreCase = true)) "US Dollar" else "Nigerian Naira"
 
 /** Show only a real ledger balance; a newly provisioned pending Wallet has a truthful zero. */
 internal fun shouldShowBuyerWalletBalance(wallet: FynxBuyerWalletSummary?): Boolean =
@@ -127,14 +134,18 @@ private fun fynxWalletStatusTitle(wallet: FynxBuyerWalletSummary?): String {
 }
 
 @Composable
-fun FynxBuyerWalletPanel() {
+internal fun FynxBuyerWalletPanel(
+    testOnlySummary: FynxBuyerWalletSummary? = null,
+    testOnlyActivity: List<FynxBuyerWalletActivity> = emptyList(),
+    testOnlySellerSummary: FynxWalletSellerSummary? = null
+) {
     val context = LocalContext.current
     var activeAction by rememberSaveable { mutableStateOf("HOME") }
     var fundingAmount by rememberSaveable { mutableStateOf("") }
-    var summary by remember { mutableStateOf<FynxBuyerWalletSummary?>(null) }
-    var activity by remember { mutableStateOf(emptyList<FynxBuyerWalletActivity>()) }
-    var summaryLoading by remember { mutableStateOf(true) }
-    var activityLoading by remember { mutableStateOf(true) }
+    var summary by remember(testOnlySummary) { mutableStateOf(testOnlySummary?.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false)) }
+    var activity by remember(testOnlyActivity) { mutableStateOf(testOnlyActivity) }
+    var summaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
+    var activityLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var summaryError by remember { mutableStateOf<String?>(null) }
     var activityError by remember { mutableStateOf<String?>(null) }
     var refreshVersion by remember { mutableIntStateOf(0) }
@@ -145,8 +156,8 @@ fun FynxBuyerWalletPanel() {
     var hasMoreActivity by remember { mutableStateOf(false) }
     var loadingMoreActivity by remember { mutableStateOf(false) }
     var activityMoreError by remember { mutableStateOf<String?>(null) }
-    var sellerSummary by remember { mutableStateOf<FynxWalletSellerSummary?>(null) }
-    var sellerSummaryLoading by remember { mutableStateOf(true) }
+    var sellerSummary by remember(testOnlySellerSummary) { mutableStateOf(testOnlySellerSummary) }
+    var sellerSummaryLoading by remember(testOnlySummary) { mutableStateOf(testOnlySummary == null) }
     var sellerSummaryError by remember { mutableStateOf<String?>(null) }
     var statementExporting by remember { mutableStateOf(false) }
     var nextActivityCursor by remember { mutableStateOf<FynxBuyerWalletActivityCursor?>(null) }
@@ -179,6 +190,22 @@ fun FynxBuyerWalletPanel() {
     }
 
     LaunchedEffect(refreshVersion, activityFilter) {
+        // Test fixtures are supplied only by Android instrumentation. Render them immediately and
+        // never call wallet APIs, clear the fixture, or write a ledger in this path.
+        if (testOnlySummary != null) {
+            summary = testOnlySummary.copy(testMode = true, canFund = false, canSpend = false, canWithdraw = false)
+            activity = testOnlyActivity
+            summaryLoading = false
+            activityLoading = false
+            summaryError = null
+            activityError = null
+            activityMoreError = null
+            loadingMoreActivity = false
+            hasMoreActivity = false
+            nextActivityCursor = null
+            return@LaunchedEffect
+        }
+
         activityRequestGeneration += 1
         val requestGeneration = activityRequestGeneration
         summaryLoading = true
@@ -232,6 +259,12 @@ fun FynxBuyerWalletPanel() {
     }
 
     LaunchedEffect(refreshVersion) {
+        if (testOnlySummary != null) {
+            sellerSummary = testOnlySellerSummary
+            sellerSummaryLoading = false
+            sellerSummaryError = null
+            return@LaunchedEffect
+        }
         sellerSummaryLoading = true
         sellerSummaryError = null
         if (!FynxBackendClient.hasAccessToken(context)) {
@@ -315,7 +348,7 @@ fun FynxBuyerWalletPanel() {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-wallet-scroll-container"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -347,7 +380,7 @@ fun FynxBuyerWalletPanel() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("FYNX WALLET", fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp, color = Color.White.copy(alpha = 0.88f))
-                            Text("Nigerian Naira", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f))
+                            Text(fynxWalletCurrencyLabel(wallet?.currency), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.88f))
                         }
                         Icon(
                             Icons.Default.AccountBalanceWallet,
@@ -368,8 +401,8 @@ fun FynxBuyerWalletPanel() {
                         Text(
                             when {
                                 summaryLoading -> "Checking…"
-                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0)
-                                canShowBalance -> "₦ ••••••"
+                                canShowBalance && balanceVisible -> fynxWalletMoney(wallet?.availableBalance ?: 0.0, wallet?.currency ?: "NGN")
+                                canShowBalance -> fynxWalletCurrencySymbol(wallet?.currency) + " ••••••"
                                 summaryError != null -> "Unavailable"
                                 else -> "—"
                             },
@@ -389,6 +422,7 @@ fun FynxBuyerWalletPanel() {
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -396,14 +430,15 @@ fun FynxBuyerWalletPanel() {
                             )
                         ) {
                             Icon(Icons.Default.ArrowDownward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Add money", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Add money", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(
                             onClick = { activeAction = "WITHDRAW" },
                             enabled = true,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f)),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color.White,
@@ -411,8 +446,8 @@ fun FynxBuyerWalletPanel() {
                             )
                         ) {
                             Icon(Icons.Default.ArrowUpward, contentDescription = null)
-                            Spacer(Modifier.size(6.dp))
-                            Text("Withdraw", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.size(4.dp))
+                            Text("Withdraw", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -498,6 +533,7 @@ fun FynxBuyerWalletPanel() {
                     amount = wallet?.reservedBalance,
                     explanation = "Held for an order or an active review.",
                     visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
                     modifier = Modifier.weight(1f)
                 )
                 FynxWalletMetric(
@@ -505,6 +541,7 @@ fun FynxBuyerWalletPanel() {
                     amount = wallet?.withdrawalPendingBalance,
                     explanation = "Sent for withdrawal and awaiting final confirmation.",
                     visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -690,7 +727,7 @@ fun FynxBuyerWalletPanel() {
         }
         item {
             Text(
-                "FYNX Wallet currently supports the NGN foundation only. No funds are moved by this preview screen.",
+                "Wallet balances and activity use the currency recorded on each entry. Deposits, purchases and withdrawals depend on payment-provider availability.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -715,7 +752,7 @@ fun FynxBuyerWalletPanel() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        if (balanceVisible) direction + fynxWalletMoney(transaction.amount) else "••••••",
+                        if (balanceVisible) direction + fynxWalletMoney(transaction.amount, transaction.currency) else "••••••",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = detailAccent
@@ -723,7 +760,7 @@ fun FynxBuyerWalletPanel() {
                     Text("Status: " + transaction.status.lowercase(Locale.US).replace('_', ' ').replaceFirstChar { it.uppercase() })
                     Text("Date: " + fynxWalletActivityDate(transaction.createdAt))
                     if (transaction.description.isNotBlank()) Text("Details: " + transaction.description)
-                    Text("Fee: " + if (balanceVisible) fynxWalletMoney(transaction.fee) else "••••••")
+                    Text("Fee: " + if (balanceVisible) fynxWalletMoney(transaction.fee, transaction.currency) else "••••••")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Reference: " + transaction.reference, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = {
@@ -756,8 +793,8 @@ fun FynxBuyerWalletPanel() {
     }
 }
 
-private fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
-    val symbol = if (currency.equals("USD", ignoreCase = true)) "\$" else "₦"
+internal fun fynxWalletCurrencyMoney(amount: Double, currency: String): String {
+    val symbol = fynxWalletCurrencySymbol(currency)
     return symbol + String.format(Locale.US, "%,.2f", amount)
 }
 
@@ -862,6 +899,7 @@ private fun FynxWalletMetric(
     amount: Double?,
     explanation: String,
     visible: Boolean,
+    currency: String,
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -873,7 +911,7 @@ private fun FynxWalletMetric(
         Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                if (visible) amount?.let(::fynxWalletMoney) ?: "—" else "••••••",
+                if (visible) amount?.let { fynxWalletMoney(it, currency) } ?: "—" else "••••••",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -932,7 +970,12 @@ private fun FynxWalletActivityRow(
                     )
                 }
                 Text(
-                    fynxWalletActivityDate(transaction.createdAt) + " · " + transaction.reference,
+                    fynxWalletActivityDate(transaction.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    transaction.reference,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -942,13 +985,13 @@ private fun FynxWalletActivityRow(
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    if (amountsVisible) sign + fynxWalletMoney(transaction.amount) else "••••••",
+                    if (amountsVisible) sign + fynxWalletMoney(transaction.amount, transaction.currency) else "••••••",
                     fontWeight = FontWeight.SemiBold,
                     color = accent
                 )
                 if (transaction.fee > 0.0 && amountsVisible) {
                     Text(
-                        "Fee " + fynxWalletMoney(transaction.fee),
+                        "Fee " + fynxWalletMoney(transaction.fee, transaction.currency),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

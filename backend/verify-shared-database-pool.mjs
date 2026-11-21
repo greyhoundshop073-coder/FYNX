@@ -9,6 +9,7 @@ const sharedModules = [
   "buyerWallet.js",
   "buyerWalletMarketplace.js",
   "adminRoutes.js",
+  "supportRoutes.js",
   "followRoutes.js",
   "businessRoutes.js",
   "presencePrivacy.js",

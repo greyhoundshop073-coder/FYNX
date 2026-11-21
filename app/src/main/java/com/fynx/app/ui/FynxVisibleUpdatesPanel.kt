@@ -260,7 +260,7 @@ fun FynxVisibleUpdatesPanel(
                         Text("Ask, create, translate and get help", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                     IconButton(onClick = onOpenFastCamera, modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape)) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Open FYNX camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Open quick camera", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
                     }
                 }
                 Row(
@@ -323,7 +323,7 @@ private fun FynxStatusPreviewCircle(status: FynxStatus?, name: String, label: St
     var bitmap by remember(status?.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(status?.id, status?.contentUri, status?.type) {
         bitmap = null
-        if (status != null && !status.contentUri.isNullOrBlank()) bitmap = withContext(Dispatchers.IO) { runCatching { val cached = FynxMediaCache.getOrDownload(context, status.contentUri!!, if (status.type == FynxStatusType.VIDEO) "video" else "image"); when { cached == null -> null; status.type == FynxStatusType.VIDEO -> MediaMetadataRetriever().run { setDataSource(cached.absolutePath); val frame = getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC); release(); frame }; status.type == FynxStatusType.PHOTO -> android.graphics.BitmapFactory.decodeFile(cached.absolutePath); else -> null } }.getOrNull() }
+        if (status != null && !status.contentUri.isNullOrBlank()) bitmap = withContext(Dispatchers.IO) { runCatching { val cached = FynxMediaCache.getOrDownload(context, status.contentUri!!, if (status.type == FynxStatusType.VIDEO) "video" else "image"); when { cached == null -> null; status.type == FynxStatusType.VIDEO -> MediaMetadataRetriever().run { setDataSource(cached.absolutePath); val frame = getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC); release(); frame }; status.type == FynxStatusType.PHOTO -> FynxBitmapSampling.decodeFileSampled(cached, FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION); else -> null } }.getOrNull() }
     }
     Column(Modifier.width(82.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.requiredSize(78.dp), contentAlignment = Alignment.Center) {

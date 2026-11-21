@@ -117,8 +117,8 @@ require(saved_panel, 'FynxRemoteSocialClient.save(context, entry.post.id, false)
 require(saved_panel, 'posts = posts.filterNot { it.post.id == entry.post.id }', "Saved Posts local reconciliation after unsave")
 require(saved_panel, 'var refreshToken by remember { mutableStateOf(0) }', "Saved Posts refresh state")
 require(saved_panel, 'IconButton(onClick = { refreshToken++ }, enabled = !loading && !loadingMore)', "Saved Posts refresh control")
-require(saved_panel, 'onOpenAuthorProfile(entry.post.authorId)', "Saved Posts author profile integration")
-require(saved_panel, '.clickable { onOpenAuthorProfile(entry.post.authorId) }', "Saved Posts clickable author profile control")
+require(saved_panel, 'onOpenAuthorProfile(entry.post.authorUsername.removePrefix("@").trim())', "Saved Posts author profile passes the username expected by the profile route")
+require(saved_panel, '.clickable { onOpenAuthorProfile(entry.post.authorUsername.removePrefix("@").trim()) }', "Saved Posts clickable author profile passes the username expected by the profile route")
 require(saved_panel, 'import androidx.compose.foundation.clickable', "Saved Posts clickable interaction import")
 
 require(backend_package, '"start": "node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js"', "production realtime entrypoint")
@@ -250,11 +250,16 @@ require(app_source, '"Seller Center" -> "Marketplace"', "Seller Center returns t
 require(app_source, 'selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)', "system back and app-bar back share the contextual resolver")
 require(app_source, 'contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"', "back action accessibility label names the resolved parent destination")
 require(app_source, 'if (notificationPreferencesOnly) notificationPreferencesOnly = false', "contextual back clears stale Profile-only notification context")
-require(app_source, 'IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" })', "Home notification entry clears stale Profile-only notification context")
+require_normalized(app_source, 'FynxGlassIconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }, contentDescription = "Notifications")', "Home notification entry clears stale Profile-only notification context")
 require(app_source, 'navigationHistory = (navigationHistory.dropLast(1).filterNot { it == selected } + selected).ifEmpty { listOf("Home") }', "system Back keeps contextual destinations aligned with navigation history")
 require(app_source, 'if (!isKeyboardVisible && selected in mainNav.map { it.key })', "bottom navigation is available on every primary tab")
-if 'visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' not in app_source and 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' not in app_source:
-    raise SystemExit("HOME INTERACTIONS RED: Home and Marketplace scroll hiding must preserve the Status-creator navigation exception and keep navigation visible on other tabs")
+# The Status creator is an overlay on Home, while the actual composer is immersive.
+# Keep navigation visible on the creator hub and non-feed tabs, but hide it over the composer.
+require_normalized(
+    app_source,
+    'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)',
+    "Home/Marketplace scroll hiding preserves the Status creator and non-feed navigation while keeping the immersive composer unobstructed"
+)
 money_center = read("app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt")
 budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")

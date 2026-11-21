@@ -30,27 +30,12 @@ data class FynxStatusInteractions(
 object FynxStatusClient {
     private val listMutex = Mutex()
 
-    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> = runCatching {
-        val input = if (uri.scheme.equals("file", true)) uri.path?.let { File(it).inputStream() } else context.contentResolver.openInputStream(uri)
-        val bytes = input?.use { stream ->
-            val out = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(32 * 1024)
-            var total = 0
-            while (true) {
-                val read = stream.read(buffer)
-                if (read <= 0) break
-                total += read
-                if (total > 12 * 1024 * 1024) error("Selected media is too large. Maximum size is 12 MB.")
-                out.write(buffer, 0, read)
-            }
-            out.toByteArray()
-        } ?: error("Could not read selected media.")
-        if (bytes.isEmpty()) error("Selected media is empty.")
+    suspend fun uploadMedia(context: Context, uri: Uri, mimeType: String): Result<String> {
         val normalizedMime = mimeType.trim().lowercase()
-        if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) error("Unsupported Status media type.")
-        val body = JSONObject().put("mimeType", normalizedMime).put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)).toString()
-        val raw = FynxBackendClient.postJson(context, "/api/media", body).getOrThrow()
-        JSONObject(raw).getJSONObject("media").getString("id")
+        if (!normalizedMime.startsWith("image/") && !normalizedMime.startsWith("video/") && !normalizedMime.startsWith("audio/")) {
+            return Result.failure(IllegalArgumentException("Unsupported Status media type."))
+        }
+        return FynxProductionMessaging.uploadMedia(context, uri, normalizedMime).map { it.id }
     }
 
     suspend fun create(context: Context, status: FynxStatus, mediaId: String?): Result<Unit> = runCatching {

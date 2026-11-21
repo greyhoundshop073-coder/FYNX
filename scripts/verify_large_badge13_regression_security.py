@@ -21,6 +21,7 @@ token = read("app/src/main/java/com/fynx/app/ui/FynxSecureTokenStore.kt")
 auth = read("app/src/main/java/com/fynx/app/ui/FynxAuthStore.kt")
 workflow = read(".github/workflows/android-build.yml")
 runtime_script = read("scripts/run_android_runtime_certification.sh")
+emulator_wrapper = read("scripts/run_android_runtime_emulator_certification.sh")
 gradle = read("app/build.gradle.kts")
 manifest = read("app/src/main/AndroidManifest.xml")
 
@@ -75,17 +76,22 @@ check("CI keeps the major badge gates before artifact publication",
           "Large Badge #9",
           "verify_large_badge11_product_completeness.py"]))
 check("authenticated visual certification remains mandatory",
-      "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
+      "verify_authenticated_runtime_navigation.py" in runtime_script and "bash scripts/run_android_runtime_emulator_certification.sh" in workflow and "bash scripts/run_android_runtime_certification.sh" in emulator_wrapper and "FYNX_E2E_USERNAME" in workflow and "FYNX_E2E_PASSWORD" in workflow)
 check("instrumentation remains mandatory before APK publication",
-      "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow and
-      "github.event_name == 'workflow_dispatch' && inputs.full_runtime == 'true'" in workflow and
+      "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_emulator_certification.sh" in workflow and "bash scripts/run_android_runtime_certification.sh" in emulator_wrapper and
+      "github.event_name == 'workflow_dispatch' && github.event.inputs.full_runtime == 'true'" in workflow and
       "Upload exact-commit debug APK" in workflow and
       "if-no-files-found: error" in workflow)
 check("no common API secrets are committed to Android source",
       not re.search(r"sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----",
                    "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "app/src/main/java").rglob("*.kt"))))
+manifest_secret_pattern = re.compile(r"""(api[_-]?key|secret|private[_-]?key)\s*[=:]\s*["']?[A-Za-z0-9_-]{20,}""", re.I)
+check("manifest secret detector recognizes a whitespace-separated key assignment",
+      bool(manifest_secret_pattern.search("api_key = ABCDEFGHIJKLMNOPQRSTUVWXYZ123456")))
+check("manifest secret detector recognizes a quoted private-key assignment",
+      bool(manifest_secret_pattern.search("private_key: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ123456'")))
 check("manifest does not contain embedded secret-looking values",
-      not re.search(r"(api[_-]?key|secret|private[_-]?key)\\s*[=:]\\s*[A-Za-z0-9_\\-]{20,}", manifest, re.I))
+      not manifest_secret_pattern.search(manifest))
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

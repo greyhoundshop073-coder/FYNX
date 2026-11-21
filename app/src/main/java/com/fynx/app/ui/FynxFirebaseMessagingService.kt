@@ -22,6 +22,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val type = data["type"]?.uppercase().orEmpty()
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "SUPPORT" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
             "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL

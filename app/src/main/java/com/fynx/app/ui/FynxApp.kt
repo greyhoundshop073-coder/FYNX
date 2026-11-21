@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -40,6 +42,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +51,12 @@ import kotlinx.coroutines.delay
 
 private const val FYNX_PREVIEW_MODE = false
 private data class FynxNavItem(val key: String, val label: String, val icon: ImageVector)
+
+/** Shortens only the longest tab label when it cannot fit at the current width and font scale. */
+internal fun fynxBottomNavLabel(label: String, screenWidthDp: Int, fontScale: Float): String {
+    val itemWidthDp = (minOf(screenWidthDp, 560) - 68) / 5f
+    return if (label == "Marketplace" && 60f * fontScale > itemWidthDp + 6f) "Market" else label
+}
 
 private fun fynxBackDestination(
     selected: String,
@@ -106,6 +116,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var authSession by remember { mutableStateOf(if (FYNX_PREVIEW_MODE) AuthSession(AuthState.SIGNED_IN, "preview") else { val stored = FynxAuthStore.load(context); val debugOfflineSession = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 && stored.state == AuthState.SIGNED_IN; if (stored.state == AuthState.SIGNED_IN && (FynxBackendClient.hasAccessToken(context) || debugOfflineSession)) stored else AuthSession() }) }
     // Key account-scoped Marketplace screens so transient private state cannot survive an account switch.
     val marketplaceAccountKey = authSession.username?.removePrefix("@")?.trim()?.lowercase(java.util.Locale.US)?.takeIf { it.isNotBlank() } ?: "signed-out"
+    var previousAuthIdentity by remember { mutableStateOf(authSession.state to authSession.username) }
     var adminRole by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf(FynxNotificationStore.load(context)) }
     var remoteUnreadCount by remember { mutableIntStateOf(-1) }
@@ -121,6 +132,42 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
+    var homeCameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
+
+    // Clear transient UI state owned by the previous signed-in identity.
+    // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
+    fun clearSessionScopedState() {
+        openChat = null
+        openGroup = null
+        profileUser = null
+        statusOpenOwner = null
+        statusOpenId = null
+        statusCreatorRequested = false
+        statusComposerImmersive = false
+        postOpenId = null
+        postOpenCommentId = null
+        callTarget = null
+        callVideo = false
+        pendingIncomingCall = null
+        marketplaceListingId = null
+        marketplaceProfileUsername = null
+        marketplaceStatusDraft = null
+        marketplaceAiListingId = null
+        openChatMarketplaceListingId = null
+        aiCaptionDraft = null
+        navigationHistory = listOf("Home")
+        selected = "Home"
+        adminRole = null
+        notifications = emptyList()
+        remoteUnreadCount = -1
+        inviteCode = null
+        profileAvatarMenuOpen = false
+        openProfileSettings = false
+        notificationPreferencesOnly = false
+        backNavigationRequested = false
+        homeCameraRequest = 0
+    }
+
     var navigationDirection by remember { mutableIntStateOf(1) }
     DisposableEffect(Unit) {
         FynxStatusNavigation.opener = { username -> statusOpenOwner = username; statusOpenId = null; selected = "Stories" }
@@ -299,6 +346,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     }
     LaunchedEffect(Unit) { FynxNotificationFoundation.createChannels(context); notifications = FynxNotificationStore.load(context) }
     LaunchedEffect(authSession.state, authSession.username) {
+        val currentIdentity = authSession.state to authSession.username
+        if (previousAuthIdentity != currentIdentity) {
+            clearSessionScopedState()
+            previousAuthIdentity = currentIdentity
+        }
         if (authSession.state != AuthState.SIGNED_IN || !FynxBackendClient.hasAccessToken(context)) return@LaunchedEffect
         while (true) {
             FynxNotificationRemoteClient.loadFeed(context).onSuccess { feed ->
@@ -321,7 +373,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         adminRole = null
         if (!FYNX_PREVIEW_MODE && authSession.state == AuthState.SIGNED_IN && FynxBackendClient.hasAccessToken(context)) {
             FynxAdminClient.dashboard(context).onSuccess { dashboard -> adminRole = dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" } }
-            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); adminRole = null; selected = "Home"; openChat = null; openGroup = null; profileUser = null } }
+            FynxBackendClient.currentUserId(context).onFailure { error -> if (FynxBackendClient.isUnauthorizedFailure(error)) { FynxBackendClient.saveAccessToken(context, null); FynxAuthStore.clear(context); authSession = AuthSession(); clearSessionScopedState() } }
         }
     }
     if (!FYNX_PREVIEW_MODE && authSession.state != AuthState.SIGNED_IN) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxAuthGate { username -> FynxAuthStore.save(context, username); authSession = AuthSession(AuthState.SIGNED_IN, username) } }; return }
@@ -336,7 +388,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
         if (notificationPreferencesOnly) notificationPreferencesOnly = false
     }
-    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(username = profileUser!!, onBack = { profileUser = null }, onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" }, onMessage = { username ->
+    if (profileUser != null) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { OtherUserProfilePanel(
+        username = profileUser!!,
+        currentUsername = authSession.username,
+        onBack = { profileUser = null },
+        onOpenMarketplaceListing = { listingId ->
+            marketplaceListingId = listingId
+            profileUser = null
+            selected = "Marketplace"
+        },
+        onOpenStatus = { statusUsername -> profileUser = null; statusOpenOwner = statusUsername; selected = "Stories" },
+        onMessage = { username ->
         val normalized = username.trim().let { if (it.startsWith("@")) it else "@$it" }
         openChatMarketplaceListingId = null
         scope.launch {
@@ -417,12 +479,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         if (remoteMyPhotoId != null) FynxRemoteProfileAvatar(
                             mediaId = remoteMyPhotoId,
                             contentDescription = myProfile.displayName,
-                            modifier = Modifier.size(38.dp),
+                            modifier = Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape),
                             ownerUsername = myProfile.username,
                             allowImagePreview = false
                         )
-                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp))
-                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp))
+                        else if (!remoteMyProfileLoaded) FynxProfileImage(myProfile.displayName, myPhoto, Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape))
+                        else FynxAvatar(myProfile.displayName, Modifier.size(38.dp).border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape))
                     }
                     // The avatar and overflow menu are fixed-width siblings. Keep the
                     // brand label in the remaining space; nesting another weighted Row
@@ -454,7 +516,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (appConnectionState == FynxAppConnectionManager.State.CONNECTED) {
-                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Text("FYNX", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 1.sp))
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.Default.Verified, "Verified FYNX", tint = Color(0xFF1877F2), modifier = Modifier.size(18.dp))
                         } else {
@@ -469,37 +531,51 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     connectingDotCount = connectingDotCount % 3 + 1
                                 }
                             }
-                            Text(
-                                if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
-                                    "Waiting for network..."
+                            val connectionStatusText = if (appConnectionState == FynxAppConnectionManager.State.WAITING_FOR_NETWORK) {
+                                "Waiting for network..."
+                            } else {
+                                "Connecting" + ".".repeat(connectingDotCount)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                            ) {
+                                if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            .size(18.dp)
+                                            .semantics { contentDescription = connectionStatusText },
+                                        strokeWidth = 2.dp
+                                    )
                                 } else {
-                                    "Connecting" + ".".repeat(connectingDotCount)
-                                },
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleLarge
-                            )
+                                    Text(
+                                        connectionStatusText,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { selected = "Search" },
-                            modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
-                                contentDescription = "Search FYNX"
-                            }
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = null)
+                        FynxGlassIconButton(onClick = { selected = "Search" }, contentDescription = "Search FYNX") {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
-                        IconButton(
-                            onClick = { homeCameraRequest++ },
-                            modifier = Modifier.size(48.dp).semantics(mergeDescendants = true) {
-                                contentDescription = "Open FYNX camera"
-                            }
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null)
+                        FynxGlassIconButton(onClick = { homeCameraInitialMode = CameraMode.PHOTO; homeCameraRequest++ }, contentDescription = "Open FYNX camera") {
+                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(22.dp))
                         }
                         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                            IconButton(onClick = { notificationPreferencesOnly = false; selected = "Notifications" }) { Icon(Icons.Default.Notifications, "Notifications") }
+                            FynxGlassIconButton(
+                                onClick = { notificationPreferencesOnly = false; selected = "Notifications" },
+                                contentDescription = "Notifications"
+                            ) {
+                                Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(22.dp))
+                            }
                         }
                     }
                 }
@@ -510,11 +586,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text("Friends", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        FynxLargeHeaderTitle("Friends")
                     }
-                    Spacer(Modifier.size(48.dp))
                 }
             } else if (selected in mainNav.map { it.key }) {
                 Row(
@@ -532,21 +606,16 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Spacer(Modifier.size(48.dp))
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
+                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                        FynxLargeHeaderTitle(
                             when (selected) {
-                                "Chats" -> "Chat & Groups"
+                                "Chats" -> "Chats"
                                 "Marketplace" -> "Marketplace"
                                 "Features" -> "More"
                                 else -> selected
-                            },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            }
                         )
                     }
-                    Spacer(Modifier.size(48.dp))
                 }
             } else {
                 Row(
@@ -555,20 +624,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    FynxGlassIconButton(
                         onClick = {
                             backNavigationRequested = true
                             selected = fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)
                             if (notificationPreferencesOnly) notificationPreferencesOnly = false
                         },
-                        modifier = Modifier.semantics {
-                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
-                        }
+                        contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to ${fynxBackDestination(selected, notificationPreferencesOnly, navigationHistory)}"
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Text(
@@ -589,9 +653,12 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                 "Admin" -> "Admin Control Center"
                                 else -> selected
                             },
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleLarge
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
                     Spacer(Modifier.size(48.dp))
@@ -604,7 +671,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             // post/content is covered. It reappears when the keyboard closes.
             if (!isKeyboardVisible && selected in mainNav.map { it.key }) {
                 AnimatedVisibility(
-                    visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden,
+                    visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden),
                     enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                 ) {
@@ -612,71 +679,40 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(32.dp)),
-                        shape = RoundedCornerShape(32.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
-                        tonalElevation = 0.dp
-                    ) {
-                        NavigationBar(
-                            modifier = Modifier.fillMaxSize(),
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            tonalElevation = 0.dp,
-                            windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
-                        ) {
-                            mainNav.forEach { item ->
-                                NavigationBarItem(
-                                    modifier = Modifier.height(64.dp).semantics(mergeDescendants = true) {
-                                        contentDescription = item.label
-                                    },
-                                    selected = selected == item.key,
-                                    onClick = { notificationPreferencesOnly = false; selected = item.key },
-                                    icon = {
-                                        Icon(
-                                            item.icon,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            item.label,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
-                                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp)
-                                        )
-                                    },
-                                    alwaysShowLabel = true,
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                )
-                            }
-                        }
-                    }
+                    FynxGlassBottomBar(
+                        items = mainNav.map { FynxBottomBarItem(it.key, it.label, it.icon) },
+                        selectedKey = selected,
+                        onSelect = { key -> notificationPreferencesOnly = false; selected = key },
+                        modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth()
+                    )
                     }
                 }
             }
         }) { padding ->
+            // Primary tabs scroll under the floating glass bar and reserve their own content inset.
+            val primaryTab = selected in mainNav.map { it.key }
+            val bottomBarSpace = if (primaryTab) padding.calculateBottomPadding() else 0.dp
+            val layoutDirection = androidx.compose.ui.platform.LocalLayoutDirection.current
             val screenContentModifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(
+                    start = padding.calculateStartPadding(layoutDirection),
+                    top = padding.calculateTopPadding(),
+                    end = padding.calculateEndPadding(layoutDirection),
+                    bottom = if (primaryTab) 0.dp else padding.calculateBottomPadding()
+                )
                 // Individual screens own their intentional horizontal content spacing.
                 // Do not add a second global side gutter here: it was shrinking every
                 // screen and making phone controls/composers unnecessarily cramped.
-                .padding(vertical = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp)
-                .then(if (selected == "Home") Modifier else Modifier.navigationBarsPadding())
+                .padding(
+                    top = if (selected == "Home" && statusCreatorRequested) 0.dp else 6.dp,
+                    bottom = if (primaryTab || (selected == "Home" && statusCreatorRequested)) 0.dp else 6.dp
+                )
+                .then(if (primaryTab) Modifier else Modifier.navigationBarsPadding())
+            CompositionLocalProvider(LocalFynxBottomBarSpace provides bottomBarSpace) {
             Box(screenContentModifier) {
                 AnimatedContent(
                     targetState = selected,
@@ -688,13 +724,15 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, cameraInitialMode = homeCameraInitialMode, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
-                onOpenProfile = { username -> profileUser = username; selected = "Home" }
+                onOpenProfile = { username -> profileUser = username; selected = "Home" },
+                onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
             )
             "Chats" -> ChatsPanel(onOpenChat = { openChat = it }, onOpenGroup = { openGroup = it }, onCreateGroup = { selected = "Groups" }, onOpenContacts = { selected = "Contacts" })
             "Friends" -> FriendsPanel(
                 onOpenProfile = { profileUser = it },
+                currentUsername = authSession.username,
                 onOpenChat = { username ->
                     val normalized = username.removePrefix("@").trim()
                     if (normalized.isNotBlank()) {
@@ -727,7 +765,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         }
                     }
                 }            )
-            "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" })
+            "Contacts" -> FynxContactsPanel(onBack = { selected = "Chats" }, onVoiceCall = { callTarget = it; callVideo = false; selected = "Calls" }, onVideoCall = { callTarget = it; callVideo = true; selected = "Calls" }, currentUsername = authSession.username, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })
             "Local Businesses" -> FynxLocalBusinessesPanel(
                 onBack = { selected = "Marketplace" },
                 onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
@@ -748,6 +786,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Extra Tools" -> FynxExtraToolsPanel(onOpenCalendar = { selected = "Calendar" })
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
+                onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 },
                 initialText = marketplaceStatusDraft,
                 onInitialTextAccepted = { marketplaceStatusDraft = null },
                 openOwnerUsername = statusOpenOwner,
@@ -799,6 +838,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         FynxNotificationType.GROUP -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://group/" + Uri.encode(it) }
                         FynxNotificationType.STORY -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://status/" + Uri.encode(it) }
                         FynxNotificationType.COMMENT, FynxNotificationType.REACTION -> notification.route?.takeIf { it.isNotBlank() } ?: notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://post/" + Uri.encode(it) }
+                        FynxNotificationType.MARKETPLACE_ORDER, FynxNotificationType.MARKETPLACE_PRICE -> notification.targetId?.takeIf { it.isNotBlank() }?.let { "fynx://marketplace/" + Uri.encode(it) } ?: "fynx://marketplace"
+                        FynxNotificationType.WALLET_ACTIVITY -> "fynx://money"
                         else -> "fynx://home"
                     } ?: "fynx://home"
                     when (val destination = FynxDeepLinkParser.parse(Uri.parse(route))) {
@@ -816,6 +857,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                                     val resolvedChat = local ?: remote?.let { user ->
                                         ChatPreview(name = user.displayName.ifBlank { normalized }, username = "@" + user.username.removePrefix("@"), lastMessage = "Start a conversation", time = "Now", avatarUri = user.profilePhotoMediaId?.let { "/api/media/" + it })
                                     }
+                                    openChatMarketplaceListingId = destination.marketplaceListingId
+                                    openGroup = null
+                                    profileUser = null
                                     openChat = resolvedChat
                                     if (resolvedChat != null) withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, resolvedChat) }
                                 }
@@ -834,13 +878,13 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null })
+            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null })
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
             "Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }) }
             "Seller Center" -> key(marketplaceAccountKey) { FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" }) }
-            "AI" -> FynxAiAssistantPanel(
+            "AI" -> key(marketplaceAccountKey) { FynxAiAssistantPanel(
                 onOpenDestination = { destination -> selected = destination },
                 initialMarketplaceListingId = marketplaceAiListingId,
                 currentUserDisplayName = myProfile.displayName.ifBlank {
@@ -848,7 +892,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 },
                 currentUsername = myProfile.username.ifBlank { authSession.username.orEmpty() },
                 currentUserPhotoUri = myPhoto
-            )
+            ) }
             "AI Creation" -> { selected = "AI" }
             "AI Photo Editor" -> { selected = "AI" }
             "Advertising" -> FynxAdvertisingCampaignPanel(currentUsername = authSession.username ?: "preview")
@@ -856,17 +900,48 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" })
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSignOut = {
+                FynxAuthStore.clear(context)
+                authSession = AuthSession()
+                clearSessionScopedState()
+            }, onAppearanceChanged = { appearance = it; FynxPreferencesStore.saveAppearance(context, it) }, onAccentChanged = { accent = it }, onOpenPrivacy = { openProfileSettings = false; selected = "Privacy" }, onOpenNotifications = { openProfileSettings = false; notificationPreferencesOnly = true; selected = "Notifications" }, onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }, onUsernameUpdated = { nextUsername ->
+                if (nextUsername.isNotBlank() && !nextUsername.equals(authSession.username, ignoreCase = true)) {
+                    FynxAuthStore.save(context, nextUsername)
+                    authSession = authSession.copy(username = nextUsername)
+                    profileVersion++
+                }
+            })
             else -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED)
                     }
                 }
             }
+            }
                 if (selected == "Home" && statusCreatorRequested) {
-                    FynxStatusHubPanel(
-                        startWithCreator = true,
-                        onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
-                        onComposerVisibilityChange = { statusComposerImmersive = it }
-                    )
+                    Dialog(
+                        onDismissRequest = {
+                            statusCreatorRequested = false
+                            statusComposerImmersive = false
+                        },
+                        properties = DialogProperties(
+                            usePlatformDefaultWidth = false,
+                            decorFitsSystemWindows = false,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = false
+                        )
+                    ) {
+                        FynxStatusHubPanel(
+                            startWithCreator = true,
+                            onOpenUnifiedCamera = { mode ->
+                                homeCameraInitialMode = mode
+                                statusCreatorRequested = false
+                                statusComposerImmersive = false
+                                selected = "Home"
+                                homeCameraRequest += 1
+                            },
+                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
+                            onComposerVisibilityChange = { statusComposerImmersive = it }
+                        )
+                    }
                 }
         }
     }
@@ -879,5 +954,9 @@ private fun FynxFeaturesPanel(isAdmin: Boolean, onSelect: (String) -> Unit) {
         add(Triple("Marketplace", "Marketplace", Icons.Default.ShoppingBag)); add(Triple("Wallet", "FYNX Wallet", Icons.Default.AccountBalanceWallet)); add(Triple("Calls", "Voice & Video Calls", Icons.Default.Call)); add(Triple("Notifications", "Notifications", Icons.Default.Notifications)); add(Triple("Gifts", "Gifts", Icons.Default.CardGiftcard)); add(Triple("Share", "Share & Invite", Icons.Default.Share)); add(Triple("To-Do", "To-Do", Icons.Default.CheckCircle)); add(Triple("Calendar", "Calendar", Icons.Default.DateRange)); add(Triple("Money Tools", "Money Center", Icons.Default.AccountBalanceWallet)); add(Triple("Extra Tools", "Extra Tools", Icons.Default.Build)); add(Triple("Privacy", "Privacy & Safety", Icons.Default.Lock)); add(Triple("Saved Posts", "Saved Posts", Icons.Default.Bookmark)); add(Triple("Saved Products", "Saved Marketplace Products", Icons.Default.BookmarkBorder)); add(Triple("Seller Center", "Manage Marketplace Listings", Icons.Default.Inventory2)); add(Triple("Business Account", "Business & Creator Profile", Icons.Default.Storefront)); add(Triple("Advertising", "Create & Manage Advertising", Icons.Default.Campaign)); add(Triple("Advertising Dashboard", "Advertising Analytics Dashboard", Icons.Default.Analytics)); add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome)); add(Triple("Announcements", "Official FYNX Announcements", Icons.Default.Campaign)); if (isAdmin) add(Triple("Admin", "Owner / Admin Control Center", Icons.Default.AdminPanelSettings))
     }
     val visible = features.filter { it.second.contains(query.trim(), true) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) { Text("FYNX Features", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text("Access your tools in one place. Business & Advertising connects your professional identity, products and campaigns.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(8.dp)); FynxFeatureSearchField(query, { query = it }); Spacer(Modifier.height(8.dp)); LazyColumn(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(bottom = LocalFynxBottomBarSpace.current + 8.dp)
+    ) { items(visible, key = { it.first }) { feature -> Card(onClick = { onSelect(feature.first) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f))) { Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) { Surface(shape = FynxDesign.ControlShape, color = MaterialTheme.colorScheme.secondaryContainer) { Icon(feature.third, feature.second, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(21.dp)) }; Spacer(Modifier.width(12.dp)); Text(feature.second, style = MaterialTheme.typography.titleMedium) } } } } }
 }

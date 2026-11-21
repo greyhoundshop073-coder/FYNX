@@ -8,8 +8,14 @@ navigation = Path("scripts/verify_authenticated_runtime_navigation.py").read_tex
 workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8")
 wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
+marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
 
 checks = [
+    (
+        "Marketplace feed states reserve measured floating navigation space instead of a fixed 132dp gap",
+        marketplace_source.count("bottom = LocalFynxBottomBarSpace.current + 8.dp") == 5
+        and "bottom = 132.dp" not in marketplace_source,
+    ),
     (
         "Marketplace seller-flow capture dismisses only a confirmed visible Android keyboard before scrolling",
         "def dismiss_ime_if_visible(name: str) -> str:" in navigation
@@ -116,7 +122,7 @@ checks = [
         '["View public Marketplace profile"]' in navigation
         and 'screenshot("authenticated-marketplace-public-profile.png")' in navigation
         and '["Marketplace profile"]' in navigation
-        and '["Available products"]' in navigation
+        and '["Marketplace profile", "Products"]' in navigation
         and "This seller has no active products available right now." in navigation
         and "Contact seller" in navigation
         and "My Shop -> View public Marketplace profile" in navigation
@@ -185,7 +191,10 @@ checks = [
         and '!= "2G"' in emulator_storage
         and "available_mb" in emulator_storage
         and "-lt 2500" in emulator_storage
-        and "emulator-boot-timeout" not in workflow.split("uses: reactivecircus/android-emulator-runner@", 1)[1].split("script: bash scripts/run_android_runtime_certification.sh", 1)[0],
+        and "emulator-boot-timeout: 900" in workflow
+        and "ram-size: 3072M" in workflow
+        and "heap-size: 512M" in workflow
+        and "cores: 4" in workflow,
     ),
 ]
 
@@ -206,7 +215,7 @@ checks.extend([
         'selected != "Home" && selected != "Marketplace"' in app_source
         and 'if (selected == "Marketplace") {' in app_source
         and '.height(52.dp * (1f - homeChromeProgress))' in app_source
-        and ('visible = (selected != "Home" && selected != "Marketplace") || !homeChromeHidden' in app_source or 'visible = (selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden' in app_source),
+        and 'visible = !statusComposerImmersive && ((selected != "Home" && selected != "Marketplace") || statusCreatorRequested || !homeChromeHidden)' in app_source,
     ),
     (
         "Great Deals uses the Home silver smoky mirror-glass palette with transparent card surface",

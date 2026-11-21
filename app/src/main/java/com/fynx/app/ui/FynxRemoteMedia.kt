@@ -314,7 +314,7 @@ fun FynxRemoteProfileAvatar(
     modifier: Modifier = Modifier,
     ownerUsername: String? = null,
     onStatusClick: (() -> Unit)? = null,
-    allowImagePreview: Boolean = true
+    allowImagePreview: Boolean = false
 ) {
     val context = LocalContext.current
     val normalizedOwner = ownerUsername?.removePrefix("@")?.trim()?.lowercase()?.takeIf { it.isNotBlank() }

@@ -22,10 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class DeviceContact(val name: String, val phone: String)
 
@@ -33,13 +35,29 @@ private data class DeviceContact(val name: String, val phone: String)
 fun FynxContactsPanel(
     onBack: () -> Unit = {},
     onVoiceCall: (String) -> Unit = {},
-    onVideoCall: (String) -> Unit = {}
+    onVideoCall: (String) -> Unit = {},
+    currentUsername: String? = null,
+    onOpenMarketplaceListing: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val contactsAccountKey = FynxAuthStore.accountStorageKey(context)
+    val disclosurePreferences = remember(context) {
+        context.getSharedPreferences(FynxContactsDisclosure.PREFERENCES_NAME, Context.MODE_PRIVATE)
+    }
+    var disclosureAccepted by remember(contactsAccountKey) {
+        mutableStateOf(
+            contactsAccountKey?.let { accountKey ->
+                !FynxContactsDisclosure.requiresDisclosure(
+                    disclosurePreferences.getInt(FynxContactsDisclosure.preferenceKey(accountKey), 0)
+                )
+            } ?: false
+        )
+    }
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     var contacts by remember { mutableStateOf(emptyList<DeviceContact>()) }
     var matched by remember { mutableStateOf<Map<String, FynxSocialClient.User>>(emptyMap()) }
+    var failedContactNumbers by remember { mutableStateOf(emptySet<String>()) }
     var friendUsernames by remember { mutableStateOf(emptySet<String>()) }
     var friendRequests by remember { mutableStateOf(emptyList<FynxSocialClient.FriendRequest>()) }
     var connectionBusy by remember { mutableStateOf<String?>(null) }
@@ -55,6 +73,16 @@ fun FynxContactsPanel(
         if (!granted) notice = "Contacts permission is needed to find people you already know on FYNX."
     }
 
+    fun acceptContactsDisclosure() {
+        contactsAccountKey?.let { accountKey ->
+            disclosurePreferences.edit()
+                .putInt(FynxContactsDisclosure.preferenceKey(accountKey), FynxContactsDisclosure.CURRENT_VERSION)
+                .apply()
+        }
+        disclosureAccepted = true
+        if (!permission) permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+    }
+
     fun loadContacts() {
         scope.launch {
             loading = true
@@ -63,11 +91,15 @@ fun FynxContactsPanel(
             friendUsernames = emptySet()
             friendRequests = emptyList()
             try {
-                val local = readDeviceContacts(context)
-                val sim = readSimContacts(context)
-                contacts = mergeContacts(local, sim)
+                val loaded = withContext(Dispatchers.IO) {
+                    val local = readDeviceContacts(context)
+                    val sim = readSimContacts(context)
+                    mergeContacts(local, sim)
+                }
+                contacts = loaded
                 val candidates = contacts
                 val found = mutableMapOf<String, FynxSocialClient.User>()
+                val failedPhones = mutableSetOf<String>()
                 var failedLookups = 0
                 candidates.chunked(4).forEach { batch ->
                     val results = coroutineScope {
@@ -79,11 +111,17 @@ fun FynxContactsPanel(
                         }.awaitAll()
                     }
                     results.forEach { (contact, result) ->
-                        result.getOrNull()?.firstOrNull()?.let { found[contact.phone] = it }
-                            ?: run { if (result.isFailure) failedLookups += 1 }
+                        val user = result.getOrNull()?.firstOrNull()
+                        if (user != null) {
+                            found[contact.phone] = user
+                        } else if (result.isFailure) {
+                            failedLookups += 1
+                            failedPhones += contact.phone
+                        }
                     }
                 }
                 matched = found.toMap()
+                failedContactNumbers = failedPhones
                 val friendResult = FynxSocialClient.friends(context)
                 val requestResult = FynxSocialClient.requests(context)
                 friendUsernames = friendResult.getOrNull().orEmpty().map { it.username.removePrefix("@").lowercase() }.toSet()
@@ -101,6 +139,7 @@ fun FynxContactsPanel(
                 throw kotlinx.coroutines.CancellationException()
             } catch (_: Exception) {
                 matched = emptyMap()
+                failedContactNumbers = contacts.map { it.phone }.toSet()
                 notice = "FYNX could not load your contacts right now. Check your connection and try again."
             } finally {
                 loading = false
@@ -108,13 +147,17 @@ fun FynxContactsPanel(
         }
     }
 
-    LaunchedEffect(permission) { if (permission) loadContacts() }
+    LaunchedEffect(permission, disclosureAccepted) {
+        if (permission && disclosureAccepted) loadContacts()
+    }
 
     profileUser?.let { username ->
         val normalizedUsername = username.removePrefix("@").trim().lowercase()
         OtherUserProfilePanel(
             username = normalizedUsername,
+            currentUsername = currentUsername,
             onBack = { profileUser = null },
+            onOpenMarketplaceListing = onOpenMarketplaceListing,
             onMessage = { targetUsername ->
                 val target = targetUsername.removePrefix("@").trim()
                 val targetUser = matched.values.firstOrNull { it.username.removePrefix("@").equals(target, true) }
@@ -125,7 +168,9 @@ fun FynxContactsPanel(
                     time = "Now",
                     avatarUri = targetUser?.profilePhotoMediaId?.let { "/api/media/$it" }
                 )
-                FynxChatStore.savePreview(context, preview)
+                scope.launch {
+                    withContext(Dispatchers.IO) { FynxChatStore.savePreview(context, preview) }
+                }
                 profileUser = null
                 openChat = preview
             }
@@ -150,8 +195,34 @@ fun FynxContactsPanel(
             Spacer(Modifier.width(8.dp))
             Text("Phone Contacts", style = MaterialTheme.typography.headlineSmall)
         }
-        Text("Find people from the contacts already saved on your phone. FYNX only checks them after you give permission.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-        if (!permission) {
+        Text("Find people from contacts saved on your phone. FYNX explains how contact matching works before reading them.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        if (!disclosureAccepted) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Before you use contact matching", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "To find people you know, FYNX reads contact names and phone numbers saved on your phone, including SIM contacts, only after you choose Continue and allow Contacts access."
+                    )
+                    Text(
+                        "FYNX sends each normalised phone number to FYNX servers over HTTPS to check whether it matches an account. The saved contact name is not included in that phone-number lookup. Numbers are checked individually; FYNX does not upload your address book as one contact file."
+                    )
+                    Text(
+                        "You can choose Not now and continue using other FYNX features. You can also change Contacts permission later in Android Settings.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onBack) { Text("Not now") }
+                        Button(onClick = { acceptContactsDisclosure() }) { Text("Continue") }
+                    }
+                }
+            }
+        } else if (!permission) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Default.People, null, tint = MaterialTheme.colorScheme.primary)
@@ -169,6 +240,7 @@ fun FynxContactsPanel(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(visibleContacts, key = { "${it.name}_${it.phone}" }) { contact ->
                     val user = matched[contact.phone]
+                    val matchState = fynxContactMatchState(user != null, contact.phone in failedContactNumbers)
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (user != null) {
@@ -179,7 +251,12 @@ fun FynxContactsPanel(
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(contact.name.ifBlank { "Unknown contact" }, style = MaterialTheme.typography.titleSmall)
-                                Text(if (user != null) "@${user.username.removePrefix("@").lowercase()}" else "Not on FYNX", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (user != null) "@${user.username.removePrefix("@").lowercase()}"
+                                    else fynxContactMatchLabel(matchState),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
                             if (user != null) {
                                 val normalizedUsername = user.username.removePrefix("@").lowercase()
@@ -215,6 +292,8 @@ fun FynxContactsPanel(
                                         }
                                     }
                                 }
+                            } else if (matchState == FynxContactMatchState.UNAVAILABLE) {
+                                Text("Match unavailable", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                             } else {
                                 TextButton(onClick = {
                                     val payload = FynxShareActions.invitePayload(contact.name.ifBlank { "A friend" })
@@ -278,4 +357,23 @@ private fun readDeviceContacts(context: Context): List<DeviceContact> {
         }
     }
     return output.values.toList()
+}
+
+
+internal enum class FynxContactMatchState {
+    MATCHED,
+    NOT_ON_FYNX,
+    UNAVAILABLE
+}
+
+internal fun fynxContactMatchState(matched: Boolean, lookupFailed: Boolean): FynxContactMatchState = when {
+    matched -> FynxContactMatchState.MATCHED
+    lookupFailed -> FynxContactMatchState.UNAVAILABLE
+    else -> FynxContactMatchState.NOT_ON_FYNX
+}
+
+internal fun fynxContactMatchLabel(state: FynxContactMatchState): String = when (state) {
+    FynxContactMatchState.MATCHED -> "On FYNX"
+    FynxContactMatchState.NOT_ON_FYNX -> "Not on FYNX"
+    FynxContactMatchState.UNAVAILABLE -> "Could not check"
 }

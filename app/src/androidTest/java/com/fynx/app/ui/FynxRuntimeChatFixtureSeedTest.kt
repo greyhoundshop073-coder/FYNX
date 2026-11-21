@@ -5,7 +5,6 @@ import java.io.File
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,9 +34,9 @@ class FynxRuntimeChatFixtureSeedTest {
         val peerUsername = "fynx_runtime_peer"
         val now = System.currentTimeMillis()
 
-        // Reserve the account-scoped store that the debug-local UI login will use,
-        // but leave the session signed out so the real login gate is exercised.
-        // This capture must be a deterministic local-only saved-device session.
+        // Seed the explicitly local, debug-only session used by after-login UI tests.
+        // This is not server authentication: both token stores are cleared above and
+        // the fixture below verifies that no backend credential is available.
         // A previous instrumentation run or emulator snapshot may leave a stale
         // bearer token behind; the app's normal 401 handling would correctly clear
         // the auth session, which also changes FynxChatStore's account namespace.
@@ -58,12 +57,13 @@ class FynxRuntimeChatFixtureSeedTest {
                 .putString("username", username)
                 .putString("display_name", "FYNX Runtime Owner")
                 .putBoolean("account_created", true)
-                .putBoolean("signed_in", false)
+                .putBoolean("signed_in", true)
                 .commit()
         )
         assertEquals(username, FynxAuthStore.accountStorageKey(context))
-        assertTrue("The disposable fixture must enter the saved-device LOGIN route", FynxAuthStore.hasAccount(context))
-        assertFalse("The fixture must not pre-authenticate the app before its debug-local login flow", auth.getBoolean("signed_in", false))
+        assertTrue("The disposable fixture must retain its local account namespace", FynxAuthStore.hasAccount(context))
+        assertTrue("The app-side visual fixture must open the local debug session directly at Home", FynxAuthStore.load(context).state == AuthState.SIGNED_IN)
+        assertNull("The local debug session must remain unauthenticated to the backend", FynxBackendClient.accessToken(context))
 
         val peerMessage = ChatMessage(
             text = "FYNX offline private fixture: hello from the test peer",

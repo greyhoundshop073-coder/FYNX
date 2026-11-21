@@ -2,6 +2,8 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def read(p): return (ROOT/p).read_text(encoding="utf-8")
 trust=read("backend/trustSafety.js"); server=read("backend/server.js"); social=read("backend/socialRoutes.js"); client=read("app/src/main/java/com/fynx/app/ui/FynxSafetyRemoteClient.kt"); privacy=read("app/src/main/java/com/fynx/app/ui/FynxPrivacySettings.kt")
+postgres_ids=read("backend/postgresIds.js")
+support=read("backend/supportRoutes.js"); support_client=read("app/src/main/java/com/fynx/app/ui/FynxSupportRemoteClient.kt"); support_ui=read("app/src/main/java/com/fynx/app/ui/FynxSupportHubPanel.kt"); notification_models=read("app/src/main/java/com/fynx/app/ui/NotificationModels.kt"); admin_panel=read("app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt")
 checks=[
 ("trust safety route module exists","registerTrustSafetyRoutes" in trust and "inspectTrustSafetyText" in trust),
 ("safety settings are server-backed and account-scoped","CREATE TABLE IF NOT EXISTS safety_settings" in trust and "WHERE user_id=$1" in trust),
@@ -14,7 +16,7 @@ checks=[
 ("appeals are authenticated and persisted",'app.post("/api/safety/appeals",auth' in trust and "INSERT INTO safety_appeals" in trust),
 ("appeals can only reference a report against the appellant","SELECT id FROM safety_reports WHERE id=$1 AND target_user_id=$2" in trust and "report is not an account case against this user" in trust),
 ("appeal ownership is bound to the authenticated appellant","INSERT INTO safety_appeals(user_id,report_id,subject,details)" in trust and "req.user.sub,reportId,subject,details" in trust),
-("appeal report IDs reject malformed and unsafe integers","Number.isSafeInteger(reportId)" in trust and "report ID must be a positive integer" in trust),
+("appeal report IDs use exact PostgreSQL BIGINT validation","import { isPositivePostgresBigint } from \"./postgresIds.js\";" in trust and "isPositivePostgresBigint(rawReportId)" in trust and "report ID must be a positive PostgreSQL BIGINT" in trust and "reportId=String(rawReportId).trim()" in trust and "Number(rawReportId)" not in trust and "9223372036854775807n" in postgres_ids and "BigInt(raw) <= MAX_POSTGRES_BIGINT" in postgres_ids),
 ("appeal history is account-scoped",'app.get("/api/safety/appeals",auth' in trust and "WHERE user_id=$1" in trust),
 ("server wires trust safety with real auth and database","registerTrustSafetyRoutes({ app, pool, auth });" in server and 'import { registerTrustSafetyRoutes } from "./trustSafety.js";' in server),
 ("block routes are authenticated",'app.post("/api/blocks/:username", auth' in social and 'app.delete("/api/blocks/:username", auth' in social),
@@ -27,7 +29,23 @@ checks=[
 ("Android can load and submit real appeals","/api/safety/appeals" in client and "submitAppeal" in client),
 ("Privacy & Safety UI exposes report submission","Report an account" in privacy and "submitReport" in privacy),
 ("Privacy & Safety UI exposes appeal submission","Appeal a decision or report" in privacy and "submitAppeal" in privacy),
-("no fabricated report records are embedded","fakeReport" not in privacy and "sampleReport" not in privacy and "dummyReport" not in privacy),]
+("no fabricated report records are embedded","fakeReport" not in privacy and "sampleReport" not in privacy and "dummyReport" not in privacy),
+("support cases use a separate backend data model","fynx_support_cases" in support and "fynx_support_messages" in support and "fynx_support_case_events" in support),
+("support requests require validated categories and retry-safe request keys","CATEGORIES.has(category)" in support and "client_request_id" in support and "ON CONFLICT(user_id,client_request_id)" in support),
+("user support history and conversations are account-scoped","WHERE c.user_id=$1" in support and "c.user_id=$2" in support),
+("staff support APIs enforce Owner or explicit Admin permission","support_access=TRUE" in support and "SUPPORT_ACCESS_REQUIRED" in support and "OWNER_REQUIRED" in support),
+("Admin inbox only exposes unassigned or self-assigned cases","c.assigned_admin_id IS NULL OR c.assigned_admin_id=$2" in support),
+("staff replies and internal notes are separated","visibility IN ('PUBLIC','INTERNAL')" in support and "loadMessages(id, true)" in support and "loadMessages(id, false)" in support),
+("case claims are atomic and case actions are audited","assigned_admin_id IS NULL AND status<>'RESOLVED'" in support and "recordEvent(client" in support),
+("support notifications are queued through the existing FYNX notifier","queueFynxNotification" in support and 'type: "SUPPORT"' in support),
+("Android Help & Support opens the real support hub","FynxSupportHubPanel()" in privacy and "Submit support request" in support_ui),
+("Android support client uses authenticated support endpoints","/api/support/cases" in support_client and "/api/admin/support/cases" in support_client),
+("Android user and staff replies send stable idempotency keys","requestKey: String" in support_client and 'put("requestKey", requestKey)' in support_client and "replyRequestKey" in support_ui),
+("Android exposes Owner/Admin support inbox and case assignment","FYNX Support Centre" in support_ui and "Assign Admin" in support_ui and "Claim this case" in support_ui),
+("Android separates internal notes from user-visible replies","Internal note" in support_ui and 'put("visibility"' in support_client),
+("support notification type is represented in Android","SUPPORT" in notification_models),
+("Owner/Admin Control Center embeds a staff-only support inbox","FYNX Support Centre" in admin_panel and "FynxSupportHubPanel(staffOnly = true)" in admin_panel),
+]
 failed=[n for n,o in checks if not o]
 for n,o in checks: print(("PASS: " if o else "FAIL: ")+n)
 if failed: raise SystemExit("Large Badge #9 trust/safety verification failed: "+"; ".join(failed))

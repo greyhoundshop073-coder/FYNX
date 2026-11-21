@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -22,6 +23,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -276,7 +280,11 @@ fun MarketplacePromotionalBanner(
             val bannerWidth = maxWidth
             LazyRow(
                 state = listState,
-                modifier = Modifier.fillMaxWidth(),
+                flingBehavior = rememberSnapFlingBehavior(lazyListState = listState),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("fynx-marketplace-promo-carousel")
+                    .semantics { contentDescription = "Marketplace promotions carousel" },
                 horizontalArrangement = Arrangement.spacedBy(0.dp),
                 userScrollEnabled = true
             ) {
@@ -321,7 +329,7 @@ private fun MarketplacePromotionalSlide(
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp),
+        modifier = Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp * androidx.compose.ui.platform.LocalDensity.current.fontScale.coerceIn(1f, 1.4f)),
         shape = RoundedCornerShape(20.dp),
         color = Color(0xFF16263D),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x22007FFF))
@@ -402,7 +410,7 @@ private fun MarketplacePromotionalSlide(
                     color = Color.White,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.ExtraBold,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
@@ -414,6 +422,11 @@ private fun MarketplacePromotionalSlide(
                 )
                 if (slide.destinationType != "NONE") Button(
                     onClick = onClick,
+                    modifier = Modifier.semantics {
+                        contentDescription = if (slide.listing != null && slide.actionLabel == "Shop this product") {
+                            "Shop this product: ${slide.headline}"
+                        } else slide.actionLabel
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF12233C)),
                     contentPadding = PaddingValues(horizontal = 15.dp, vertical = 7.dp)
                 ) {

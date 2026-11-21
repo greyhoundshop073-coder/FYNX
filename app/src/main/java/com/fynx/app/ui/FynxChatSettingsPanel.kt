@@ -106,10 +106,11 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
                     vibration = true
                     previews = true
                     readReceipts = true
-                    saveGallery = false
-                    FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), false).apply()
                     FynxConversationPreferences.setChatMessagePreviews(context, chatUsername, true)
                     FynxConversationPreferences.setChatReadReceipts(context, chatUsername, true)
+                    saveGallery = false
+                    FynxConversationPreferences.chat(context, chatUsername).edit()
+                        .putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), false).apply()
                     textSize = "Medium"
                     FynxConversationPreferences.setChatTextSize(context, chatUsername, "Medium")
                     bubbleTransparency = 0.90f
@@ -180,7 +181,8 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
         ChatSettingsSection("Media", Icons.Default.Palette) {
             ChatSwitchRow("Save received photos and videos to gallery", "Save media received in this conversation to your device gallery", saveGallery) {
                 saveGallery = it
-                FynxConversationPreferences.chat(context, chatUsername).edit().putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), it).apply()
+                FynxConversationPreferences.chat(context, chatUsername).edit()
+                    .putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), it).apply()
             }
         }
 

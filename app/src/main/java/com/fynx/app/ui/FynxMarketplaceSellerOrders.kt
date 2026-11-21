@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Locale
 
-private data class SellerOrderRow(
+internal data class SellerOrderRow(
     val id: String,
     val buyerName: String,
     val title: String,
@@ -72,7 +72,7 @@ private fun fulfillmentLabel(state: String): String = when (state) {
 }
 
 @Composable
-fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
+internal fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}, testOnlyOrders: List<SellerOrderRow>? = null) {
     var open by remember { mutableStateOf(false) }
     var orders by remember { mutableStateOf<List<SellerOrderRow>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -82,6 +82,13 @@ fun FynxMarketplaceSellerOrders(context: Context, onChanged: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
 
     fun load() {
+        if (testOnlyOrders != null) {
+            orders = testOnlyOrders
+            selected = null
+            error = null
+            loading = false
+            return
+        }
         val requestGeneration = ++orderLoadGeneration
         loading = true
         error = null

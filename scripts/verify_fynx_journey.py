@@ -28,6 +28,9 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 marketplace_client = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt")
 remote_social_client = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
+media_backend_client = read("app/src/main/java/com/fynx/app/ui/FynxBackendClient.kt")
+media_shared_client = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
+media_status_client = read("app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt")
 transactions = read("backend/marketplaceTransactions.js")
 create_menu = read("app/src/main/java/com/fynx/app/ui/FynxHomeCreateMenu.kt")
 home_panel = read("app/src/main/java/com/fynx/app/ui/HomePanel.kt")
@@ -66,7 +69,7 @@ check("profile stats are server-authoritative and self-only", "followerCount" in
 check("profile stats UI matches the private connections rule", 'ProfileStat("Posts"' in profile_panel and 'ProfileStat("Followers"' in profile_panel and 'ProfileStat("Following"' in profile_panel and "ProfileConnectionsDialog" in profile_panel and "FynxProfileRemoteClient.followers" in profile_panel and "FynxProfileRemoteClient.following" in profile_panel and not re.search(r"(?:followers?|following)\s+(?:list|members?|user|people|names)", other_profile_panel, re.IGNORECASE))
 
 check("other-user profile uses real identity and server profile loading", "FynxProfileRemoteClient.get(context, username)" in other_profile_panel and "person.profilePhotoMediaId" in other_profile_panel and "person.displayName" in other_profile_panel and '"@${person.username' in other_profile_panel)
-check("other-user profile uses the shared clean profile content hub", "FynxProfileContentSection(username = person.username" in other_profile_panel and "person.profilePhotoMediaId" in other_profile_panel and "person.displayName" in other_profile_panel and "person.username.removePrefix" in other_profile_panel)
+check("other-user profile uses the shared clean profile content hub", re.search(r"FynxProfileContentSection\s*\(\s*username\s*=\s*person\.username", other_profile_panel) is not None and "person.profilePhotoMediaId" in other_profile_panel and "person.displayName" in other_profile_panel and "person.username.removePrefix" in other_profile_panel)
 check("profile content hub exposes real All, Videos, Photos, Audio and Marketplace tabs", all(x in profile_content for x in ['"All"', '"Videos"', '"Photos"', '"Audio"', '"Marketplace"']) and "FynxProfileRemoteClient.posts(context, username)" in profile_content and "FynxMarketplaceClient.listings(context, username, \"\")" in profile_content and "sellerUsername.equals(username, ignoreCase = true)" in profile_content and "GridCells.Fixed(columns)" in profile_content and "val columns = 3" in profile_content)
 check("profile has no fabricated Business content or repost/likes tabs", "Business" not in other_profile_panel and "Reposts" not in other_profile_panel and "Likes" not in other_profile_panel)
 check("profile post and marketplace taps stay on real content paths", "FynxProfilePostViewer" in profile_content and "FynxProfileMarketplaceDetails" in profile_content and "FynxMarketplaceClient.mediaUrl" in profile_content and "selectedPost = item.post" in profile_content and "ic_fynx_logo" in profile_content and "aspectRatio(9f / 16f)" in profile_content and "aspectRatio(4f / 5f)" in profile_content and "aspectRatio(3f / 4f)" in profile_content and "selectedListing = item.listing" in profile_content)
@@ -90,6 +93,32 @@ check("protected marketplace transaction backend remains present", (ROOT / "back
 check("Send a Gift remains connected to conversations", "GiftsPanel" in conversation and "showGifts" in conversation and "onGiftSelected" in gifts)
 check("owner/admin client exposes server controls", all(x in admin for x in ["dashboard", "admins", "setAccountStatus", "grantAdmin", "revokeAdmin"]))
 check("removed AI image/video generation is not reintroduced", "image generation" not in app.lower() and "video generation" not in app.lower())
+
+# Media upload is routed through an owner-bound intent. PostgreSQL/Neon still return
+# the explicit legacy instruction; R2 uses a token-free signed PUT and a session-bound
+# idempotent completion POST. Signed media GET redirects are allowlisted separately.
+put_start = media_backend_client.find("internal suspend fun putSignedMedia(")
+put_end = media_backend_client.find("    suspend fun postJsonStream", put_start)
+put_method = media_backend_client[put_start:put_end] if put_start >= 0 and put_end > put_start else ""
+put_once_start = media_backend_client.find("private suspend fun putSignedMediaOnce")
+put_once_end = media_backend_client.find("\n\n    private suspend fun request(", put_once_start)
+put_once_method = media_backend_client[put_once_start:put_once_end] if put_once_start >= 0 and put_once_end > put_once_start else ""
+download_start = media_backend_client.find("private suspend fun downloadOnce(")
+download_end = media_backend_client.find("\n\n    private suspend fun putSignedMediaOnce", download_start)
+download_method = media_backend_client[download_start:download_end] if download_start >= 0 and download_end > download_start else ""
+media_upload_start = media_shared_client.find("suspend fun uploadMedia(")
+media_upload_end = media_shared_client.find("\n\n    private fun readMediaBytes", media_upload_start)
+media_upload_method = media_shared_client[media_upload_start:media_upload_end] if media_upload_start >= 0 and media_upload_end > media_upload_start else ""
+
+check("shared media uploader requests an authenticated upload intent", '"/api/media/upload-intent"' in media_upload_method and "postJsonForSession" in media_upload_method)
+check("R2 upload falls back to existing server upload on Neon/PostgreSQL", "useLegacyUpload" in media_upload_method and '"/api/media"' in media_upload_method and "dataBase64" in media_upload_method)
+check("R2 uploads use HTTPS Cloudflare host allowlist", "isTrustedR2Host(target.host)" in put_method and "r2\\\\.cloudflarestorage\\\\.com" in media_backend_client)
+check("direct R2 PUT never forwards FYNX bearer authorization", "putSignedMediaOnce" in put_method and "Authorization" not in put_once_method and "accessToken(context)" not in put_once_method)
+check("direct R2 PUT enforces size, MIME, fixed content length and no redirect", "12 * 1024 * 1024" in put_method and "normalizedMime" in put_method and "setFixedLengthStreamingMode(bytes.size)" in put_once_method and "instanceFollowRedirects = false" in put_once_method)
+check("media upload completion is session-bound and idempotent", '"/api/media/upload-complete"' in media_upload_method and "postJsonIdempotentForSession" in media_upload_method and "isRequestSessionCurrent" in media_upload_method)
+check("R2 GET redirects are allowlisted and never receive the FYNX token", "HTTP_MOVED_TEMP" in download_method and "isTrustedR2Host(signedTarget.host)" in download_method and "openConnection(signedTarget, false)" in download_method)
+check("HTTP retry logic does not retry permanent status codes", "retrySafePost" in media_backend_client and "current is FynxHttpException" in media_backend_client and "current.status in setOf(408, 425, 429, 500, 502, 503, 504)" in media_backend_client)
+check("Status media uses the shared authenticated uploader", "FynxProductionMessaging.uploadMedia(context, uri, normalizedMime)" in media_status_client)
 status_timeline = read("app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
 status_composer = read("app/src/main/java/com/fynx/app/ui/FynxMatureStatusComposerPanel.kt")
 post_client = read("app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt")

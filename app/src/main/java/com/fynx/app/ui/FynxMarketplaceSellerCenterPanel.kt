@@ -6,6 +6,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +73,14 @@ private data class SellerMoneyTotals(
     val paidOut: Double,
     val unreconciledLegacy: Double,
     val unreconciledFailedPayouts: Double
+)
+
+/** The four balances the overview earnings card shows for one currency. */
+private data class SellerFundsFigures(
+    val protectedFunds: Double,
+    val availableForPayout: Double,
+    val payoutPending: Double,
+    val paidOut: Double
 )
 
 private data class SellerMoneySnapshot(
@@ -142,13 +157,19 @@ private fun marketplaceShopProfileSignature(
 
 /** Seller management surface connected to authenticated Marketplace settlement APIs. */
 @Composable
-fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
+internal fun FynxMarketplaceSellerCenterPanel(
+    onViewPublicShop: () -> Unit = {},
+    testOnlyListings: List<FynxMarketplaceClient.Listing>? = null,
+    testOnlyShopName: String = "FYNX Test Market",
+    testOnlyShopDescription: String = "Test-only shop profile; not a public seller account.",
+    testOnlyOrders: List<SellerOrderRow>? = null
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sellerAccountKey = FynxAuthStore.accountStorageKey(context).orEmpty().ifBlank { "signed-out" }
-    var listings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var archivedListings by remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }
-    var loading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var listings by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings?.filter { it.active }.orEmpty()) }
+    var archivedListings by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings?.filterNot { it.active }.orEmpty()) }
+    var loading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var refreshGeneration by remember { mutableIntStateOf(0) }
     var error by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var deletingId by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
@@ -170,14 +191,15 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var editCondition by rememberSaveable(sellerAccountKey) { mutableStateOf("NEW") }
     var editLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editPrice by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var editOriginalPrice by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editQuantity by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
     var editSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var editError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var payoutAccount by remember(sellerAccountKey) { mutableStateOf<JSONObject?>(null) }
     var payoutAccounts by remember(sellerAccountKey) { mutableStateOf(emptyList<JSONObject>()) }
     var marketplacePayoutsEnabled by remember(sellerAccountKey) { mutableStateOf(false) }
-    var payoutReadinessNotice by remember(sellerAccountKey) { mutableStateOf("Checking seller payout eligibility…") }
-    var accountLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var payoutReadinessNotice by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(if (testOnlyListings != null) "TEST MODE — payout verification and transfers are not active." else "Checking seller payout eligibility…") }
+    var accountLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var accountSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var showPayoutAccount by remember(sellerAccountKey) { mutableStateOf(false) }
@@ -189,7 +211,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     var payoutBankMenuOpen by remember(sellerAccountKey) { mutableStateOf(false) }
     var accountNumber by remember(sellerAccountKey) { mutableStateOf("") }
     var accountName by remember(sellerAccountKey) { mutableStateOf("") }
-    var moneyLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var moneyLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var moneyRequestGeneration by remember { mutableIntStateOf(0) }
     var moneyError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var moneyRecords by remember(sellerAccountKey) { mutableStateOf(emptyList<SellerMoneyRecord>()) }
@@ -216,18 +238,18 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         editCategory.isNotBlank() &&
         standardMarketplaceCategories.none { it.equals(editCategory.trim(), ignoreCase = true) }
     ) standardMarketplaceCategories + editCategory else standardMarketplaceCategories
-    var shopName by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopDescription by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopName by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopName) { mutableStateOf(if (testOnlyListings != null) testOnlyShopName else "") }
+    var shopDescription by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopDescription) { mutableStateOf(if (testOnlyListings != null) testOnlyShopDescription else "") }
     var shopDescriptionAiBusy by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopDescriptionAiError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopDescriptionAiSuggestion by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
-    var shopLocation by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopContactPhone by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
-    var shopLoading by remember(sellerAccountKey) { mutableStateOf(true) }
+    var shopLocation by rememberSaveable(sellerAccountKey, testOnlyListings != null) { mutableStateOf(if (testOnlyListings != null) "Port Harcourt, Rivers State, Nigeria" else "") }
+    var shopContactPhone by rememberSaveable(sellerAccountKey, testOnlyListings != null) { mutableStateOf("") }
+    var shopLoading by remember(sellerAccountKey, testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var shopSaving by remember(sellerAccountKey) { mutableStateOf(false) }
     var shopError by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
     var shopMessage by remember(sellerAccountKey) { mutableStateOf<String?>(null) }
-    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey) { mutableStateOf("") }
+    var shopProfileSavedSignature by rememberSaveable(sellerAccountKey, testOnlyListings != null, testOnlyShopName, testOnlyShopDescription) { mutableStateOf(if (testOnlyListings != null) marketplaceShopProfileSignature(testOnlyShopName, testOnlyShopDescription, "Port Harcourt, Rivers State, Nigeria", "") else "") }
     val currentShopProfileSignature = marketplaceShopProfileSignature(
         shopName, shopDescription, shopLocation, shopContactPhone
     )
@@ -373,6 +395,44 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     }
 
     fun refresh() {
+        if (testOnlyListings != null) {
+            // Explicit instrumentation path: render real seller UI without touching seller APIs.
+            listings = testOnlyListings.filter { it.active }
+            archivedListings = testOnlyListings.filterNot { it.active }
+            loading = false
+            error = null
+            listingActionError = null
+            listingActionMessage = null
+            shopName = testOnlyShopName
+            shopDescription = testOnlyShopDescription
+            shopLocation = "Port Harcourt, Rivers State, Nigeria"
+            shopContactPhone = ""
+            shopProfileSavedSignature = marketplaceShopProfileSignature(
+                shopName, shopDescription, shopLocation, shopContactPhone
+            )
+            shopLoading = false
+            shopError = null
+            shopMessage = null
+            accountLoading = false
+            accountMessage = null
+            payoutAccount = null
+            payoutAccounts = emptyList()
+            marketplacePayoutsEnabled = false
+            payoutReadinessNotice = "TEST MODE — payout verification and transfers are not active."
+            moneyLoading = false
+            moneyError = null
+            moneyRecords = emptyList()
+            moneyTotals = emptyMap()
+            moneyTotalsFromBackend = false
+            moneyNextCursor = null
+            moneyHasMore = false
+            moneyPageLoading = false
+            moneyPageError = null
+            weeklySellerAwards = emptyList()
+            weeklyAwardsLoading = false
+            weeklyAwardsError = null
+            return
+        }
         val requestGeneration = ++refreshGeneration
         loading = true
         error = null
@@ -500,6 +560,27 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
 
     // Include currencies from all-history totals even if recent detail rows omit them.
     val currencies = (moneyRecords.map { it.currency } + moneyTotals.keys).distinct().sorted()
+    val shopCardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val shopCardBorder = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+
+    fun sellerFundsFor(currency: String): SellerFundsFigures {
+        val serverTotals = moneyTotals[currency]
+        if (moneyTotalsFromBackend) {
+            return SellerFundsFigures(
+                protectedFunds = serverTotals?.protectedFunds ?: 0.0,
+                availableForPayout = serverTotals?.availableForPayout ?: 0.0,
+                payoutPending = serverTotals?.payoutPending ?: 0.0,
+                paidOut = serverTotals?.paidOut ?: 0.0
+            )
+        }
+        val rows = moneyRecords.filter { it.currency == currency }
+        return SellerFundsFigures(
+            protectedFunds = rows.filter { it.funds in setOf("HELD", "DISPUTED", "REFUND_PENDING") }.sumOf { it.sellerNet },
+            availableForPayout = rows.filter { it.funds == "RELEASE_ELIGIBLE" }.sumOf { it.sellerNet },
+            payoutPending = rows.filter { it.funds == "RELEASE_PENDING" || it.payoutStatus == "PENDING" }.sumOf { it.sellerNet },
+            paidOut = rows.filter { it.funds == "RELEASED" || it.payoutStatus == "SUCCEEDED" }.sumOf { it.sellerNet }
+        )
+    }
 
     val listingSummary = when {
         loading -> "Loading listings…"
@@ -519,16 +600,22 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(12.dp),
+        modifier = Modifier.fillMaxSize().fynxAdaptiveContentWidth().testTag("fynx-seller-center-scroll-container"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 36.dp)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("My Shop", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Manage your storefront, listings, orders, deliveries and earnings from one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("My Shop", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Manage your storefront, listings, orders, deliveries and earnings from one place.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }
             }
@@ -536,7 +623,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         item {
             LazyRow(
                 state = shopSectionsScrollState,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().fynxFadeEnd(shopSectionsScrollState.canScrollForward).testTag("fynx-seller-center-section-tabs"),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(end = 12.dp)
             ) {
@@ -545,6 +632,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                         selected = activeSection == section,
                         onClick = { activeSection = section },
                         label = { Text(section, maxLines = 1) },
+                        modifier = Modifier.testTag("fynx-seller-center-section-${section.lowercase(Locale.US).replace(' ', '-') }"),
                         colors = selectedChipColors
                     )
                 }
@@ -552,30 +640,23 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         }
         if (activeSection == "Overview") {
             item {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Your shop at a glance", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text(if (shopName.isBlank()) "Set up your shop identity so buyers can recognize your business." else shopName, style = MaterialTheme.typography.titleMedium)
-                        Text("$listingSummary • $settlementSummary", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Surface(shape = CircleShape, color = FynxDesign.AzureBlue.copy(alpha = 0.12f)) {
+                                Icon(Icons.Default.Storefront, contentDescription = null, tint = FynxDesign.AzureBlue, modifier = Modifier.padding(12.dp).size(26.dp))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(if (shopName.isBlank()) "Name your shop" else shopName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(shopLocation.ifBlank { "Add your shop details so buyers can recognize you." }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            TextButton(onClick = { activeSection = "Shop profile" }) { Text("Edit") }
+                        }
+                        HorizontalDivider()
+                        Text("Your shop at a glance", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Text("$listingSummary • $settlementSummary", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         error?.let { Text("Inventory is not current. Retry refresh before relying on listing availability.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        shopError?.let { Text("Shop profile could not be refreshed.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { activeSection = "Shop profile" }, modifier = Modifier.weight(1f)) { Text("Shop profile") }
-                            OutlinedButton(onClick = { activeSection = "Listings" }, modifier = Modifier.weight(1f)) { Text("Manage listings") }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { activeSection = "Orders" }, modifier = Modifier.weight(1f)) { Text("Orders") }
-                            OutlinedButton(onClick = { activeSection = "Delivery & drivers" }, modifier = Modifier.weight(1f)) { Text("Delivery & drivers") }
-                        }
-                        OutlinedButton(onClick = { activeSection = "Earnings & payouts" }, modifier = Modifier.fillMaxWidth()) { Text("Earnings & payouts") }
-                        Button(onClick = onViewPublicShop, modifier = Modifier.fillMaxWidth()) {
-                            Text("View public Marketplace profile")
-                        }
-                        OutlinedButton(onClick = { showDriverAssignments = true }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Manage driver deliveries")
-                        }
+                        shopError?.let { Text("Your shop details could not be refreshed.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                         if (loading || shopLoading || moneyLoading) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 CircularProgressIndicator(Modifier.size(16.dp))
@@ -585,8 +666,63 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     }
                 }
             }
+            item(key = "seller-earnings-summary") {
+                val ready = !moneyLoading && moneyError == null
+                val funds = if (ready) sellerFundsFor("NGN") else null
+                Surface(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, color = FynxDesign.AzureBlue, contentColor = Color.White) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("AVAILABLE FOR PAYOUT", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            when {
+                                funds != null -> formatSellerMoney(funds.availableForPayout, "NGN")
+                                moneyLoading -> "Checking…"
+                                else -> "Unavailable"
+                            },
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (funds != null) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ShopFundsFigure("Protected", funds.protectedFunds, Modifier.weight(1f))
+                                ShopFundsFigure("Pending", funds.payoutPending, Modifier.weight(1f))
+                                ShopFundsFigure("Paid out", funds.paidOut, Modifier.weight(1f))
+                            }
+                        } else if (moneyError != null) {
+                            Text("Your balances are hidden until they load correctly.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (ready && currencies.any { it != "NGN" }) {
+                            Text("You also have earnings in other currencies. See Earnings & payouts.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        OutlinedButton(
+                            onClick = { if (moneyError != null) loadMoney() else activeSection = "Earnings & payouts" },
+                            enabled = !moneyLoading,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            border = BorderStroke(1.dp, Color.White),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (moneyError != null) "Retry earnings" else "View earnings & payouts") }
+                    }
+                }
+            }
+            item(key = "seller-manage-shop") {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
+                    Column(Modifier.padding(vertical = 6.dp)) {
+                        ShopActionRow(Icons.Default.Inventory2, "Listings", listingSummary) { activeSection = "Listings" }
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                        ShopActionRow(Icons.AutoMirrored.Filled.ReceiptLong, "Orders", "Review buyer orders and next steps") { activeSection = "Orders" }
+                        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                        ShopActionRow(Icons.Default.LocalShipping, "Delivery & drivers", "Assign drivers and track deliveries") { activeSection = "Delivery & drivers" }
+                    }
+                }
+            }
+            item(key = "seller-view-public-shop") {
+                Button(onClick = onViewPublicShop, modifier = Modifier.fillMaxWidth()) {
+                    Text("View public Marketplace profile")
+                }
+            }
             item(key = "seller-weekly-recognition") {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("🏆", style = MaterialTheme.typography.titleLarge)
@@ -646,18 +782,18 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         }
         if (activeSection == "Orders") {
             item {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Orders", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("Review buyer orders, fulfillment progress, protected payment status, receipts and available next actions.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() })
+                        FynxMarketplaceSellerOrders(context = context, onChanged = { refresh() }, testOnlyOrders = testOnlyOrders)
                     }
                 }
             }
         }
         if (activeSection == "Delivery & drivers") {
             item {
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Delivery & drivers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("Manage driver assignments and delivery coordination separately from order review and payout settings.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -671,7 +807,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
             }
         }
         if (activeSection == "Shop profile") item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Shop identity", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -824,7 +960,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         }
 
         if (activeSection == "Earnings & payouts") item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Marketplace earnings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -928,7 +1064,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         }
 
         if (activeSection == "Earnings & payouts") item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Seller earnings history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     moneyError?.let { message ->
@@ -981,7 +1117,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         }
 
         if (activeSection == "Earnings & payouts") item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountBalance, null, tint = MaterialTheme.colorScheme.primary)
@@ -1050,7 +1186,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
             }
             item { Text("Your listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
             items(listings, key = { it.id }) { listing ->
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (listing.mediaIds.isNotEmpty()) {
@@ -1088,6 +1224,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                     editCondition = listing.condition.uppercase(Locale.US)
                                     editLocation = listing.location
                                     editPrice = listing.price.toString()
+                                    editOriginalPrice = listing.originalPrice?.toString().orEmpty()
                                     editQuantity = listing.quantity.toString()
                                     editError = null
                                 }) { Icon(Icons.Default.Edit, "Edit listing") }
@@ -1124,7 +1261,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
         if (activeSection == "Listings" && !loading && archivedListings.isNotEmpty()) {
             item { Text("Archived listings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
             items(archivedListings, key = { "archived-${it.id}" }) { listing ->
-                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape) {
+                Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = shopCardColors, border = shopCardBorder) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (listing.mediaIds.isNotEmpty()) {
@@ -1161,6 +1298,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                 editCondition = listing.condition.uppercase(Locale.US)
                                 editLocation = listing.location
                                 editPrice = listing.price.toString()
+                                editOriginalPrice = listing.originalPrice?.toString().orEmpty()
                                 editQuantity = listing.quantity.toString()
                                 editError = null
                             }) { Icon(Icons.Default.Edit, "Edit archived listing") }
@@ -1364,7 +1502,16 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                     OutlinedTextField(
                         value = editPrice,
                         onValueChange = { editPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                        label = { Text("Price (${selectedListing.currency})") },
+                        label = { Text("Selling price (${selectedListing.currency})") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = !editSaving
+                    )
+                    OutlinedTextField(
+                        value = editOriginalPrice,
+                        onValueChange = { editOriginalPrice = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                        label = { Text("Original price (${selectedListing.currency}, optional)") },
+                        supportingText = { Text("Leave blank to remove the markdown. The original price must be above the selling price.") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         enabled = !editSaving
@@ -1390,6 +1537,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                         editCondition.trim().uppercase(Locale.US) in setOf("NEW", "USED", "REFURBISHED") &&
                         editLocation.trim().isNotBlank() &&
                         editPrice.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } == true &&
+                        (editOriginalPrice.isBlank() || (editOriginalPrice.toDoubleOrNull()?.let { it.isFinite() && it > (editPrice.toDoubleOrNull() ?: 0.0) } == true)) &&
                         editQuantity.toIntOrNull()?.let { it >= 0 } == true,
                     onClick = {
                         val price = editPrice.toDoubleOrNull() ?: return@Button
@@ -1420,7 +1568,8 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                     editLocation,
                                     price,
                                     quantity,
-                                    mediaIds = uploadedMedia?.map { it.id }
+                                    mediaIds = uploadedMedia?.map { it.id },
+                                    originalPrice = editOriginalPrice.toDoubleOrNull()
                                 ).getOrThrow()
                                 uploadedMedia
                             }.onSuccess { uploadedMedia ->
@@ -1434,6 +1583,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                         condition = editCondition.trim().uppercase(Locale.US),
                                         location = editLocation.trim(),
                                         price = price,
+                                        originalPrice = editOriginalPrice.toDoubleOrNull(),
                                         quantity = quantity,
                                         mediaIds = replacementIds ?: current.mediaIds,
                                         mediaTypes = replacementTypes ?: current.mediaTypes
@@ -1447,6 +1597,7 @@ fun FynxMarketplaceSellerCenterPanel(onViewPublicShop: () -> Unit = {}) {
                                         condition = editCondition.trim().uppercase(Locale.US),
                                         location = editLocation.trim(),
                                         price = price,
+                                        originalPrice = editOriginalPrice.toDoubleOrNull(),
                                         quantity = quantity,
                                         mediaIds = replacementIds ?: current.mediaIds,
                                         mediaTypes = replacementTypes ?: current.mediaTypes
@@ -1576,5 +1727,31 @@ private fun MoneySummaryRow(label: String, amount: Double, currency: String) {
     }
 }
 
-private fun formatSellerMoney(price: Double, currency: String): String =
-    "${currency.uppercase()} ${String.format(Locale.US, "%,.2f", price)}"
+@Composable
+private fun ShopFundsFigure(label: String, amount: Double, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        Text(formatSellerMoney(amount, "NGN"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 2)
+    }
+}
+
+@Composable
+private fun ShopActionRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = FynxDesign.AzureBlue)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun formatSellerMoney(price: Double, currency: String): String {
+    val amount = String.format(Locale.US, "%,.2f", price)
+    return if (currency.equals("NGN", ignoreCase = true)) "₦$amount" else "${currency.uppercase()} $amount"
+}

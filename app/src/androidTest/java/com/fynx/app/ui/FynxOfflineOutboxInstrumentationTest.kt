@@ -148,4 +148,195 @@ class FynxOfflineOutboxInstrumentationTest {
         assertEquals(null, result)
         assertTrue("A failed local copy must not enqueue a message that cannot be retried", FynxOfflineOutbox.load(context).isEmpty())
     }
+    @Test
+    fun structuredMessagesPersistAcrossReloadAndRemainAccountScoped() {
+        val types = listOf("location", "contact", "poll", "sticker", "gif")
+        val queued = types.map { type ->
+            val id = "offline-structured-$type-${UUID.randomUUID()}"
+            val mediaBacked = type == "sticker" || type == "gif"
+            FynxOfflineOutbox.Item(
+                id = id,
+                requestId = "request-$id",
+                recipient = "recipient@example",
+                text = "",
+                replyToId = null,
+                mediaId = if (mediaBacked) "12345" else null,
+                mediaType = if (mediaBacked) "image" else null,
+                voiceDurationMs = 0L,
+                createdAt = System.currentTimeMillis(),
+                messageType = type,
+                messagePayload = when (type) {
+                    "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
+                    "contact" -> mapOf("name" to "Test Contact", "phone" to "+2348000000000")
+                    "poll" -> mapOf("question" to "Choose?", "options" to "A\u001FB")
+                    else -> mapOf("caption" to type)
+                }
+            )
+        }
+        try {
+            queued.forEach { item ->
+                assertTrue("Structured item ${item.messageType} must enqueue",
+                    FynxOfflineOutbox.enqueue(context, item, expectedAccountKey = testUsername))
+            }
+
+            // Re-reading SharedPreferences models process recreation: no in-memory queue is needed.
+            val restored = FynxOfflineOutbox.load(context).associateBy { it.messageType }
+            assertEquals(types.toSet(), restored.keys)
+            queued.forEach { original ->
+                val persisted = requireNotNull(restored[original.messageType])
+                assertEquals(original.id, persisted.id)
+                assertEquals(original.requestId, persisted.requestId)
+                assertEquals(original.messagePayload, persisted.messagePayload)
+                assertEquals(original.mediaId, persisted.mediaId)
+            }
+
+            val otherAccount = "offline-structured-other-${UUID.randomUUID()}"
+            assertTrue(authPreferences.edit().putString("username", otherAccount).commit())
+            assertTrue("A different account must not see structured pending messages",
+                FynxOfflineOutbox.load(context).isEmpty())
+        } finally {
+            assertTrue(authPreferences.edit().putString("username", testUsername).commit())
+            queued.forEach { FynxOfflineOutbox.remove(context, it.id, expectedAccountKey = testUsername) }
+        }
+        assertTrue(FynxOfflineOutbox.load(context).isEmpty())
+    }
+
+
+    @Test
+    fun serverAcceptedStructuredMessageReplacesPendingBubbleAndRejectsStaleSnapshot() {
+        val types = listOf("location", "contact", "poll", "sticker", "gif")
+        types.forEachIndexed { index, type ->
+            val recipient = "structured-replacement-$type-${UUID.randomUUID()}"
+            try {
+                val localId = "offline-pending-$type-${UUID.randomUUID()}"
+                val serverId = (System.currentTimeMillis() * 10L + index).toString()
+                val payload = when (type) {
+                    "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
+                    "contact" -> mapOf("name" to "Test Contact", "phone" to "+2348000000000")
+                    "poll" -> mapOf("question" to "Choose?", "options" to "A\u001FB")
+                    else -> mapOf("caption" to type)
+                }
+                val pending = ChatMessage(
+                    text = "",
+                    fromMe = true,
+                    id = localId,
+                    delivered = false,
+                    messageType = type,
+                    messagePayload = payload
+                )
+                FynxChatStore.save(context, recipient, listOf(pending))
+
+                val accepted = ChatMessage(
+                    text = "",
+                    fromMe = true,
+                    id = serverId,
+                    delivered = true,
+                    read = false,
+                    messageType = type,
+                    messagePayload = payload
+                )
+                FynxChatStore.replaceMessage(context, recipient, localId, accepted)
+
+                val afterAcceptance = FynxChatStore.load(context, recipient)
+                assertEquals("Only the server-accepted bubble should remain for $type", 1, afterAcceptance.size)
+                assertEquals(serverId, afterAcceptance.single().id)
+                assertTrue(afterAcceptance.single().delivered)
+                assertEquals(type, afterAcceptance.single().messageType)
+                assertEquals(payload, afterAcceptance.single().messagePayload)
+
+                // A late Compose snapshot containing the old local ID must not
+                // resurrect the pending bubble after server acceptance.
+                FynxChatStore.save(context, recipient, listOf(pending))
+                val afterStaleSnapshot = FynxChatStore.load(context, recipient)
+                assertEquals("Stale pending state must not replace accepted $type message", 1, afterStaleSnapshot.size)
+                assertEquals(serverId, afterStaleSnapshot.single().id)
+                assertEquals(type, afterStaleSnapshot.single().messageType)
+            } finally {
+                FynxChatStore.clear(context, recipient)
+            }
+        }
+    }
+
+
+    
+    @Test
+    fun structuredSendFailureQueuesAndReconnectDrainReplacesPendingForEveryType() = runBlocking {
+        val types = listOf("location", "contact", "poll", "sticker", "gif")
+        val recipients = types.associateWith { "offline-reconnect-$it-${UUID.randomUUID()}" }
+        val pendingIds = mutableMapOf<String, String>()
+        var online = false
+        var serverSequence = 70000L
+        val acceptedRequestIds = mutableMapOf<String, String>()
+        FynxBackendClient.requestExecutorForTests = { _, method, path, body, _ ->
+            when {
+                method == "GET" && path == "/api/me" -> """{"user":{"id":"local-user"}}"""
+                method == "GET" && path.startsWith("/api/messages/") -> """{"messages":[]}"""
+                method == "POST" && path == "/api/messages" && !online ->
+                    throw java.io.IOException("simulated connection failure")
+                method == "POST" && path == "/api/messages" && online -> {
+                    val request = org.json.JSONObject(requireNotNull(body))
+                    val type = request.getString("messageType")
+                    val payload = request.getJSONObject("messagePayload")
+                    acceptedRequestIds[type] = request.getString("clientMessageId")
+                    val acceptedId = (serverSequence++).toString()
+                    """{"message":{"id":"$acceptedId","sender_id":"local-user","sender_username":"$testUsername","recipient_id":"peer","recipient_username":"${recipients[type]}","text":"","timestamp":${System.currentTimeMillis()},"delivered":true,"read":false,"edited":false,"deleted":false,"message_type":"$type","message_payload":$payload}}"""
+                }
+                else -> throw AssertionError("Unexpected test transport request: $method $path")
+            }
+        }
+        try {
+            types.forEach { type ->
+                val payload = when (type) {
+                    "location" -> mapOf("latitude" to "6.5244", "longitude" to "3.3792")
+                    "contact" -> mapOf("name" to "Offline Contact", "phone" to "+2348000000000")
+                    "poll" -> mapOf("question" to "Reconnect?", "options" to "Yes\\u001FNo")
+                    else -> mapOf("caption" to type)
+                }
+                val mediaBacked = type == "sticker" || type == "gif"
+                val requestId = "reconnect-request-$type-${UUID.randomUUID()}"
+                val sent = FynxProductionMessaging.sendStructuredMessage(
+                    context = context,
+                    recipientUsername = recipients.getValue(type),
+                    messageType = type,
+                    payload = payload,
+                    mediaId = if (mediaBacked) "12345" else null,
+                    mediaType = if (mediaBacked) "image" else null,
+                    requestId = requestId,
+                    expectedAccountKey = testUsername,
+                    requestToken = null
+                )
+                assertTrue("Offline $type send should return a pending local message", sent.isSuccess)
+                val pending = sent.getOrThrow()
+                assertTrue(pending.id.startsWith("offline-"))
+                assertFalse(pending.delivered)
+                pendingIds[type] = pending.id
+                FynxChatStore.save(context, recipients.getValue(type), listOf(FynxProductionMessaging.toChatMessage(pending, "local-user")))
+            }
+            val queued = FynxOfflineOutbox.load(context)
+            assertEquals(types.toSet(), queued.map { it.messageType }.toSet())
+            assertEquals(types.size, queued.size)
+            assertTrue(queued.all { it.requestId.startsWith("reconnect-request-") })
+
+            online = true
+            assertEquals(types.size, FynxOfflineSync.drain(context))
+            assertEquals(
+                "Reconnect must replay the exact clientMessageId originally persisted for each structured send",
+                queued.associate { it.messageType to it.requestId },
+                acceptedRequestIds
+            )
+            assertTrue(FynxOfflineOutbox.load(context).isEmpty())
+            types.forEach { type ->
+                val messages = FynxChatStore.load(context, recipients.getValue(type))
+                assertEquals("Only the accepted server bubble should remain for $type", 1, messages.size)
+                assertFalse(messages.single().id == pendingIds.getValue(type))
+                assertTrue(messages.single().delivered)
+                assertEquals(type, messages.single().messageType)
+            }
+        } finally {
+            FynxBackendClient.requestExecutorForTests = null
+            FynxOfflineOutbox.load(context).forEach { FynxOfflineOutbox.remove(context, it.id, expectedAccountKey = testUsername) }
+            recipients.values.forEach { FynxChatStore.clear(context, it) }
+        }
+    }
+
 }

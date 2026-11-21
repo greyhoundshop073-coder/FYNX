@@ -12,8 +12,8 @@ class FynxPassiveVideoView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : VideoView(context, attrs, defStyleAttr) {
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Playback is controlled by the Compose host; don't let accidental taps
-        // toggle playback while scrolling the Home feed.
-        return true
+        // Playback is controlled by the Compose host; let the parent feed receive
+        // drag gestures so scrolling still works when a gesture starts over video.
+        return false
     }
 }

@@ -39,8 +39,6 @@ internal fun belongsToDirectConversation(
 
     val senderIsCurrentUser = remoteSenderId.trim() == currentId
     val recipientIsCurrentUser = remoteRecipientId.trim() == currentId
-
-    // A valid direct message has exactly one endpoint equal to the signed-in account.
     if (senderIsCurrentUser == recipientIsCurrentUser) return false
 
     return if (senderIsCurrentUser) {

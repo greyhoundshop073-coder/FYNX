@@ -7,102 +7,32 @@ import org.junit.Test
 class FynxConversationIsolationTest {
     @Test
     fun acceptsIncomingMessageFromTheOpenPeer() {
-        assertTrue(
-            belongsToDirectConversation(
-                remoteSenderId = "peer-42",
-                remoteSenderUsername = "runtimepeer",
-                remoteRecipientId = "owner-7",
-                remoteRecipientUsername = "owner",
-                currentUserId = "owner-7",
-                peerUserId = "peer-42",
-                peerUsername = "@runtimepeer"
-            )
-        )
+        assertTrue(belongsToDirectConversation("peer-42", "runtimepeer", "owner-7", "owner", "owner-7", "peer-42", "@runtimepeer"))
     }
 
     @Test
     fun acceptsOutgoingMessageToTheOpenPeer() {
-        assertTrue(
-            belongsToDirectConversation(
-                remoteSenderId = "owner-7",
-                remoteSenderUsername = "owner",
-                remoteRecipientId = "peer-42",
-                remoteRecipientUsername = "runtimepeer",
-                currentUserId = "owner-7",
-                peerUserId = "peer-42",
-                peerUsername = "runtimepeer"
-            )
-        )
+        assertTrue(belongsToDirectConversation("owner-7", "owner", "peer-42", "runtimepeer", "owner-7", "peer-42", "runtimepeer"))
     }
 
     @Test
     fun rejectsAnotherConversationInvolvingTheSignedInUser() {
-        assertFalse(
-            belongsToDirectConversation(
-                remoteSenderId = "owner-7",
-                remoteSenderUsername = "owner",
-                remoteRecipientId = "different-peer",
-                remoteRecipientUsername = "different",
-                currentUserId = "owner-7",
-                peerUserId = "peer-42",
-                peerUsername = "runtimepeer"
-            )
-        )
+        assertFalse(belongsToDirectConversation("owner-7", "owner", "different-peer", "different", "owner-7", "peer-42", "runtimepeer"))
     }
 
     @Test
     fun usesNormalizedUsernameOnlyWhenPeerIdHasNotResolved() {
-        assertTrue(
-            belongsToDirectConversation(
-                remoteSenderId = "peer-42",
-                remoteSenderUsername = "@RuntimePeer",
-                remoteRecipientId = "owner-7",
-                remoteRecipientUsername = "owner",
-                currentUserId = "owner-7",
-                peerUserId = null,
-                peerUsername = "@runtimepeer"
-            )
-        )
+        assertTrue(belongsToDirectConversation("peer-42", "@RuntimePeer", "owner-7", "owner", "owner-7", null, "@runtimepeer"))
     }
 
     @Test
     fun doesNotFallBackToUsernameWhenStablePeerIdIsKnown() {
-        assertFalse(
-            belongsToDirectConversation(
-                remoteSenderId = "different-peer",
-                remoteSenderUsername = "runtimepeer",
-                remoteRecipientId = "owner-7",
-                remoteRecipientUsername = "owner",
-                currentUserId = "owner-7",
-                peerUserId = "peer-42",
-                peerUsername = "runtimepeer"
-            )
-        )
+        assertFalse(belongsToDirectConversation("different-peer", "runtimepeer", "owner-7", "owner", "owner-7", "peer-42", "runtimepeer"))
     }
 
     @Test
     fun rejectsBlankIdentityAndSelfAddressedMessages() {
-        assertFalse(
-            belongsToDirectConversation(
-                remoteSenderId = "owner-7",
-                remoteSenderUsername = "owner",
-                remoteRecipientId = "peer-42",
-                remoteRecipientUsername = "runtimepeer",
-                currentUserId = "",
-                peerUserId = "peer-42",
-                peerUsername = "runtimepeer"
-            )
-        )
-        assertFalse(
-            belongsToDirectConversation(
-                remoteSenderId = "owner-7",
-                remoteSenderUsername = "owner",
-                remoteRecipientId = "owner-7",
-                remoteRecipientUsername = "owner",
-                currentUserId = "owner-7",
-                peerUserId = "peer-42",
-                peerUsername = "runtimepeer"
-            )
-        )
+        assertFalse(belongsToDirectConversation("owner-7", "owner", "peer-42", "runtimepeer", "", "peer-42", "runtimepeer"))
+        assertFalse(belongsToDirectConversation("owner-7", "owner", "owner-7", "owner", "owner-7", "peer-42", "runtimepeer"))
     }
 }

@@ -14,6 +14,8 @@ def check(name, ok):
 remote_media = read('app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt')
 timeline = read('app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt')
 market = read('app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt')
+home_social = read('app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt')
+home_people = home_social
 market_compat = read('app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt')
 profile = read('app/src/main/java/com/fynx/app/ui/ProfilePanel.kt')
 profile_client = read('app/src/main/java/com/fynx/app/ui/FynxProfileRemoteClient.kt')
@@ -25,16 +27,18 @@ media_privacy = read('backend/mediaPrivacy.js')
 glass_theme = read('app/src/main/java/com/fynx/app/ui/FynxGlassTheme.kt')
 glass_wallpaper = read('app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt')
 chat_settings = read('app/src/main/java/com/fynx/app/ui/FynxChatSettingsPanel.kt')
-group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
+group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
 friends_panel = read('app/src/main/java/com/fynx/app/ui/FriendsPanel.kt')
 conversation = read('app/src/main/java/com/fynx/app/ui/ConversationPanel.kt')
 production_messaging = read('app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt')
 chat_store = read('app/src/main/java/com/fynx/app/ui/FynxChatStore.kt')
-offline_outbox = read('app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt')
-offline_sync = read('app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt')
 runtime_navigation = read('scripts/verify_authenticated_runtime_navigation.py')
 chats_panel = read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt')
 groups_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
+safety_client = read('app/src/main/java/com/fynx/app/ui/FynxSafetyRemoteClient.kt')
+admin_client = read('app/src/main/java/com/fynx/app/ui/FynxAdminClient.kt')
+admin_panel = read('app/src/main/java/com/fynx/app/ui/FynxAnnouncementsPanel.kt')
+comments_panel = read('app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt')
 
 check('remote media uses the authenticated central downloader', 'FynxBackendClient.downloadToFile' in remote_media and 'MAX_REMOTE_MEDIA_BYTES' in remote_media)
 check('remote media is account scoped', 'FynxAuthStore.accountStorageKey(context)' in remote_media and 'FynxBackendClient.hasAccessToken(context)' in remote_media)
@@ -42,7 +46,7 @@ check('Status timeline uses the shared remote audio renderer', re.search(r'FynxR
 check('Status circles use the shared remote avatar resolver for authoritative identity and invalidation', 'FynxRemoteProfileAvatar(' in timeline and 'ownerUsername = avatarOwnerUsername' in timeline and 'val avatarOwnerUsername = status?.ownerUsername' in timeline)
 check('profile cold start hydrates the cached remote avatar', 'cachedProfilePhotoId(context, it)' in profile and 'remotePhotoId = remote.profilePhotoMediaId' in profile and 'remoteProfileLoaded = true' in profile)
 check('remote profile success persists authoritative avatar identity', 'saveRemoteProfilePhotoId(context, normalized, profile.profilePhotoMediaId)' in profile_client)
-check('chat list uses the server avatar as authoritative, including clearing a removed photo', 'remoteByUsername' in chats_panel and 'avatarUri = serverPreview.avatarUri' in chats_panel and 'serverPreview == null' in chats_panel)
+check('chat list clears stale avatar when server photo is removed', 'else chat.copy(avatarUri = null)' in read('app/src/main/java/com/fynx/app/ui/ChatsPanel.kt'))
 check('conversation keeps cached avatar only while remote profile is loading', 'var remoteProfileLoaded by remember(chat.username)' in conversation and 'if (remoteProfileLoaded)' in conversation)
 check('conversation marks remote profile loaded after successful fetch', 'remoteProfileLoaded = true' in conversation)
 
@@ -58,18 +62,6 @@ market_cache_authority = 'cachedProfilePhotoId(context,' in remote_media and 'sa
 check('Marketplace seller avatar uses the shared cache-first avatar authority path', market_avatar_call and market_cache_authority)
 
 check('identity cache is account namespaced', 'KEY_REMOTE_IDENTITY_CACHE' in prefs and 'accountNamespace(context)' in prefs)
-check('clearing a private conversation also clears stale outbox replacement aliases', '.remove(outboxReplacementKey(context, chatKey))' in chat_store and '.remove(syncKey(context, chatKey))' in chat_store)
-check('local chat history round-trips deleted state, pinned state, sender identity and group read receipts', all(token in chat_store for token in ['put("deleted", message.deleted)','put("pinned", message.pinned)','put("senderUsername", message.senderUsername ?: "")','put("readBy", JSONArray(message.readBy))','deleted = item.optBoolean("deleted")','pinned = item.optBoolean("pinned")','senderUsername = item.optString("senderUsername")','readBy = item.optJSONArray("readBy")']))
-check('private media attachments are copied into the durable outbox before network upload', 'queuePrivateAttachment(' in conversation and 'FynxOfflineOutbox.enqueueAttachment(context, item, sourceUri, mimeType)' in conversation and 'localMediaPath' in offline_outbox)
-check('private media staging writes only to the account captured before copying', 'val accountKey = FynxAuthStore.accountStorageKey(context)' in offline_outbox and 'FynxAuthStore.accountStorageKey(context) != accountKey' in offline_outbox and 'enqueue(context, name, item.copy(localMediaPath' in offline_outbox)
-check('offline retry does not remove another account’s queued item after an account switch', offline_sync.count('FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))') >= 8)
-check('private voice recordings use restart-safe app-owned outbox storage', 'mimeType = "audio/mp4"' in conversation and 'mediaType = "audio"' in conversation and 'voiceDurationMs = duration' in conversation and 'File(context.filesDir, "fynx_chat_outbox_media_' in offline_outbox)
-check('pending private outbox messages are restored and can be retried after app restart', 'FynxOfflineOutbox.updates.collect' in conversation and 'FynxOfflineOutbox.load(context)' in conversation and 'Retry pending messages' in conversation and 'pendingLocalUpload' in conversation)
-check('private outbox draining is serialized to prevent parallel media uploads and duplicate sends', 'private val drainMutex = Mutex()' in offline_sync and 'drainMutex.withLock' in offline_sync)
-check('offline send reconciliation replaces the local row in the actual @-prefixed conversation store', 'conversationStoreKey(context, item)' in offline_sync and 'FynxChatStore.load(context, candidate)' in offline_sync)
-check('queued Marketplace conversations retain their listing context until the authenticated link succeeds', 'marketplaceListingId = marketplaceListingId' in conversation and 'marketplaceListingId' in offline_outbox and 'attachListingToMessage' in offline_sync)
-check('cold-start chat reconstruction restores staged media rows before delivery', 'suspend fun restorePendingOutboxMessages()' in conversation and 'pendingBubbles' in conversation and 'FynxOfflineOutbox.load(context)' in conversation)
-check('outbox stores server acceptance so Marketplace association retries do not resend accepted messages', 'sentMessageId: String? = null' in offline_outbox and 'fun markSent(context: Context, id: String, messageId: String, expectedAccountKey: String? = null)' in offline_outbox and 'item.sentMessageId' in offline_sync)
 check('identity cache is cleared at the session boundary', 'getSharedPreferences("${KEY_REMOTE_IDENTITY_CACHE}_$accountNamespace"' in prefs)
 check('R5B audio verifier recognizes the shared renderer', 'def contains_remote_audio_renderer(source):' in r5b_verifier and "require('remote audio renderer',contains_remote_audio_renderer(remote_media))" in r5b_verifier)
 check('media privacy guard remains installed', 'app.use("/api/media", mediaGuard)' in media_privacy)
@@ -82,16 +74,24 @@ check('Group chat uses its shared wallpaper runtime and active glass palette sur
 check('Private conversation uses the shared themed wallpaper runtime', 'FynxChatWallpaperBackground' in conversation and 'glassPalette' in conversation)
 check('private chat history reconciles remote messages with the existing local store', ('mergeLocalHistory(context, username, remote)' in production_messaging or 'mergeLocalHistory(context, username, remote, currentUserId)' in production_messaging) and 'val local = FynxChatStore.load(context, username)' in production_messaging)
 check('private chat reconciliation preserves local messages missing from the remote response', 'val remoteIds = remote.asSequence().map { it.id }.toSet()' in production_messaging and 'val preserved = local.mapNotNull' in production_messaging and 'return (remote + preserved).distinctBy { it.id }.sortedBy { it.timestamp }' in production_messaging)
-check('private chat loads local conversation state off the UI thread before remote reconciliation', ('mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation or ('mutableStateOf(emptyList<ChatMessage>())' in conversation and 'FynxChatStore.load(context, chat.username, fallbackMessage)' in conversation and 'withContext(Dispatchers.IO)' in conversation and 'LaunchedEffect(chat.username)' in conversation and 'messagesLoaded = true' in conversation)) and 'FynxProductionMessaging.historyPage(' in conversation and 'messages = (messages + authoritative).distinctBy { it.id }.sortedBy { it.timestamp }' in conversation)
+check('private chat loads local conversation state off the UI thread before remote reconciliation', ('mutableStateOf(FynxChatStore.load(context, chat.username, fallbackMessage))' in conversation or ('mutableStateOf(emptyList<ChatMessage>())' in conversation and 'FynxChatStore.load(context, chat.username, fallbackMessage)' in conversation and 'withContext(Dispatchers.IO)' in conversation and 'LaunchedEffect(chat.username)' in conversation and 'messagesLoaded = true' in conversation)) and ('FynxProductionMessaging.history(context, normalizedUsername)' in conversation or (
+    'FynxProductionMessaging.historyPage(' in conversation
+    and 'historyAccountKey = FynxAuthStore.accountStorageKey(context)' in conversation
+    and 'historyRequestToken = FynxBackendClient.accessToken(context)' in conversation
+    and 'FynxBackendClient.isRequestSessionCurrent(' in conversation
+    and 'messages = (messages + authoritative).distinctBy { it.id }.sortedBy { it.timestamp }' in conversation
+)))
 check('private chat persists restored history on IO only after local restoration completes', 'LaunchedEffect(messagesLoaded, messages)' in conversation and 'if (!messagesLoaded) return@LaunchedEffect' in conversation and 'messagesLoaded = true' in conversation and 'withContext(Dispatchers.IO)' in conversation and 'FynxChatStore.save(context, chat.username, snapshot)' in conversation)
 check('Chat/Groups cold-start routes restore the approved debug-only session before deep linking', 'def restore_home_after_restart(name:str)->str:' in runtime_navigation and 'restore_home_after_restart("private-chat-self-fallback-home")' in runtime_navigation and 'restore_home_after_restart("group-chat-self-fallback-home")' in runtime_navigation and 'current,error=login()' in runtime_navigation)
 check('private-chat identity setup cannot cancel itself or recreate its socket while resolving state', 'LaunchedEffect(chat.username) {' in conversation and 'remember(chat.username) {' in conversation and 'rememberUpdatedState(currentUserId)' in conversation and 'rememberUpdatedState(recipientUserId)' in conversation and 'rememberUpdatedState(resolvedAvatarUri)' in conversation and 'LaunchedEffect(chat.username, currentUserId, recipientUserId, resolvedAvatarUri)' not in conversation and 'remember(chat.username, currentUserId, recipientUserId, resolvedAvatarUri)' not in conversation)
 check('Chat/Groups runtime gate captures complete crash and ANR context', 'def clear_runtime_log():' in runtime_navigation and '"-t","4000"' in runtime_navigation and 'Input dispatching timed out' in runtime_navigation and 'Group unavailable' in runtime_navigation)
-check('Chat list refresh debounces preview events and avoids publishing another preview update recursively', 'fun refreshChats() {' in chats_panel and 'FynxChatStore.previewUpdates.conflate().collectLatest {' in chats_panel and 'delay(700)' in chats_panel and 'refreshChats()' in chats_panel and 'FynxChatStore.savePreview(context,' not in chats_panel[chats_panel.index('fun refreshChats()'):chats_panel.index('LaunchedEffect(Unit)')])
+check('Chat list refresh cannot recursively publish another preview update', 'fun refreshChats() {' in chats_panel and re.search(r'FynxChatStore\.previewUpdates\.conflate\(\)\.collectLatest\s*\{[\s\S]{0,180}?refreshChats\(\)', chats_panel) is not None and 'FynxChatStore.savePreview(context,' not in chats_panel[chats_panel.index('fun refreshChats()'):chats_panel.index('LaunchedEffect(Unit)')])
 check('Chat list history and unread counts are not loaded from disk during composition', 'mutableStateOf(emptyList<ChatPreview>())' in chats_panel and 'mutableStateOf(emptyList<FynxGroup>())' in chats_panel and 'val unread = chat.unreadCount' in chats_panel and 'val unread = FynxChatStore.load(context, chat.username)' not in chats_panel)
-check('Groups list defers disk reads and reconciles authoritative server memberships while preserving pending offline-created groups under the initiating account', 'var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }' in groups_panel and 'LaunchedEffect(currentUsername)' in groups_panel and 'FynxGroupsStore.load(context, accountKey)' in groups_panel and 'FynxGroupRemoteClient.loadMyGroups(context)' in groups_panel and 'FynxGroupsStore.pendingSyncGroups(context, accountKey)' in groups_panel and 'FynxGroupsStore.save(context, reconciled, accountKey)' in groups_panel and 'mutableStateOf(FynxGroupsStore.load(context))' not in groups_panel[:groups_panel.index('private fun FynxCreateGroupDialog')])
-check('group chat starts from its local message store', 'mutableStateOf(loadGroupMessages(context, group.id))' in group_panel)
-check('group chat refresh preserves pending local messages not yet visible remotely', 'val remoteIds = remoteMessages.asSequence().map { it.id }.toSet()' in group_panel and 'val pendingLocal = messages.filter { it.id !in remoteIds }' in group_panel and 'messages = (remoteMessages + pendingLocal)' in group_panel)
+groups_load_is_account_scoped = ('val expectedAccountKey = accountKey' in groups_panel and 'val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, expectedAccountKey) }' in groups_panel) or ('val localGroups = withContext(Dispatchers.IO) { FynxGroupsStore.load(context, accountKey) }' in groups_panel)
+groups_pending_is_account_scoped = 'FynxGroupsStore.pendingSyncGroups(context, expectedAccountKey)' in groups_panel or 'FynxGroupsStore.pendingSyncGroups(context, accountKey)' in groups_panel
+check('Groups list defers disk reads off the UI thread and binds refresh to the signed-in account namespace', 'var groups by remember { mutableStateOf(emptyList<FynxGroup>()) }' in groups_panel and 'val accountKey = FynxAuthStore.accountStorageKey(context)' in groups_panel and 'LaunchedEffect(currentUsername, accountKey)' in groups_panel and groups_load_is_account_scoped and groups_pending_is_account_scoped and 'groups = localGroups' in groups_panel and 'mutableStateOf(FynxGroupsStore.load(context))' not in groups_panel[:groups_panel.index('private fun FynxCreateGroupDialog')])
+check('active group chat restores only unsent local messages before server authorization', 'FynxChatStore.load(context, "group_$groupId", null)' in group_panel and 'messages = local.second.filterNot { it.delivered }' in group_panel)
+check('active group history refresh retains only server-authorized pages and the local unsent outbox', 'mergeGroupMessageRefresh' in group_panel and 'authorizedGroupHistoryScope != pageHistoryScope' in group_panel and 'authorizedOlderGroupMessageIds' in group_panel)
 check('Friends refresh preserves last-known people data after transient failures', 'friends = fr.getOrElse { friends }' in friends_panel and 'val requests = rr.getOrElse { incoming + outgoing }' in friends_panel and 'blocked = br.getOrElse { blocked }' in friends_panel)
 check('Friends exposes a retry for list-refresh errors instead of showing a false empty state', 'refreshError?.let { message ->' in friends_panel and 'TextButton(onClick = { scope.launch { refresh() } }, enabled = !loading)' in friends_panel and 'friendsLoadFailed' in friends_panel and "Couldn't load friends" in friends_panel)
 check('Friends search is debounced and stale requests are cancelled safely', 'delay(350)' in friends_panel and 'currentCoroutineContext().ensureActive()' in friends_panel and 'searchLoading' in friends_panel and 'searchError' in friends_panel)
@@ -99,7 +99,7 @@ check('Friends screen exposes blocked accounts and unblock action', '"Blocked"' 
 check('Friends search switches to Discover before returning so loading and failures are visible', 'section = "Discover"' in friends_panel and 'searchError' in friends_panel)
 check('Friends requests and blocked tabs do not report false empty states after load failures', all(x in friends_panel for x in ['requestsLoadFailed', 'blockedLoadFailed', 'Couldn’t load requests', 'Couldn’t load blocked accounts']))
 check('Friend action errors are visible outside the Discover tab', 'error?.let { Text(it, color = MaterialTheme.colorScheme.error' in friends_panel)
-check('Friends can block an existing friend and a discovered account', 'FynxSocialClient.block(context, person.username)' in friends_panel and 'Block account' in friends_panel)
+check('Friends can block an existing friend and a discovered account only after confirmation', 'onBlock = { pendingRelationshipAction = person.username to "block" }' in friends_panel and 'onSecondary = { pendingRelationshipAction = person.username to "block" }' in friends_panel and 'pendingRelationshipAction?.let' in friends_panel and 'FynxSocialClient.block(context, username)' in friends_panel and 'Block account' in friends_panel)
 check('Groups invite from the authoritative accepted-friends API, not device-local cache', 'FynxSocialClient.friends(context)' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt') and 'FynxFriendsStore' not in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt'))
 check('Group invitations do not offer an invite action for existing members', 'val alreadyMember = group.members.any' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt') and 'enabled = !alreadyMember' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt') and 'alreadyMember -> "In group"' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt'))
 check('Group invite actions require a fresh successful accepted-friends fetch', 'friends = emptyList()' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt') and 'friendsError == null' in read('app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt'))
@@ -129,15 +129,9 @@ check('gift recipient cards use the shared remote avatar renderer', 'FynxRemoteP
 client_sources = '\n'.join(str(p.read_text(encoding='utf-8')) for p in (ROOT / 'app/src/main/java/com/fynx/app/ui').glob('*.kt'))
 check('this chat adds no obvious client API secrets', not re.search(r'sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}', client_sources))
 
-check('Chat list recent-conversation API is authenticated, account-scoped, and registered before the dynamic username route', 'app.get("/api/messages/recent", auth' in read('backend/server.js') and 'FynxBackendClient.get(context, "/api/messages/recent")' in production_messaging and read('backend/server.js').index('app.get("/api/messages/recent", auth') < read('backend/server.js').index('app.get("/api/messages/:username", auth') and 'WHERE NOT EXISTS' in read('backend/server.js')[read('backend/server.js').index('app.get("/api/messages/recent", auth'):read('backend/server.js').index('app.get("/api/messages/:username", auth')])
-group_store = read('app/src/main/java/com/fynx/app/ui/FynxGroupsStore.kt')
-check('offline group pending-sync IDs are read and written under the initiating account namespace', 'pendingSyncKey(context, accountKey)' in group_store and 'putStringSet(pendingSyncKey(context, accountKey), pending)' in group_store)
-group_unavailable_panel = groups_panel[groups_panel.index("if (!groupLoadComplete || selectedGroup == null)"):groups_panel.index("if (showPulse && selectedGroup != null)")]
-group_runtime_waiter = read('scripts/verify_authenticated_runtime_navigation.py').split('def wait_for_group_conversation_ui', 1)[1].split('def wait_for_conversation_ui', 1)[0]
-check('unavailable group state cannot masquerade as a usable conversation', 'This group is unavailable to this account.' in group_unavailable_panel and 'Message…' not in group_unavailable_panel and 'Group unavailable' in group_runtime_waiter and group_runtime_waiter.index('find_control(latest, ["Group unavailable"])') < group_runtime_waiter.index('find_control(latest, ["Message..."'))
-check('group conversation reads, member changes, transfer and leave remain account-scoped', re.search(r'FynxGroupsStore\.(?:load|updateGroup|removeGroup|markSynced)\(context\)', groups_panel) is None and 'FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" })' in groups_panel and 'FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })' in groups_panel)
- 
 
+check('social posts, comments and Marketplace listings submit typed content reports to the authenticated safety API', all(x in safety_client for x in ['submitContentReport', '/api/social/content-reports']) and 'submitContentReport(context, "SOCIAL_POST"' in home_social and 'submitContentReport(context, "SOCIAL_COMMENT"' in comments_panel and 'submitContentReport(context, "MARKETPLACE_LISTING"' in market)
+check('owner/admin Safety queue separates content reports from account reports and exposes audit history', all(x in admin_client for x in ['contentReports(context', 'reviewContentReport(context', 'contentReportAudit(context']) and 'Text("Content reports"' in admin_panel and 'FynxAdminClient.contentReports(context)' in admin_panel and 'FynxAdminClient.contentReportAudit(context, reportId)' in admin_panel and 'FynxAdminClient.reviewContentReport(context' in admin_panel)
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

@@ -34,8 +34,7 @@ conversation = read("app/src/main/java/com/fynx/app/ui/ConversationPanel.kt")
 groups = read("app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt")
 realtime = read("app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt")
 messaging = read("app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt")
-offline_outbox = read("app/src/main/java/com/fynx/app/ui/FynxOfflineOutbox.kt")
-offline_sync = read("app/src/main/java/com/fynx/app/ui/FynxOfflineSync.kt")
+offline_outbox_test = read("app/src/androidTest/java/com/fynx/app/ui/FynxOfflineOutboxInstrumentationTest.kt")
 backend = read("backend/server.js")
 isolation = read("backend/realtimeIsolationBootstrap.js")
 compat = read("backend/chatRealtimeCompatibility.js")
@@ -59,7 +58,16 @@ for panel, label in ((conversation, "Private Chat"), (groups, "Group Chat")):
 
 # 1. Android conversation entry and authenticated identity resolution.
 require(conversation, r"FynxBackendClient\.currentUserId\(context\)", "ConversationPanel must resolve the authenticated current user")
-require(conversation, r"FynxProductionMessaging\.(?:history|historyPage)\(\s*context,", "ConversationPanel must load production conversation history through the authenticated legacy or paginated API")
+require(
+    conversation,
+    r"FynxProductionMessaging\.(?:history|historyPage)\(\s*context,",
+    "ConversationPanel must load production conversation history through the bounded API or its legacy compatibility method",
+)
+if "FynxProductionMessaging.historyPage(" in conversation:
+    require(conversation, r"historyAccountKey = FynxAuthStore.accountStorageKey\(context\)", "Paged private history must snapshot the signed-in account before loading")
+    require(conversation, r"historyRequestToken = FynxBackendClient.accessToken\(context\)", "Paged private history must snapshot the session token before loading")
+    require(conversation, r"FynxBackendClient.isRequestSessionCurrent\(", "Paged private history must reject responses from a changed account or session")
+    require(conversation, r"hasOlderMessages = page.hasMore[\s\S]{0,120}olderMessagesCursor = page.nextBeforeId", "Paged private history must preserve its next-page cursor")
 require(conversation, r"realtimeClient\.connect\(\)", "ConversationPanel must connect its realtime transport")
 require(conversation, r"realtimeClient\.close\(\)", "ConversationPanel must close realtime transport on disposal")
 require(conversation, r"FynxProductionMessaging\.sendText\(context,", "ConversationPanel must send through production messaging")
@@ -85,17 +93,28 @@ require(messaging, r"markRead\(", "Production messaging client must implement pe
 require(messaging, r"uploadMedia\(", "Production messaging client must preserve media upload support")
 require(messaging, r"cacheRemoteMedia\(", "Production messaging client must preserve remote media caching")
 
-# 4. Attachment send must use durable staging and one retryable delivery path.
-require(conversation, r"val queued = queuePrivateAttachment\(", "Attachment send must stage through the durable private-chat queue")
-require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Selected media must be copied to app-owned durable storage before network upload")
-require(offline_outbox, r"File\(context\.filesDir, \"fynx_chat_outbox_media_", "Private attachment outbox must use persistent app files, not cacheDir")
-require(offline_sync, r"FynxProductionMessaging\.uploadMedia\(", "Queued attachments must upload through production media during retry")
-require(offline_sync, r"FynxOfflineOutbox\.markSent\(context, item\.id, remote\.id(?:, accountKey)?\)", "Accepted server message ID must be persisted before Marketplace context retry")
-require(conversation, r"FynxOfflineSync\.drain\(context\)", "Private attachment delivery must invoke the shared retry synchronizer")
-require(conversation, r"if \(queued\)[\s\S]{0,1800}attachment = null", "Successful durable staging must clear the composer attachment")
-require(conversation, r"Attachment could not be saved for retry", "Attachment staging failures must be visible to the user")
-require(conversation, r"restorePendingOutboxMessages\(\)", "Cold-start Chat must reconstruct bubbles from durable pending outbox records")
-require(conversation, r"(?:it|item)\.sentMessageId\.isNullOrBlank\(\)", "Already accepted server messages must not be reconstructed as unsent media")
+# 4. Attachments use the durable device-owned outbox so they remain safe when the backend is offline.
+# Assert durable staging, account-scoped local persistence, automatic sync attempt, and truthful failure UI.
+require(conversation, r"suspend fun queuePrivateAttachment\(", "Attachment send must use the durable offline queue")
+require(conversation, r"FynxOfflineOutbox\.Item\(", "Queued attachment must have a typed outbox record")
+require(conversation, r"requestId = java\.util\.UUID\.randomUUID\(\)\.toString\(\)", "Queued attachment must carry a unique idempotency request ID")
+require(conversation, r"FynxOfflineOutbox\.enqueueAttachment\(context, item, sourceUri, mimeType\)", "Attachment bytes must be copied into app-owned durable storage before success")
+require(conversation, r"FynxChatStore\.save\(context, chat\.username, updatedMessages\)", "Pending attachment message must be persisted with the account-scoped conversation")
+require(conversation, r"FynxOfflineSync\.drain\(context\)", "Queued attachment must attempt normal sync without discarding failed uploads")
+require(conversation, r"val queued = queuePrivateAttachment\(", "Composer attachment send must enqueue before clearing the draft")
+require(conversation, r"if \(queued\) \{[\s\S]{0,700}attachment = null[\s\S]{0,300}Attachment saved on this device and will send when the connection returns", "Successful attachment staging must clear the composer only after durable save")
+require(conversation, r"else \{\s*networkError = \"Attachment could not be saved for retry\. Keep it selected and try again\.\"\s*\}", "Failed attachment staging must keep the selection and explain how to retry")
+require(conversation, r"pendingLocalUpload", "Queued attachment must render as an explicitly pending local upload")
+
+# 4a. Device-side proof for the offline attachment queue must exercise the real
+# Android Context, app-owned media copy, account namespaces and cleanup.
+require(offline_outbox_test, r"connectedDebugAndroidTest|FynxOfflineOutboxInstrumentationTest", "Offline attachment behavior must have an Android instrumentation test")
+require(offline_outbox_test, r"enqueueAttachment\(", "Android offline test must call the production attachment enqueue path")
+require(offline_outbox_test, r"assertArrayEquals", "Android offline test must compare the actual copied media bytes")
+require(offline_outbox_test, r"FynxOfflineOutbox\.load\(context\)", "Android offline test must reload persisted outbox records")
+require(offline_outbox_test, r"A different account must not see", "Android offline test must verify cross-account isolation")
+require(offline_outbox_test, r"storedFile\.exists\(\)", "Android offline test must verify queued media cleanup")
+require(offline_outbox_test, r"attachmentStagingFailureDoesNotCreateAnOutboxEntry", "Android offline test must verify local staging failure does not enqueue an unusable item")
 
 # 5. Voice contract: the client must enforce the backend's authoritative 120-second limit
 # both at send time and at the recorder itself, so the UI cannot continue recording past it.
@@ -159,7 +178,7 @@ print("CHAT END-TO-END VERIFICATION: GREEN")
 print("- Android ConversationPanel -> realtime + production messaging wiring present")
 print("- authenticated realtime -> typing/read/ack compatibility present")
 print("- backend messages -> persistence/delivery/broadcast wiring present")
-print("- attachment send -> durable staging, upload retry and server acknowledgement path present")
+print("- attachment send -> shared success/failure completion path present")
 print("- voice capture -> recorder-level 120-second enforcement present")
 print("- voice contract -> Android 120-second limit aligned with backend")
 print("- Render preload -> scalability + Chat compatibility chain present")

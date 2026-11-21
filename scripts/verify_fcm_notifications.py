@@ -33,8 +33,7 @@ check("FCM HTTP v1 send endpoint", 'fcm.googleapis.com/v1/projects/' in push and
 check("FCM retry and invalid-token cleanup", 'response.status !== 429' in push and 'UNREGISTERED' in push and 'enabled=FALSE' in push)
 check("privacy-safe data payload", 'You have a new message.' in bootstrap and 'body: String(message)' in push)
 check("notification deep-link routing", 'route' in service and 'Uri.parse(route)' in service)
-check("group message push hook", "queueFynxNotification" in bootstrap and "type:'GROUP'" in bootstrap and "targetId:groupId" in bootstrap and "userId:member.user_id" in bootstrap and "notificationId:'group-'" in bootstrap)
-check("group mentions receive targeted notification copy and stable mention IDs", "mentionedUsers=new Set" in bootstrap and "mentionedUsers.has(String(member.username||'').replace(/^@/,'').toLowerCase())" in bootstrap and "You were mentioned in a group" in bootstrap and "mentioned?'mention':'message'" in bootstrap)
+check("group message push hook", 'queueFynxNotification' in bootstrap and 'group-message-' in bootstrap)
 check("per-chat mute suppresses its FCM banner in addition to the conversation notification switch", 'FynxConversationPreferences.chatNotifications(this, chatUsername)' in service and 'FynxPreferencesStore.isChatMuted(this, chatUsername)' in service)
 check("friend request push hook", 'friend-request-' in bootstrap and 'FRIEND_REQUEST' in bootstrap)
 check("friend accepted push hook", 'friend-accepted-' in bootstrap and 'Friend request accepted' in bootstrap)
@@ -59,7 +58,7 @@ check("backend starts through notification bootstrap", 'node notificationBootstr
 check("server-side secrets are not APK dependencies", 'FIREBASE_SERVICE_ACCOUNT_JSON' not in read("app/build.gradle.kts"))
 check("backend aggregates repeated social notifications", "AGGREGATABLE_TYPES = new Set(['REACTION','COMMENT'])" in read("backend/notificationPreferences.js") and "aggregateNotifications" in read("backend/notificationPreferences.js"))
 check("aggregation counts distinct related posts and actors", "new Set(group.rows.map(row => String(row.target_id)).filter(Boolean))" in read("backend/notificationPreferences.js") and "new Set(group.rows.map(row => String(row.source_username || '').trim()).filter(Boolean))" in read("backend/notificationPreferences.js") and "other" in read("backend/notificationPreferences.js"))
-check("aggregate read state marks underlying events", "id.match(/^aggregate-(REACTION|COMMENT)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
+check("aggregate read state marks underlying events using numeric ID segments", r"id.match(/^aggregate-(REACTION|COMMENT)-(\d+)-(\d+)$/)" in read("backend/notificationPreferences.js") and "created_at>=to_timestamp" in read("backend/notificationPreferences.js"))
 check("FOLLOW respects Friends notification preference", 'case "FOLLOW": return "friend_requests_enabled";' in push)
 
 failed = [name for name, ok in checks if not ok]

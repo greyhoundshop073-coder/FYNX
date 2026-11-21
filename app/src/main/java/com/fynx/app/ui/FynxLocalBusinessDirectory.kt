@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -119,20 +120,24 @@ object FynxBusinessDirectoryClient {
 }
 
 @Composable
-fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) -> Unit = {}) {
+fun FynxLocalBusinessesPanel(
+    onBack: () -> Unit = {},
+    onOpenListing: (String) -> Unit = {},
+    testOnlyBusinesses: List<FynxBusinessDirectoryItem>? = null
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
-    var businesses by remember { mutableStateOf<List<FynxBusinessDirectoryItem>>(emptyList()) }
+    var businesses by remember(testOnlyBusinesses) { mutableStateOf(testOnlyBusinesses?.take(30).orEmpty()) }
     var selectedBusiness by remember { mutableStateOf<FynxBusinessDirectoryItem?>(null) }
     var businessDetails by remember { mutableStateOf<JSONObject?>(null) }
     var loadingDetails by remember { mutableStateOf(false) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember(testOnlyBusinesses) { mutableStateOf(testOnlyBusinesses == null) }
     var loadingMore by remember { mutableStateOf(false) }
-    var hasMore by remember { mutableStateOf(false) }
-    var offset by remember { mutableIntStateOf(0) }
+    var hasMore by remember(testOnlyBusinesses) { mutableStateOf((testOnlyBusinesses?.size ?: 0) > 30) }
+    var offset by remember(testOnlyBusinesses) { mutableIntStateOf(testOnlyBusinesses?.take(30)?.size ?: 0) }
     var requestGeneration by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     val categories = listOf("All", "Food", "Fashion", "Retail", "Services", "Health", "Beauty", "Automotive", "Agriculture")
@@ -143,6 +148,23 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) ->
         scope.launch {
             if (reset) { loading = true; loadingMore = false } else loadingMore = true
             error = null
+            if (testOnlyBusinesses != null) {
+                val filtered = testOnlyBusinesses.filter { business ->
+                    (query.isBlank() || business.businessName.contains(query, ignoreCase = true) || business.description.contains(query, ignoreCase = true)) &&
+                        (location.isBlank() || business.location.contains(location, ignoreCase = true)) &&
+                        (category == "All" || business.category.equals(category, ignoreCase = true))
+                }
+                val loaded = filtered.drop(requestedOffset).take(30)
+                if (generation == requestGeneration) {
+                    businesses = if (reset) loaded else businesses + loaded.filterNot { next -> businesses.any { it.id == next.id } }
+                    offset = requestedOffset + loaded.size
+                    hasMore = filtered.size > offset
+                    error = null
+                    loading = false
+                    loadingMore = false
+                }
+                return@launch
+            }
             FynxBusinessDirectoryClient.search(
                 context = context,
                 query = query,
@@ -225,7 +247,7 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) ->
                 if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             }
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("fynx-local-business-list"),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
@@ -233,13 +255,22 @@ fun FynxLocalBusinessesPanel(onBack: () -> Unit = {}, onOpenListing: (String) ->
                     Surface(
                         onClick = {
                             selectedBusiness = business
-                            businessDetails = null
-                            loadingDetails = true
-                            scope.launch {
-                                FynxBusinessDirectoryClient.details(context, business.username)
-                                    .onSuccess { businessDetails = it }
-                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                            if (testOnlyBusinesses != null) {
+                                businessDetails = JSONObject()
+                                    .put("testOnly", true)
+                                    .put("businessName", business.businessName)
+                                    .put("description", business.description)
+                                    .put("location", business.location)
                                 loadingDetails = false
+                            } else {
+                                businessDetails = null
+                                loadingDetails = true
+                                scope.launch {
+                                    FynxBusinessDirectoryClient.details(context, business.username)
+                                        .onSuccess { businessDetails = it }
+                                        .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                                    loadingDetails = false
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

@@ -39,7 +39,7 @@ checks = [
  ("Home recovery preserves the authenticated app process instead of force-stopping it", "def restore_home_after_restart(name:str)->str:" in runtime and 'fynx://home' in runtime and 'run("adb","shell","am","force-stop",PACKAGE)' not in runtime.split("def restore_home_after_restart(name:str)->str:",1)[1].split("def capture_surface(",1)[0]),
  ("wallet UI hierarchy artifacts end with a real newline", "write_text(wallet_xml+chr(10)" in runtime and "(wallet_xml or \"\")+chr(10)" in runtime),
  ("visual-only navigation also captures Wallet read-only", 'capture_wallet_from_features("marketplace-visual-wallet")' in runtime and "no listing/order/payment mutations" in runtime),
- ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready(wallet_xml)" in runtime and "wallet_opened=wallet_shell_opened and wallet_settled" in runtime),
+ ("Wallet runtime gate checks visible balance buckets rather than below-fold explanatory copy", "def wallet_destination_ready(xml_text: str) -> bool:" in runtime and 'find_control(xml_text, ["Reserved"])' in runtime and 'find_control(xml_text, ["Withdrawal pending"])' in runtime and "wallet_shell_opened=wallet_destination_ready_scrolling(wallet_xml," in runtime and "def wallet_destination_ready_scrolling(" in runtime and "wallet_opened=wallet_shell_opened and wallet_settled" in runtime),
  ("wallet branch receives full emulator and screenshot certification", workflow.count("refs/heads/feat/fynx-wallet-ux-hardening-20261031") == 4),
  ("Wallet capture correction receives full emulator and exact-commit APK certification only on its PR", workflow.count("github.event.pull_request.head.ref == 'fix/real-wallet-runtime-screen-capture-20261101'") == 4 and workflow.count("refs/heads/fix/real-wallet-runtime-screen-capture-20261101") == 1),
  ("authenticated Wallet capture runs outside the feature-search helper and saves real PNGs", runtime.index("def open_features(") < runtime.index("\nfeatures=open_features()") and "capture_wallet_from_features(\"authenticated-runtime-wallet\")" in runtime and all(name in runtime for name in ["authenticated-wallet.png", "authenticated-wallet-add-money.png", "authenticated-wallet-bank-transfer.png", "authenticated-wallet-card.png", "authenticated-wallet-ussd.png", "authenticated-wallet-withdraw.png"]) and "missing_authenticated_surfaces" in runtime),
@@ -55,7 +55,7 @@ checks = [
   and "pendingWalletBalanceCaptionDoesNotPromiseSpendableFunds" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
   and "firstVisitPendingWalletShowsOnlyItsLedgerDerivedZeroBalance" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
   and "restrictedAndClosedWalletBalancesRemainHidden" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxBuyerWalletClientTest.kt").read_text()
-  and "fynxWalletMoney(wallet?.availableBalance ?: 0.0)" in panel),
+  and "fynxWalletMoney(wallet?.availableBalance ?: 0.0, wallet?.currency ?: \"NGN\")" in panel),
  ("Azure wallet card with white text", "FynxDesign.AzureBlue" in panel and "contentColor = Color.White" in panel and "Color.White" in panel),
  ("hide/show balance control", "balanceVisible" in panel and "Hide balance" in panel and "Show balance" in panel),
  ("reserved and withdrawal-pending balance separated", "reservedBalance" in client and "withdrawalPendingBalance" in client and '"Reserved"' in panel and '"Withdrawal pending"' in panel),
@@ -74,12 +74,12 @@ checks = [
  ("activity history supports cursor-based load more", "loadMoreActivity()" in panel and "Load more activity" in panel and "nextActivityCursor" in panel and "beforeCreatedAt" in client and "nextCursor" in wallet_backend),
  ("stale pagination requests cannot clear a newer loading state", "loadingMoreActivity = false" in panel and "requestGeneration == activityRequestGeneration" in panel and "A request from an older filter/refresh must not clear the current request's spinner." in panel),
  ("pagination preserves database timestamp precision", "created_at_iso" in wallet_backend and "lastRow.created_at_iso" in wallet_backend and "US" in wallet_backend and "createdAt, id: id.toLowerCase()" in wallet_backend and "parsedDate.toISOString()" not in wallet_backend),
- ("balance visibility masks amounts across the screen", "amountsVisible = balanceVisible" in panel and "if (visible) amount?.let(::fynxWalletMoney)" in panel and "if (amountsVisible) sign + fynxWalletMoney" in panel),
+ ("balance visibility masks amounts across the screen", "amountsVisible = balanceVisible" in panel and "if (visible) amount?.let { fynxWalletMoney(it, currency) } ?: \"—\" else \"••••••\"" in panel and "if (amountsVisible) sign + fynxWalletMoney(transaction.amount, transaction.currency)" in panel),
  ("balance buckets explain withdrawal eligibility", "Held for an order or an active review." in panel and "How bank withdrawals will work" in panel and "no money moves from this screen today" in panel),
  ("wallet status has user-readable state labels", "Wallet access is restricted" in panel and "This wallet is closed" in panel),
  ("Wallet spending and payouts remain gated by explicit provider/custody/compliance and registered-business approvals", "canSpend: wallet.status === 'ACTIVE' && walletProviderApproved('SPENDING')" in wallet_backend and "FYNX_WALLET_SPENDING_ENABLED === 'true'" in wallet_backend and "FYNX_WALLET_PROVIDER_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_CUSTODY_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_COMPLIANCE_APPROVED === 'true'" in wallet_backend and "FYNX_PAYSTACK_REGISTERED_BUSINESS_APPROVED === 'true'" in wallet_backend and "FYNX_WALLET_WITHDRAWALS_ENABLED === 'true'" in wallet_backend and "FYNX_WALLET_PAYOUTS_APPROVED === 'true'" in wallet_backend),
  ("existing Marketplace Paystack checkout retained", "initializeMarketplacePayment" in payments and "verifyMarketplacePayment" in payments),
- ("NGN-only launch foundation", 'currency == "NGN"' in client and "currently supports the NGN foundation only" in panel),
+ ("live Wallet API remains NGN-only while the Android Wallet formats returned NGN/USD currency", 'currency == "NGN"' in client and "fynxWalletCurrencyMoney(amount, currency)" in panel and 'currency.equals("USD", ignoreCase = true)' in panel and "US Dollar" in panel and "Wallet balances and activity use the currency recorded on each entry." in panel),
  ("Add Money opens a dedicated funding-method screen", 'onClick = { activeAction = "ADD" }' in panel and 'screen = activeAction' in panel and 'FynxWalletActionPanel' in panel and '"ADD" ->' in actions),
  ("wallet Add Money, bank-transfer, card, USSD and Withdraw screens are captured by emulator runtime", 'wallet-add-money' in runtime and 'wallet-bank-transfer' in runtime and 'wallet-card-funding' in runtime and 'wallet-ussd-funding' in runtime and 'wallet-withdraw' in runtime),
  ("dedicated bank transfer shows only provider-assigned account details", "FynxWalletFundingAccountPanel" in actions and 'account?.status == "ACTIVE" && account?.accountNumber != null' in actions and '"Copy account number"' in actions and '"0000000000"' not in actions),
@@ -199,7 +199,7 @@ checks.extend([
  ("Marketplace -> Wallet runtime helper waits for settled Wallet buckets, saves the screenshot, and verifies Marketplace return",
   "tap_control(" in wallet_shortcut_helper
   and 'marketplace_xml, ["Wallet"]' in wallet_shortcut_helper
-  and "wallet_destination_ready(latest)" in wallet_shortcut_helper
+  and "wallet_destination_ready_scrolling(latest, prefix + \"-marketplace-wallet-probe\")" in wallet_shortcut_helper
   and "authenticated-wallet-marketplace-shortcut.png" in wallet_shortcut_helper
   and 'find_control(back_xml, ["Search products, sellers or categories"])' in wallet_shortcut_helper),
  ("Marketplace -> Wallet screenshot is mandatory in authenticated runtime",

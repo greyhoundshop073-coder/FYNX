@@ -141,18 +141,45 @@ fun HomePanel(
 }
 
 @Composable
-fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modifier, ownerUsername: String? = null) {
+fun FynxProfileImage(
+    name: String,
+    uriString: String?,
+    modifier: Modifier = Modifier,
+    ownerUsername: String? = null,
+    preferLocalUri: Boolean = false
+) {
     val context = LocalContext.current
-    val authUsername = remember(context) {
-        FynxAuthStore.load(context).username
-            ?.removePrefix("@")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
+    val authUsername = FynxAuthStore.load(context).username
+        ?.removePrefix("@")
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
     val normalizedOwner = (ownerUsername ?: authUsername)
         ?.removePrefix("@")
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+    var bitmap by remember(uriString) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(uriString) {
+        bitmap = withContext(Dispatchers.IO) {
+            uriString?.let {
+                runCatching {
+                    FynxBitmapSampling.decodeUriSampled(context, Uri.parse(it), FynxBitmapSampling.THUMBNAIL_MAX_DIMENSION)
+                }.getOrNull()
+            }
+        }
+    }
+    if (preferLocalUri && !uriString.isNullOrBlank()) {
+        if (bitmap != null) {
+            Image(
+                bitmap!!.asImageBitmap(),
+                contentDescription = name,
+                modifier = modifier.clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            FynxAvatar(name, modifier.clip(CircleShape), ownerUsername = normalizedOwner)
+        }
+        return
+    }
     var remotePhotoId by remember(normalizedOwner) {
         mutableStateOf(normalizedOwner?.let { FynxProfileRemoteClient.cachedProfilePhotoId(context, it) })
     }
@@ -172,19 +199,6 @@ fun FynxProfileImage(name: String, uriString: String?, modifier: Modifier = Modi
             ownerUsername = normalizedOwner
         )
         return
-    }
-
-    var bitmap by remember(uriString) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(uriString) {
-        bitmap = withContext(Dispatchers.IO) {
-            uriString?.let {
-                runCatching {
-                    context.contentResolver.openInputStream(Uri.parse(it)).use { input ->
-                        BitmapFactory.decodeStream(input)
-                    }
-                }.getOrNull()
-            }
-        }
     }
     if (bitmap != null) {
         Image(

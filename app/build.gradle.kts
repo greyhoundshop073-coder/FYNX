@@ -23,7 +23,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        // FynxRemoteFeatureFlags uses BuildConfig.DEBUG for the debug-only fetch cadence.
+        buildConfig = true
+    }
 }
 
 kotlin {
@@ -66,6 +70,8 @@ dependencies {
 
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Remote configuration only; Firebase Analytics is intentionally not added.
+    implementation("com.google.firebase:firebase-config")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
@@ -74,5 +80,9 @@ dependencies {
     testImplementation("org.json:json:20260719")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
+    // Android-test is a separate Gradle configuration; align Compose UI test artifacts with the app BOM.
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.01.01"))
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

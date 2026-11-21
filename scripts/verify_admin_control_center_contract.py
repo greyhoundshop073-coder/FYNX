@@ -101,7 +101,7 @@ require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynx
 require("recordAdminActivity(req,'ADMIN_GRANTED'" in backend and "recordAdminActivity(req,'ADMIN_REVOKED'" in backend and
         "RETURNING user_id" in backend and "await client.query('COMMIT')" in backend,
         "admin grant/revoke and their audit records must be committed atomically")
-require("owner already has owner access" in backend and "u.id<>(SELECT id FROM users ORDER BY id ASC LIMIT 1)" in backend,
+require("owner already has owner access" in backend and "u.id<>(SELECT owner_user_id FROM fynx_platform_owner WHERE singleton=TRUE)" in backend and "CREATE TABLE IF NOT EXISTS fynx_platform_owner" in backend,
         "OWNER must not receive a duplicate ADMIN grant or appear in the admin roster")
 
 # Report and appeal data must be fetched from the protected APIs and rendered as actionable queues.
@@ -120,11 +120,14 @@ require("app.get('/api/admin/reports'" in backend and "app.get('/api/admin/appea
         backend.count("LIMIT $1 OFFSET $2") >= 2 and backend.count("limit+1") >= 2 and
         backend.count("Math.min(10000" ) >= 2,
         "report and appeal APIs must enforce bounded database pagination")
-require("account reports; content-report types are not presented as account reports" in source,
-        "moderation queue must not misrepresent account reports as content reports")
+require('Text("Reported accounts"' in source and 'Text("Content reports"' in source and
+        "Review account reports and content reports in separate queues" in source and
+        "FynxAdminClient.contentReports(context)" in source and
+        "FynxAdminClient.reviewContentReport(context" in source,
+        "account reports and content reports must remain in distinct, separately actionable moderation queues")
 
 # The audit event must commit with the safety state change, not after a response-worthy mutation.
-require("executor = pool" in backend, "audit helper cannot use a transaction-scoped executor")
+require("executor = routePool" in backend, "audit helper cannot use a transaction-scoped executor")
 require("recordAdminActivity(req,'REPORT_REVIEWED'" in backend and "recordAdminActivity(req,'APPEAL_DECIDED'" in backend,
         "report and appeal decisions must be audited")
 require("recordAdminActivity(req,'ACCOUNT_STATUS_CHANGED'" in backend,
@@ -263,9 +266,10 @@ require("function parseCampaignTimestamp(value)" in advertising and
         "parseCampaignTimestamp(req.body?.endsAt)" in advertising and
         "(Z|([+-])(\\d{2}):(\\d{2}))" in advertising,
         "seasonal promotion create/edit must require explicit timezone and validate calendar timestamps")
-require("MAX_POSTGRES_BIGINT" in backend and "function isPositivePostgresBigint(value)" in backend and
+postgres_ids = (ROOT / "backend/postgresIds.js").read_text(encoding="utf-8")
+require("MAX_POSTGRES_BIGINT" in postgres_ids and "export function isPositivePostgresBigint(value)" in postgres_ids and
         "isPositivePostgresBigint(mediaIdRaw)" in backend and "isPositivePostgresBigint(raw)" in backend,
-        "announcement image IDs must be bounded to positive PostgreSQL BIGINT before database access")
+        "announcement image IDs must use the shared positive PostgreSQL BIGINT validator before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
 # OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the

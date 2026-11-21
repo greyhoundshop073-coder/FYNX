@@ -43,9 +43,19 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     var chatSearch by remember { mutableStateOf("") }
 
     suspend fun refreshChats() {
+        val expectedAccountKey = FynxAuthStore.accountStorageKey(context)
+        val expectedRequestToken = FynxBackendClient.accessToken(context)
+        val expectedAccountUsername = FynxAuthStore.storedUsername(context)?.trim()?.lowercase()
         val local = withContext(Dispatchers.IO) { FynxChatStore.loadPreviews(context) }
-        val remote = FynxProductionMessaging.recentConversations(context).getOrNull()
+        val remote = FynxProductionMessaging.recentConversations(
+            context, expectedAccountKey, expectedRequestToken
+        ).getOrNull()
         if (remote != null) {
+            if (!FynxBackendClient.isRequestSessionCurrent(
+                    expectedAccountKey, FynxAuthStore.accountStorageKey(context),
+                    expectedRequestToken, FynxBackendClient.accessToken(context)
+                ) || FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername
+            ) return
             val localHistories = withContext(Dispatchers.IO) {
                 local.associateBy(
                     { it.username.removePrefix("@").trim().lowercase() },
@@ -55,7 +65,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val pendingLocal = local.filter { preview ->
                 localHistories[preview.username.removePrefix("@").trim().lowercase()]?.any { !it.delivered } == true
             }
-            val remoteByUsername = remote.associateBy { it.username.removePrefix("@").trim().lowercase() }
+            // The server is authoritative for profile-photo removal. Do not retain
+            // a stale cached avatar when a contact has removed their photo.
+            val authoritativeRemote = remote.map { chat ->
+                if (chat.avatarUri != null) chat else chat.copy(avatarUri = null)
+            }
+            val remoteByUsername = authoritativeRemote.associateBy { it.username.removePrefix("@").trim().lowercase() }
             val pendingMerged = pendingLocal.map { pending ->
                 val serverPreview = remoteByUsername[pending.username.removePrefix("@").trim().lowercase()]
                 if (serverPreview == null) pending else serverPreview.copy(
@@ -65,7 +80,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 )
             }
             val pendingUsernames = pendingLocal.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
-            val remoteUsernames = remote.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
+            val remoteUsernames = authoritativeRemote.mapTo(mutableSetOf()) { it.username.removePrefix("@").trim().lowercase() }
             val cachedLocalOnly = local.filter { preview ->
                 val username = preview.username.removePrefix("@").trim().lowercase()
                 username !in remoteUsernames && username !in pendingUsernames &&
@@ -74,9 +89,11 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             val merged = pendingMerged + remote.filterNot {
                 it.username.removePrefix("@").trim().lowercase() in pendingUsernames
             } + cachedLocalOnly
-            withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged) }
+            withContext(Dispatchers.IO) { FynxChatStore.savePreviews(context, merged, expectedAccountUsername) }
+            if (FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername) return
             chats = merged
         } else {
+            if (FynxAuthStore.storedUsername(context)?.trim()?.lowercase() != expectedAccountUsername) return
             chats = withContext(Dispatchers.IO) {
                 local.map { preview ->
                     val unread = FynxChatStore.load(context, preview.username).count { !it.fromMe && !it.read }
@@ -181,7 +198,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp + LocalFynxBottomBarSpace.current)) {
                     if (visibleChats.isNotEmpty()) {
                         item {
                             Text(
@@ -364,7 +381,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 Text("No groups yet", style = MaterialTheme.typography.titleMedium)
                 Text("Create a group to start a shared conversation.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(rowSpacing), contentPadding = PaddingValues(bottom = 12.dp + LocalFynxBottomBarSpace.current)) {
                     items(groups, key = { it.id }) { group ->
                         Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                             ListItem(
@@ -381,7 +398,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
     }
         FloatingActionButton(
             onClick = onOpenContacts,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 22.dp + LocalFynxBottomBarSpace.current),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = Color.White
         ) {
