@@ -501,7 +501,7 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
         screenshot("private-chat-restored-after-process-death-failed.png")
         return ""
     screenshot("private-chat-restored-after-process-death.png")
-    (ROOT / "private-chat-restored-after-process-death.xml").write_text(cold_private + "\\n", encoding="utf-8")
+    (ROOT / "private-chat-restored-after-process-death.xml").write_text(cold_private + chr(10), encoding="utf-8")
     report.append("- PASS: the private offline message and local conversation were restored after force-stop and cold application relaunch.")
     return cold_private
 
@@ -1897,7 +1897,7 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
         screenshot("group-chat-restored-after-process-death-failed.png")
         return ""
     screenshot("group-chat-restored-after-process-death.png")
-    (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + "\\n", encoding="utf-8")
+    (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + chr(10), encoding="utf-8")
     report.append("- PASS: the offline group and its pending/local message were restored after force-stop and cold application relaunch.")
     return cold_group
 

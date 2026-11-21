@@ -19,6 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: Validate Chat and Groups certification script syntax
+        run: |
+          bash -n scripts/run_android_runtime_certification.sh
+          python3 -m py_compile scripts/verify_authenticated_runtime_navigation.py scripts/verify_chat_final_closure.py scripts/verify_r5a_groups.py
+      - name: Verify active Chat/Groups closure and R5A security contracts
+        run: |
+          python3 scripts/verify_chat_final_closure.py
+          python3 scripts/verify_r5a_groups.py
       - name: Verify Chat and Group parity/layout contracts
         run: python3 scripts/verify_chat_group_layout_and_parity_gate.py
       - name: Verify private Chat offline send and structured recovery
