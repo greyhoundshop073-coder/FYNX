@@ -15,7 +15,6 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -86,10 +85,6 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             }
         )
         assertTrue("Great Deals fixture needs at least two eligible products", candidates.size >= 2)
-        val featuredTitles = candidates.mapNotNull { candidate ->
-            dealListings.firstOrNull { it.id == candidate.id }?.title
-        }
-        assertTrue("At least two featured product titles must be available", featuredTitles.size >= 2)
         val expectedDealId = candidates[1].id
         val firstDeal = dealListings.first { it.id == candidates.first().id }
         val secondDeal = dealListings.first { it.id == expectedDealId }

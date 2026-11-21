@@ -2266,25 +2266,12 @@ private fun MarketplaceDetails(
 ) {
     val context = LocalContext.current
     val reviewScope = rememberCoroutineScope()
-    var productReviews by remember(l.id, testOnlyReviews) {
-        mutableStateOf(testOnlyReviews.orEmpty())
-    }
-    var productReviewCount by remember(l.id, testOnlyReviews) {
-        mutableIntStateOf(testOnlyReviews?.size ?: l.productReviewCount)
-    }
-    var productReviewAverage by remember(l.id, testOnlyReviews) {
-        mutableDoubleStateOf(
-            testOnlyReviews?.map { it.rating.toDouble() }?.average()?.takeIf { it.isFinite() }
-                ?: l.productAverageRating
-        )
-    }
+    var productReviews by remember(l.id) { mutableStateOf(emptyList<FynxRemoteSocialClient.MarketplaceProductReview>()) }
+    var productReviewCount by remember(l.id) { mutableIntStateOf(l.productReviewCount) }
+    var productReviewAverage by remember(l.id) { mutableDoubleStateOf(l.productAverageRating) }
     var productReviewsHasMore by remember(l.id) { mutableStateOf(false) }
-    var productReviewsOffset by remember(l.id, testOnlyReviews) {
-        mutableIntStateOf(testOnlyReviews?.size ?: 0)
-    }
-    var productReviewsLoading by remember(l.id, testOnlyReviews) {
-        mutableStateOf(testOnlyReviews == null)
-    }
+    var productReviewsOffset by remember(l.id) { mutableIntStateOf(0) }
+    var productReviewsLoading by remember(l.id) { mutableStateOf(true) }
     var productReviewsError by remember(l.id) { mutableStateOf<String?>(null) }
     var productReviewsReloadKey by remember(l.id) { mutableIntStateOf(0) }
     LaunchedEffect(l.id, productReviewsReloadKey) {

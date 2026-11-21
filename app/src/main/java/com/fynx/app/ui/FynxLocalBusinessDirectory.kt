@@ -272,7 +272,6 @@ fun FynxLocalBusinessesPanel(
                                     loadingDetails = false
                                 }
                             }
-                        }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
