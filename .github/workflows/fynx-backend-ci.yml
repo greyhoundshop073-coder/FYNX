@@ -5,7 +5,8 @@ on:
     paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   pull_request:
     branches: [ "main", "integration/fynx-single-apk-20261013" ]
-    paths: ["backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
+    # App-side Chat/Groups changes must rerun PostgreSQL integration contracts on the exact PR head.
+    paths: ["app/**", "backend/**", "scripts/**", ".github/workflows/fynx-backend-ci.yml"]
   workflow_dispatch:
     inputs:
       run_live_backend_probe:
