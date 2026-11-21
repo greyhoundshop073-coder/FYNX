@@ -213,11 +213,50 @@ object FynxProductionMessaging {
             val effectiveMimeType = prepared.second
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= MAX_MEDIA_BYTES) { "Media is too large. Maximum size is 12 MB." }
-            val body = JSONObject().apply { put("mimeType", effectiveMimeType); put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP)) }
+            val intentBody = JSONObject()
+                .put("mimeType", effectiveMimeType)
+                .put("byteSize", bytes.size)
+                .toString()
             check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
                 "Your account changed while preparing this attachment. Please choose it again."
             }
-            val raw = FynxBackendClient.postJsonForSession(context, "/api/media", body.toString(), requestToken).getOrThrow()
+            val intentRaw = FynxBackendClient.postJsonForSession(
+                context,
+                "/api/media/upload-intent",
+                intentBody,
+                requestToken
+            ).getOrThrow()
+            check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                "Your account changed while the upload was being prepared."
+            }
+            val intent = JSONObject(intentRaw)
+            val raw = if (intent.optBoolean("useLegacyUpload")) {
+                // Keep the existing PostgreSQL/Neon server-upload path for providers
+                // that do not expose the direct-to-R2 upload contract.
+                val legacyBody = JSONObject().apply {
+                    put("mimeType", effectiveMimeType)
+                    put("dataBase64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                }
+                FynxBackendClient.postJsonForSession(
+                    context,
+                    "/api/media",
+                    legacyBody.toString(),
+                    requestToken
+                ).getOrThrow()
+            } else {
+                val uploadUrl = intent.getString("uploadUrl")
+                val intentId = intent.getString("intentId")
+                FynxBackendClient.putSignedMedia(context, uploadUrl, effectiveMimeType, bytes).getOrThrow()
+                check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
+                    "Your account changed while the attachment was uploading."
+                }
+                FynxBackendClient.postJsonIdempotentForSession(
+                    context,
+                    "/api/media/upload-complete",
+                    JSONObject().put("intentId", intentId).toString(),
+                    requestToken
+                ).getOrThrow()
+            }
             check(FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
                 "Your account changed while the attachment upload was completing. Reopen the original account to continue."
             }

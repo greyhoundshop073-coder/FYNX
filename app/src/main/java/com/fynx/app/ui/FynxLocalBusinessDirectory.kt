@@ -130,20 +130,14 @@ fun FynxLocalBusinessesPanel(
     var query by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("All") }
-    var businesses by remember(testOnlyBusinesses) {
-        mutableStateOf(testOnlyBusinesses?.take(30).orEmpty())
-    }
+    var businesses by remember(testOnlyBusinesses) { mutableStateOf(testOnlyBusinesses?.take(30).orEmpty()) }
     var selectedBusiness by remember { mutableStateOf<FynxBusinessDirectoryItem?>(null) }
     var businessDetails by remember { mutableStateOf<JSONObject?>(null) }
     var loadingDetails by remember { mutableStateOf(false) }
     var loading by remember(testOnlyBusinesses) { mutableStateOf(testOnlyBusinesses == null) }
     var loadingMore by remember { mutableStateOf(false) }
-    var hasMore by remember(testOnlyBusinesses) {
-        mutableStateOf((testOnlyBusinesses?.size ?: 0) > 30)
-    }
-    var offset by remember(testOnlyBusinesses) {
-        mutableIntStateOf(minOf(testOnlyBusinesses?.size ?: 0, 30))
-    }
+    var hasMore by remember(testOnlyBusinesses) { mutableStateOf((testOnlyBusinesses?.size ?: 0) > 30) }
+    var offset by remember(testOnlyBusinesses) { mutableIntStateOf(testOnlyBusinesses?.take(30)?.size ?: 0) }
     var requestGeneration by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     val categories = listOf("All", "Food", "Fashion", "Retail", "Services", "Health", "Beauty", "Automotive", "Agriculture")
@@ -261,21 +255,22 @@ fun FynxLocalBusinessesPanel(
                     Surface(
                         onClick = {
                             selectedBusiness = business
-                        if (testOnlyBusinesses != null) {
-                            businessDetails = JSONObject()
-                                .put("testOnly", true)
-                                .put("businessName", business.businessName)
-                                .put("description", business.description)
-                                .put("location", business.location)
-                            loadingDetails = false
-                        } else {
-                            businessDetails = null
-                            loadingDetails = true
-                            scope.launch {
-                                FynxBusinessDirectoryClient.details(context, business.username)
-                                    .onSuccess { businessDetails = it }
-                                    .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                            if (testOnlyBusinesses != null) {
+                                businessDetails = JSONObject()
+                                    .put("testOnly", true)
+                                    .put("businessName", business.businessName)
+                                    .put("description", business.description)
+                                    .put("location", business.location)
                                 loadingDetails = false
+                            } else {
+                                businessDetails = null
+                                loadingDetails = true
+                                scope.launch {
+                                    FynxBusinessDirectoryClient.details(context, business.username)
+                                        .onSuccess { businessDetails = it }
+                                        .onFailure { error = "Additional business details are temporarily unavailable. Please try again." }
+                                    loadingDetails = false
+                                }
                             }
                         }
                         },

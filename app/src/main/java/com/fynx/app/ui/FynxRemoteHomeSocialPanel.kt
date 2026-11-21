@@ -103,6 +103,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var quoteBusy by remember { mutableStateOf(false) }
     var reportBusy by remember { mutableStateOf(false) }
     var reportNotice by remember { mutableStateOf<String?>(null) }
+    var reportReason by remember { mutableStateOf("Harassment or bullying") }
     var discoveryLoadingMore by remember { mutableStateOf(false) }
     var discoveryHasMore by remember { mutableStateOf(false) }
     var discoveryOffset by remember { mutableIntStateOf(0) }
@@ -555,7 +556,7 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
             }
         }
         if (loading) item(key = "feed_loading") { LinearProgressIndicator(Modifier.fillMaxWidth().semantics { contentDescription = "Loading Home feed" }) }
-        error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
+        error?.let { message -> item(key = "feed_error") { Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp), shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { reload(true) }, enabled = !feedRequestInFlight) { Text("Retry") } } } } }
         if (!loading && posts.isEmpty() && error == null) item(key = "feed_empty") { Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(if (feedMode == "FOLLOWING") "Your Following feed is quiet" else "Your feed is ready", style = MaterialTheme.typography.titleMedium); Text(if (feedMode == "FOLLOWING") "Posts from accounts you follow will appear here. Follow people to build this timeline." else "There are no visible posts yet. Create a post or find real people to build your FYNX circle."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = onCreatePost) { Text("Create Post") }; OutlinedButton(onClick = onOpenFindPeople) { Text("Find People") } } } } }
         if (feedMode == "FOR_YOU" && !loading && posts.isEmpty() && discoveryVideos.isNotEmpty()) {
             item(key = "home_discovery_empty_feed") {
@@ -619,7 +620,36 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         }
         if (loadingMore) item(key = "feed_loading_more") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
     }
-    reportPost?.let { post -> AlertDialog(onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } }, title = { Text("Report post") }, text = { Text(reportNotice ?: "Report this post to FYNX for review.") }, confirmButton = { TextButton(enabled = !reportBusy, onClick = { reportBusy = true; reportNotice = "Sending report…"; scope.launch { FynxDiscoveryClient.recordEvent(context, "REPORT", postId = post.id, metadata = JSONObject().put("reason", "user_report")).onSuccess { reportNotice = "Report submitted."; reportBusy = false; delay(700L); reportPost = null; reportNotice = null }.onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false } } }) { Text("Report post") } }, dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Cancel") } }) }
+    reportPost?.let { post ->
+        val reasons = listOf("Harassment or bullying", "Scam or fraud", "Hate or abusive content", "Violence or dangerous content", "Spam or misleading content", "Other")
+        AlertDialog(
+            onDismissRequest = { if (!reportBusy) { reportPost = null; reportNotice = null } },
+            title = { Text("Report post") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(reportNotice ?: "Choose why this post should be reviewed by FYNX.")
+                    if (reportNotice?.startsWith("Report submitted") != true) reasons.forEach { reason ->
+                        Row(Modifier.fillMaxWidth().clickable(enabled = !reportBusy) { reportReason = reason }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = reportReason == reason, onClick = { reportReason = reason }, enabled = !reportBusy)
+                            Text(reason, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportBusy && reportNotice?.startsWith("Report submitted") != true, onClick = {
+                    reportBusy = true
+                    reportNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitContentReport(context, "SOCIAL_POST", post.id, reportReason)
+                            .onSuccess { reportNotice = "Report submitted for review."; reportBusy = false }
+                            .onFailure { reportNotice = it.message ?: "Report could not be submitted."; reportBusy = false }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportBusy, onClick = { reportPost = null; reportNotice = null }) { Text("Close") } }
+        )
+    }
     quotePost?.let { original ->
         AlertDialog(
             onDismissRequest = { if (!quoteBusy) { quotePost = null; quoteText = "" } },

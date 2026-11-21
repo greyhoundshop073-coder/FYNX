@@ -406,16 +406,16 @@ let marketplacePaymentExpiryTimers = [];
 
 export function registerMarketplacePaymentExpiryWorker({ logger = console } = {}) {
   if (marketplacePaymentExpiryTimers.length) return;
-  const timer = setInterval(() => { void expireUnpaidMarketplaceReservations({ logger }); }, 60_000);
+  const timer = setInterval(() => { void Promise.resolve().then(() => expireUnpaidMarketplaceReservations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] payment expiry scan failed", error?.message || error)); }, 60_000);
   timer.unref();
-  const recoveryTimer = setInterval(() => { void recoverInterruptedPaymentInitializations({ logger }); }, 20_000);
+  const recoveryTimer = setInterval(() => { void Promise.resolve().then(() => recoverInterruptedPaymentInitializations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] payment initialization recovery failed", error?.message || error)); }, 20_000);
   recoveryTimer.unref();
-  const terminalTimer = setInterval(() => { void reconcileTerminalFinancialOperations({ logger }); }, 30_000);
+  const terminalTimer = setInterval(() => { void Promise.resolve().then(() => reconcileTerminalFinancialOperations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] terminal operation reconciliation failed", error?.message || error)); }, 30_000);
   terminalTimer.unref();
   marketplacePaymentExpiryTimers = [timer, recoveryTimer, terminalTimer];
-  void expireUnpaidMarketplaceReservations({ logger });
-  void recoverInterruptedPaymentInitializations({ logger });
-  void reconcileTerminalFinancialOperations({ logger });
+  void Promise.resolve().then(() => expireUnpaidMarketplaceReservations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] payment expiry scan failed", error?.message || error));
+  void Promise.resolve().then(() => recoverInterruptedPaymentInitializations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] payment initialization recovery failed", error?.message || error));
+  void Promise.resolve().then(() => reconcileTerminalFinancialOperations({ logger })).catch((error) => logger.error?.("[fynx-marketplace] terminal operation reconciliation failed", error?.message || error));
   logger.log(`[fynx-marketplace] payment reservation expiry enabled (${PAYMENT_RESERVATION_TTL_MINUTES} minutes); initialization recovery enabled (${PAYMENT_INITIALIZATION_RECOVERY_MINUTES} minutes)`);
 }
 

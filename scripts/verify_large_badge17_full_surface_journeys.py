@@ -17,6 +17,8 @@ def read(path):
 app = read("app/src/main/java/com/fynx/app/ui/FynxApp.kt")
 auth = read("scripts/verify_authenticated_runtime_navigation.py")
 workflow = read(".github/workflows/android-build.yml")
+runtime_script = read("scripts/run_android_runtime_certification.sh")
+emulator_wrapper = read("scripts/run_android_runtime_emulator_certification.sh")
 marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt")
 remote_marketplace = read("app/src/main/java/com/fynx/app/ui/FynxMarketplaceRemotePanel.kt")
 remote_social = read("app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt")
@@ -52,7 +54,9 @@ checks = [
      'FynxGroup' in read("app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt")),
     ("Full runtime certification remains wired",
      'verify_authenticated_runtime_navigation.py' in workflow
-     and 'connectedDebugAndroidTest' in workflow),
+     and 'connectedDebugAndroidTest' in runtime_script
+     and 'bash scripts/run_android_runtime_emulator_certification.sh' in workflow
+     and 'bash scripts/run_android_runtime_certification.sh' in emulator_wrapper),
     ("Badge #17 is actually executed by CI",
      'verify_large_badge17_full_surface_journeys.py' in workflow),
     ("No fabricated runtime records are introduced by this gate",

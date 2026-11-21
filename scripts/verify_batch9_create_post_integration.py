@@ -14,9 +14,14 @@ bootstrap = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
-    ("One Create Post composer owns the social post attachments that are actually supported there", all(x in composer for x in [
-        'ComposerQuickChip("Music"', 'ComposerQuickChip("Location"', 'ComposerQuickChip("Feeling/Activity"',
-        'FynxPostAudienceClient', 'FynxMultiMediaPostClient.createPost'
+    ("One Create Post composer exposes the real Music, Location and Feeling/Activity controls", all(x in composer for x in [
+        'if (showMorePostOptions)', 'Text("Add to your post"',
+        'onClick = { showMorePostOptions = false; showMusicPicker = true; notice = null }',
+        'Text(if (selectedCatalogueMusic == null) "Add music" else "Change music")',
+        'onClick = { showMorePostOptions = false; showFeelingActivityPicker = true }',
+        'Text("Feeling / Activity")',
+        'clickable(enabled = !posting && !locationLoading) { requestComposerLocation() }',
+        'Text("Location"', 'FynxPostAudienceClient', 'FynxMultiMediaPostClient.createPost'
     ])),
     ("Existing camera remains the single real capture implementation", "FynxCameraCapturePanel" in composer and "showCamera = true" in composer and "FynxCameraCapturePanel" in camera),
     ("Photo and video selection feeds the same publish path", "PickMultipleVisualMedia" in composer and "capturedUris" in composer and "capturedTypes" in composer and "uris: List<Uri>" in client),

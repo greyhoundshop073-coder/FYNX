@@ -5,18 +5,21 @@ package com.fynx.app.ui
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
+import android.text.Layout
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.AlignmentSpan
 import androidx.media3.common.Effect
 import androidx.media3.transformer.Effects
 import androidx.media3.common.MediaItem
@@ -42,6 +45,7 @@ import com.google.mlkit.genai.speechrecognition.speechRecognizerRequest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.Locale
 import kotlin.coroutines.resume
@@ -92,7 +96,61 @@ private class TimedCameraTextOverlay(private val cues: List<CameraCaptionCue>) :
     override fun getOverlaySettings(presentationTimeUs: Long) = settings
 }
 
-internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style: CameraVideoStyle, captionText: String = ""): Uri =
+
+/**
+ * Editor positions use a top-left origin, while Media3 background-frame anchors use NDC:
+ * x=-1 is left, x=+1 is right, y=+1 is top and y=-1 is bottom.
+ */
+internal fun cameraVideoTextOverlayBackgroundAnchor(item: FynxCameraTextOverlay): Pair<Float, Float> {
+    val x = item.x.coerceIn(0.04f, 0.96f) * 2f - 1f
+    val y = 1f - item.y.coerceIn(0.06f, 0.94f) * 2f
+    return x to y
+}
+
+/** Text added by the creator is encoded into the output video, not left as editor-only decoration. */
+private class FynxMediaTextOverlay(private val item: FynxCameraTextOverlay) : TextOverlay() {
+    private val backgroundAnchor = cameraVideoTextOverlayBackgroundAnchor(item)
+    private val settings = StaticOverlaySettings.Builder()
+        // Use the text overlay's centre as the anchor, matching the on-screen editor element.
+        .setBackgroundFrameAnchor(backgroundAnchor.first, backgroundAnchor.second)
+        .setScale((0.72f * item.scale).coerceIn(0.42f, 1.7f), (0.72f * item.scale).coerceIn(0.42f, 1.7f))
+        .build()
+
+    override fun getText(presentationTimeUs: Long): SpannableString {
+        val timeMs = presentationTimeUs / 1000L
+        val visible = isFynxCameraTextOverlayVisibleAt(item, timeMs)
+        val text = SpannableString(if (visible) item.text.trim() else "")
+        if (text.isNotEmpty()) {
+            text.setSpan(ForegroundColorSpan(item.color), 0, text.length, 0)
+            item.backgroundColor?.let { text.setSpan(BackgroundColorSpan(it), 0, text.length, 0) }
+            text.setSpan(RelativeSizeSpan(0.9f), 0, text.length, 0)
+            text.setSpan(TypefaceSpan(when (item.font) {
+                "Serif" -> "serif"
+                "Mono" -> "monospace"
+                "Hand" -> "cursive"
+                else -> "sans-serif"
+            }), 0, text.length, 0)
+            if (item.bold) text.setSpan(StyleSpan(Typeface.BOLD), 0, text.length, 0)
+            val alignment = when (item.alignment) {
+                "LEFT" -> Layout.Alignment.ALIGN_NORMAL
+                "RIGHT" -> Layout.Alignment.ALIGN_OPPOSITE
+                else -> Layout.Alignment.ALIGN_CENTER
+            }
+            text.setSpan(AlignmentSpan.Standard(alignment), 0, text.length, 0)
+        }
+        return text
+    }
+
+    override fun getOverlaySettings(presentationTimeUs: Long) = settings
+}
+
+internal suspend fun applyFynxVideoEdits(
+    context: Context,
+    sourceUri: Uri,
+    style: CameraVideoStyle,
+    captionText: String = "",
+    textOverlays: List<FynxCameraTextOverlay> = emptyList()
+): Uri =
     suspendCancellableCoroutine { continuation ->
         val sourceFile = sourceUri.path?.let(::File)
         if (sourceFile == null || !sourceFile.exists() || sourceFile.length() == 0L) {
@@ -112,6 +170,7 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
             CameraVideoStyle.BLACK_AND_WHITE -> effects += RgbFilter.createGrayscaleFilter()
             CameraVideoStyle.VIVID -> effects += HslAdjustment.Builder().adjustSaturation(22f).adjustLightness(4f).build()
         }
+        val textEffects = mutableListOf<androidx.media3.effect.TextureOverlay>()
         val cleanCaption = captionText.trim().replace(Regex("\\s+"), " ")
         if (cleanCaption.isNotBlank()) {
             val retriever = MediaMetadataRetriever()
@@ -120,8 +179,10 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
                 retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
             } finally { retriever.release() }
             val cues = buildCameraCaptionCues(cleanCaption, duration)
-            if (cues.isNotEmpty()) effects += OverlayEffect(listOf(TimedCameraTextOverlay(cues)))
+            if (cues.isNotEmpty()) textEffects += TimedCameraTextOverlay(cues)
         }
+        textOverlays.filter { it.text.isNotBlank() }.forEach { textEffects += FynxMediaTextOverlay(it) }
+        if (textEffects.isNotEmpty()) effects += OverlayEffect(textEffects)
         try {
             val edited = EditedMediaItem.Builder(MediaItem.fromUri(sourceUri)).setEffects(Effects(emptyList(), effects)).build()
             val transformer = Transformer.Builder(context).addListener(object : Transformer.Listener {
@@ -141,10 +202,180 @@ internal suspend fun applyFynxVideoEdits(context: Context, sourceUri: Uri, style
         }
     }
 
+
+/**
+ * Verify the finished MP4 before the editor accepts the export. The check decodes frames, keeps
+ * the source video track and any source audio track, and confirms a non-Natural look changed pixels.
+ */
+internal fun verifyFynxVideoEditOutput(
+    sourceUri: Uri,
+    outputUri: Uri,
+    style: CameraVideoStyle,
+    textOverlays: List<FynxCameraTextOverlay> = emptyList()
+) {
+    val sourceFile = sourceUri.path?.let(::File) ?: error("The original video file is unavailable.")
+    val outputFile = outputUri.path?.let(::File) ?: error("The edited video file is unavailable.")
+    require(sourceFile.isFile && sourceFile.length() > 1024L) { "The original video file is unavailable." }
+    require(outputFile.isFile && outputFile.length() > 1024L) { "Video export produced an empty file." }
+
+    fun trackTypes(file: File): Set<String> {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            val types = mutableSetOf<String>()
+            for (index in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
+                when {
+                    mime.startsWith("video/") -> types += "video"
+                    mime.startsWith("audio/") -> types += "audio"
+                }
+            }
+            types
+        } finally {
+            extractor.release()
+        }
+    }
+
+    val sourceTracks = trackTypes(sourceFile)
+    val outputTracks = trackTypes(outputFile)
+    require("video" in sourceTracks && "video" in outputTracks) {
+        "Video export did not produce a readable video track."
+    }
+    require("audio" !in sourceTracks || "audio" in outputTracks) {
+        "Video export did not preserve the original audio track."
+    }
+
+    fun durationMs(file: File): Long {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+        } finally {
+            retriever.release()
+        }
+    }
+
+    fun frameAt(file: File, atMs: Long): android.graphics.Bitmap {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.getFrameAtTime(atMs.coerceAtLeast(0L) * 1_000L, MediaMetadataRetriever.OPTION_CLOSEST)
+                ?: retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: error("Video export could not decode a preview frame.")
+        } finally {
+            retriever.release()
+        }
+    }
+
+    val sourceDurationMs = durationMs(sourceFile)
+    require(sourceDurationMs > 0L) { "Video export could not read the original clip duration." }
+    val styleSampleTimeMs = sourceDurationMs / 2L
+    val sourceFrame = frameAt(sourceFile, styleSampleTimeMs)
+    val outputFrame = frameAt(outputFile, styleSampleTimeMs)
+    try {
+        require(outputFrame.width > 0 && outputFrame.height > 0) {
+            "Video export produced an invalid preview frame."
+        }
+        if (style != CameraVideoStyle.NATURAL) {
+            val width = minOf(sourceFrame.width, outputFrame.width)
+            val height = minOf(sourceFrame.height, outputFrame.height)
+            val stepX = max(1, width / 32)
+            val stepY = max(1, height / 32)
+            var totalDifference = 0L
+            var samples = 0
+            var y = 0
+            while (y < height) {
+                var x = 0
+                while (x < width) {
+                    val before = sourceFrame.getPixel(x, y)
+                    val after = outputFrame.getPixel(x, y)
+                    totalDifference += kotlin.math.abs(android.graphics.Color.red(before) - android.graphics.Color.red(after))
+                    totalDifference += kotlin.math.abs(android.graphics.Color.green(before) - android.graphics.Color.green(after))
+                    totalDifference += kotlin.math.abs(android.graphics.Color.blue(before) - android.graphics.Color.blue(after))
+                    samples++
+                    x += stepX
+                }
+                y += stepY
+            }
+            val meanDifference = if (samples == 0) 0.0 else totalDifference.toDouble() / (samples * 3.0)
+            require(meanDifference > 0.5) {
+                "The selected ${style.label} style did not visibly change the exported video."
+            }
+        }
+    } finally {
+        sourceFrame.recycle()
+        outputFrame.recycle()
+    }
+
+    val requestedTextOverlays = textOverlays.filter { it.text.isNotBlank() }
+    val verifiableTextOverlays = requestedTextOverlays.filter { item ->
+        val startMs = item.startMs.coerceAtLeast(0L)
+        startMs < sourceDurationMs && item.endMs > startMs
+    }
+    if (requestedTextOverlays.isNotEmpty()) {
+        require(verifiableTextOverlays.size == requestedTextOverlays.size) {
+            "The selected video text has no visible interval inside this clip."
+        }
+
+        verifiableTextOverlays.forEach { item ->
+            val startMs = item.startMs.coerceAtLeast(0L).coerceAtMost(sourceDurationMs - 1L)
+            val endMs = item.endMs.coerceAtMost(sourceDurationMs).coerceAtLeast(startMs + 1L)
+            val sampleTimeMs = startMs + ((endMs - startMs) / 2L)
+            val sourceTextFrame = frameAt(sourceFile, sampleTimeMs)
+            val outputTextFrame = frameAt(outputFile, sampleTimeMs)
+            try {
+                val frameWidth = minOf(sourceTextFrame.width, outputTextFrame.width)
+                val frameHeight = minOf(sourceTextFrame.height, outputTextFrame.height)
+                val centerX = (item.x.coerceIn(0.04f, 0.96f) * frameWidth).toInt()
+                val centerY = (item.y.coerceIn(0.06f, 0.94f) * frameHeight).toInt()
+                val overlayScale = item.scale.coerceIn(0.55f, 2.4f)
+                val radiusX = (frameWidth * 0.42f * overlayScale).toInt().coerceAtLeast(12)
+                val radiusY = (frameHeight * 0.16f * overlayScale).toInt().coerceAtLeast(10)
+                val targetRed = android.graphics.Color.red(item.color)
+                val targetGreen = android.graphics.Color.green(item.color)
+                val targetBlue = android.graphics.Color.blue(item.color)
+
+                fun matchingTextPixels(frame: android.graphics.Bitmap): Int {
+                    var matches = 0
+                    val left = (centerX - radiusX).coerceAtLeast(0)
+                    val right = (centerX + radiusX).coerceAtMost(frame.width - 1)
+                    val top = (centerY - radiusY).coerceAtLeast(0)
+                    val bottom = (centerY + radiusY).coerceAtMost(frame.height - 1)
+                    var y = top
+                    while (y <= bottom) {
+                        var x = left
+                        while (x <= right) {
+                            val pixel = frame.getPixel(x, y)
+                            if (android.graphics.Color.alpha(pixel) > 160 &&
+                                kotlin.math.abs(android.graphics.Color.red(pixel) - targetRed) < 90 &&
+                                kotlin.math.abs(android.graphics.Color.green(pixel) - targetGreen) < 90 &&
+                                kotlin.math.abs(android.graphics.Color.blue(pixel) - targetBlue) < 90
+                            ) matches++
+                            x++
+                        }
+                        y++
+                    }
+                    return matches
+                }
+
+                val sourceMatches = matchingTextPixels(sourceTextFrame)
+                val outputMatches = matchingTextPixels(outputTextFrame)
+                require(outputMatches >= sourceMatches + 8) {
+                    "Video export did not visibly burn the text overlay into its selected time and position."
+                }
+            } finally {
+                sourceTextFrame.recycle()
+                outputTextFrame.recycle()
+            }
+        }
+    }
+}
+
 internal suspend fun generateFynxVideoTranscript(context: Context, videoUri: Uri): String {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) error("Automatic captions need Android 12 or newer on this device.")
     val video = videoUri.path?.let(::File) ?: error("The video file is unavailable.")
-    val audio = File(context.cacheDir, "fynx_caption_audio_" + System.currentTimeMillis() + ".m4a")
+    val audio = File(context.cacheDir, "fynx_caption_audio_" + System.currentTimeMillis() + ".wav")
     extractFynxVideoAudio(video, audio)
     val recognizer = SpeechRecognition.getClient(speechRecognizerOptions {
         locale = Locale.US
@@ -185,47 +416,164 @@ internal suspend fun generateFynxVideoTranscript(context: Context, videoUri: Uri
     }
 }
 
-private fun extractFynxVideoAudio(video: File, audio: File) {
+internal fun extractFynxVideoAudio(video: File, audio: File) {
     val extractor = MediaExtractor()
-    var muxer: MediaMuxer? = null
-    var started = false
+    var decoder: MediaCodec? = null
+    var decoderStarted = false
+    val pcmFile = File(audio.parentFile, audio.nameWithoutExtension + ".pcm")
     try {
         extractor.setDataSource(video.absolutePath)
-        var track = -1
-        var format: MediaFormat? = null
+        var audioTrack = -1
+        var sourceFormat: MediaFormat? = null
         for (index in 0 until extractor.trackCount) {
             val candidate = extractor.getTrackFormat(index)
             if (candidate.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true) {
-                track = index; format = candidate; break
+                audioTrack = index
+                sourceFormat = candidate
+                break
             }
         }
-        if (track < 0 || format == null) error("This video has no audio track to caption.")
-        if (format.getString(MediaFormat.KEY_MIME) != MediaFormat.MIMETYPE_AUDIO_AAC) error("This video's audio format is not supported.")
-        muxer = MediaMuxer(audio.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        val outputTrack = muxer.addTrack(format)
-        extractor.selectTrack(track)
-        muxer.start(); started = true
-        val maxSize = if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE).coerceIn(65536, 2097152) else 524288
-        val buffer = ByteBuffer.allocateDirect(maxSize)
-        val info = MediaCodec.BufferInfo()
-        while (true) {
-            buffer.clear()
-            val size = extractor.readSampleData(buffer, 0)
-            if (size < 0) break
-            val extractedFlags = extractor.sampleFlags
-            check((extractedFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
-                "Encrypted audio samples cannot be captioned."
+        val audioFormat = sourceFormat
+            ?: error("This video has no audio track to caption.")
+        if (audioTrack < 0) error("This video has no audio track to caption.")
+        val mime = audioFormat.getString(MediaFormat.KEY_MIME)
+            ?: error("This video's audio track has no supported format.")
+
+        extractor.selectTrack(audioTrack)
+        val audioDecoder = MediaCodec.createDecoderByType(mime)
+        decoder = audioDecoder
+        audioDecoder.configure(audioFormat, null, null, 0)
+        audioDecoder.start()
+        decoderStarted = true
+
+        var inputEnded = false
+        var outputEnded = false
+        var decodedFormat: MediaFormat? = null
+        var idleAfterInputEnd = 0
+        pcmFile.outputStream().buffered().use { pcmOutput ->
+            val bufferInfo = MediaCodec.BufferInfo()
+            while (!outputEnded) {
+                if (!inputEnded) {
+                    val inputIndex = audioDecoder.dequeueInputBuffer(10_000L)
+                    if (inputIndex >= 0) {
+                        val inputBuffer = audioDecoder.getInputBuffer(inputIndex)
+                            ?: error("Audio decoder did not provide an input buffer.")
+                        inputBuffer.clear()
+                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                        if (sampleSize < 0) {
+                            audioDecoder.queueInputBuffer(
+                                inputIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            )
+                            inputEnded = true
+                        } else {
+                            check((extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_ENCRYPTED) == 0) {
+                                "Encrypted audio samples cannot be captioned."
+                            }
+                            audioDecoder.queueInputBuffer(
+                                inputIndex, 0, sampleSize, extractor.sampleTime.coerceAtLeast(0L), 0
+                            )
+                            extractor.advance()
+                        }
+                    }
+                }
+
+                when (val outputIndex = audioDecoder.dequeueOutputBuffer(bufferInfo, 10_000L)) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> decodedFormat = audioDecoder.outputFormat
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        if (inputEnded && ++idleAfterInputEnd > 3_000) {
+                            error("Audio decoder did not finish converting this video's audio.")
+                        }
+                    }
+                    else -> if (outputIndex >= 0) {
+                        idleAfterInputEnd = 0
+                        val outputBuffer = audioDecoder.getOutputBuffer(outputIndex)
+                        if (bufferInfo.size > 0) {
+                            decodedFormat = decodedFormat ?: audioDecoder.outputFormat
+                            if (outputBuffer == null) {
+                                error("Audio decoder returned an empty output buffer.")
+                            }
+                            outputBuffer.position(bufferInfo.offset)
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                            val decodedBytes = ByteArray(bufferInfo.size)
+                            outputBuffer.get(decodedBytes)
+                            pcmOutput.write(decodedBytes)
+                        }
+                        val reachedEnd = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
+                        audioDecoder.releaseOutputBuffer(outputIndex, false)
+                        if (reachedEnd) outputEnded = true
+                    }
+                }
             }
-            // MediaExtractor sample flags and MediaCodec buffer flags are different
-            // flag domains. AAC audio samples do not need video key-frame flags.
-            info.set(0, size, extractor.sampleTime, 0)
-            muxer.writeSampleData(outputTrack, buffer, info)
-            if (!extractor.advance()) break
         }
-        if (!audio.exists() || audio.length() == 0L) error("No audio could be extracted for captions.")
+
+        val outputFormat = decodedFormat ?: audioDecoder.outputFormat
+        val sampleRate = outputFormat.getIntegerOrDefault(MediaFormat.KEY_SAMPLE_RATE, 0)
+        val channelCount = outputFormat.getIntegerOrDefault(MediaFormat.KEY_CHANNEL_COUNT, 0)
+        val pcmEncoding = outputFormat.getIntegerOrDefault(
+            MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_16BIT
+        )
+        require(sampleRate in 8_000..192_000 && channelCount in 1..2) {
+            "The decoded audio format is not supported for captions."
+        }
+        require(pcmEncoding == AudioFormat.ENCODING_PCM_16BIT) {
+            "The audio decoder did not produce 16-bit PCM for captions."
+        }
+        val dataBytes = pcmFile.length()
+        val frameSize = channelCount * 2L
+        require(dataBytes >= frameSize && dataBytes % frameSize == 0L) {
+            "This video's audio could not be converted into complete PCM samples."
+        }
+        require(dataBytes <= Int.MAX_VALUE.toLong() - 36L) {
+            "Audio is too long to caption on this device."
+        }
+        audio.outputStream().buffered().use { output ->
+            writeCameraWavHeader(output, dataBytes, sampleRate, channelCount)
+            pcmFile.inputStream().buffered().use { input -> input.copyTo(output) }
+        }
+    } catch (failure: Throwable) {
+        audio.delete()
+        throw failure
     } finally {
-        if (started) runCatching { muxer?.stop() }
-        runCatching { muxer?.release() }
+        if (decoderStarted) runCatching { decoder?.stop() }
+        runCatching { decoder?.release() }
         extractor.release()
+        pcmFile.delete()
     }
+}
+
+private fun MediaFormat.getIntegerOrDefault(key: String, fallback: Int): Int =
+    if (containsKey(key)) getInteger(key) else fallback
+
+private fun writeCameraWavHeader(
+    output: OutputStream,
+    pcmBytes: Long,
+    sampleRate: Int,
+    channels: Int
+) {
+    val blockAlign = channels * 2
+    val byteRate = sampleRate * blockAlign
+    output.write("RIFF".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, 36L + pcmBytes)
+    output.write("WAVEfmt ".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, 16L)
+    writeLittleEndian16(output, 1)
+    writeLittleEndian16(output, channels)
+    writeLittleEndian32(output, sampleRate.toLong())
+    writeLittleEndian32(output, byteRate.toLong())
+    writeLittleEndian16(output, blockAlign)
+    writeLittleEndian16(output, 16)
+    output.write("data".toByteArray(Charsets.US_ASCII))
+    writeLittleEndian32(output, pcmBytes)
+}
+
+private fun writeLittleEndian16(output: OutputStream, value: Int) {
+    output.write(value and 0xff)
+    output.write((value ushr 8) and 0xff)
+}
+
+private fun writeLittleEndian32(output: OutputStream, value: Long) {
+    output.write((value and 0xffL).toInt())
+    output.write(((value ushr 8) and 0xffL).toInt())
+    output.write(((value ushr 16) and 0xffL).toInt())
+    output.write(((value ushr 24) and 0xffL).toInt())
 }

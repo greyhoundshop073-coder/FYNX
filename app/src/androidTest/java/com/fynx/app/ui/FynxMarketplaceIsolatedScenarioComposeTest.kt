@@ -9,9 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -22,6 +20,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -91,6 +91,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         }
         assertTrue("At least two featured product titles must be available", featuredTitles.size >= 2)
         val expectedDealId = candidates[1].id
+        val firstDeal = dealListings.first { it.id == candidates.first().id }
+        val secondDeal = dealListings.first { it.id == expectedDealId }
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -140,18 +142,22 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         }
 
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
-        compose.onNodeWithText("Discover on FYNX").assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
+        compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // Scroll the real production LazyRow to the next slide; snapping keeps the
-        // product fully visible and verifies the selected listing identity.
+        // Select the second real slide through the production LazyRow state. This keeps
+        // listing-identity and destination assertions deterministic on slower emulators;
+        // auto-rotation is exercised independently by the following test.
         compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
         compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithText(featuredTitles[1]).fetchSemanticsNodes().isNotEmpty()
+            runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
-        compose.onNodeWithText(featuredTitles[1]).assertIsDisplayed()
-        compose.onNodeWithContentDescription("Shop this product: ${featuredTitles[1]}").performClick()
+        compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
+        // The whole production slide is clickable; tap its unique headline to prove that
+        // the selected product identity, rather than a neighbouring card, is routed.
+        compose.onNodeWithContentDescription("Shop this product: ${secondDeal.title}").performClick()
         compose.runOnIdle { assertEquals(expectedDealId, openedDealId) }
 
         compose.onAllNodesWithText("FYNX Test Product 13")[0].performScrollTo().assertIsDisplayed()
@@ -197,25 +203,32 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        val featuredTitles = candidates.mapNotNull { candidate ->
-            dealListings.firstOrNull { it.id == candidate.id }?.title
+        compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
+        // Rotation is 6.5 seconds in production. Assert the next real listing headline,
+        // rather than a counter that the production promotional banner does not render.
+        compose.waitUntil(timeoutMillis = 9_000) {
+            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
-        assertTrue("At least two featured product titles must be available", featuredTitles.size >= 2)
-        compose.onNodeWithText(featuredTitles[0]).assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 8_000) {
-            compose.onAllNodesWithText(featuredTitles[1]).fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText(featuredTitles[1]).assertIsDisplayed()
+        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {
-        val directory = File(
-            compose.activity.getExternalFilesDir(null),
-            "marketplace-test-fixtures"
-        )
-        check(directory.mkdirs() || directory.isDirectory)
-        FynxTestScreenshots.save(directory, name) {
-            compose.onRoot().captureToImage().asAndroidBitmap()
+        // Visual evidence is optional: screenshot capture must never fail a functional test.
+        runCatching {
+            val directory = File(
+                compose.activity.getExternalFilesDir(null),
+                "marketplace-test-fixtures"
+            )
+            check(directory.mkdirs() || directory.isDirectory)
+            val file = File(directory, name)
+            val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                ?: error("Could not capture the Android device display")
+            FileOutputStream(file).use { output ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            }
+            check(file.isFile && file.length() > 0L)
+        }.onFailure { error ->
+            android.util.Log.w("FYNXMarketplaceTest", "Optional screenshot '$name' was not captured", error)
         }
     }
 }

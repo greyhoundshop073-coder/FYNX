@@ -30,6 +30,11 @@ marketplace_checkout = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplac
 marketplace_lifecycle = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceOrderLifecycle.kt").read_text(encoding="utf-8")
 marketplace_store_dialog = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt").read_text(encoding="utf-8")
 app_shell = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+glass_bar = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGlassBottomBar.kt").read_text(encoding="utf-8")
+glass_header = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGlassHeader.kt").read_text(encoding="utf-8")
+chats_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+friends_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FriendsPanel.kt").read_text(encoding="utf-8")
+features_panel = app_shell[app_shell.index("@Composable\nprivate fun FynxFeaturesPanel"):]
 
 checks = [
     ("Marketplace exposes the approved Azure selected-chip palette with contrast-safe text for light and dark surfaces", "internal fun fynxMarketplaceSelectedChipColors()" in marketplace_components and "MaterialTheme.colorScheme.background.luminance() > 0.5f" in marketplace_components and "selectedContainerColor = if (isLight) FynxDesign.AzureBlue else Color(0xFF17365D)" in marketplace_components and "selectedLabelColor = if (isLight) Color(0xFF000000) else Color(0xFFEAF1FF)" in marketplace_components and marketplace_components.count("colors = selectedChipColors") >= 2 and "MarketplaceReferenceCategoryRow(" in marketplace_panel),
@@ -39,7 +44,9 @@ checks = [
     ("checkout delivery/pickup selections use shared Azure selected colors without changing quote invalidation", marketplace_checkout.count("colors = fynxMarketplaceSelectedChipColors()") >= 2 and "invalidateQuote()" in marketplace_checkout),
     ("order delivery/pickup and dispute reasons use shared Azure selected colors", marketplace_lifecycle.count("colors = fynxMarketplaceSelectedChipColors()") >= 3 and "disputeReason == code" in marketplace_lifecycle),
     ("public storefront Products/About tabs use shared Azure selected colors", "colors = fynxMarketplaceSelectedChipColors()" in marketplace_store_dialog and "selected = tab == label" in marketplace_store_dialog),
-    ("active bottom navigation uses the Azure selected container and contrast-safe on-container foreground", "indicatorColor = MaterialTheme.colorScheme.primaryContainer" in app_shell and "indicatorColor = MaterialTheme.colorScheme.secondaryContainer" not in app_shell and "selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer" in app_shell and "selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer" in app_shell),
+    ("active bottom navigation uses the floating glass bar with an Azure selected pill and accessible tab semantics", "FynxGlassBottomBar(" in app_shell and "FynxDesign.AzureBlue.copy(alpha = 0.20f)" in glass_bar and "val selectedColor = if (isLight) Color(0xFF0060C7) else Color(0xFF7DBBFF)" in glass_bar and "val idleColor = if (isLight) Color(0xFF475569) else Color(0xFFB9C6D8)" in glass_bar and "role = Role.Tab" in glass_bar and "contentDescription = item.label" in glass_bar),
+    ("glass header buttons and titles use theme colors and accessible action names", "FynxGlassIconButton(" in app_shell and "this.contentDescription = contentDescription" in glass_header and "FynxLargeHeaderTitle(" in app_shell and "MaterialTheme.colorScheme.onSurface" in glass_header),
+    ("primary tabs reserve space for the floating glass bar without hiding the final list items", "CompositionLocalProvider(LocalFynxBottomBarSpace provides bottomBarSpace)" in app_shell and "LocalFynxBottomBarSpace.current" in chats_panel and "LocalFynxBottomBarSpace.current" in friends_panel and "contentPadding = PaddingValues(bottom = LocalFynxBottomBarSpace.current + 8.dp)" in features_panel and "fynxBottomBarSpaceAboveInset()" in marketplace_panel),
     ("Marketplace reference links and action icons use the shared Material primary token, without a competing local primary token", "Text(action, color = MaterialTheme.colorScheme.primary)" in marketplace_components and "tint = MaterialTheme.colorScheme.primary" in marketplace_components and "val primary =" not in marketplace_components),
     ("default blue accent uses the Azure Blue token and preserves the existing companion and Classic Green", "Blue(FynxDesign.AzureBlue, Color(0xFF3C73BD), FynxDesign.ClassicGreen)" in design),
     ("Marketplace Smart Deals hero uses the silver mirror-glass surface with contrast-safe text and Azure accents", "Card(" in marketplace_hero and "dealsGlassBrush" in marketplace_hero and "dealsGlassBorder" in marketplace_hero and "containerColor = Color.Transparent" in marketplace_hero and "contentColor = MaterialTheme.colorScheme.onSurface" in marketplace_hero and "color = MaterialTheme.colorScheme.primary" in marketplace_hero and "ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)" in marketplace_hero and "MaterialTheme.colorScheme.onPrimary" not in marketplace_hero),
@@ -83,6 +90,13 @@ checks = [
     ("supporting palette usage rules are documented",
      all(token in guidelines for token in ("#F5F7FA", "#1C2434", "#64748B", "#D4AF37", "#E8EEFA"))),
 ]
+bar_fill = glass_bar[glass_bar.index("val barFill ="):glass_bar.index("val barRim =")]
+checks.append((
+    "floating glass bottom bar uses an opaque surface in light and dark themes",
+    "Brush.verticalGradient(listOf(Color.White, Color(0xFFEAF0F7)))" in bar_fill
+    and "Brush.verticalGradient(listOf(Color(0xFF28384F), Color(0xFF0F1A2D)))" in bar_fill,
+))
+
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)
 failed = [name for name, ok in checks if not ok]

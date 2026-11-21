@@ -22,6 +22,7 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
         val type = data["type"]?.uppercase().orEmpty()
         val channel = when (type) {
             "MESSAGE" -> FynxNotificationFoundation.MESSAGES_CHANNEL
+            "SUPPORT" -> FynxNotificationFoundation.MESSAGES_CHANNEL
             "FRIEND_REQUEST", "FOLLOW", "STORY", "COMMENT", "REACTION" -> FynxNotificationFoundation.FRIENDS_CHANNEL
             "GROUP" -> FynxNotificationFoundation.GROUPS_CHANNEL
             "MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY" -> FynxNotificationFoundation.MONEY_CHANNEL
@@ -45,7 +46,8 @@ class FynxFirebaseMessagingService : FirebaseMessagingService() {
             "You have a new message."
         } else body
         if (type == "MESSAGE" && chatUsername != null &&
-            !FynxConversationPreferences.chatNotifications(this, chatUsername)) return
+            (!FynxConversationPreferences.chatNotifications(this, chatUsername) ||
+                FynxPreferencesStore.isChatMuted(this, chatUsername))) return
 
         FynxNotificationFoundation.createChannels(this)
         val stableHash = notificationId.hashCode()

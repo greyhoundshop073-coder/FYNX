@@ -150,6 +150,20 @@ def is_home(xml_text: str) -> bool:
     )
 
 
+def return_to_home(stage: str) -> str:
+    adb("shell", "input", "keyevent", "4")
+    deadline = time.monotonic() + 12.0
+    returned = ""
+    while time.monotonic() < deadline:
+        time.sleep(0.4)
+        returned = dump_ui(f"status-{stage}-return-home.xml") or returned
+        if is_home(returned):
+            return returned
+    FAILURES.append(f"{stage}: camera Back did not return cleanly to the Home surface.")
+    screenshot(f"status-{stage}-return-home-failed.png")
+    return returned
+
+
 def main() -> int:
     report = [
         "# FYNX Status creator runtime check",
@@ -165,14 +179,20 @@ def main() -> int:
 
     current = dump_ui("status-runtime-start.xml")
     if not FAILURES and not is_home(current):
-        # My Shop is nested under Marketplace; return through its own control first.
-        back = find_click_target(current, "Back to Marketplace")
-        if back:
-            adb("shell", "input", "tap", str(back[0]), str(back[1]))
-            time.sleep(1.0)
-            current = dump_ui("status-return-marketplace.xml") or current
+        # Unwind real nested app surfaces first. A group conversation exposes
+        # "Back"; the dedicated Groups manager exposes "Back to Chats"; My Shop
+        # exposes "Back to Marketplace". Never restart or reset the app session.
+        for back_label in ("Back", "Back to Chats", "Back to Marketplace"):
+            if is_home(current):
+                break
+            back = find_click_target(current, back_label)
+            if back:
+                adb("shell", "input", "tap", str(back[0]), str(back[1]))
+                time.sleep(0.8)
+                stage_label = back_label.lower().replace(" ", "-")
+                current = dump_ui(f"status-return-{stage_label}.xml") or current
 
-        # Use the visible Home tab, never guessed screen coordinates or app restarts.
+        # Use the visible Home tab after nested screens have been closed.
         if not is_home(current):
             home = find_click_target(current, "Home")
             if home:
@@ -195,19 +215,44 @@ def main() -> int:
         else:
             FAILURES.append("Home own-Status + button did not open the creator with both Voice and Text choices.")
 
-        # Dismiss without selecting a creation mode or publishing anything.
-        adb("shell", "input", "keyevent", "4")
-        deadline = time.monotonic() + 8.0
-        returned = ""
-        while time.monotonic() < deadline:
-            time.sleep(0.4)
-            returned = dump_ui("status-after-dismiss.xml") or returned
-            if is_home(returned):
-                break
-        if is_home(returned):
-            report.append("- PASS Android Back dismisses the creator and returns to Home without creating a Status.")
-        else:
-            FAILURES.append("Status creator did not return to Home cleanly after Android Back.")
+        # The Status Photo and Record Video buttons must enter the one shared CameraX
+        # surface in their requested modes. Inspect the real shutter accessibility label
+        # and return without recording, capturing or publishing media.
+        if not FAILURES:
+            photo_camera = tap(
+                "Take photo", "photo-camera-entry",
+                ("Take photo", "Switch front/back camera")
+            )
+            if photo_camera and find_click_target(photo_camera, "Take photo") and find_click_target(photo_camera, "Switch front/back camera"):
+                report.append("- PASS Status Take photo opens the shared live CameraX preview in Photo mode.")
+                screenshot("authenticated-status-photo-camera-mode.png")
+            else:
+                FAILURES.append("Status Take photo did not open the shared CameraX preview in Photo mode.")
+            if photo_camera:
+                returned = return_to_home("photo-camera")
+                if is_home(returned):
+                    report.append("- PASS Back from the Status Photo camera returns to Home without publishing.")
+                else:
+                    FAILURES.append("Status Photo camera did not return to Home cleanly.")
+
+        if not FAILURES:
+            creator = tap("Create your status", "video-create", ("Voice", "Text"))
+            video_camera = tap(
+                "Record video", "video-camera-entry",
+                ("Record video", "Switch front/back camera")
+            ) if creator else ""
+            if video_camera and find_click_target(video_camera, "Record video") and find_click_target(video_camera, "Switch front/back camera"):
+                report.append("- PASS Status Record video opens the shared live CameraX preview in Video mode.")
+                screenshot("authenticated-status-video-camera-mode.png")
+            else:
+                FAILURES.append("Status Record video did not open the shared CameraX preview in Video mode.")
+            if video_camera:
+                returned = return_to_home("video-camera")
+                if is_home(returned):
+                    report.append("- PASS Back from the Status Video camera returns to Home without starting a recording.")
+                else:
+                    FAILURES.append("Status Video camera did not return to Home cleanly.")
+
         logs = adb("logcat", "-d", "-v", "brief")
         if "FATAL EXCEPTION" in logs.stdout or f"ANR in {PACKAGE}" in logs.stdout:
             FAILURES.append("Status creator interaction produced a FYNX crash or ANR in logcat.")

@@ -78,6 +78,37 @@ adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.tx
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
 
+# Optional responsive-display profile applies only to visual screenshots, after instrumentation.
+case "${FYNX_DISPLAY_PROFILE:-default}" in
+  small_phone) adb shell wm size 720x1280; adb shell wm density 360 ;;
+  tablet) adb shell wm size 1600x2560; adb shell wm density 320 ;;
+  large_font) adb shell settings put system font_scale 1.5 ;;
+  landscape) adb shell settings put system accelerometer_rotation 0; adb shell settings put system user_rotation 1 ;;
+  default) ;;
+  *) echo "::error::Unknown FYNX_DISPLAY_PROFILE: ${FYNX_DISPLAY_PROFILE}"; exit 2 ;;
+esac
+{
+  echo "display_profile=${FYNX_DISPLAY_PROFILE:-default}"
+  adb shell wm size
+  adb shell wm density
+  adb shell settings get system font_scale
+} > fynx-runtime-screenshots/display-profile.txt
+
+if [ "${FYNX_DEFER_MARKETPLACE_VISUAL_CAPTURE:-0}" = "1" ]; then
+  cat > fynx-runtime-screenshots/FYNX-marketplace-visual-capture-deferred.md <<EOF
+# FYNX Marketplace visual evidence — deferred
+
+- Screenshot/navigation evidence is temporarily separated from the required Android instrumentation gate.
+- Functional Android instrumentation still runs and remains blocking.
+- No app screens, controls, Marketplace features, or production code are removed.
+- Re-enable the visual capture pass when screenshot evidence is requested.
+- Instrumentation exit code: ${TEST_EXIT}
+- Result: $(if [ "${TEST_EXIT}" -eq 0 ]; then echo "INSTRUMENTATION_GREEN; VISUAL_CAPTURE_DEFERRED"; else echo "INSTRUMENTATION_RED; VISUAL_CAPTURE_DEFERRED"; fi)
+EOF
+  echo "::notice::Marketplace screenshot/navigation capture deferred; Android instrumentation remains a required gate."
+  exit "${TEST_EXIT}"
+fi
+
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # Admin permissions and account queues require the live OWNER/ADMIN backend.
   # Do not let an unrelated Marketplace/Wallet capture turn this Admin PR red,
@@ -104,6 +135,80 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
     echo "::error::Admin PR Android instrumentation failed; see instrumentation logs."
   else
     echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
+  fi
+  exit "${TEST_EXIT}"
+fi
+
+if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::notice::Running Chat and Groups-only UI certification; unrelated Marketplace/Wallet checks are excluded."
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    echo "::error::Android instrumentation failed; Chat/Groups navigation was not attempted."
+    exit "${TEST_EXIT}"
+  fi
+  echo "::notice::Backend probing is disabled for this app-side completion run; using disposable local Chat/Groups fixtures only."
+    echo "::notice::Backend or E2E credentials unavailable; seeding an isolated local private-chat fixture before the explicit debug-local UI capture. No server behavior is certified."
+    # Seed after the suite. A second Gradle-managed connected test invocation can
+    # replace the target package; use the built APK pair and invoke AndroidJUnitRunner
+    # directly so the fixture remains in the installed app's private data directory.
+    APP_APK="app/build/outputs/apk/debug/app-debug.apk"
+    TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+    if [ ! -s "${APP_APK}" ] || [ ! -s "${TEST_APK}" ]; then
+      echo "::error::The exact-head debug APK pair is missing; refusing to seed a fixture into an unknown install."
+      exit 1
+    fi
+    adb install -t -r "${APP_APK}"
+    INSTALL_APP_EXIT=$?
+    if [ "${INSTALL_APP_EXIT}" -ne 0 ]; then
+      echo "::error::Could not install the exact-head FYNX debug APK before private-chat fixture seeding."
+      exit "${INSTALL_APP_EXIT}"
+    fi
+    adb install -t -r "${TEST_APK}"
+    INSTALL_TEST_EXIT=$?
+    if [ "${INSTALL_TEST_EXIT}" -ne 0 ]; then
+      echo "::error::Could not install the exact-head Android test APK before private-chat fixture seeding."
+      exit "${INSTALL_TEST_EXIT}"
+    fi
+    FIXTURE_OUTPUT=$(adb shell am instrument -w \
+      -e class com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest \
+      -e username "fynx_local_runtime" \
+      com.fynx.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1)
+    FIXTURE_EXIT=$?
+    printf '%s\n' "${FIXTURE_OUTPUT}"
+    FIXTURE_SUMMARY=$(printf '%s\n' "${FIXTURE_OUTPUT}" | grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$' | tail -n 1)
+    if [ "${FIXTURE_EXIT}" -ne 0 ] || [ -z "${FIXTURE_SUMMARY}" ] || printf '%s' "${FIXTURE_OUTPUT}" | grep -q 'FAILURES!!!'; then
+      echo "::error::The private-chat fixture instrumentation did not report a successful JUnit test summary."
+      printf '%s\n' "${FIXTURE_OUTPUT}"
+      exit 1
+    fi
+    echo "::notice::Private-chat fixture instrumentation passed: ${FIXTURE_SUMMARY}"
+    # Verify the real target-app preference file from the shell before launching UI.
+    FIXTURE_DISK=$(adb shell run-as com.fynx.app cat shared_prefs/fynx_chat_store.xml 2>&1)
+    if ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX offline private fixture: hello from the test peer' ||
+       ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX local reply: the private conversation history restored' ||
+       ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX Runtime Peer'; then
+      echo "::error::The target app's persisted Chat XML does not contain the expected peer and both messages."
+      printf '%s\n' "${FIXTURE_DISK}"
+      exit 1
+    fi
+    echo "::notice::Verified the private peer, both messages and preview in the installed FYNX app's on-disk SharedPreferences before app-side visual capture."
+    NAV_EXIT=0
+    FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    NAV_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "${NAV_EXIT}" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${NAV_EXIT}"; fi
+  if [ "${FYNX_APP_SIDE_VISUALS_ONLY:-0}" = "1" ]; then
+    run_local_capture() {
+      local label="$1"
+      shift
+      echo "::notice::Capturing local-only ${label} UI; no backend request or publish action is used."
+      "$@"
+      local capture_status=$?
+      if [ "$capture_status" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="$capture_status"; fi
+    }
+    run_local_capture "Home Feed" env FYNX_HOME_FEED_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    run_local_capture "Camera and New Post" env FYNX_CAMERA_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+    run_local_capture "Status creator" python3 scripts/verify_status_creator_runtime.py
+    run_local_capture "Marketplace" env FYNX_MARKETPLACE_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
   fi
   exit "${TEST_EXIT}"
 fi

@@ -5,6 +5,7 @@ UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 PRIVATE = (UI / "ConversationPanel.kt").read_text(encoding="utf-8")
 ACTIVE_GROUP = (UI / "FynxGroupsPanel.kt").read_text(encoding="utf-8")
+NON_OWNER_LEAVE = ACTIVE_GROUP[ACTIVE_GROUP.rfind("FynxGroupRemoteClient.leaveGroup(context, groupId)"):]
 APP = (UI / "FynxApp.kt").read_text(encoding="utf-8")
 CALLS = (UI / "FynxCallsPanel.kt").read_text(encoding="utf-8")
 REALTIME = (UI / "FynxRealtimeClient.kt").read_text(encoding="utf-8")
@@ -118,7 +119,7 @@ require("Android group-history client encodes q and preserves the timestamp/ID c
 
 
 require("active Group More menu exposes Leave group or transfer ownership for owners", 'Text(if (isGroupOwner) "Transfer ownership & leave" else "Leave group")' in ACTIVE_GROUP and "showLeaveGroupDialog = true" in ACTIVE_GROUP)
-require("non-owner Leave group calls the authenticated backend leave endpoint before local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in ACTIVE_GROUP and "FynxGroupsStore.removeGroup(context, groupId)" in ACTIVE_GROUP and "onBack()" in ACTIVE_GROUP)
+require("non-owner Leave group calls the authenticated backend leave endpoint before account-scoped local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in NON_OWNER_LEAVE and "FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == \"signed_out\" })" in NON_OWNER_LEAVE and "onBack()" in NON_OWNER_LEAVE and NON_OWNER_LEAVE.index("FynxGroupRemoteClient.leaveGroup(context, groupId)") < NON_OWNER_LEAVE.index("FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == \"signed_out\" })") < NON_OWNER_LEAVE.index("onBack()"))
 require("group owner must transfer ownership to another current member before leaving", "FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)" in ACTIVE_GROUP and "transferCandidates" in ACTIVE_GROUP and "member.copy(role = FynxGroupRole.MODERATOR)" in ACTIVE_GROUP)
 require("Android group remote client wraps authenticated ownership and leave endpoints", "suspend fun transferOwnership" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "suspend fun leaveGroup" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
 failed = [label for label, ok in checks if not ok]

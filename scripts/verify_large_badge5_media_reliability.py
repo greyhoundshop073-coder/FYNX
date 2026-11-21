@@ -13,6 +13,7 @@ status = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusTimelinePanel.kt")
 home_media = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomePostMediaClient.kt").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_script = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+emulator_wrapper = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 
 remote_checks = {
     "authenticated backend media download": "FynxBackendClient.downloadToFile" in remote,
@@ -33,7 +34,7 @@ camera_checks = {
     "zoom": "setZoomRatio" in camera,
     "exposure": "setExposureCompensationIndex" in camera,
     "timer": "captureTimerSeconds" in camera,
-    "preview and send": "pendingUri" in camera and "onCaptured(previewUri,previewType)" in camera,
+    "preview and Next hand-off": "pendingUri" in camera and 'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera and "renderFynxPhotoTextOverlays(context, current, cameraTextOverlays)" in camera and "applyFynxVideoEdits(context, source, videoStyle, videoCaptionText, visibleText)" in camera,
     "retake": "retake()" in camera,
 }
 surface_checks = {
@@ -41,7 +42,7 @@ surface_checks = {
     "Status video completion": "onVideoCompleted" in status,
     "Home uses real media manifest": "optJSONArray(\"media\")" in home_media,
     "Home preserves media ordering": "sortedBy { it.position }" in home_media,
-    "runtime instrumentation remains": "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_certification.sh" in workflow,
+    "runtime instrumentation remains": "connectedDebugAndroidTest" in runtime_script and "bash scripts/run_android_runtime_emulator_certification.sh" in workflow and "bash scripts/run_android_runtime_certification.sh" in emulator_wrapper,
     "camera/media gate remains": "verify_stage16_camera.py" in workflow,
     "camera-to-post gate remains": "verify_camera_post_journey.py" in workflow,
 }

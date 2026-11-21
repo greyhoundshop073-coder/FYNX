@@ -57,6 +57,7 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
     var vibration by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatVibration(context, chatUsername)) }
     var previews by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatMessagePreviews(context, chatUsername)) }
     var readReceipts by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatReadReceipts(context, chatUsername)) }
+    var saveGallery by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatSaveGallery(context, chatUsername)) }
     var showClearDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var showResetDialog by rememberSaveable(chatUsername) { mutableStateOf(false) }
     var wallpaper by rememberSaveable(chatUsername) { mutableStateOf(FynxConversationPreferences.chatWallpaper(context, chatUsername)) }
@@ -107,6 +108,9 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
                     readReceipts = true
                     FynxConversationPreferences.setChatMessagePreviews(context, chatUsername, true)
                     FynxConversationPreferences.setChatReadReceipts(context, chatUsername, true)
+                    saveGallery = false
+                    FynxConversationPreferences.chat(context, chatUsername).edit()
+                        .putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), false).apply()
                     textSize = "Medium"
                     FynxConversationPreferences.setChatTextSize(context, chatUsername, "Medium")
                     bubbleTransparency = 0.90f
@@ -171,6 +175,14 @@ fun FynxChatSettingsPanel(chatUsername: String, onBack: () -> Unit = {}, onClear
             ChatSwitchRow("Read receipts", "Send read status when you open and receive messages", readReceipts) {
                 readReceipts = it
                 FynxConversationPreferences.setChatReadReceipts(context, chatUsername, it)
+            }
+        }
+
+        ChatSettingsSection("Media", Icons.Default.Palette) {
+            ChatSwitchRow("Save received photos and videos to gallery", "Save media received in this conversation to your device gallery", saveGallery) {
+                saveGallery = it
+                FynxConversationPreferences.chat(context, chatUsername).edit()
+                    .putBoolean("gallery_" + chatUsername.removePrefix("@").lowercase(), it).apply()
             }
         }
 

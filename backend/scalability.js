@@ -23,6 +23,7 @@ import { registerStatusInteractionRoutes } from "./statusInteractionRoutes.js";
 import { registerNotificationPreferenceRoutes } from "./notificationPreferences.js";
 import { registerNotificationDeviceRoutes } from "./notificationDevices.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
+import { registerSupportRoutes } from "./supportRoutes.js";
 import { registerMonetizationRoutes } from "./monetizationRoutes.js";
 import { installPresencePrivacyGuard } from "./presencePrivacy.js";
 import { installMediaPrivacyGuard } from "./mediaPrivacy.js";
@@ -90,6 +91,7 @@ http.createServer = function fynxCreateServer(...args) {
         registerNotificationPreferenceRoutes({ app });
         registerNotificationDeviceRoutes({ app });
         registerAdminRoutes({ app });
+        registerSupportRoutes({ app });
         registerMonetizationRoutes({ app });
         installMediaPrivacyGuard(app);
         installSocialHardening(app);

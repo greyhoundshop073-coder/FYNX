@@ -15,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
@@ -773,18 +774,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             }
         }
     }
-    // Isolated instrumentation records are already available locally; render them immediately
-    // instead of making UI tests race the first LaunchedEffect refresh.
-    var listings by remember(testOnlyListings) {
-        mutableStateOf(testOnlyListings?.take(24).orEmpty())
-    }
-    var hasMoreListings by remember(testOnlyListings) {
-        mutableStateOf((testOnlyListings?.size ?: 0) > 24)
-    }
+    var listings by remember(testOnlyListings) { mutableStateOf(testOnlyListings?.take(24).orEmpty()) }
+    var hasMoreListings by remember(testOnlyListings) { mutableStateOf(testOnlyListings?.size?.let { it > 24 } ?: false) }
     var loadingMoreListings by remember { mutableStateOf(false) }
-    var nextListingsOffset by remember(testOnlyListings) {
-        mutableIntStateOf(minOf(testOnlyListings?.size ?: 0, 24))
-    }
+    var nextListingsOffset by remember(testOnlyListings) { mutableIntStateOf(testOnlyListings?.take(24)?.size ?: 0) }
     // Invalidates in-flight search/filter and pagination responses when the active listing query changes.
     var listingRequestGeneration by remember { mutableIntStateOf(0) }
     val productsGridState = rememberLazyGridState()
@@ -809,13 +802,13 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var loading by remember(testOnlyListings) { mutableStateOf(testOnlyListings == null) }
     var error by remember { mutableStateOf<String?>(null) }
     var discoveryFallbackWarning by remember(testOnlyListings) {
-        mutableStateOf(
-            if (testOnlyListings != null) {
-                "FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed."
-            } else null
-        )
+        mutableStateOf(if (testOnlyListings != null) "FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed." else null)
     }
     var selected by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var reportListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
+    var reportListingReason by remember { mutableStateOf("Scam or fraud") }
+    var reportListingBusy by remember { mutableStateOf(false) }
+    var reportListingNotice by remember { mutableStateOf<String?>(null) }
     var sellerStoreUsername by remember(currentUsername) { mutableStateOf<String?>(null) }
     var checkoutListing by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var paymentOrder by remember { mutableStateOf<FynxRemoteSocialClient.MarketplaceOrder?>(null) }
@@ -1335,7 +1328,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 1.dp),
+                    modifier = Modifier.fillMaxWidth().fynxScrollRowWithFade().padding(horizontal = 16.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1456,7 +1449,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             when {
                 loading && listings.isEmpty() -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     // Keep the promotional experience visible while live listings are loading.
@@ -1527,7 +1520,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
                 listings.isEmpty() && error != null -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-offline-hero") {
@@ -1590,7 +1583,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
                 listings.isEmpty() -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     // The empty catalogue is still the Marketplace home: keep the promo card visible here too.
@@ -1658,9 +1651,9 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 else -> if (showAllProducts || query.isNotBlank() || category != "All" || nearbyMode) {
                     LazyVerticalGrid(
                         state = productsGridState,
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Adaptive(FYNX_MARKETPLACE_GRID_MIN_CELL),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 132.dp),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
@@ -1717,7 +1710,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     }
                 } else LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 132.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
                     item(key = "marketplace-hero") {
@@ -1882,7 +1875,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             }
         }
-        if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
+        if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp + fynxBottomBarSpaceAboveInset()), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { listingId ->
@@ -2017,7 +2010,38 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             },
             onOpenAssistant = { listingId -> onOpenAi(listingId) },
+            onReport = { reportListing = listing; reportListingReason = "Scam or fraud"; reportListingNotice = null },
             onClose = { selected = null }
+        )
+    }
+    reportListing?.let { listing ->
+        val reasons = listOf("Scam or fraud", "Counterfeit or prohibited item", "Misleading product information", "Inappropriate or harmful content", "Spam or duplicate listing", "Other")
+        AlertDialog(
+            onDismissRequest = { if (!reportListingBusy) { reportListing = null; reportListingNotice = null } },
+            title = { Text("Report Marketplace listing") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(reportListingNotice ?: "Choose why this listing should be reviewed.")
+                    if (reportListingNotice?.startsWith("Report submitted") != true) reasons.forEach { reason ->
+                        Row(Modifier.fillMaxWidth().clickable(enabled = !reportListingBusy) { reportListingReason = reason }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = reportListingReason == reason, onClick = { reportListingReason = reason }, enabled = !reportListingBusy)
+                            Text(reason, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !reportListingBusy && reportListingNotice?.startsWith("Report submitted") != true, onClick = {
+                    reportListingBusy = true
+                    reportListingNotice = "Sending report…"
+                    scope.launch {
+                        FynxSafetyRemoteClient.submitContentReport(context, "MARKETPLACE_LISTING", listing.id, reportListingReason)
+                            .onSuccess { reportListingNotice = "Report submitted for review."; reportListingBusy = false }
+                            .onFailure { reportListingNotice = it.message ?: "Report could not be submitted."; reportListingBusy = false }
+                    }
+                }) { Text("Submit report") }
+            },
+            dismissButton = { TextButton(enabled = !reportListingBusy, onClick = { reportListing = null; reportListingNotice = null }) { Text("Close") } }
         )
     }
     sellerStoreUsername?.let { username ->
@@ -2236,6 +2260,7 @@ private fun MarketplaceDetails(
     onToggleSavedProduct: (String) -> Unit,
     onWatchPrice: (String) -> Unit,
     onOpenAssistant: (String) -> Unit,
+    onReport: () -> Unit,
     onClose: () -> Unit,
     testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null
 ) {
@@ -2344,6 +2369,7 @@ private fun MarketplaceDetails(
                     )
                 }
                 TextButton(onClick = onContact) { Text("Contact seller") }
+                TextButton(onClick = onReport) { Text("Report this listing") }
             }
         }
         Surface(
@@ -2893,7 +2919,7 @@ private fun MarketplaceSellDialog(context: android.content.Context, onPublished:
             Text("Choose a closer match. FYNX keeps the main category unchanged for existing search and filter compatibility.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text("Condition", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf("NEW" to "New", "USED" to "Used", "REFURBISHED" to "Refurbished").forEach { (value, label) -> FilterChip(selected = condition == value, onClick = { condition = value }, label = { Text(label) }, colors = selectedChipColors) } }
         Text("2. Price and stock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Choose one currency for this listing. Buyers see the price exactly in the selected currency.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FynxMarketplaceSellerFlowSupport.SUPPORTED_CURRENCIES.forEach { code -> FilterChip(selected = currency == code, onClick = { currency = code }, label = { Text(code) }, colors = selectedChipColors) } }

@@ -143,8 +143,16 @@ jobs:
         run: |
           node test-platform-admin-role.mjs
           node test-admin-auth-session-version.mjs
+      - name: Verify PostgreSQL IDs, content reporting and Admin safety routes
+        run: |
+          node test-postgres-id-validation.mjs
+          node test-content-reporting-db.mjs
+          node test-admin-account-safety-db.mjs
+          node test-admin-reports-appeals-db.mjs
       - name: Verify shared bounded database pool
         run: node verify-shared-database-pool.mjs
+      - name: Test Owner/Admin Support Centre database routes
+        run: node --check supportRoutes.js && node test-support-routes.mjs
       - name: Check and test FYNX assistant request parsing and Gemini provider
         run: |
           node --check assistantJsonBodyParser.js
@@ -196,6 +204,13 @@ jobs:
         run: node verify-marketplace-seasonal-promotions.mjs
       - name: Run Marketplace weekly-seller awards verification
         run: node verify-marketplace-weekly-sellers.mjs
+      - name: Verify who can see each post audience
+        run: node verify-post-visibility-contract.mjs
+      - name: Verify background timers cannot crash the server
+        run: node verify-background-timers-guarded.mjs
+      - name: Verify post and upload size limits agree
+        working-directory: .
+        run: python3 scripts/verify_post_upload_limits.py
 
       - name: Verify notification bootstrap idempotency
         run: node verify-notification-bootstrap-idempotency.mjs

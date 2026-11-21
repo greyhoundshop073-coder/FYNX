@@ -15,6 +15,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.LocalTime
@@ -34,10 +40,25 @@ enum class FynxAccent(
     Charcoal(Color(0xFF37474F), Color(0xFF607D8B), Color(0xFF8A9499))
 }
 
+/** Minimum product-card width; retains two columns on narrow phones and expands on larger screens. */
+internal val FYNX_MARKETPLACE_GRID_MIN_CELL = 138.dp
+
+/** Centers content and prevents wide screens from stretching phone-oriented surfaces. */
+internal fun Modifier.fynxAdaptiveContentWidth(maxWidth: Dp = 720.dp): Modifier =
+    fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = maxWidth).fillMaxWidth()
+
 object FynxDesign {
     /** User-approved primary FYNX blue, used by the default accent and themed primary controls. */
     val AzureBlue = Color(0xFF007FFF)
 
+    // Raised secondary actions: pale Azure companion in light mode and a restrained
+    // deep-blue surface in dark mode. Danger actions retain semantic crimson styling.
+    val SoftActionLightContainer = Color(0xFFE3F2FC)
+    val SoftActionLightForeground = Color(0xFF102A3A)
+    val SoftActionLightOutline = Color(0xFF4C87A4)
+    val SoftActionDarkContainer = Color(0xFF17365D)
+    val SoftActionDarkForeground = Color(0xFFEAF1FF)
+    val SoftActionDarkOutline = Color(0xFF6BAED6)
     // Supporting palette: neutral surfaces, secondary content and premium-only details.
     val SoftCloudWhite = Color(0xFFF5F7FA)
     val MidnightSlate = Color(0xFF1C2434)
@@ -73,6 +94,12 @@ object FynxDesign {
     val CrimsonRed = Color(0xFFDC143C)
     /** Brighter counterpart used for error text on dark surfaces to preserve contrast. */
     val DarkModeError = Color(0xFFFF7086)
+    val SoftActionDangerLightContainer = Color(0xFFFDE8EC)
+    val SoftActionDangerLightForeground = Color(0xFF8F1D2C)
+    val SoftActionDangerLightOutline = CrimsonRed
+    val SoftActionDangerDarkContainer = Color(0xFF4B1724)
+    val SoftActionDangerDarkForeground = Color(0xFFFFDDE3)
+    val SoftActionDangerDarkOutline = DarkModeError
     val PurpleLightCompanionContainer = Color(0xFFF3E7EC)
     val PurpleDarkCompanionContainer = Color(0xFF3A2B32)
     val CharcoalLightCompanionContainer = Color(0xFFE7EBED)

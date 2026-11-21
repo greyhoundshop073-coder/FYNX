@@ -54,7 +54,7 @@ require(messaging, r"markRead\(", "production messaging must expose the persiste
 require(realtime, r"message_ack", "realtime transport must retain message acknowledgements")
 require(realtime, r"MessageStatus", "realtime transport must expose message status events")
 require(conversation, r"FynxProductionMessaging\.sendText\(", "ConversationPanel must use production messaging for text sends")
-require(conversation, r"FynxProductionMessaging\.history\(", "ConversationPanel must restore production history")
+require(conversation, r"FynxProductionMessaging\.history(Page)?\(", "ConversationPanel must restore production history (history or paged historyPage)")
 require(conversation, r"FynxChatStore\.save\(", "ConversationPanel must persist conversation state locally")
 require(store, r"load\(", "Chat store must provide local conversation restoration")
 require(store, r"save\(", "Chat store must provide local conversation persistence")

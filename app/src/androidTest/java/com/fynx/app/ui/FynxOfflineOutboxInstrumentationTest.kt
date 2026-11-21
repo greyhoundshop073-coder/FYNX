@@ -266,8 +266,7 @@ class FynxOfflineOutboxInstrumentationTest {
         val pendingIds = mutableMapOf<String, String>()
         var online = false
         var serverSequence = 70000L
-        val originalBackendUrl = FynxBackendClient.baseUrl(context)
-        FynxBackendClient.configureBaseUrl(context, "https://offline-test.invalid")
+        val acceptedRequestIds = mutableMapOf<String, String>()
         FynxBackendClient.requestExecutorForTests = { _, method, path, body, _ ->
             when {
                 method == "GET" && path == "/api/me" -> """{"user":{"id":"local-user"}}"""
@@ -278,6 +277,7 @@ class FynxOfflineOutboxInstrumentationTest {
                     val request = org.json.JSONObject(requireNotNull(body))
                     val type = request.getString("messageType")
                     val payload = request.getJSONObject("messagePayload")
+                    acceptedRequestIds[type] = request.getString("clientMessageId")
                     val acceptedId = (serverSequence++).toString()
                     """{"message":{"id":"$acceptedId","sender_id":"local-user","sender_username":"$testUsername","recipient_id":"peer","recipient_username":"${recipients[type]}","text":"","timestamp":${System.currentTimeMillis()},"delivered":true,"read":false,"edited":false,"deleted":false,"message_type":"$type","message_payload":$payload}}"""
                 }
@@ -319,6 +319,11 @@ class FynxOfflineOutboxInstrumentationTest {
 
             online = true
             assertEquals(types.size, FynxOfflineSync.drain(context))
+            assertEquals(
+                "Reconnect must replay the exact clientMessageId originally persisted for each structured send",
+                queued.associate { it.messageType to it.requestId },
+                acceptedRequestIds
+            )
             assertTrue(FynxOfflineOutbox.load(context).isEmpty())
             types.forEach { type ->
                 val messages = FynxChatStore.load(context, recipients.getValue(type))
@@ -329,7 +334,6 @@ class FynxOfflineOutboxInstrumentationTest {
             }
         } finally {
             FynxBackendClient.requestExecutorForTests = null
-            FynxBackendClient.configureBaseUrl(context, originalBackendUrl)
             FynxOfflineOutbox.load(context).forEach { FynxOfflineOutbox.remove(context, it.id, expectedAccountKey = testUsername) }
             recipients.values.forEach { FynxChatStore.clear(context, it) }
         }
