@@ -70,6 +70,8 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -173,7 +175,12 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
                 items(visible, key = { it.id }) { group ->
-                    Card(onClick = { onOpenGroup(group.id) }, modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { onOpenGroup(group.id) },
+                        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                            contentDescription = "Open group ${group.name}"
+                        }
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(48.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
                                 if (group.groupPhotoMediaId.isNullOrBlank()) {

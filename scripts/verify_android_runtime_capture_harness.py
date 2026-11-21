@@ -52,15 +52,16 @@ checks = {
         and "permission && disclosureAccepted" in CONTACTS_PANEL
         and 'Text("Before you use contact matching"' in CONTACTS_PANEL
     ),
-    "Groups-tab capture waits for the Groups-specific action, not the Chats-section New group button": (
-        'groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])' in RUNTIME_NAV
-        and 'contentDescription = "Create group"' in CHAT_PANEL
+    "Groups-tab capture targets the real New group navigation action": (
+        'groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["New group"])' in RUNTIME_NAV
+        and '["New group"],\n        "chat-groups-open-groups-manager"' in RUNTIME_NAV
         and 'Text("＋ New group")' in CHAT_PANEL
     ),
-    "Groups manager and dialog use the actual Create group accessibility label": (
-        '["Create group"],\n        "chat-groups-open-groups-manager"' in RUNTIME_NAV
-        and '["Create group"],\n        "chat-groups-open-create-dialog"' in RUNTIME_NAV
+    "Groups manager opens the real create dialog and group cards expose accessible targets": (
+        '["Create group"],\n        "chat-groups-open-create-dialog"' in RUNTIME_NAV
         and 'Icon(Icons.Default.Add, "Create group")' in GROUPS_PANEL
+        and 'contentDescription = "Open group ${group.name}"' in GROUPS_PANEL
+        and 'description.startswith("Open group ")' in RUNTIME_NAV
     ),
     "Status runtime unwinds group and chat screens using visible controls before Home": (
         'for back_label in ("Back", "Back to Chats", "Back to Marketplace")' in STATUS_RUNTIME
