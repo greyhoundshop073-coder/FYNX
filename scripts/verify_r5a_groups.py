@@ -17,7 +17,7 @@ membership = read('backend/groupMembershipRoutes.js')
 bootstrap = read('backend/scalability.js')
 server = read('backend/server.js')
 realtime = read('app/src/main/java/com/fynx/app/ui/FynxRealtimeClient.kt')
-group_panel = read('app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt')
+group_panel = read('app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt')
 client = read('app/src/main/java/com/fynx/app/ui/FynxGroupsBatch3.kt')
 
 check('group routes authenticate requests', "const auth = (req,res,next)" in group and "jwt.verify(token,JWT_SECRET)" in group)

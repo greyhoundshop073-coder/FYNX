@@ -1,3 +1,17 @@
+#!/usr/bin/env python3
+"""Certify the authenticated FYNX runtime journey with a real CI test account."""
+# Keep authenticated recovery coverage enabled after detector corrections.
+# Recovery runtime: rerun authenticated Chat/Groups coverage after navigation-detector fixes.
+from __future__ import annotations
+import os, subprocess, time, html, re, json, shutil
+import urllib.parse, urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+FAILURES=[]
+MESSAGE_TAP_SKIPPED=False
+LOGIN_MODE="server credential login"
+
 ROOT=Path("fynx-runtime-screenshots"); ROOT.mkdir(parents=True,exist_ok=True)
 PACKAGE="com.fynx.app"
 FORCE_LOCAL_VISUALS=os.environ.get("FYNX_LOCAL_VISUALS_ONLY") == "1"
@@ -389,6 +403,30 @@ def tap_first_real_chat_or_group_if_present(xml_text:str, name:str)->str:
             return ""
     return after
 
+def force_stop_and_restore_local_home(name:str)->str:
+    """Kill the installed app process, relaunch it, and verify the local session restores Home."""
+    stopped=run("adb","shell","am","force-stop",PACKAGE,timeout=15)
+    if stopped.returncode != 0:
+        FAILURES.append(name+": Android could not force-stop the FYNX application process.")
+        return ""
+    remaining=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if (remaining.stdout or "").strip():
+        FAILURES.append(name+": the FYNX application process remained alive after force-stop; cold restart was not proven.")
+        return ""
+    home=restore_home_after_restart(name)
+    if not home or not is_authenticated_home_surface(home):
+        FAILURES.append(name+": the locally signed-in Home surface did not restore after a real process death.")
+        screenshot(name+"-failed.png")
+        return ""
+    relaunched=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if not (relaunched.stdout or "").strip():
+        FAILURES.append(name+": the FYNX process was not alive after relaunch.")
+        return ""
+    screenshot(name+".png")
+    report.append("- PASS: force-stopped the FYNX app process, confirmed it exited, cold-launched it, and restored the locally signed-in Home session.")
+    return home
+
+
 def send_and_reopen_local_private_fixture(private_xml: str) -> str:
     """Send a private message with emulator networking disabled and prove it survives reopening."""
     run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
@@ -450,7 +488,22 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
     screenshot("private-chat-reopened-offline.png")
     (ROOT / "private-chat-reopened-offline.xml").write_text(reopened + "\n", encoding="utf-8")
     report.append("- PASS: the newly sent private message remained visible after leaving and reopening the conversation, proving local conversation persistence.")
-    return reopened
+
+    # A screen reopen is not a process restart. Kill the actual app process and
+    # prove the account-scoped conversation survives a cold Activity launch.
+    cold_home=force_stop_and_restore_local_home("private-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat=tap_control(cold_home, ["Chat"], "private-chat-after-process-restart", ["Messages and groups in one place"])
+    cold_private=tap_first_real_chat_or_group_if_present(cold_chat, "private-chat-cold-reopen")
+    if not cold_private or private_message not in cold_private:
+        FAILURES.append("The offline private message did not survive force-stop and cold application relaunch.")
+        screenshot("private-chat-restored-after-process-death-failed.png")
+        return ""
+    screenshot("private-chat-restored-after-process-death.png")
+    (ROOT / "private-chat-restored-after-process-death.xml").write_text(cold_private + "\\n", encoding="utf-8")
+    report.append("- PASS: the private offline message and local conversation were restored after force-stop and cold application relaunch.")
+    return cold_private
 
 
 def find_edit_fields(xml_text:str):
@@ -1826,7 +1879,27 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
         report.append("- PASS: offline group-send failure stayed visible as a saved, retryable message.")
     else:
         report.append("- NOTE: local message persistence passed; this visual run does not certify backend delivery or receipt by another account.")
-    return reopened
+
+    # Prove durable group history across process death, not only navigation.
+    cold_home=force_stop_and_restore_local_home("group-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat=tap_control(cold_home, ["Chat"], "group-chat-after-process-restart", ["Messages and groups in one place"])
+    cold_groups=tap_control(cold_chat, ["Groups"], "group-groups-after-process-restart", ["New group"]) if cold_chat else ""
+    cold_group=tap_control(
+        cold_groups,
+        [f"Open group {group_name}"],
+        "group-chat-cold-reopen",
+        ["Message...", "Message composer", "Messaging is restricted", "Group unavailable"],
+    ) if cold_groups else ""
+    if not cold_group or message_text not in cold_group:
+        FAILURES.append("The offline group message did not survive force-stop and cold application relaunch.")
+        screenshot("group-chat-restored-after-process-death-failed.png")
+        return ""
+    screenshot("group-chat-restored-after-process-death.png")
+    (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + "\\n", encoding="utf-8")
+    report.append("- PASS: the offline group and its pending/local message were restored after force-stop and cold application relaunch.")
+    return cold_group
 
 def first_local_group_id()->str:
     result=run("adb","shell","run-as",PACKAGE,"cat","shared_prefs/fynx_groups_store.xml")
@@ -3798,6 +3871,10 @@ if CHAT_GROUPS_VISUALS_ONLY:
         "chat-groups-create-dialog.png",
         "chat-groups-created-fixture.png",
         "group-chat-inside.png",
+        "private-chat-process-restart.png",
+        "private-chat-restored-after-process-death.png",
+        "group-chat-process-restart.png",
+        "group-chat-restored-after-process-death.png",
     ]
     missing = [name for name in required_images if not (ROOT / name).is_file() or (ROOT / name).stat().st_size < 12000]
     if missing:
@@ -3811,7 +3888,8 @@ if CHAT_GROUPS_VISUALS_ONLY:
         "- Debug-local entry proves rendered UI, navigation and local persistence only. It does not prove server authentication, two-account delivery, FCM delivery or server-side group authorization.",
         "- The disposable private conversation is seeded in the app's account-scoped local Chat store. No remote user or server message is created.",
         "- The disposable group is created through the actual app UI with emulator Wi-Fi and mobile data disabled, then verified in the account-scoped FynxGroupsStore.",
-        "- The offline group message is verified after leaving and reopening the local conversation. This does not certify remote group delivery or backend membership.",
+        "- Private and group messages are checked after leaving/reopening and after force-stop plus cold application relaunch; the latter verifies local process-death restoration.",
+        "- The offline group message is verified locally. This does not certify remote group delivery or backend membership.",
         "- No production user, group, message, media, payment or Marketplace record is created by this capture path.",
         "",
         f"## Result: {'GREEN' if not FAILURES else 'RED'}"
