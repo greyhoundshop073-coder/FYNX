@@ -62,6 +62,10 @@ checks = {
         and 'Icon(Icons.Default.Add, "Create group")' in GROUPS_PANEL
         and 'contentDescription = "Open group ${group.name}"' in GROUPS_PANEL
         and 'description.startswith("Open group ")' in RUNTIME_NAV
+        and '["Group name"]' in RUNTIME_NAV
+        and '["Description"]' in RUNTIME_NAV
+        and 'label = { Text("Group name") }' in GROUPS_PANEL
+        and 'label = { Text("Description") }' in GROUPS_PANEL
     ),
     "Status runtime unwinds group and chat screens using visible controls before Home": (
         'for back_label in ("Back", "Back to Chats", "Back to Marketplace")' in STATUS_RUNTIME

@@ -208,7 +208,7 @@ DIAGNOSTIC_MARKERS = (
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
-    "Your communities in one place", "New group", "No groups yet", "Open create group dialog", "Create group dialog",
+    "Your communities in one place", "New group", "No groups yet", "Group name", "Description", "Open create group dialog", "Create group dialog",
     "Group name input", "Description input"
 )
 
@@ -3076,7 +3076,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         manager_xml,
         ["Create group"],
         "chat-groups-open-create-dialog",
-        ["Group name input"],
+        ["Group name"],
     )
     if not dialog:
         FAILURES.append("The dedicated Groups manager did not open its real create-group dialog.")
@@ -3091,11 +3091,11 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         FAILURES.append("The Create action was enabled while both required group fields were empty.")
         return ""
     report.append("- PASS: the blank group form keeps Create disabled until valid name and description are supplied.")
-    name_field = find_control(dialog, ["Group name input"], exact_only=True)
-    description_field = find_control(dialog, ["Description input"], exact_only=True)
+    name_field = find_control(dialog, ["Group name"], exact_only=True)
+    description_field = find_control(dialog, ["Description"], exact_only=True)
     if not name_field or not description_field:
         FAILURES.append(
-            "The real group creation dialog did not expose distinct accessible Group name and Description inputs; "
+            "The real group creation dialog did not expose distinct accessible Group name and Description labels; "
             "visible markers: " + visible_marker_summary(dialog)
         )
         screenshot("chat-groups-create-dialog-controls-missing.png")
@@ -3109,7 +3109,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     after_name = dismiss_ime_if_visible("chat-groups-create-fixture-name.xml")
     description_field = find_control(after_name, ["Description input"], exact_only=True)
     if not description_field:
-        FAILURES.append("The group creation dialog lost its named Description input after entering the group name.")
+        FAILURES.append("The group creation dialog lost its Description label after entering the group name.")
         screenshot("chat-groups-create-description-missing.png")
         return ""
     _, description_x, description_y = description_field
