@@ -64,6 +64,9 @@ checks = {
         and 'description.startswith("Open group ")' in RUNTIME_NAV
         and '["Group name"]' in RUNTIME_NAV
         and '["Description"]' in RUNTIME_NAV
+        and 'description_field = find_control(after_name, ["Description"], exact_only=True)' in RUNTIME_NAV
+        and '"Description input"' not in RUNTIME_NAV
+        and '"Group name input"' not in RUNTIME_NAV
         and 'label = { Text("Group name") }' in GROUPS_PANEL
         and 'label = { Text("Description") }' in GROUPS_PANEL
     ),

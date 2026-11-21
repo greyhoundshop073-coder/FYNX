@@ -209,7 +209,6 @@ DIAGNOSTIC_MARKERS = (
     "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
     "Your communities in one place", "New group", "No groups yet", "Group name", "Description", "Open create group dialog", "Create group dialog",
-    "Group name input", "Description input"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -3071,7 +3070,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         FAILURES.append("Chat -> Groups -> New group did not open the dedicated Groups manager.")
         return ""
     # Match the actual accessibility label on FynxGroupsPanel's plus button.
-    # The Group name input is required before this counts as an opened dialog.
+    # The visible Group name field is required before this counts as an opened dialog.
     dialog = tap_control(
         manager_xml,
         ["Create group"],
@@ -3107,7 +3106,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         return ""
     time.sleep(0.35)
     after_name = dismiss_ime_if_visible("chat-groups-create-fixture-name.xml")
-    description_field = find_control(after_name, ["Description input"], exact_only=True)
+    description_field = find_control(after_name, ["Description"], exact_only=True)
     if not description_field:
         FAILURES.append("The group creation dialog lost its Description label after entering the group name.")
         screenshot("chat-groups-create-description-missing.png")
