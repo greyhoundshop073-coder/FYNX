@@ -26,6 +26,37 @@ require("active group conversation uses 48dp minimum touch targets", "Modifier.s
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
 require("active group conversation loads authenticated paginated remote history", "FynxGroupRemoteClient.loadMessagePage(context, groupId)" in ACTIVE_GROUP)
+RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+require(
+    "focused Chat/Groups runtime sends a private message offline and checks local persistence",
+    "FYNX_private_offline_QA_" in RUNTIME_NAV
+    and "private-chat-reopened-offline.png" in RUNTIME_NAV
+)
+require(
+    "focused Chat/Groups runtime proves private and group history survive real process death",
+    'run("adb","shell","am","force-stop",PACKAGE' in RUNTIME_NAV
+    and "private-chat-restored-after-process-death.png" in RUNTIME_NAV
+    and "group-chat-restored-after-process-death.png" in RUNTIME_NAV
+)
+GROUP_REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
+GROUP_CONTENT_TEST = (ROOT / "backend/test-group-content-routes.mjs").read_text(encoding="utf-8")
+require(
+    "group read-receipt capability is explicit and scoped to the signed-in account and group",
+    "ConcurrentHashMap<String, Boolean>" in GROUP_REMOTE
+    and "groupReadReceiptScope(context, groupId)" in GROUP_REMOTE
+    and "FynxAuthStore.accountStorageKey(context)" in GROUP_REMOTE
+    and "supportsReadReceipts" in GROUP_REMOTE
+    and "root.optBoolean(\"supportsServerSearch\", false)" in GROUP_REMOTE
+    and "groupReadReceiptsSupported" not in GROUP_REMOTE
+)
+require(
+    "backend group history explicitly advertises and tests search and read-receipt capabilities",
+    "supportsServerSearch:true" in GROUP_ROUTES
+    and "supportsReadReceipts:true" in GROUP_ROUTES
+    and "assert.equal(firstPage.body.supportsServerSearch, true" in GROUP_CONTENT_TEST
+    and "assert.equal(firstPage.body.supportsReadReceipts, true" in GROUP_CONTENT_TEST
+)
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)
