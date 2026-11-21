@@ -3141,6 +3141,95 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     return group_name
 
 
+def force_stop_and_restore_local_home(name:str)->str:
+    """Kill the app process, cold-launch FYNX and verify local session restoration."""
+    stopped=run("adb","shell","am","force-stop",PACKAGE,timeout=15)
+    if stopped.returncode != 0:
+        FAILURES.append(name+": Android could not force-stop the FYNX application process.")
+        return ""
+    remaining=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if (remaining.stdout or "").strip():
+        FAILURES.append(name+": the FYNX process remained alive after force-stop; process death was not proven.")
+        return ""
+    home=restore_home_after_restart(name)
+    if not home or not is_authenticated_home_surface(home):
+        FAILURES.append(name+": the local session did not restore the authenticated Home surface after cold relaunch.")
+        screenshot(name+"-failed.png")
+        return ""
+    relaunched=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if not (relaunched.stdout or "").strip():
+        FAILURES.append(name+": the FYNX process was not alive after cold relaunch.")
+        return ""
+    screenshot(name+".png")
+    report.append("- PASS: force-stopped the FYNX process, confirmed exit, cold-launched the app and restored its local Home session.")
+    return home
+
+
+def send_and_reopen_local_private_fixture(private_xml: str) -> str:
+    """Send a private message offline, reopen its conversation, then prove cold-process restoration."""
+    run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
+    if not run_suffix:
+        run_suffix = str(int(time.time()))
+    private_message = "FYNX_private_offline_QA_" + run_suffix
+
+    focused = tap_control(private_xml, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."], "private-offline-composer-focus")
+    if not focused:
+        FAILURES.append("The private conversation did not expose its accessible message composer.")
+        return ""
+    if input_text(private_message).returncode != 0:
+        FAILURES.append("The private offline test message could not be entered in the real composer.")
+        return ""
+    time.sleep(0.5)
+    ready = dump_ui("private-offline-send-ready.xml")
+    send_control = find_control(ready, ["Send message"], exact_only=True)
+    if not send_control:
+        FAILURES.append("Typing a private offline message did not expose the real Send message action.")
+        screenshot("private-offline-send-action-missing.png")
+        return ""
+    _, send_x, send_y = send_control
+    screenshot("private-offline-send-action.png")
+    run("adb", "shell", "input", "tap", str(send_x), str(send_y))
+    sent = ""
+    for _ in range(40):
+        time.sleep(0.5)
+        sent = dump_ui("private-offline-send-wait.xml")
+        if private_message in sent and find_control(sent, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."]):
+            break
+    sent = dismiss_ime_if_visible("private-offline-send-ime-dismissed.xml") or sent
+    if private_message not in sent or find_control(sent, ["Send message"]):
+        FAILURES.append("The private offline message did not leave the composer and appear in the conversation.")
+        screenshot("private-offline-send-not-confirmed.png")
+        return ""
+    screenshot("private-chat-sent-offline.png")
+    report.append("- PASS: sent a private message with emulator Wi-Fi and mobile data disabled; it appeared in the real conversation.")
+
+    run("adb", "shell", "input", "keyevent", "4")
+    time.sleep(0.8)
+    chat_list = dump_ui("private-chat-list-after-offline-send.xml")
+    reopened = tap_first_real_chat_or_group_if_present(chat_list, "private-chat-reopen-after-offline-send")
+    if not reopened or private_message not in reopened:
+        FAILURES.append("The private offline message did not survive leaving and reopening its conversation.")
+        screenshot("private-chat-offline-reopen-failed.png")
+        return ""
+    screenshot("private-chat-reopened-offline.png")
+    (ROOT / "private-chat-reopened-offline.xml").write_text(reopened + "\n", encoding="utf-8")
+    report.append("- PASS: the private offline message remained visible after leaving and reopening the conversation.")
+
+    cold_home = force_stop_and_restore_local_home("private-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat = tap_control(cold_home, ["Chat"], "private-chat-after-process-restart", ["Messages and groups in one place"])
+    cold_private = tap_first_real_chat_or_group_if_present(cold_chat, "private-chat-cold-reopen") if cold_chat else ""
+    if not cold_private or private_message not in cold_private:
+        FAILURES.append("The private offline message did not survive force-stop and cold application relaunch.")
+        screenshot("private-chat-restored-after-process-death-failed.png")
+        return ""
+    screenshot("private-chat-restored-after-process-death.png")
+    (ROOT / "private-chat-restored-after-process-death.xml").write_text(cold_private + "\n", encoding="utf-8")
+    report.append("- PASS: the private conversation and its offline message were restored after actual process death and cold relaunch.")
+    return cold_private
+
+
 def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
     """Send via the real group composer, then leave and reopen the persisted group."""
     run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
@@ -3199,7 +3288,26 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
         report.append("- PASS: offline group-send failure stayed visible as a saved, retryable message.")
     else:
         report.append("- NOTE: local message persistence passed; this visual run does not certify backend delivery or receipt by another account.")
-    return reopened
+
+    cold_home = force_stop_and_restore_local_home("group-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat = tap_control(cold_home, ["Chat"], "group-chat-after-process-restart", ["Messages and groups in one place"])
+    cold_groups = tap_control(cold_chat, ["Groups"], "group-groups-after-process-restart", ["Create group"]) if cold_chat else ""
+    cold_group = tap_control(
+        cold_groups,
+        [f"Open group {group_name}"],
+        "group-chat-cold-reopen",
+        [group_name, "Message..."],
+    ) if cold_groups else ""
+    if not cold_group or message_text not in cold_group:
+        FAILURES.append("The offline group message did not survive force-stop and cold application relaunch.")
+        screenshot("group-chat-restored-after-process-death-failed.png")
+        return ""
+    screenshot("group-chat-restored-after-process-death.png")
+    (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + chr(10), encoding="utf-8")
+    report.append("- PASS: the offline group and message were restored after actual process death and cold relaunch.")
+    return cold_group
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
@@ -5735,6 +5843,14 @@ if CHAT_GROUPS_VISUALS_ONLY:
             (ROOT/"private-chat-inside.xml").write_text(private_xml+"\n", encoding="utf-8")
             if FORCE_LOCAL_VISUALS:
                 report.append("- PASS: captured the real private ConversationPanel with two persisted disposable peer/owner messages from the local test fixture.")
+                if not set_emulator_network_enabled(False):
+                    FAILURES.append("Could not disable emulator Wi-Fi and mobile data for the private offline-send journey.")
+                else:
+                    try:
+                        private_xml = send_and_reopen_local_private_fixture(private_xml)
+                    finally:
+                        if not set_emulator_network_enabled(True):
+                            FAILURES.append("Could not restore emulator Wi-Fi and mobile data after the private offline-send journey.")
             else:
                 report.append("- PASS: captured the real private ConversationPanel.")
         else:
@@ -5791,6 +5907,15 @@ if CHAT_GROUPS_VISUALS_ONLY:
         "chat-groups-created-fixture.png",
         "group-chat-inside.png",
     ]
+    if FORCE_LOCAL_VISUALS:
+        required_images += [
+            "private-chat-sent-offline.png",
+            "private-chat-reopened-offline.png",
+            "private-chat-process-restart.png",
+            "private-chat-restored-after-process-death.png",
+            "group-chat-process-restart.png",
+            "group-chat-restored-after-process-death.png",
+        ]
     missing = [name for name in required_images if not (ROOT/name).is_file() or (ROOT/name).stat().st_size < 12000]
     if missing:
         FAILURES.append("Chat/Groups screenshot evidence is missing or undersized: " + ", ".join(missing))
@@ -5801,6 +5926,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, server delivery, FCM or backend data.",
                "- The disposable group is created through the app UI while emulator Wi-Fi and mobile data are disabled, then verified in the emulator account's FynxGroupsStore; it is not inserted into the production backend.",
                "- The fixture has only its creating account as a local ADMIN; it does not prove a second member, server membership or two-account delivery.",
+               "- In local-only mode, private and group messages must survive navigation reopening and a verified force-stop/cold relaunch; this proves device persistence only, not remote delivery.",
                "- No real production user, group, message, payment or Marketplace record is created by this capture path.",
                "", f"## Result: {'RED' if FAILURES else ('PARTIAL — GROUP RUNTIME BLOCKED' if GROUP_RUNTIME_BLOCKED else 'GREEN')}"]
     if FAILURES:

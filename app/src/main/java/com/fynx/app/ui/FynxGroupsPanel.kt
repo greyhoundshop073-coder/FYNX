@@ -1625,7 +1625,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                             }
                                     }
                                     .onFailure { error ->
-                                        leaveGroupError = error.message ?: "Ownership could not be transferred. Please try again."
+                                        android.util.Log.w("FYNXGroups", "Group ownership transfer failed", error)
+                                        leaveGroupError = "Ownership could not be transferred. Please try again."
                                     }
                             } else {
                                 FynxGroupRemoteClient.leaveGroup(context, groupId)
@@ -1636,7 +1637,8 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                                         onBack()
                                     }
                                     .onFailure { error ->
-                                        leaveGroupError = error.message ?: "Could not leave this group. Please try again."
+                                        android.util.Log.w("FYNXGroups", "Leaving group failed", error)
+                                        leaveGroupError = "Could not leave this group. Please try again."
                                     }
                             }
                             leaveGroupBusy = false
