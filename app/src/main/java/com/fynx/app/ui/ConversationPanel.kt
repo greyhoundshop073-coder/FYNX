@@ -64,6 +64,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** Keeps a cached private conversation usable when its remote refresh is unavailable. */
+internal fun privateChatHistoryFailureMessage(hasSavedMessages: Boolean): String =
+    if (hasSavedMessages) {
+        "Saved messages are shown. Could not refresh them yet; check your connection and retry."
+    } else {
+        "Messages could not load yet. Check your connection and retry."
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
@@ -487,14 +495,22 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                 }
             }.onFailure {
-                isNewConversation = messages.isEmpty()
-                networkError = "Messages could not load yet. Check your connection and retry."
+                // The local history restore runs independently; read disk here as well so
+                // a fast network failure cannot mislabel a cached conversation as empty.
+                val hasSavedMessages = withContext(Dispatchers.IO) {
+                    FynxChatStore.load(context, chat.username, null).isNotEmpty()
+                }
+                isNewConversation = !hasSavedMessages
+                networkError = privateChatHistoryFailureMessage(hasSavedMessages)
             }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
-            networkError = "This conversation could not connect yet. Check your connection and try again."
-            isNewConversation = false
+            val hasSavedMessages = withContext(Dispatchers.IO) {
+                FynxChatStore.load(context, chat.username, null).isNotEmpty()
+            }
+            networkError = privateChatHistoryFailureMessage(hasSavedMessages)
+            isNewConversation = !hasSavedMessages
         }
     }
 
