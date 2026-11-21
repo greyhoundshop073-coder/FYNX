@@ -139,6 +139,8 @@ try {
   assert.equal(firstPage.statusCode, 200);
   assert.equal(firstPage.body.messages.length, 2);
   assert.equal(firstPage.body.hasMore, true, "history pagination must signal an older page");
+  assert.equal(firstPage.body.supportsServerSearch, true, "the group history response must explicitly advertise server-backed search");
+  assert.equal(firstPage.body.supportsReadReceipts, true, "the group history response must explicitly advertise per-member read receipts");
   assert.ok(firstPage.body.nextCursor?.id);
   const secondPage = await call("GET", messagePath, params, memberId, {}, {
     q: "pagination marker", limit: "2",

@@ -8,13 +8,19 @@ import org.json.JSONObject
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 object FynxGroupRemoteClient {
     data class RemoteMessage(val id:String,val text:String,val senderUsername:String,val timestamp:Long,val attachmentMediaId:String?,val attachmentType:String?,val attachmentUrl:String?,val replyToId:String?=null,val reaction:String?=null,val edited:Boolean=false,val deleted:Boolean=false,val pinned:Boolean=false,val readBy:List<String> = emptyList())
-    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean,val supportsServerSearch:Boolean=false)
+    data class RemoteMessagePage(val messages:List<RemoteMessage>,val hasMore:Boolean,val supportsServerSearch:Boolean=false,val supportsReadReceipts:Boolean=false)
     private val sendMutex = Mutex()
     private val rsvpMutex = Mutex()
-    @Volatile private var groupReadReceiptsSupported = false
+    private val groupReadReceiptSupportByScope = ConcurrentHashMap<String, Boolean>()
+    private fun groupReadReceiptScope(context: Context, groupId: String): String? {
+        val accountKey = FynxAuthStore.accountStorageKey(context)?.trim().orEmpty()
+        val safeGroupId = groupId.trim()
+        return if (accountKey.isNotBlank() && safeGroupId.isNotBlank()) "$accountKey:$safeGroupId" else null
+    }
     data class RemotePermissions(val sendMessages:Boolean=true,val sendMedia:Boolean=true,val addMembers:Boolean=true,val inviteLinks:Boolean=true,val approveNewMembers:Boolean=false,val disappearingSeconds:Int=0,val showHistoryToNewMembers:Boolean=true,val supportsHistoryVisibility:Boolean=false,val supportsJoinRequestApproval:Boolean=false,val supportsInvitePreview:Boolean=false)
     data class RemoteMember(val username:String,val role:String,val joinedAt:Long)
     data class RemoteInvite(val groupId:String,val token:String,val name:String,val description:String,val memberCount:Int,val approveNewMembers:Boolean,val alreadyMember:Boolean,val pending:Boolean,val supportsJoinRequestApproval:Boolean=false)
@@ -96,30 +102,36 @@ object FynxGroupRemoteClient {
     suspend fun loadJoinRequests(context:Context,groupId:String):Result<List<RemoteJoinRequest>> = runCatching { val a=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/join-requests").getOrThrow()).optJSONArray("requests")?:JSONArray();buildList{for(i in 0 until a.length()){val o=a.getJSONObject(i);add(RemoteJoinRequest(o.optString("username"),o.optLong("requestedAt")))}} }
     suspend fun approveJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/approve",JSONObject().toString()).getOrThrow();Unit}
     suspend fun rejectJoinRequest(context:Context,groupId:String,username:String):Result<Unit> = runCatching {FynxBackendClient.postJson(context,"/api/groups/$groupId/join-requests/${Uri.encode(username)}/reject",JSONObject().toString()).getOrThrow();Unit}
-    suspend fun loadMessagePage(context:Context,groupId:String,before:RemoteMessage?=null,limit:Int=50,query:String?=null):Result<RemoteMessagePage> = runCatching {
-        val safeLimit=limit.coerceIn(1,100)
-        val cleanQuery=query?.trim()?.replace(Regex("\\s+")," ")?.takeIf { it.isNotBlank() }
-        require(cleanQuery==null || cleanQuery.length in 2..100) { "Message search must contain between 2 and 100 characters." }
-        val cursor=before?.let { "&beforeTimestamp=${it.timestamp}&beforeId=${Uri.encode(it.id)}" }.orEmpty()
-        val search=cleanQuery?.let { "&q=${Uri.encode(it)}" }.orEmpty()
-        val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages?limit=$safeLimit$cursor$search").getOrThrow())
-        val serverHistorySearchSupported = root.has("hasMore") && root.has("nextCursor")
-        groupReadReceiptsSupported = serverHistorySearchSupported
-        val a=root.optJSONArray("messages")?:JSONArray()
-        val parsed=buildList {
-            for(i in 0 until a.length()) {
-                runCatching {
-                    val o=a.getJSONObject(i)
-                    val rawId=o.optString("id").trim()
-                    val safeId=rawId.ifBlank { "group-remote-$i-" + o.optLong("timestamp") }
-                    RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
-                }.getOrNull()?.let(::add)
-            }
-        }.distinctBy { it.id }
-        RemoteMessagePage(parsed,root.optBoolean("hasMore",false),serverHistorySearchSupported)
+    suspend fun loadMessagePage(context:Context,groupId:String,before:RemoteMessage?=null,limit:Int=50,query:String?=null):Result<RemoteMessagePage> {
+        val receiptScope = groupReadReceiptScope(context, groupId)
+        return runCatching {
+            val safeLimit=limit.coerceIn(1,100)
+            val cleanQuery=query?.trim()?.replace(Regex("\\s+")," ")?.takeIf { it.isNotBlank() }
+            require(cleanQuery==null || cleanQuery.length in 2..100) { "Message search must contain between 2 and 100 characters." }
+            val cursor=before?.let { "&beforeTimestamp=${it.timestamp}&beforeId=${Uri.encode(it.id)}" }.orEmpty()
+            val search=cleanQuery?.let { "&q=${Uri.encode(it)}" }.orEmpty()
+            val root=JSONObject(FynxBackendClient.get(context,"/api/groups/$groupId/messages?limit=$safeLimit$cursor$search").getOrThrow())
+            val a=root.optJSONArray("messages")?:JSONArray()
+            val parsed=buildList {
+                for(i in 0 until a.length()) {
+                    runCatching {
+                        val o=a.getJSONObject(i)
+                        val rawId=o.optString("id").trim()
+                        val safeId=rawId.ifBlank { "group-remote-$i-" + o.optLong("timestamp") }
+                        RemoteMessage(safeId,o.optString("text"),o.optString("senderUsername"),o.optLong("timestamp"),o.optString("attachmentMediaId").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentType").takeIf{it.isNotBlank()&&it!="null"},o.optString("attachmentUrl").takeIf{it.isNotBlank()&&it!="null"},o.optString("replyToId").takeIf{it.isNotBlank()&&it!="null"},o.optString("reaction").takeIf{it.isNotBlank()&&it!="null"},o.optBoolean("edited"),o.optBoolean("deleted"),o.optBoolean("pinned"),o.optJSONArray("readBy")?.let { values -> buildList { for(index in 0 until values.length()) values.optString(index).takeIf { it.isNotBlank() }?.let(::add) } } ?: emptyList())
+                    }.getOrNull()?.let(::add)
+                }
+            }.distinctBy { it.id }
+            val supportsServerSearch = root.optBoolean("supportsServerSearch", false)
+            val supportsReadReceipts = root.optBoolean("supportsReadReceipts", parsed.any { it.readBy.isNotEmpty() })
+            receiptScope?.let { groupReadReceiptSupportByScope[it] = supportsReadReceipts }
+            RemoteMessagePage(parsed,root.optBoolean("hasMore",false),supportsServerSearch,supportsReadReceipts)
+        }.onFailure {
+            receiptScope?.let { groupReadReceiptSupportByScope.remove(it) }
+        }
     }
     suspend fun markMessagesRead(context:Context,groupId:String,messageIds:List<String>):Result<List<RemoteMessage>> = runCatching {
-        if (!groupReadReceiptsSupported) return@runCatching emptyList()
+        if (groupReadReceiptScope(context, groupId)?.let { groupReadReceiptSupportByScope[it] } != true) return@runCatching emptyList()
         val safeIds=messageIds.distinct().filter { it.matches(Regex("[A-Za-z0-9_-]{8,80}")) }.take(100)
         if(safeIds.isEmpty())return@runCatching emptyList()
         val body=JSONObject().put("messageIds",JSONArray(safeIds))

@@ -1,4 +1,6 @@
 from pathlib import Path
+import ast
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
@@ -18,6 +20,66 @@ def require(label, condition):
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
+
+require(
+    "private history and outbox restoration are sequenced to prevent remote pages from overwriting pending local messages",
+    "LaunchedEffect(chat.username, messagesLoaded)" in PRIVATE
+    and "if (!messagesLoaded) return@LaunchedEffect" in PRIVATE
+    and '(restored.first + messages.filterNot { it.id == "initial" })' in PRIVATE
+    and "&& messagesLoaded" in PRIVATE
+)
+require(
+    "private conversation loads cursor-paginated history and exposes an older-messages action",
+    PRIVATE.count("FynxProductionMessaging.historyPage(") >= 3
+    and "nextPrivateHistoryBeforeId" in PRIVATE
+    and "Load older messages" in PRIVATE
+    and "Load older private messages" in PRIVATE
+    and "applyPrivateHistoryPage" in PRIVATE
+)
+require(
+    "private server search hits merge into conversation state so message actions and offline history remain authoritative",
+    "messages = (messages + mappedSearchResults)" in PRIVATE
+    and "messages = (messages + older)" in PRIVATE
+)
+require(
+    "private conversation searches server history with a cursor and preserves offline local matches",
+    "FynxProductionMessaging.searchHistoryPage(" in PRIVATE
+    and "Load older matching messages" in PRIVATE
+    and "Load older matching private messages" in PRIVATE
+    and "Offline: showing messages already saved on this device." in PRIVATE
+    and "localSearchMatches" in PRIVATE
+)
+GROUP_REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
+GROUP_CONTENT_TEST = (ROOT / "backend/test-group-content-routes.mjs").read_text(encoding="utf-8")
+require(
+    "group read-receipt capability is explicit and scoped to the signed-in account and group",
+    "ConcurrentHashMap<String, Boolean>" in GROUP_REMOTE
+    and "groupReadReceiptScope(context, groupId)" in GROUP_REMOTE
+    and "FynxAuthStore.accountStorageKey(context)" in GROUP_REMOTE
+    and "supportsReadReceipts" in GROUP_REMOTE
+    and 'root.optBoolean("supportsServerSearch", false)' in GROUP_REMOTE
+    and "groupReadReceiptsSupported" not in GROUP_REMOTE
+)
+require(
+    "backend group history explicitly advertises and tests server search and read-receipt capabilities",
+    "supportsServerSearch:true" in GROUP_ROUTES
+    and "supportsReadReceipts:true" in GROUP_ROUTES
+    and "assert.equal(firstPage.body.supportsServerSearch, true" in GROUP_CONTENT_TEST
+    and "assert.equal(firstPage.body.supportsReadReceipts, true" in GROUP_CONTENT_TEST
+)
+
+require(
+    "group cards in both Chat and Groups lists expose stable accessible Open group labels",
+    'contentDescription = "Open group ${group.name}"' in ACTIVE_GROUP
+    and 'contentDescription = "Open group ${group.name}"' in (UI / "ChatsPanel.kt").read_text(encoding="utf-8")
+)
+require(
+    "group creation fields expose distinct accessible names for the name and description inputs",
+    'contentDescription = "Group name input"' in ACTIVE_GROUP
+    and 'contentDescription = "Description input"' in ACTIVE_GROUP
+)
+
 PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
 require("Pure Black Glass uses only true black background gradient stops while preserving other themes", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in PURE_BLACK_PALETTE and "Color(0xFF080B18)" not in PURE_BLACK_PALETTE and "Color(0xFF182B52)" not in PURE_BLACK_PALETTE and "FynxGlassThemeId.AURORA" in GLASS_THEME and "FynxGlassThemeId.EMERALD" in GLASS_THEME)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
@@ -121,6 +183,64 @@ require("active Group More menu exposes Leave group or transfer ownership for ow
 require("non-owner Leave group calls the authenticated backend leave endpoint before local group removal", "FynxGroupRemoteClient.leaveGroup(context, groupId)" in ACTIVE_GROUP and "FynxGroupsStore.removeGroup(context, groupId)" in ACTIVE_GROUP and "onBack()" in ACTIVE_GROUP)
 require("group owner must transfer ownership to another current member before leaving", "FynxGroupRemoteClient.transferOwnership(context, groupId, transferTargetUsername)" in ACTIVE_GROUP and "transferCandidates" in ACTIVE_GROUP and "member.copy(role = FynxGroupRole.MODERATOR)" in ACTIVE_GROUP)
 require("Android group remote client wraps authenticated ownership and leave endpoints", "suspend fun transferOwnership" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8") and "suspend fun leaveGroup" in (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8"))
+
+RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+RUNTIME_RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
+ANDROID_WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+CHAT_FIXTURE = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxRuntimeChatFixtureSeedTest.kt").read_text(encoding="utf-8")
+require(
+    "focused Chat/Groups runtime certification is a distinct local-only mode with required real-app screenshots",
+    "CHAT_GROUPS_VISUALS_ONLY" in RUNTIME_NAV
+    and "FYNX-chat-groups-visual-capture.md" in RUNTIME_NAV
+    and all(name in RUNTIME_NAV for name in [
+        "authenticated-chat.png", "private-chat-inside.png", "authenticated-groups.png",
+        "chat-groups-create-dialog.png", "chat-groups-created-fixture.png", "group-chat-inside.png"
+    ])
+    and "Debug-local entry proves rendered UI, navigation and local persistence only" in RUNTIME_NAV
+)
+require(
+    "Chat/Groups runtime seeds a disposable private conversation into the exact installed app and never uses server credentials",
+    "FynxRuntimeChatFixtureSeedTest" in RUNTIME_RUNNER
+    and 'FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py' in RUNTIME_RUNNER
+    and "FYNX offline private fixture: hello from the test peer" in CHAT_FIXTURE
+    and "FYNX local reply: the private conversation history restored" in CHAT_FIXTURE
+    and 'remove("access_token")' in CHAT_FIXTURE
+)
+require(
+    "the Chat/Groups-only runtime is enabled and its genuine screenshot artifact is uploaded for the dedicated PR",
+    "FYNX_CHAT_GROUPS_VISUALS_ONLY" in ANDROID_WORKFLOW
+    and "fix/fynx-chat-groups-runtime-cert-20261120" in ANDROID_WORKFLOW
+    and "Upload FYNX runtime screenshots and UI hierarchies" in ANDROID_WORKFLOW
+)
+
+
+try:
+    ast.parse(RUNTIME_NAV)
+    runtime_python_syntax_ok = True
+except SyntaxError:
+    runtime_python_syntax_ok = False
+require("dedicated Chat/Groups runtime Python script has valid syntax", runtime_python_syntax_ok)
+runtime_shell_syntax = subprocess.run(
+    ["bash", "-n", str(ROOT / "scripts/run_android_runtime_certification.sh")],
+    capture_output=True,
+    text=True,
+)
+require("Android runtime certification shell runner has valid syntax", runtime_shell_syntax.returncode == 0)
+require(
+    "installed-app runtime seeds and restores a 1,002-message private history for large-history navigation coverage",
+    "0 until 1_000" in CHAT_FIXTURE
+    and "assertEquals(1_002, restoredHistory.size)" in CHAT_FIXTURE
+    and "expected_history_message_count >= 1_002" in RUNTIME_NAV
+    and "large_history_fixture_ready" in RUNTIME_NAV
+)
+require(
+    "focused Chat/Groups runtime sends a private message offline and verifies it after reopening",
+    "def send_and_reopen_local_private_fixture" in RUNTIME_NAV
+    and "private-chat-sent-offline.png" in RUNTIME_NAV
+    and "private-chat-reopened-offline.png" in RUNTIME_NAV
+    and "set_emulator_network_enabled(False)" in RUNTIME_NAV
+)
+
 failed = [label for label, ok in checks if not ok]
 print(f"CHAT/GROUP ACTIVE-SCREEN PARITY + LAYOUT: {len(checks)-len(failed)}/{len(checks)} checks passed")
 if failed:

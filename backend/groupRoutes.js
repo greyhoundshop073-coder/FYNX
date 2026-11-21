@@ -157,7 +157,7 @@ export function registerGroupRoutes({ app }) {
     const oldest=pageRows[pageRows.length-1];
     const nextCursor=oldest?{timestamp:new Date(oldest.created_at).getTime(),id:String(oldest.id)}:null;
     res.set('Cache-Control','no-store');
-    return res.json({messages:pageRows.reverse().map(messageJson),hasMore,nextCursor,historyScope});
+    return res.json({messages:pageRows.reverse().map(messageJson),hasMore,nextCursor,historyScope,supportsServerSearch:true,supportsReadReceipts:true});
   }catch(error){console.error('group messages get',error);return res.status(500).json({error:'group messages lookup failed'});}});
   app.post('/api/groups/:groupId/read',auth,async(req,res)=>{try{
     await ensureSchema();

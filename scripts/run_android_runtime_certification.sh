@@ -66,7 +66,7 @@ if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
 fi
 
 ./gradlew connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.notClass=com.fynx.app.FynxRemoteConfigLiveFetchTest \
+  -Pandroid.testInstrumentationRunnerArguments.notClass=com.fynx.app.FynxRemoteConfigLiveFetchTest,com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest \
   --no-daemon --build-cache
 TEST_EXIT=$?
 
@@ -77,6 +77,57 @@ python3 scripts/report_instrumentation_failures.py || true
 adb logcat -d -v threadtime > fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
 adb shell dumpsys activity activities > fynx-runtime-screenshots/instrumentation-activities.txt 2>&1
 adb shell dumpsys package com.fynx.app > fynx-runtime-screenshots/instrumentation-package.txt 2>&1
+
+
+if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::notice::Running focused Chat and Groups installed-app certification; unrelated feature screenshots and backend probes are excluded."
+  if [ "${TEST_EXIT}" -ne 0 ]; then
+    echo "::error::Android instrumentation failed; Chat/Groups runtime was not attempted."
+    exit "${TEST_EXIT}"
+  fi
+  APP_APK="app/build/outputs/apk/debug/app-debug.apk"
+  TEST_APK="app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+  if [ ! -s "${APP_APK}" ] || [ ! -s "${TEST_APK}" ]; then
+    echo "::error::The exact-head debug APK pair is missing; refusing to seed local Chat data into an unknown install."
+    exit 1
+  fi
+  adb install -t -r "${APP_APK}"
+  INSTALL_APP_EXIT=$?
+  if [ "${INSTALL_APP_EXIT}" -ne 0 ]; then
+    echo "::error::Could not install the exact-head FYNX debug APK before Chat fixture seeding."
+    exit "${INSTALL_APP_EXIT}"
+  fi
+  adb install -t -r "${TEST_APK}"
+  INSTALL_TEST_EXIT=$?
+  if [ "${INSTALL_TEST_EXIT}" -ne 0 ]; then
+    echo "::error::Could not install the exact-head Android test APK before Chat fixture seeding."
+    exit "${INSTALL_TEST_EXIT}"
+  fi
+  FIXTURE_OUTPUT=$(adb shell am instrument -w \
+    -e class com.fynx.app.ui.FynxRuntimeChatFixtureSeedTest \
+    -e username "fynx_local_runtime" \
+    com.fynx.app.test/androidx.test.runner.AndroidJUnitRunner 2>&1)
+  FIXTURE_EXIT=$?
+  printf '%s\n' "${FIXTURE_OUTPUT}"
+  FIXTURE_SUMMARY=$(printf '%s\n' "${FIXTURE_OUTPUT}" | grep -E '^[[:space:]]*OK \([1-9][0-9]* tests?\)[[:space:]]*$' | tail -n 1)
+  if [ "${FIXTURE_EXIT}" -ne 0 ] || [ -z "${FIXTURE_SUMMARY}" ] || printf '%s' "${FIXTURE_OUTPUT}" | grep -q 'FAILURES!!!'; then
+    echo "::error::The local private-chat fixture instrumentation did not report a successful JUnit summary."
+    exit 1
+  fi
+  FIXTURE_DISK=$(adb shell run-as com.fynx.app cat shared_prefs/fynx_chat_store.xml 2>&1)
+  if ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX offline private fixture: hello from the test peer' ||
+     ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX local reply: the private conversation history restored' ||
+     ! printf '%s' "${FIXTURE_DISK}" | grep -Fq 'FYNX Runtime Peer'; then
+    echo "::error::The installed FYNX app's persisted Chat XML is missing the disposable peer or one of its two messages."
+    exit 1
+  fi
+  echo "::notice::Verified the private peer and both persisted messages in the installed FYNX app's on-disk SharedPreferences."
+  FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py
+  NAV_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "${NAV_EXIT}" -ne 0 ] && [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${NAV_EXIT}"; fi
+  exit "${TEST_EXIT}"
+fi
 
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   # Admin permissions and account queues require the live OWNER/ADMIN backend.
