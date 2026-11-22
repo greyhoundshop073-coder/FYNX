@@ -21,13 +21,15 @@ Add these repository **Secrets** (values must be copied from the existing Railwa
 - `FYNX_GEMINI_API_KEY` — use a development API key if AI testing is required; this can be added after core API deployment.
 - `FYNX_PAYSTACK_SECRET_KEY` — use a **Paystack test-mode secret key only**. Until one is available, do not run wallet funding or payouts; core API deployment should not depend on enabling real payments.
 
-Add these repository **Variables** for the development environment (do not enable real payment collection):
+Repository **Variables** are optional for the first development deployment. The workflow supplies safe defaults when they are absent:
 
-- `FYNX_OFFICIAL_USERNAME`
-- `FYNX_WALLET_TEST_MODE_ENABLED` — set to `true`.
-- `FYNX_WALLET_CARD_FUNDING_ENABLED` — set to `false` until a Paystack test key has been verified.
-- `FYNX_WALLET_FUNDING_MIN_AMOUNT`
-- `FYNX_WALLET_FUNDING_MAX_AMOUNT`
+- `FYNX_OFFICIAL_USERNAME` — defaults to `fynx`.
+- `FYNX_WALLET_TEST_MODE_ENABLED` — defaults to `false`.
+- `FYNX_WALLET_CARD_FUNDING_ENABLED` — defaults to `false`.
+- `FYNX_WALLET_FUNDING_MIN_AMOUNT` — defaults to `100` (NGN).
+- `FYNX_WALLET_FUNDING_MAX_AMOUNT` — defaults to `100000` (NGN).
+
+These defaults let the core API deploy without activating wallet funding or real payments. Do not change the wallet flags for the initial Neon deployment. Wallet test-mode behavior needs a separate runtime safety review because the current test-mode gate includes a Railway testing-environment check.
 
 Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-dev`. It is manual-only; ordinary pushes do not deploy a backend. This workflow is pinned to the development branch and must not be repointed to `production` or `live-recovery-20261101`.
 
