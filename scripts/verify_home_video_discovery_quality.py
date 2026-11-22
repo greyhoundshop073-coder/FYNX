@@ -21,7 +21,9 @@ checks = [
         and '"home_discovery_videos"' in client
         and '"ci-home-discovery-portrait"' in client
         and "FynxDiscoveryClient.localVisualFixtureVideos(context)" in home
-        and "ci-home-discovery-fixtures.xml" in navigation,
+        and "ci-home-discovery-fixtures.xml" in navigation
+        and '"fynx_home_feed_view"' in navigation
+        and '"FOR_YOU"' in navigation,
     ),
     (
         "runtime certification exercises both repost choices and the original-media quote composer without submitting",

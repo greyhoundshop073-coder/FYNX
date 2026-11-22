@@ -1076,7 +1076,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                         newConversationRelation = "loading"
                                         relationshipRefresh++
-                                    }.onFailure { networkError = "Friend action could not be completed. Please try again." }
+                                    }.onFailure { error ->
+                                        android.util.Log.w("FYNXChat", "Friend relationship action failed", error)
+                                        networkError = "Friend action could not be completed. Please try again."
+                                    }
                                     sending = false
                                 }
                             }
@@ -1098,7 +1101,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     sending = true
                                     FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                         .onSuccess { networkError = "User blocked."; onBack() }
-                                        .onFailure { networkError = "This user could not be blocked yet. Please try again." }
+                                        .onFailure { error ->
+                                            android.util.Log.w("FYNXChat", "Blocking a user failed", error)
+                                            networkError = "This user could not be blocked yet. Please try again."
+                                        }
                                     sending = false
                                 }
                             }

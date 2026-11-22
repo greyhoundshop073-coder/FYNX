@@ -19,8 +19,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: Validate Chat and Groups certification script syntax
+        run: |
+          bash -n scripts/run_android_runtime_certification.sh
+          python3 -m py_compile scripts/verify_authenticated_runtime_navigation.py scripts/verify_chat_final_closure.py scripts/verify_r5a_groups.py scripts/verify_chat_group_layout_and_parity_gate.py scripts/verify_chat_end_to_end.py scripts/verify_chat_gate1_core_messaging.py scripts/verify_chat_gate2_message_actions.py scripts/verify_chat_gate3_media_contract.py scripts/verify_chat_gate4_organization.py scripts/verify_chat_gate5_notifications.py scripts/verify_chat_settings_contract.py scripts/verify_chat_attachment_audio_contract.py
+      - name: Verify active Chat/Groups closure and group security contracts
+        run: |
+          python3 scripts/verify_chat_final_closure.py
+          python3 scripts/verify_r5a_groups.py
       - name: Verify Chat and Group parity/layout contracts
         run: python3 scripts/verify_chat_group_layout_and_parity_gate.py
+      - name: Verify Chat V1 core messaging and realtime contract
+        run: python3 scripts/verify_chat_gate1_core_messaging.py
+      - name: Verify Chat message actions contract
+        run: python3 scripts/verify_chat_gate2_message_actions.py
+      - name: Verify Chat media and attachment contract
+        run: |
+          python3 scripts/verify_chat_gate3_media_contract.py
+          python3 scripts/verify_chat_attachment_audio_contract.py
+      - name: Verify Chat organization and notification settings
+        run: |
+          python3 scripts/verify_chat_gate4_organization.py
+          python3 scripts/verify_chat_gate5_notifications.py
+          python3 scripts/verify_chat_settings_contract.py
       - name: Verify private Chat offline send and structured recovery
         run: python3 scripts/verify_offline_chat_send.py
       - name: Android regression build
