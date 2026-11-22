@@ -294,6 +294,43 @@ def has_accessibility_label(xml_text: str, labels: list[str]) -> bool:
     )
 
 
+def find_visible_node(xml_text:str, labels:list[str]):
+    """Find a visible semantic node even when it is an editable field or static label, not clickable."""
+    if not xml_text:
+        return None
+    wanted = [label.strip().casefold() for label in labels]
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        values = (
+            (node.attrib.get("text") or "").strip().casefold(),
+            (node.attrib.get("content-desc") or "").strip().casefold(),
+            (node.attrib.get("resource-id") or "").strip().casefold(),
+        )
+        if any(value and any(label == value or label in value for label in wanted) for value in values):
+            center = _center(node)
+            if center:
+                candidates.append((node, center))
+    if not candidates:
+        return None
+    # Prefer the most specific semantic node, not a broad parent container.
+    node, center = min(candidates, key=lambda item: (
+        sum(len(value) for value in (
+            (item[0].attrib.get("text") or "").strip(),
+            (item[0].attrib.get("content-desc") or "").strip(),
+            (item[0].attrib.get("resource-id") or "").strip(),
+        ) if value),
+        (item[0].attrib.get("bounds") or "").count(","),
+    ))
+    label = (node.attrib.get("text") or node.attrib.get("content-desc") or node.attrib.get("resource-id") or "").strip()
+    return label, center[0], center[1]
+
+
 def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
@@ -1547,10 +1584,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
             # Direct-on-media text journey: the typing field is invisible apart from the cursor.
             photo_text_xml = tap_control(
-                second_editor, ["Text"], f"{prefix}-camera-photo-text-tool", ["Text on media"]
+                second_editor, ["Text"], f"{prefix}-camera-photo-text-tool", ["Add text overlay"], exact_only=True
             )
             if photo_text_xml:
-                text_field = find_control(photo_text_xml, ["Text on media"])
+                text_field = find_visible_node(photo_text_xml, ["Text on media"])
                 if text_field:
                     _, tx, ty = text_field
                     run("adb", "shell", "input", "tap", str(tx), str(ty))
@@ -2358,15 +2395,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Timing is available only after a text overlay is created and selected. The
     # previous verifier searched for the timing title before selecting any overlay.
     video_text_xml = tap_control(
-        editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Text on media"]
+        editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Add text overlay"], exact_only=True
     )
     if video_text_xml:
         add_overlay_xml = tap_control(
             video_text_xml, ["Add text overlay", "+ Add"], f"{prefix}-camera-video-text-add",
-            ["Text on media"]
+            ["Add text overlay"]
         )
         if add_overlay_xml:
-            video_text_field = find_control(add_overlay_xml, ["Text on media"])
+            video_text_field = find_visible_node(add_overlay_xml, ["Text on media"])
             if video_text_field:
                 _, vx, vy = video_text_field
                 run("adb", "shell", "input", "tap", str(vx), str(vy))
@@ -3244,7 +3281,7 @@ def login():
     )
     if VISUALS_ONLY and home_already_visible:
         if FORCE_LOCAL_VISUALS or not PASSWORD:
-            LOGIN_MODE="reused debug-only local UI session (not server-authenticated)"
+            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
             return xml, ""
         token_present = secure_access_token_persisted()
         if token_present is True:
