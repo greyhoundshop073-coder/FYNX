@@ -8,7 +8,7 @@ The function runs Node.js 24, keeps the existing Express routes, adapts HTTP req
 
 Realtime is designed for multiple Neon Function isolates: transient user-targeted and global events are written to `fynx_realtime_events`, active WebSocket connections are tracked in `fynx_realtime_connections`, and call state is shared through `fynx_realtime_calls`. Each isolate polls the outbox only while it has local WebSocket clients; event rows are retained for one hour. A PostgreSQL integration check verifies user-targeted and global event fanout between two simulated isolates.
 
-The `fynx-marketplace-maintenance` schedule is deliberately deployed **disabled** for the first development pass. The branch contains historical pending wallet funding intents, so do not enable background settlement, payment recovery, or notification jobs until the test Paystack key and test-mode settings have been verified. Once the API and wallet flows pass their isolated tests, enable the schedule on this development branch only. It invokes `/internal/cron` every minute and runs payment reservation and checkout expiry, interrupted-payment and terminal-financial recovery, inspection expiry, payout settlement scanning, up to 20 queued background jobs per invocation, and stale realtime cleanup.
+The `fynx-marketplace-maintenance` schedule is deliberately deployed **disabled** for the first development pass. This is a fresh development database with no imported user or payment history. Do not enable background settlement, payment recovery, or notification jobs until the test Paystack key and test-mode settings have been verified. Once the API and wallet flows pass their isolated tests, enable the schedule on this development branch only. It invokes `/internal/cron` every minute and runs payment reservation and checkout expiry, interrupted-payment and terminal-financial recovery, inspection expiry, payout settlement scanning, up to 20 queued background jobs per invocation, and stale realtime cleanup.
 
 ## One-time deployment credentials
 
@@ -17,9 +17,9 @@ In GitHub, open **greyhoundshop073-coder/FYNX → Settings → Secrets and varia
 Add these repository **Secrets** (values must be copied from the existing Railway `fynx-backend-testing` environment; never paste them into chat or commit them):
 
 - `NEON_API_KEY` — create an API key in Neon.
-- `FYNX_JWT_SECRET` — copy the exact current Railway `JWT_SECRET`. Do not generate a replacement; existing tester login tokens depend on it.
-- `FYNX_GEMINI_API_KEY` — copy the current Railway `GEMINI_API_KEY`.
-- `FYNX_PAYSTACK_SECRET_KEY` — use a **Paystack test-mode secret key only**. Never copy a live/production payment key into this development deployment.
+- `FYNX_JWT_SECRET` — use a dedicated development JWT secret. Existing tokens from another environment will not validate; create/sign in with development test accounts.
+- `FYNX_GEMINI_API_KEY` — use a development API key if AI testing is required; this can be added after core API deployment.
+- `FYNX_PAYSTACK_SECRET_KEY` — use a **Paystack test-mode secret key only**. Until one is available, do not run wallet funding or payouts; core API deployment should not depend on enabling real payments.
 
 Add these repository **Variables** for the development environment (do not enable real payment collection):
 
