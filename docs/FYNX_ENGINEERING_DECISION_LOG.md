@@ -61,3 +61,11 @@ This is the durable record of material engineering choices. New entries are appe
 - **Remaining red evidence:** Home video aspect-ratio scan measured only the portrait preview (0.562) and did not reach the Discovery viewer; the Home final-navigation assertion also failed. The Status creator pass found no running app process after the Camera capture stage. No FATAL/ANR marker was present in the captured logcat; investigate the camera/session handoff without claiming an app crash or a successful Status test.
 - **Next:** Re-run exact-head Android build, instrumentation and emulator capture after these grouped fixes; inspect the next real screenshots/hierarchy and only then close the remaining Home/Discovery, Camera/Status and Chat runtime gates. Live backend/payment flows remain separate.
 - **Release boundary:** This is a feature-branch candidate only. No canonical merge, production infrastructure/data change or official APK publication was performed.
+
+### 2026-11-22 — Neon Object Storage candidate integration
+
+- **Source:** PR #572, exact head `494be03a025955825ef75579fae1e4e574f224fe`; backend CI run #45059759732 passed. Android build and 83-test instrumentation completed with 0 failed and 1 skipped in run #45059764001; the installed-app visual job remained RED on unrelated Chat/Groups, Home video, Camera Text/style, and backend-authenticated Marketplace/Wallet checks.
+- **Integrated into:** PR #580 candidate branch via a feature-to-feature merge commit. The nine storage files are isolated from the Chat/Home/Camera fixes; no production host, credentials, bucket or user data was changed.
+- **Implementation:** Neon and R2 direct signed uploads, provider-pinned upload intents and completion/cleanup, object HEAD/size/MIME validation, trusted HTTPS host validation on Android, bearer-token exclusion from object-storage requests, PostgreSQL legacy fallback, and backend/Android tests.
+- **Evidence boundary:** Backend contracts and Android compilation/instrumentation passed; live Neon PUT/HEAD/authorized GET/expiry/cleanup have NOT been exercised because a healthy configured testing service and branch-scoped Neon credentials are unavailable. Do not claim live storage is operational yet.
+- **Next:** Run the combined candidate's backend, Android, and runtime gates; keep the live storage probe as a separate test-service gate.

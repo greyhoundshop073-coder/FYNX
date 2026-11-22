@@ -114,7 +114,7 @@ object FynxBackendClient {
     internal suspend fun postJsonIdempotentForSession(context: Context, path: String, body: String, sessionToken: String?): Result<String> =
         request(context, "POST", path, body, sessionToken, useRequestTokenOverride = true, retrySafePost = true)
 
-    /** Upload bytes to a short-lived FYNX-issued R2 URL without forwarding the user's bearer token. */
+    /** Upload bytes to a short-lived FYNX-issued object-storage URL without forwarding the user's bearer token. */
     internal suspend fun putSignedMedia(
         context: Context,
         signedUrl: String,
@@ -125,8 +125,8 @@ object FynxBackendClient {
             require(bytes.isNotEmpty()) { "The selected media is empty." }
             require(bytes.size <= 12 * 1024 * 1024) { "Media is too large. Maximum size is 12 MB." }
             val target = URL(signedUrl.trim())
-            require(target.protocol.equals("https", true) && isTrustedR2Host(target.host)) {
-                "FYNX upload URL is not a trusted R2 endpoint."
+            require(target.protocol.equals("https", true) && isTrustedObjectStorageHost(target.host)) {
+                "FYNX upload URL is not a trusted object-storage endpoint."
             }
             val normalizedMime = mimeType.trim().lowercase()
             require(Regex("^(image/(jpeg|png|webp|gif)|video/(mp4|webm|quicktime)|audio/(mp4|mpeg|aac|x-m4a|wav))$").matches(normalizedMime)) {
@@ -213,9 +213,12 @@ object FynxBackendClient {
         }
     }
 
-    private fun isTrustedR2Host(host: String): Boolean =
-        Regex("^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\\.)?[0-9a-f]{32}\\.r2\\.cloudflarestorage\\.com$", RegexOption.IGNORE_CASE)
-            .matches(host)
+    internal fun isTrustedObjectStorageHost(host: String): Boolean {
+        val normalized = host.trim()
+        val r2 = Regex("^(?:[a-z0-9][a-z0-9-]{1,61}[a-z0-9]\\.)?[0-9a-f]{32}\\.r2\\.cloudflarestorage\\.com$", RegexOption.IGNORE_CASE).matches(normalized)
+        val neon = Regex("^[a-z0-9][a-z0-9-]{1,62}\\.storage\\.c-[a-z0-9-]+\\.[a-z0-9-]+\\.aws\\.neon\\.tech$", RegexOption.IGNORE_CASE).matches(normalized)
+        return r2 || neon
+    }
 
     private suspend fun downloadOnce(
         context: Context,
@@ -250,13 +253,13 @@ object FynxBackendClient {
             }
 
             // FYNX authorizes the media request first, then redirects to a short-lived
-            // signed R2 URL. Never forward the FYNX bearer token to object storage.
+            // signed Neon/R2 URL. Never forward the FYNX bearer token to object storage.
             if (status == HttpURLConnection.HTTP_MOVED_TEMP) {
                 val location = connection.getHeaderField("Location")?.trim().orEmpty()
                 require(location.isNotBlank()) { "FYNX media redirect did not include a location." }
                 val signedTarget = URL(location)
-                require(signedTarget.protocol.equals("https", true) && isTrustedR2Host(signedTarget.host)) {
-                    "FYNX media redirect is not a trusted R2 endpoint."
+                require(signedTarget.protocol.equals("https", true) && isTrustedObjectStorageHost(signedTarget.host)) {
+                    "FYNX media redirect is not a trusted object-storage endpoint."
                 }
                 connection.disconnect()
                 connection = openConnection(signedTarget, false)

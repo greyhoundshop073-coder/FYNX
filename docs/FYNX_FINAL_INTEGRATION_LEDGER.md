@@ -124,3 +124,11 @@ The consolidation PR is not a final APK certification. Its prior description rec
 - Next gate: rerun exact-head build, instrumentation and emulator screenshots; keep backend, multi-account delivery, Wallet/Paystack and official APK certification explicitly separate until their prerequisites are available.
 
 **Release boundary:** PR #580 remains a feature candidate. No canonical merge, production change or official APK publication has occurred.
+
+### 22 November 2026 — Neon Object Storage selectively integrated into candidate
+
+- PR #572 head `494be03a025955825ef75579fae1e4e574f224fe` was integrated into the PR #580 feature candidate, not canonical. Its backend CI passed; Android build and instrumentation passed (83 tests, 0 failed, 1 skipped), while its installed-app visual runtime remained RED on separate Chat/Groups, Home, Camera, and authenticated Marketplace/Wallet journeys.
+- Candidate now includes Neon/R2 direct signed media uploads, provider-pinned upload intent completion/cleanup, strict trusted-host checks, no bearer-token forwarding to object storage, PostgreSQL fallback, and backend/Android storage tests.
+- Live Neon upload, HEAD validation, authorized retrieval, expiry and cleanup remain UNVERIFIED until a healthy test service and branch-scoped credentials are available. No production credentials, bucket, configuration or data were changed.
+
+**Release boundary:** feature candidate only; no canonical merge or official APK publication.
