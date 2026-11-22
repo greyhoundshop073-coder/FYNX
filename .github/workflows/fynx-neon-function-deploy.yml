@@ -66,7 +66,7 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy only to the isolated fynx-dev-backend-20261122 branch
+      - name: Deploy only to the isolated fynx-dev branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
@@ -92,6 +92,6 @@ jobs:
           # Pin the CLI to the intended project and branch before applying neon.ts.
           # The deploy command itself applies to the linked branch; it does not accept
           # project/branch flags.
-          npx --yes neon@9.2.0 link --project-id patient-lab-43403708 --no-env-pull -y
-          npx --yes neon@9.2.0 checkout fynx-dev-backend-20261122 --no-env-pull
+          npx --yes neon@9.2.0 link --project-id spring-mode-34864088 --no-env-pull -y
+          npx --yes neon@9.2.0 checkout fynx-dev --no-env-pull
           npx --yes neon@9.2.0 deploy --env .env.neon.deploy
