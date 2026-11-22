@@ -67,3 +67,49 @@ The correction commit is `c3854dfe3ea61c7854ac464733f8f3854a7c8771`. Android, Ba
 ## Release boundary
 
 The consolidation PR is not a final APK certification. Its prior description records Marketplace/My Shop/Wallet live screens and the production backend probe as unverified/blocked. The official APK must still be built from the approved canonical integration source after approval; this ledger does not authorize merging PR #563 or changing the canonical branch.
+
+
+## Current operational checkpoint — 2026-11-22 (PR #580; supersedes 2026-11-20 status for this workstream)
+
+**Canonical branch:** `integration/fynx-single-apk-20261013`  
+**Canonical base SHA used by candidate:** `dfb9b83d420b41512224ad7180eab797b9664f6d`  
+**Active candidate PR:** [#580](https://github.com/greyhoundshop073-coder/FYNX/pull/580), OPEN and UNMERGED  
+**Candidate branch:** `fix/canonical-local-runtime-visual-modes-20261122`  
+**Candidate head at checkpoint:** `e1c3bcf149dff2246ca7123867910958323b0037`
+
+### Grouped work added to the candidate
+
+- Home Feed runtime detection no longer treats normal post interactions as modal routes.
+- The disposable local Discovery fixture explicitly persists and verifies `FOR_YOU` before its local videos are scanned.
+- Groups tab uses a unique `Open Groups` accessibility description and the runtime verifier requires that exact control.
+- Chat/Groups account/group read-receipt capability state is scoped and the authoritative final message snapshot is persisted with stale-session guards.
+- Added focused receipt tests, two-account isolation instrumentation and offline message persistence/cold-restart coverage.
+- Backend group-history capability tests and Chat/Groups parity/closure contracts were updated.
+- Added/updated the runtime/workflow handoff and permanent engineering standard (see #581 port recorded on the next candidate head).
+
+### Exact-head evidence at time of checkpoint
+
+- Android source/contract gates: PASSED on #45058308486, including camera script syntax, Home video/Discovery, Home lifecycle, R5A Groups security, Status source/runtime contract, Marketplace/Wallet and H12 gates.
+- Backend CI: PASSED on #45058308499; production reachability was SKIPPED and remains unverified.
+- Chat/Groups parity/layout static contracts: PASSED on #45058308496; Android regression build was still running.
+- Android fast build/test/lint: still running in #45058308486.
+- Installed-app runtime capture and final screenshots/hierarchy: NOT YET VERIFIED on this head.
+- Earlier Chat Closure Android unit/lint/debug APK workflow #45057973421 passed on ancestor #781da8b; the Chat source files were unchanged afterward, but this is not a substitute for the latest full exact-head checks.
+- No feature-branch APK is the shared canonical APK. No official APK is published.
+
+### Related PR disposition
+
+- #574 Chat/Groups source changes were selectively ported to #580; keep #574 OPEN until the candidate has passed its checks and the final integration disposition is confirmed.
+- #581 global engineering standard is being ported into the same candidate; do not treat documentation or a feature-branch PR as canonical integration.
+- #155 currently has a head SHA identical to the canonical branch and targets `main`; it contains no unique change relative to canonical and should be closed as superseded rather than merged into the delivery path.
+- Divergent #535/#573/#171 and old consolidation-base PRs must be reviewed per-file; do not wholesale merge them.
+
+### Next acceptance gates
+
+1. Complete #45058308486 Android build, unit tests, lint, instrumentation and installed-app runtime capture.
+2. Complete #45058308496 Android regression build.
+3. Verify exact-head Chat/Groups closure and collect local UI evidence.
+4. Review Home/Discovery, Camera, Status and Marketplace/My Shop runtime reports/screenshots, keeping live-service blockers separate.
+5. Reconcile the remaining unique PR work into one candidate branch, then build the shared APK only from the approved canonical commit after authorization.
+
+**Release boundary:** This candidate is not merged into canonical, no production configuration/data was changed, and no official APK was published.
