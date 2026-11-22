@@ -22,7 +22,7 @@ checks = [
         and '"ci-home-discovery-portrait"' in client
         and "FynxDiscoveryClient.localVisualFixtureVideos(context)" in home
         and "ci-home-discovery-fixtures.xml" in navigation
-        and '"fynx_home_feed_view"' in navigation
+        and "shared_prefs/fynx_home_feed_view.xml" in navigation
         and '"FOR_YOU"' in navigation,
     ),
     (
