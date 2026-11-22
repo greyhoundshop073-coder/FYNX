@@ -821,20 +821,28 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                         )
                         messages = mergedMessages
                         hasMoreGroupHistory = page.hasMore
+                        // Persist the final snapshot after read-receipt reconciliation. Saving
+                        // mergedMessages after the receipt callback would overwrite readBy with
+                        // the older pre-receipt snapshot.
+                        var messagesToPersist = mergedMessages
                         val incomingIds = remoteMessages.filter { !it.fromMe }.map { it.id }.takeLast(100)
                         if (incomingIds.isNotEmpty()) {
                             FynxGroupRemoteClient.markMessagesRead(context, groupId, incomingIds).onSuccess { readUpdates ->
                                 if (!isCurrentGroupAccount(groupAccountKey)) return@onSuccess
-                                val byId = readUpdates.associateBy { it.id }
-                                val withReceipts = messages.map { message -> byId[message.id]?.let { message.copy(readBy = it.readBy) } ?: message }
+                                val withReceipts = applyGroupReadReceiptUpdates(
+                                    messages,
+                                    readUpdates.associate { it.id to it.readBy }
+                                )
                                 messages = withReceipts
-                                withContext(Dispatchers.IO) { if (isCurrentGroupAccount(groupAccountKey)) FynxChatStore.save(context, "group_$groupId", withReceipts) }
+                                messagesToPersist = withReceipts
                             }
                         }
                         if (showError) syncMessage = null
                         runCatching {
                             withContext(Dispatchers.IO) {
-                                FynxChatStore.save(context, "group_$groupId", mergedMessages)
+                                if (isCurrentGroupAccount(groupAccountKey)) {
+                                    FynxChatStore.save(context, "group_$groupId", messagesToPersist)
+                                }
                             }
                         }.onFailure { if (showError) syncMessage = "Your group messages could not be saved locally. Please try again." }
                     }
