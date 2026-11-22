@@ -86,7 +86,22 @@ class FynxRuntimeChatFixtureSeedTest {
             senderUsername = username
         )
 
-        FynxChatStore.save(context, peerUsername, listOf(peerMessage, ownerReply))
+        // Exercise the real local history store with a 1,000-message conversation
+        // before the final two visible messages. This catches serialization, account
+        // namespace and large-history regressions without creating server messages.
+        val historyStressMessages = (0 until 1_000).map { index ->
+            val fromMe = index % 2 == 1
+            peerMessage.copy(
+                text = "FYNX runtime history stress item $index",
+                fromMe = fromMe,
+                id = "runtime-history-$index",
+                timestamp = now - ((1_002L - index.toLong()) * 60_000L),
+                senderName = if (fromMe) "FYNX Runtime Owner" else "FYNX Runtime Peer",
+                senderUsername = if (fromMe) username else peerUsername
+            )
+        }
+        val seededHistory = historyStressMessages + listOf(peerMessage, ownerReply)
+        FynxChatStore.save(context, peerUsername, seededHistory)
         FynxChatStore.savePreview(
             context,
             ChatPreview(
@@ -99,7 +114,10 @@ class FynxRuntimeChatFixtureSeedTest {
             )
         )
 
-        assertEquals(listOf(peerMessage, ownerReply), FynxChatStore.load(context, peerUsername))
+        val restoredHistory = FynxChatStore.load(context, peerUsername)
+        assertEquals(1_002, restoredHistory.size)
+        assertEquals(peerMessage.id, restoredHistory[1_000].id)
+        assertEquals(ownerReply.id, restoredHistory[1_001].id)
         assertEquals(peerUsername, FynxChatStore.loadPreviews(context).firstOrNull()?.username)
 
         // save()/savePreview() intentionally use apply() for normal UI writes.

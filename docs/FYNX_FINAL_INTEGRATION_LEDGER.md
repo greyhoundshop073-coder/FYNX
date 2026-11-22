@@ -145,3 +145,11 @@ The consolidation PR is not a final APK certification. Its prior description rec
 
 - Real Camera evidence showed the Text rail action and Video FX tiles on screen but without stable accessible names. Added merged accessibility labels to the shared rail-action and effect-tile clickable surfaces, and added harness contracts for both.
 - Next exact-head runtime must demonstrate video text entry, Cinematic/Warm Film selection, and a completed edited MP4 export. This source repair is not yet runtime-certified.
+
+### 22 November 2026 — Groups accessibility and large-history fixture
+
+- Groups list cards now expose merged `Open group <name>` accessibility labels on their actual clickable surfaces.
+- The disposable Chat runtime fixture now verifies 1,002 persisted account-scoped messages, including the two visible conversation messages at the end of the history. Added a harness contract for this stress case.
+- Preserved the candidate's newer group read-receipt final-snapshot persistence logic.
+
+**Release boundary:** feature candidate only; no canonical merge or official APK publication.

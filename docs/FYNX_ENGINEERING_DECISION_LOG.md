@@ -84,3 +84,10 @@ This is the durable record of material engineering choices. New entries are appe
 - Inspected real Camera screenshots and UIAutomator XML from run #45059764001. The Text tool and Video FX style row were visibly rendered; the Text rail action and style tiles did not consistently expose their names as stable merged accessibility labels. The verifier consequently saw only unrelated markers and could not tap the Text action, then could not reach the style row or Apply text/effects action.
 - Updated the shared Camera editor rail action and effect tile components to merge their visible labels into their clickable semantics. This improves TalkBack/UIAutomator access across Text, Captions, Cinematic, Warm Film and the other effect categories without changing visual layout or effect behavior.
 - Added static harness contracts so future changes cannot silently remove these accessible names. The next exact-head emulator run must still prove Text entry, style selection and actual export; source-level semantics alone are not runtime certification.
+
+### 2026-11-22 — Groups accessibility and large-history fixture
+
+- Ported the missing accessible group-card label from #535 into the current Groups screen. Every group card now exposes `Open group <name>` as one merged clickable accessibility action; this restores the intended real group-open target for TalkBack and runtime certification.
+- Expanded the disposable Chat runtime fixture to persist and reload 1,002 messages (1,000 stress entries plus the peer and owner messages used by the visible conversation). It asserts exact ordering and persistence in the account-scoped local store. No server messages or remote accounts are created.
+- Added a harness contract for the large-history fixture. The current candidate's group receipt persistence already uses the newer final-snapshot reconciliation and is retained; no older receipt implementation was copied over it.
+- Exact-head Android instrumentation and installed-app Chat/Groups runtime must still pass before this work is closed.
