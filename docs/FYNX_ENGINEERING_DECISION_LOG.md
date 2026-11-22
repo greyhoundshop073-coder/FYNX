@@ -69,3 +69,12 @@ This is the durable record of material engineering choices. New entries are appe
 - **Implementation:** Neon and R2 direct signed uploads, provider-pinned upload intents and completion/cleanup, object HEAD/size/MIME validation, trusted HTTPS host validation on Android, bearer-token exclusion from object-storage requests, PostgreSQL legacy fallback, and backend/Android tests.
 - **Evidence boundary:** Backend contracts and Android compilation/instrumentation passed; live Neon PUT/HEAD/authorized GET/expiry/cleanup have NOT been exercised because a healthy configured testing service and branch-scoped Neon credentials are unavailable. Do not claim live storage is operational yet.
 - **Next:** Run the combined candidate's backend, Android, and runtime gates; keep the live storage probe as a separate test-service gate.
+
+### 2026-11-22 — Selective Chat reliability port from #535
+
+- Reviewed #535 per-file rather than merging its 274-commit divergent history. Ported only three unique tests and two focused app repairs that are compatible with the current candidate.
+- Private-chat history failure now checks the durable account-scoped local store before marking a conversation new; cached messages remain visible with a truthful refresh warning. Added focused JVM tests for saved-history and empty-history cases.
+- In-app incoming-message alerts now share the same per-chat notification/mute policy as FCM, including the user's chat sound and vibration preferences. Added policy tests for disabled notifications and muted chats.
+- Added local deterministic instrumentation for group reconnect drain: successful group sync replaces the pending message with the server-confirmed ID/status; failed group creation keeps both group and message queued and never sends the message prematurely.
+- These tests use local injected transports and disposable account namespaces; no live backend, production group, or real user is involved.
+- The new tests and source changes are now part of the PR #580 feature candidate. Exact-head Android and Chat closure workflows must verify them before acceptance.

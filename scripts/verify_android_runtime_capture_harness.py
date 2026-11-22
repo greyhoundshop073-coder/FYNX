@@ -10,6 +10,11 @@ RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encod
 RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 STATUS_RUNTIME = (ROOT / "scripts/verify_status_creator_runtime.py").read_text(encoding="utf-8")
 CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+CONVERSATION_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt").read_text(encoding="utf-8")
+GROUP_RECONNECT_TEST = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxGroupReconnectDrainInstrumentationTest.kt").read_text(encoding="utf-8")
+CHAT_SOUND_POLICY_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/FynxInChatSoundPolicyTest.kt").read_text(encoding="utf-8")
+CHAT_HISTORY_FALLBACK_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/PrivateChatHistoryFallbackTest.kt").read_text(encoding="utf-8")
+CHAT_SOUND = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxInChatSound.kt").read_text(encoding="utf-8")
 GROUPS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
 GROUP_CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt").read_text(encoding="utf-8")
 EMULATOR_WRAPPER = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
@@ -23,6 +28,25 @@ chat_command = (
 workflow_script = WORKFLOW.split("script: |", 1)[1].split("\n        env:", 1)[0]
 workflow_commands = [line.strip() for line in workflow_script.splitlines() if line.strip()]
 checks = {
+    "private chat keeps cached history visible when remote history refresh fails": (
+        "privateChatHistoryFailureMessage(hasSavedMessages: Boolean)" in CONVERSATION_PANEL
+        and "FynxChatStore.load(context, chat.username, null).isNotEmpty()" in CONVERSATION_PANEL
+        and "Saved messages are shown. Could not refresh them yet" in CONVERSATION_PANEL
+        and "privateChatHistoryFailureMessage(hasSavedMessages = true)" in CHAT_HISTORY_FALLBACK_TEST
+    ),
+    "private chat in-app sound and vibration respect per-chat notification and mute settings": (
+        "FynxInChatSound.play(context, chat.username)" in CONVERSATION_PANEL
+        and "shouldPlayInChatAlert(" in CHAT_SOUND
+        and "FynxPreferencesStore.isChatMuted(context, username)" in CHAT_SOUND
+        and "chatVibration(context, username)" in CHAT_SOUND
+        and "suppressesAlertWhenLegacyMuteIsEnabled" in CHAT_SOUND_POLICY_TEST
+    ),
+    "group reconnect drain replaces confirmed server messages and preserves failed pending work": (
+        "FynxGroupRemoteClient.drainPendingWork(context)" in GROUP_RECONNECT_TEST
+        and "reconnectDrainSyncsPendingGroupAndReplacesTheUndeliveredMessage" in GROUP_RECONNECT_TEST
+        and "failedGroupCreationSyncKeepsTheGroupAndItsMessageQueued" in GROUP_RECONNECT_TEST
+        and "assertFalse(saved.single().delivered)" in GROUP_RECONNECT_TEST
+    ),
     "emulator runner executes compound certification through one Bash script": (
         workflow_commands == ["bash scripts/run_android_runtime_emulator_certification.sh"]
         and "if [ \"$preflight_status\" -eq 0 ]; then" in EMULATOR_WRAPPER

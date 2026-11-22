@@ -132,3 +132,11 @@ The consolidation PR is not a final APK certification. Its prior description rec
 - Live Neon upload, HEAD validation, authorized retrieval, expiry and cleanup remain UNVERIFIED until a healthy test service and branch-scoped credentials are available. No production credentials, bucket, configuration or data were changed.
 
 **Release boundary:** feature candidate only; no canonical merge or official APK publication.
+
+### 22 November 2026 — Selective Chat reliability port from #535
+
+- Reviewed the divergent #535 branch per-file and selectively ported its unique private-history fallback, per-chat alert policy and deterministic group reconnect-drain tests into the #580 candidate.
+- Private chat now distinguishes saved-history refresh failure from an empty first-load failure. In-app alert sound/vibration now respects per-chat notification and mute settings. Group reconnect tests verify successful server-ID replacement and preservation of pending group/message work after a simulated failure.
+- All added tests use local fixtures/injected transports. They do not certify live delivery, FCM or backend readiness.
+
+**Release boundary:** feature candidate only; no canonical merge, production change or official APK publication.

@@ -65,6 +65,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** Keeps a cached private conversation usable when its remote refresh is unavailable. */
+internal fun privateChatHistoryFailureMessage(hasSavedMessages: Boolean): String =
+    if (hasSavedMessages) {
+        "Saved messages are shown. Could not refresh them yet; check your connection and retry."
+    } else {
+        "Messages could not load yet. Check your connection and retry."
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, onBack: () -> Unit, onOpenProfile: (String) -> Unit = {}, onVoiceCall: () -> Unit = {}, onVideoCall: () -> Unit = {}) {
@@ -291,18 +299,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    if (FynxConversationPreferences.chatSounds(context, chat.username)) {
-                        FynxInChatSound.play(context)
-                    }
-                    if (FynxConversationPreferences.chatVibration(context, chat.username)) {
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator?.vibrate(VibrationEffect.createOneShot(35L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator?.vibrate(35L)
-                        }
-                    }
+                    // Keep in-app alerts consistent with FCM: respect this chat's notification
+                    // toggle and the legacy mute setting before playing sound or vibrating.
+                    FynxInChatSound.play(context, chat.username)
                     realtimeClient.acknowledgeMessage(remote.id)
                     if (FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
                         conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
@@ -497,14 +496,22 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                 }
             }.onFailure {
-                isNewConversation = messages.isEmpty()
-                networkError = "Messages could not load yet. Check your connection and retry."
+                // The local history restore runs independently; read disk here as well so
+                // a fast network failure cannot mislabel a cached conversation as empty.
+                val hasSavedMessages = withContext(Dispatchers.IO) {
+                    FynxChatStore.load(context, chat.username, null).isNotEmpty()
+                }
+                isNewConversation = !hasSavedMessages
+                networkError = privateChatHistoryFailureMessage(hasSavedMessages)
             }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
-            networkError = "This conversation could not connect yet. Check your connection and try again."
-            isNewConversation = false
+            val hasSavedMessages = withContext(Dispatchers.IO) {
+                FynxChatStore.load(context, chat.username, null).isNotEmpty()
+            }
+            networkError = privateChatHistoryFailureMessage(hasSavedMessages)
+            isNewConversation = !hasSavedMessages
         }
     }
 
