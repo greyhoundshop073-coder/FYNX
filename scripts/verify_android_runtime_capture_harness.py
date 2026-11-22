@@ -53,7 +53,8 @@ checks = {
         and 'Text("Before you use contact matching"' in CONTACTS_PANEL
     ),
     "Groups-tab capture waits for the Groups-specific action, not the Chats-section New group button": (
-        'groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])' in RUNTIME_NAV
+        'groups_xml = tap_control(\n        chat_again, ["Open Groups"], "chat-groups-groups-tab",\n        ["Create group"], exact_only=True\n    )' in RUNTIME_NAV
+        and 'contentDescription = if (section == "Chats") "Open Groups" else "Open Chats"' in CHAT_PANEL
         and 'contentDescription = "Create group"' in CHAT_PANEL
         and 'Text("＋ New group")' in CHAT_PANEL
     ),
@@ -66,6 +67,15 @@ checks = {
         'for back_label in ("Back", "Back to Chats", "Back to Marketplace")' in STATUS_RUNTIME
         and 'find_click_target(current, back_label)' in STATUS_RUNTIME
         and 'IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back"' in GROUP_CHAT_PANEL
+    ),
+    "Home runtime keeps ordinary post actions inside the feed and restores navigation": (
+        '"Close viewer",\n    )):' in RUNTIME_NAV
+        and 'restore_home_feed_top(home_xml)' in RUNTIME_NAV
+    ),
+    "offline Home Discovery fixture is deterministic and opens For You": (
+        'ci-home-feed-view.xml' in RUNTIME_NAV
+        and '"fynx_home_feed_view"' in RUNTIME_NAV
+        and '"FOR_YOU"' in RUNTIME_NAV
     ),
     "camera callback uses a public SAM interface": (
         "fun interface FynxCameraEditedCaptureCallback" in CAMERA
