@@ -74,7 +74,7 @@ checks = {
     ),
     "offline Home Discovery fixture is deterministic and opens For You": (
         'ci-home-feed-view.xml' in RUNTIME_NAV
-        and '"fynx_home_feed_view"' in RUNTIME_NAV
+        and 'shared_prefs/fynx_home_feed_view.xml' in RUNTIME_NAV
         and '"FOR_YOU"' in RUNTIME_NAV
     ),
     "camera callback uses a public SAM interface": (
