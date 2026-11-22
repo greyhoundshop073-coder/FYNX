@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  deploy-testing-function:
+  deploy-development-function:
     runs-on: ubuntu-latest
     env:
       PGHOST: 127.0.0.1
@@ -49,34 +49,38 @@ jobs:
       - name: Build and verify FYNX Neon Function
         run: npm run verify:neon
 
-      - name: Require Neon deployment credential and preserved FYNX settings
+      - name: Validate required deployment credentials and safe wallet defaults
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
           FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
-          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
-          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
-          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
-          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
-          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED || 'false' }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT || '100' }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
-          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ] || [ -z "$FYNX_OFFICIAL_USERNAME" ] || [ -z "$FYNX_WALLET_TEST_MODE_ENABLED" ] || [ -z "$FYNX_WALLET_CARD_FUNDING_ENABLED" ] || [ -z "$FYNX_WALLET_FUNDING_MIN_AMOUNT" ] || [ -z "$FYNX_WALLET_FUNDING_MAX_AMOUNT" ]; then
-            echo "::error::Add all required FYNX secrets and variables listed in backend/NEON_FUNCTIONS_DEPLOYMENT.md."
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
+            echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY."
+            exit 1
+          fi
+          if [ "$FYNX_WALLET_TEST_MODE_ENABLED" != "false" ] || [ "$FYNX_WALLET_CARD_FUNDING_ENABLED" != "false" ]; then
+            echo "::error::Initial Neon deployment must keep wallet test mode and card funding disabled until provider/runtime safety checks pass."
             exit 1
           fi
 
-      - name: Deploy only to the isolated fynx-testing branch
+      - name: Deploy only to the isolated fynx-dev branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
           FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
-          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME }}
-          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED }}
-          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED }}
-          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT }}
-          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT }}
+          FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
+          FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
+          FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED || 'false' }}
+          FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT || '100' }}
+          FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
           umask 077
           cat > .env.neon.deploy <<EOF
@@ -92,6 +96,6 @@ jobs:
           # Pin the CLI to the intended project and branch before applying neon.ts.
           # The deploy command itself applies to the linked branch; it does not accept
           # project/branch flags.
-          npx --yes neon@9.2.0 link --project-id patient-lab-43403708 --no-env-pull -y
-          npx --yes neon@9.2.0 checkout fynx-testing --no-env-pull
+          npx --yes neon@9.2.0 link --project-id spring-mode-34864088 --no-env-pull -y
+          npx --yes neon@9.2.0 checkout fynx-dev --no-env-pull
           npx --yes neon@9.2.0 deploy --env .env.neon.deploy

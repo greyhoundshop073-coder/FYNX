@@ -2,13 +2,13 @@
 
 ## Target
 
-Deploy the existing Node backend as a Neon Function on the isolated `fynx-testing` branch of project `patient-lab-43403708` (branch id `br-floral-shape-b5mbajl5`). The Function receives Neon's branch-scoped `DATABASE_URL`; no production or recovery branch is targeted.
+Deploy the existing Node backend as a Neon Function on the isolated `fynx-dev` branch of project `spring-mode-34864088` (branch id `br-little-cherry-befotl0z`). The Function receives Neon's branch-scoped `DATABASE_URL`; no production or recovery branch is targeted.
 
 The function runs Node.js 24, keeps the existing Express routes, adapts HTTP requests through `serverless-http`, and adapts the existing authenticated `/realtime` WebSocket handler through Neon's `upgradeWebSocket` API.
 
 Realtime is designed for multiple Neon Function isolates: transient user-targeted and global events are written to `fynx_realtime_events`, active WebSocket connections are tracked in `fynx_realtime_connections`, and call state is shared through `fynx_realtime_calls`. Each isolate polls the outbox only while it has local WebSocket clients; event rows are retained for one hour. A PostgreSQL integration check verifies user-targeted and global event fanout between two simulated isolates.
 
-The `fynx-marketplace-maintenance` schedule invokes `/internal/cron` every minute. It runs payment reservation and checkout expiry, interrupted-payment and terminal-financial recovery, inspection expiry, payout settlement scanning, up to 20 queued background jobs per invocation, and stale realtime cleanup. These scheduled jobs replace the corresponding process-local timers in the Neon request runtime.
+The `fynx-marketplace-maintenance` schedule is deliberately deployed **disabled** for the first development pass. This is a fresh development database with no imported user or payment history. Do not enable background settlement, payment recovery, or notification jobs until the test Paystack key and test-mode settings have been verified. Once the API and wallet flows pass their isolated tests, enable the schedule on this development branch only. It invokes `/internal/cron` every minute and runs payment reservation and checkout expiry, interrupted-payment and terminal-financial recovery, inspection expiry, payout settlement scanning, up to 20 queued background jobs per invocation, and stale realtime cleanup.
 
 ## One-time deployment credentials
 
@@ -17,19 +17,21 @@ In GitHub, open **greyhoundshop073-coder/FYNX → Settings → Secrets and varia
 Add these repository **Secrets** (values must be copied from the existing Railway `fynx-backend-testing` environment; never paste them into chat or commit them):
 
 - `NEON_API_KEY` — create an API key in Neon.
-- `FYNX_JWT_SECRET` — copy the exact current Railway `JWT_SECRET`. Do not generate a replacement; existing tester login tokens depend on it.
-- `FYNX_GEMINI_API_KEY` — copy the current Railway `GEMINI_API_KEY`.
-- `FYNX_PAYSTACK_SECRET_KEY` — copy the current Railway `PAYSTACK_SECRET_KEY`.
+- `FYNX_JWT_SECRET` — use a dedicated development JWT secret. Existing tokens from another environment will not validate; create/sign in with development test accounts.
+- `FYNX_GEMINI_API_KEY` — use a development API key if AI testing is required; this can be added after core API deployment.
+- `FYNX_PAYSTACK_SECRET_KEY` — use a **Paystack test-mode secret key only**. Until one is available, do not run wallet funding or payouts; core API deployment should not depend on enabling real payments.
 
-Add these repository **Variables** using their exact current Railway values:
+Repository **Variables** are optional for the first development deployment. The workflow supplies safe defaults when they are absent:
 
-- `FYNX_OFFICIAL_USERNAME`
-- `FYNX_WALLET_TEST_MODE_ENABLED`
-- `FYNX_WALLET_CARD_FUNDING_ENABLED`
-- `FYNX_WALLET_FUNDING_MIN_AMOUNT`
-- `FYNX_WALLET_FUNDING_MAX_AMOUNT`
+- `FYNX_OFFICIAL_USERNAME` — defaults to `fynx`.
+- `FYNX_WALLET_TEST_MODE_ENABLED` — defaults to `false`.
+- `FYNX_WALLET_CARD_FUNDING_ENABLED` — defaults to `false`.
+- `FYNX_WALLET_FUNDING_MIN_AMOUNT` — defaults to `100` (NGN).
+- `FYNX_WALLET_FUNDING_MAX_AMOUNT` — defaults to `100000` (NGN).
 
-Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-testing`. It is manual-only; ordinary pushes do not deploy a backend.
+These defaults let the core API deploy without activating wallet funding or real payments. Do not change the wallet flags for the initial Neon deployment. Wallet test-mode behavior needs a separate runtime safety review because the current test-mode gate includes a Railway testing-environment check.
+
+Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-dev`. It is manual-only; ordinary pushes do not deploy a backend. This workflow is pinned to the development branch and must not be repointed to `production` or `live-recovery-20261101`.
 
 ## Runtime configuration
 
@@ -46,10 +48,10 @@ Optional integrations can be added later as Function environment variables witho
 
 ## Safety gates before changing Android
 
-- Confirm the Function's branch is `fynx-testing`.
-- Configure the original `JWT_SECRET` and verify login with the existing test accounts before any Android URL change.
+- Confirm the Function's branch is `fynx-dev`.
+- Configure the development JWT secret. Reuse the previous testing secret if it is available; otherwise use a separate development-only secret and have test accounts sign in again (old tokens will no longer validate). Never reuse a live production secret in this branch.
 - Verify health, login, token validation, social feed, chat REST, WebSocket realtime, Marketplace, Wallet, media and AI routes.
-- Verify scheduled Marketplace settlement/expiry tasks before relying on automatic settlement.
+- Keep the maintenance trigger disabled while validating APIs and historical test data. Enable it only after confirming Paystack test-mode credentials, wallet test flags, and that queued jobs cannot issue real payouts or notifications.
 - Keep the Android backend URL unchanged until all gates pass.
 - Do not run migrations against `production` or `live-recovery-20261101`; do not reset or delete any branch data.
 
