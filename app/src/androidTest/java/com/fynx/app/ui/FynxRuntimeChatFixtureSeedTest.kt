@@ -162,7 +162,7 @@ class FynxRuntimeChatFixtureSeedTest {
         assertTrue("The persisted XML must contain the owner reply", diskSnapshot.contains(ownerReply.text))
         assertTrue("The persisted XML must contain the account-scoped preview", diskSnapshot.contains("chat_previews_" + normalizedUsername))
 
-        assertEquals(2, FynxChatStore.load(context, peerUsername).size)
+        assertEquals(1_002, FynxChatStore.load(context, peerUsername).size)
         assertNull("Tokenless local entry must remain independent of a backend credential", FynxBackendClient.accessToken(context))
 
         // Exercise the exact local sign-in transition used by FynxApp's auth gate.
@@ -171,7 +171,7 @@ class FynxRuntimeChatFixtureSeedTest {
         FynxAuthStore.save(context, username)
         assertEquals(username.trim().lowercase(), FynxAuthStore.accountStorageKey(context))
         assertEquals(peerUsername, FynxChatStore.loadPreviews(context).firstOrNull()?.username)
-        assertEquals(2, FynxChatStore.load(context, peerUsername).size)
+        assertEquals(1_002, FynxChatStore.load(context, peerUsername).size)
         assertNull(FynxBackendClient.accessToken(context))
         assertTrue("Restore the signed-out gate for the following UI login", auth.edit().putBoolean("signed_in", false).commit())
     }

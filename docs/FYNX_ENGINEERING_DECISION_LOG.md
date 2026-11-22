@@ -91,3 +91,9 @@ This is the durable record of material engineering choices. New entries are appe
 - Expanded the disposable Chat runtime fixture to persist and reload 1,002 messages (1,000 stress entries plus the peer and owner messages used by the visible conversation). It asserts exact ordering and persistence in the account-scoped local store. No server messages or remote accounts are created.
 - Added a harness contract for the large-history fixture. The current candidate's group receipt persistence already uses the newer final-snapshot reconciliation and is retained; no older receipt implementation was copied over it.
 - Exact-head Android instrumentation and installed-app Chat/Groups runtime must still pass before this work is closed.
+
+### 2026-11-22 — Instrumentation fixture assertion correction
+
+- Exact-head run #45067248420 compiled and built successfully, then ran 87 Android tests: 86 completed with 1 skipped; the sole failure was `FynxRuntimeChatFixtureSeedTest` still asserting a two-message history at two later persistence checkpoints after the fixture had correctly been expanded to 1,002 messages.
+- Updated both stale count assertions to 1,002. The failure was in the test expectation, not in ChatStore persistence: the earlier assertion had already confirmed 1,002 records and the expected final two message IDs/order.
+- Runtime navigation was correctly blocked after the instrumentation failure; no Home/Camera/Chat UI result is claimed from this run. Re-run exact-head instrumentation before interpreting any runtime gate.

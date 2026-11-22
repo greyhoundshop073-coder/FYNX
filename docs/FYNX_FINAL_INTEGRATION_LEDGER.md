@@ -153,3 +153,8 @@ The consolidation PR is not a final APK certification. Its prior description rec
 - Preserved the candidate's newer group read-receipt final-snapshot persistence logic.
 
 **Release boundary:** feature candidate only; no canonical merge or official APK publication.
+
+### 22 November 2026 — Instrumentation fixture assertion correction
+
+- Run #45067248420: APK build and unit tests passed; Android instrumentation reported 86 tests, 1 failed, 1 skipped. The only failure was two stale fixture assertions expecting 2 messages after the same test now seeds and verifies 1,002 messages. Both stale assertions now expect 1,002.
+- Runtime navigation was not attempted because the instrumentation gate correctly stopped the sequence. The next exact-head run must repeat instrumentation before runtime certification.
