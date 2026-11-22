@@ -3227,18 +3227,54 @@ def send_and_reopen_local_private_fixture(private_xml: str) -> str:
         FAILURES.append("Typing a private offline message did not expose the real Send message action.")
         screenshot("private-offline-send-action-missing.png")
         return ""
-    _, send_x, send_y = send_control
     screenshot("private-offline-send-action.png")
-    run("adb", "shell", "input", "tap", str(send_x), str(send_y))
+
+    def message_is_in_composer(xml_text: str) -> bool:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return False
+        return any(
+            node.attrib.get("class") == "android.widget.EditText"
+            and private_message in (node.attrib.get("text") or "")
+            for node in root.iter("node")
+        )
+
+    def message_is_in_conversation(xml_text: str) -> bool:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return False
+        return any(
+            node.attrib.get("class") != "android.widget.EditText"
+            and private_message in (node.attrib.get("text") or "")
+            for node in root.iter("node")
+        )
+
+    # The composer advertises IME_ACTION_SEND. Use the keyboard's real Send action
+    # first; if the emulator keyboard does not dispatch it, retry through the now
+    # explicitly accessible Send message control using a fresh hierarchy.
+    run("adb", "shell", "input", "keyevent", "66")
     sent = ""
-    for _ in range(40):
-        time.sleep(0.5)
-        sent = dump_ui("private-offline-send-wait.xml")
-        if private_message in sent and find_control(sent, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."]):
+    for _ in range(16):
+        time.sleep(0.4)
+        sent = dump_ui("private-offline-send-ime-wait.xml")
+        if message_is_in_conversation(sent) and not message_is_in_composer(sent):
             break
+    if not message_is_in_conversation(sent) or message_is_in_composer(sent):
+        ready_to_tap = dump_ui("private-offline-send-button-retry.xml") or sent
+        send_control = find_control(ready_to_tap, ["Send message"], exact_only=True)
+        if send_control:
+            _, send_x, send_y = send_control
+            run("adb", "shell", "input", "tap", str(send_x), str(send_y))
+        for _ in range(24):
+            time.sleep(0.4)
+            sent = dump_ui("private-offline-send-button-wait.xml")
+            if message_is_in_conversation(sent) and not message_is_in_composer(sent):
+                break
     sent = dismiss_ime_if_visible("private-offline-send-ime-dismissed.xml") or sent
-    if private_message not in sent or find_control(sent, ["Send message"]):
-        FAILURES.append("The private offline message did not leave the composer and appear in the conversation.")
+    if not message_is_in_conversation(sent) or message_is_in_composer(sent):
+        FAILURES.append("The private offline message remained in the composer instead of appearing as a conversation message after IME and accessible-button send attempts.")
         screenshot("private-offline-send-not-confirmed.png")
         return ""
     screenshot("private-chat-sent-offline.png")

@@ -113,3 +113,14 @@ The consolidation PR is not a final APK certification. Its prior description rec
 5. Reconcile the remaining unique PR work into one candidate branch, then build the shared APK only from the approved canonical commit after authorization.
 
 **Release boundary:** This candidate is not merged into canonical, no production configuration/data was changed, and no official APK was published.
+
+### 22 November 2026 — Runtime evidence correction and next grouped repair
+
+- PR #580 exact-head run #45059210784: Android instrumentation passed (83 tests, 0 failed, 1 skipped); installed-app runtime capture remained RED.
+- Actual Groups screen screenshot exists; the runtime selector expected `Create group` but the rendered button was `＋ New group`. The button is being given a stable accessibility label.
+- Offline private message was still in the composer after the old tap. The send control now has an accessibility click action; the verifier uses IME Send first and confirms the message appears outside the EditText before declaring success.
+- Discovery fixtures were seeded but, with only three feed posts, the insertion was after the last post. Short test feeds now place Discovery after the first post to make it reachable.
+- Home ratio/Discovery viewer and Home final navigation remain unresolved; Status capture reported no running app process after Camera. No FATAL/ANR marker was found in the available logcat, so this is not yet evidence of an app crash.
+- Next gate: rerun exact-head build, instrumentation and emulator screenshots; keep backend, multi-account delivery, Wallet/Paystack and official APK certification explicitly separate until their prerequisites are available.
+
+**Release boundary:** PR #580 remains a feature candidate. No canonical merge, production change or official APK publication has occurred.

@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -1712,6 +1713,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         !voiceMode -> "Send message"
                                         recordingMode -> "Hold to record video note"
                                         else -> "Hold to record voice message"
+                                    }
+                                    onClick(label = if (!voiceMode) "Send message" else "Switch to video note") {
+                                        if (sending) {
+                                            false
+                                        } else {
+                                            if (!voiceMode) submitComposer() else composerVideoMode = !composerVideoMode
+                                            true
+                                        }
                                     }
                                 }
                                 .pointerInput(voiceMode, recordingMode, sending) {
