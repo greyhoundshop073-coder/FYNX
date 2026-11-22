@@ -231,7 +231,7 @@ object FynxProductionMessaging {
             }
             val intent = JSONObject(intentRaw)
             val raw = if (intent.optBoolean("useLegacyUpload")) {
-                // Keep the existing PostgreSQL/Neon server-upload path for providers
+                // Keep the legacy server-upload path only for PostgreSQL; Neon/R2 use signed direct uploads.
                 // that do not expose the direct-to-R2 upload contract.
                 val legacyBody = JSONObject().apply {
                     put("mimeType", effectiveMimeType)

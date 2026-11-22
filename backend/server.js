@@ -190,11 +190,13 @@ async function initDatabase() {
       byte_size INTEGER NOT NULL CHECK (byte_size > 0 AND byte_size <= 12582912),
       object_key TEXT NOT NULL UNIQUE,
       upload_object_key TEXT NOT NULL,
+      storage_provider TEXT NOT NULL DEFAULT 'r2' CHECK (storage_provider IN ('neon', 'r2')),
       expires_at TIMESTAMPTZ NOT NULL,
       completed_media_id BIGINT REFERENCES message_media(id) ON DELETE SET NULL,
       completed_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE message_media_upload_intents ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'r2' CHECK (storage_provider IN ('neon', 'r2'));
     ALTER TABLE message_media_upload_intents ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     ALTER TABLE message_media_upload_intents ADD COLUMN IF NOT EXISTS upload_object_key TEXT;
     UPDATE message_media_upload_intents SET upload_object_key = object_key WHERE upload_object_key IS NULL;
@@ -508,8 +510,8 @@ app.post("/api/media/upload-intent", auth, async (req, res) => {
       return res.status(413).json({ error: "media is too large" });
     }
 
-    // Neon and PostgreSQL retain the existing authenticated server-upload path.
-    if (mediaStorage.provider !== "r2") return res.json({ useLegacyUpload: true });
+    // PostgreSQL retains the legacy server-upload path; Neon and R2 use signed direct uploads.
+    if (!mediaStorage.supportsDirectUpload) return res.json({ useLegacyUpload: true });
     if (!mediaStorage.isConfigured) return res.status(503).json({ error: "media object storage is not configured" });
     requireConfig("DATABASE_URL", DATABASE_URL);
 
@@ -523,8 +525,8 @@ app.post("/api/media/upload-intent", auth, async (req, res) => {
     });
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     await pool.query(
-      "INSERT INTO message_media_upload_intents (id, owner_id, mime_type, byte_size, object_key, upload_object_key, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [intentId, req.user.sub, mimeType, byteSize, objectKey, uploadObjectKey, expiresAt]
+      "INSERT INTO message_media_upload_intents (id, owner_id, mime_type, byte_size, object_key, upload_object_key, storage_provider, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [intentId, req.user.sub, mimeType, byteSize, objectKey, uploadObjectKey, mediaStorage.provider, expiresAt]
     );
     return res.status(201).json({
       useLegacyUpload: false,
@@ -547,14 +549,12 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
   let client;
   let inTransaction = false;
   let promotedObjectKey = null;
+  let promotedObjectProvider = null;
   let committed = false;
   try {
     const intentId = typeof req.body?.intentId === "string" ? req.body.intentId.trim() : "";
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(intentId)) {
       return res.status(400).json({ error: "invalid media upload intent" });
-    }
-    if (mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) {
-      return res.status(503).json({ error: "media object storage is unavailable" });
     }
     requireConfig("DATABASE_URL", DATABASE_URL);
 
@@ -562,7 +562,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     await client.query("BEGIN");
     inTransaction = true;
     const selected = await client.query(
-      "SELECT id, owner_id, mime_type, byte_size, object_key, upload_object_key, expires_at, completed_media_id, completed_at FROM message_media_upload_intents WHERE id = $1 AND owner_id = $2 FOR UPDATE",
+      "SELECT id, owner_id, mime_type, byte_size, object_key, upload_object_key, storage_provider, expires_at, completed_media_id, completed_at FROM message_media_upload_intents WHERE id = $1 AND owner_id = $2 FOR UPDATE",
       [intentId, req.user.sub]
     );
     const intent = selected.rows[0];
@@ -594,6 +594,13 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
       return res.status(410).json({ error: "this upload intent was completed but its media record is unavailable" });
     }
 
+    const intentProvider = String(intent.storage_provider || "r2").trim().toLowerCase();
+    if (!mediaStorage.isObjectStorageProvider(intentProvider) || !mediaStorage.isConfiguredFor(intentProvider)) {
+      await client.query("ROLLBACK");
+      inTransaction = false;
+      return res.status(503).json({ error: "the upload's original media storage provider is unavailable" });
+    }
+
     if (new Date(intent.expires_at).getTime() <= Date.now()) {
       await client.query("ROLLBACK");
       inTransaction = false;
@@ -602,7 +609,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
 
     let objectInfo;
     try {
-      objectInfo = await mediaStorage.inspectMediaObject(intent.upload_object_key);
+      objectInfo = await mediaStorage.inspectMediaObject(intent.upload_object_key, intentProvider);
     } catch (error) {
       const status = error?.$metadata?.httpStatusCode;
       if (status === 404 || error?.name === "NotFound" || error?.name === "NoSuchKey") {
@@ -622,8 +629,9 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
 
     // The signed PUT URL targets only a temporary key and cannot overwrite permanent media.
     promotedObjectKey = intent.object_key;
-    await mediaStorage.promoteUploadedObject(intent.upload_object_key, promotedObjectKey);
-    const permanentInfo = await mediaStorage.inspectMediaObject(promotedObjectKey);
+    promotedObjectProvider = intentProvider;
+    await mediaStorage.promoteUploadedObject(intent.upload_object_key, promotedObjectKey, intentProvider);
+    const permanentInfo = await mediaStorage.inspectMediaObject(promotedObjectKey, intentProvider);
     if (permanentInfo.byteSize !== Number(intent.byte_size) ||
         permanentInfo.mimeType !== String(intent.mime_type).toLowerCase()) {
       await client.query("ROLLBACK");
@@ -632,8 +640,8 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     }
 
     const inserted = await client.query(
-      "INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1,$2,NULL,$3,'r2',$4) RETURNING id, mime_type, byte_size",
-      [req.user.sub, intent.mime_type, intent.byte_size, intent.object_key]
+      "INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1,$2,NULL,$3,$4,$5) RETURNING id, mime_type, byte_size",
+      [req.user.sub, intent.mime_type, intent.byte_size, intentProvider, intent.object_key]
     );
     const media = inserted.rows[0];
     await client.query(
@@ -650,7 +658,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
   } catch (error) {
     if (inTransaction && client) await client.query("ROLLBACK").catch(() => {});
     if (!committed && promotedObjectKey) {
-      await mediaStorage.deleteMediaObject(promotedObjectKey, "r2").catch((cleanupError) => {
+      await mediaStorage.deleteMediaObject(promotedObjectKey, promotedObjectProvider || mediaStorage.provider).catch((cleanupError) => {
         console.error("media permanent object rollback cleanup failed", cleanupError);
       });
     }
@@ -1427,7 +1435,7 @@ if (pool) registerMarketplaceAdvertisingRoutes({ app, pool, auth });
 
 
 async function cleanupExpiredMediaUploadIntents() {
-  if (!pool || mediaStorage.provider !== "r2" || !mediaStorage.isConfigured) return;
+  if (!pool) return;
   const client = await pool.connect();
   let inTransaction = false;
   let removed = 0;
@@ -1435,13 +1443,15 @@ async function cleanupExpiredMediaUploadIntents() {
     await client.query("BEGIN");
     inTransaction = true;
     const expired = await client.query(
-      "SELECT id, object_key, upload_object_key FROM message_media_upload_intents WHERE completed_at IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
+      "SELECT id, object_key, upload_object_key, storage_provider FROM message_media_upload_intents WHERE completed_at IS NULL AND expires_at < NOW() - INTERVAL '15 minutes' ORDER BY expires_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
     );
     for (const intent of expired.rows) {
       try {
+        const intentProvider = String(intent.storage_provider || "r2").trim().toLowerCase();
+        if (!mediaStorage.isObjectStorageProvider(intentProvider) || !mediaStorage.isConfiguredFor(intentProvider)) continue;
         // Incomplete intents own no message_media row; both allocated keys are temporary to this intent.
-        await mediaStorage.deleteMediaObject(intent.upload_object_key, "r2");
-        await mediaStorage.deleteMediaObject(intent.object_key, "r2");
+        await mediaStorage.deleteMediaObject(intent.upload_object_key, intentProvider);
+        await mediaStorage.deleteMediaObject(intent.object_key, intentProvider);
         const result = await client.query(
           "DELETE FROM message_media_upload_intents WHERE id = $1 AND completed_at IS NULL",
           [intent.id]
@@ -1454,11 +1464,13 @@ async function cleanupExpiredMediaUploadIntents() {
     }
 
     const completedTemporary = await client.query(
-      "SELECT id, object_key, upload_object_key FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND upload_object_key <> object_key AND expires_at < NOW() ORDER BY completed_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
+      "SELECT id, object_key, upload_object_key, storage_provider FROM message_media_upload_intents WHERE completed_at IS NOT NULL AND upload_object_key <> object_key AND expires_at < NOW() ORDER BY completed_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED"
     );
     for (const intent of completedTemporary.rows) {
       try {
-        await mediaStorage.deleteMediaObject(intent.upload_object_key, "r2");
+        const intentProvider = String(intent.storage_provider || "r2").trim().toLowerCase();
+        if (!mediaStorage.isObjectStorageProvider(intentProvider) || !mediaStorage.isConfiguredFor(intentProvider)) continue;
+        await mediaStorage.deleteMediaObject(intent.upload_object_key, intentProvider);
         await client.query(
           "UPDATE message_media_upload_intents SET upload_object_key = object_key WHERE id = $1 AND completed_at IS NOT NULL",
           [intent.id]
