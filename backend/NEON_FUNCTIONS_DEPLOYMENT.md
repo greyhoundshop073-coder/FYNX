@@ -2,7 +2,7 @@
 
 ## Target
 
-Deploy the existing Node backend as a Neon Function on the isolated `fynx-dev-backend-20261122` branch of project `patient-lab-43403708` (branch id `br-rough-voice-b5e21c2o`). The Function receives Neon's branch-scoped `DATABASE_URL`; no production or recovery branch is targeted.
+Deploy the existing Node backend as a Neon Function on the isolated `fynx-dev` branch of project `spring-mode-34864088` (branch id `br-little-cherry-befotl0z`). The Function receives Neon's branch-scoped `DATABASE_URL`; no production or recovery branch is targeted.
 
 The function runs Node.js 24, keeps the existing Express routes, adapts HTTP requests through `serverless-http`, and adapts the existing authenticated `/realtime` WebSocket handler through Neon's `upgradeWebSocket` API.
 
@@ -29,7 +29,7 @@ Add these repository **Variables** for the development environment (do not enabl
 - `FYNX_WALLET_FUNDING_MIN_AMOUNT`
 - `FYNX_WALLET_FUNDING_MAX_AMOUNT`
 
-Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-dev-backend-20261122`. It is manual-only; ordinary pushes do not deploy a backend. This workflow is pinned to the development branch and must not be repointed to `production` or `live-recovery-20261101`.
+Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-dev`. It is manual-only; ordinary pushes do not deploy a backend. This workflow is pinned to the development branch and must not be repointed to `production` or `live-recovery-20261101`.
 
 ## Runtime configuration
 
@@ -46,7 +46,7 @@ Optional integrations can be added later as Function environment variables witho
 
 ## Safety gates before changing Android
 
-- Confirm the Function's branch is `fynx-dev-backend-20261122`.
+- Confirm the Function's branch is `fynx-dev`.
 - Configure the development JWT secret. Reuse the previous testing secret if it is available; otherwise use a separate development-only secret and have test accounts sign in again (old tokens will no longer validate). Never reuse a live production secret in this branch.
 - Verify health, login, token validation, social feed, chat REST, WebSocket realtime, Marketplace, Wallet, media and AI routes.
 - Keep the maintenance trigger disabled while validating APIs and historical test data. Enable it only after confirming Paystack test-mode credentials, wallet test flags, and that queued jobs cannot issue real payouts or notifications.
