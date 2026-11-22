@@ -140,3 +140,8 @@ The consolidation PR is not a final APK certification. Its prior description rec
 - All added tests use local fixtures/injected transports. They do not certify live delivery, FCM or backend readiness.
 
 **Release boundary:** feature candidate only; no canonical merge, production change or official APK publication.
+
+### 22 November 2026 — Camera video editor accessibility correction
+
+- Real Camera evidence showed the Text rail action and Video FX tiles on screen but without stable accessible names. Added merged accessibility labels to the shared rail-action and effect-tile clickable surfaces, and added harness contracts for both.
+- Next exact-head runtime must demonstrate video text entry, Cinematic/Warm Film selection, and a completed edited MP4 export. This source repair is not yet runtime-certified.

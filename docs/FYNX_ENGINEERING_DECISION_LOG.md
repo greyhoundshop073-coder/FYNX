@@ -78,3 +78,9 @@ This is the durable record of material engineering choices. New entries are appe
 - Added local deterministic instrumentation for group reconnect drain: successful group sync replaces the pending message with the server-confirmed ID/status; failed group creation keeps both group and message queued and never sends the message prematurely.
 - These tests use local injected transports and disposable account namespaces; no live backend, production group, or real user is involved.
 - The new tests and source changes are now part of the PR #580 feature candidate. Exact-head Android and Chat closure workflows must verify them before acceptance.
+
+### 2026-11-22 — Camera video editor accessibility correction
+
+- Inspected real Camera screenshots and UIAutomator XML from run #45059764001. The Text tool and Video FX style row were visibly rendered; the Text rail action and style tiles did not consistently expose their names as stable merged accessibility labels. The verifier consequently saw only unrelated markers and could not tap the Text action, then could not reach the style row or Apply text/effects action.
+- Updated the shared Camera editor rail action and effect tile components to merge their visible labels into their clickable semantics. This improves TalkBack/UIAutomator access across Text, Captions, Cinematic, Warm Film and the other effect categories without changing visual layout or effect behavior.
+- Added static harness contracts so future changes cannot silently remove these accessible names. The next exact-head emulator run must still prove Text entry, style selection and actual export; source-level semantics alone are not runtime certification.

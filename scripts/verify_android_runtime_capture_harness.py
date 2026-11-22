@@ -28,6 +28,12 @@ chat_command = (
 workflow_script = WORKFLOW.split("script: |", 1)[1].split("\n        env:", 1)[0]
 workflow_commands = [line.strip() for line in workflow_script.splitlines() if line.strip()]
 checks = {
+    "camera editor rail actions expose stable accessible labels": (
+        'Modifier.width(58.dp).semantics(mergeDescendants = true) { contentDescription = label }' in CAMERA
+    ),
+    "camera effect tiles expose their names as clickable accessibility controls": (
+        'modifier = modifier.heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = label }' in CAMERA
+    ),
     "private chat keeps cached history visible when remote history refresh fails": (
         "privateChatHistoryFailureMessage(hasSavedMessages: Boolean)" in CONVERSATION_PANEL
         and "FynxChatStore.load(context, chat.username, null).isNotEmpty()" in CONVERSATION_PANEL
