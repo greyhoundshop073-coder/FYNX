@@ -25,7 +25,7 @@ export default defineConfig({
       function: "fynxapi",
       cron: "* * * * *",
       functionPath: "/internal/cron",
-      enabled: true
+      enabled: false
     }
   }
 });
