@@ -22,13 +22,13 @@ class FynxNetworkRecoveryContractTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun productionBackendDefaultsToTheActiveRailwayService() {
+    fun productionBackendDefaultsToTheActiveNeonFunction() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = prefs.getString("base_url", null)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
         try {
             prefs.edit().remove("base_url").putBoolean("base_url_explicit", false).commit()
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
+            assertEquals("https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech", FynxBackendClient.baseUrl(context))
         } finally {
             val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
             if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
@@ -37,16 +37,16 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun legacyRailwayBackendAddressRemainsTheActiveBackendForEveryBuildType() {
+    fun legacyRailwayAddressMigratesToTheActiveNeonFunctionForEveryBuildType() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = prefs.getString("base_url", null)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
         try {
             prefs.edit().putString("base_url", "https://fynx-backend-testing-testing.up.railway.app")
                 .putBoolean("base_url_explicit", true).commit()
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", prefs.getString("base_url", null))
-            assertTrue(FynxBackendClient.baseUrl(context).contains("railway.app"))
+            assertEquals("https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech", FynxBackendClient.baseUrl(context))
+            assertEquals("https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech", prefs.getString("base_url", null))
+            assertFalse(prefs.getBoolean("base_url_explicit", true))
         } finally {
             val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
             if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
@@ -55,15 +55,15 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun activeRailwayBackendAddressIsPreserved() {
+    fun explicitlyConfiguredCustomHttpsBackendIsPreserved() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = prefs.getString("base_url", null)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
         try {
-            prefs.edit().putString("base_url", "https://fynx-backend-testing-testing.up.railway.app")
+            prefs.edit().putString("base_url", "https://example.invalid")
                 .putBoolean("base_url_explicit", true).commit()
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", prefs.getString("base_url", null))
+            assertEquals("https://example.invalid", FynxBackendClient.baseUrl(context))
+            assertEquals("https://example.invalid", prefs.getString("base_url", null))
         } finally {
             val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
             if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
@@ -111,7 +111,7 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun staleUnmarkedRailwayOverrideIsNotDiscardedForDebugBuilds() {
+    fun staleUnmarkedRailwayOverrideMigratesForDebugBuilds() {
         val prefs = context.getSharedPreferences("fynx_backend", Context.MODE_PRIVATE)
         val originalUrl = FynxBackendClient.baseUrl(context)
         val originalExplicit = prefs.getBoolean("base_url_explicit", false)
@@ -124,7 +124,7 @@ class FynxNetworkRecoveryContractTest {
             val resolved = FynxBackendClient.baseUrl(context)
             val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
             if (isDebuggable) {
-                assertEquals("https://fynx-backend-testing-testing.up.railway.app", resolved)
+                assertEquals("https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech", resolved)
                 assertEquals(resolved, prefs.getString("base_url", null))
             }
         } finally {
@@ -136,14 +136,14 @@ class FynxNetworkRecoveryContractTest {
     }
 
     @Test
-    fun debugAndroidRuntimeCanReachLiveRailwayBackend() = runBlocking {
+    fun debugAndroidRuntimeCanReachLiveNeonFunction() = runBlocking {
         // Keep normal APK/UI certification independent of backend availability.
         // This live integration probe is opt-in; CI has a separate backend health step.
         val shouldProbeLiveBackend = InstrumentationRegistry.getArguments()
             .getString("fynxRequireLiveBackend")
             ?.equals("true", ignoreCase = true) == true
         assumeTrue(
-            "Live Railway probe is opt-in; pass -Pandroid.testInstrumentationRunnerArguments.fynxRequireLiveBackend=true to run it.",
+            "Live Neon probe is opt-in; pass -Pandroid.testInstrumentationRunnerArguments.fynxRequireLiveBackend=true to run it.",
             shouldProbeLiveBackend
         )
 
@@ -151,10 +151,10 @@ class FynxNetworkRecoveryContractTest {
         try {
             val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
             if (isDebuggable) {
-                FynxBackendClient.configureBaseUrl(context, "https://fynx-backend-testing-testing.up.railway.app")
+                FynxBackendClient.configureBaseUrl(context, "https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech")
                 val result = FynxBackendClient.health(context)
                 assertTrue(
-                    "Android runtime could not reach Railway backend: ${result.exceptionOrNull()?.message}",
+                    "Android runtime could not reach Neon Function: ${result.exceptionOrNull()?.message}",
                     result.isSuccess
                 )
             }
