@@ -241,7 +241,8 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 createError = null
                 if (!sessionIsCurrent()) return@launch
                 val savedLocally = withContext(Dispatchers.IO) {
-                    val added = FynxGroupsStore.addPendingGroupDurably(context, group, expectedAccountKey)
+                    val added = FynxGroupsStore.add(context, group, expectedAccountKey)
+                    if (added) FynxGroupsStore.markPendingSync(context, group.id, expectedAccountKey)
                     added to FynxGroupsStore.load(context, expectedAccountKey)
                 }
                 if (!sessionIsCurrent()) return@launch
