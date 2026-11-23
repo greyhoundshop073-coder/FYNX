@@ -1,6 +1,8 @@
 package com.fynx.app.ui
 
 import android.graphics.Bitmap
+import android.content.ContentValues
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -110,28 +112,43 @@ class FynxAdminControlCenterVisualComposeTest {
         assertTrue("Support fixture was not requested", requestedPaths.contains("/api/support/access"))
 
         val suffix = if (role == "OWNER") "owner" else "admin"
-        // Internal app storage is readable by adb through run-as on this debuggable
-        // instrumentation build; Android 11+ blocks ordinary adb pull from Android/data.
-        val directory = File(compose.activity.filesDir, "admin-test-fixtures")
-        check(directory.mkdirs() || directory.isDirectory)
+        // Save into shared Pictures media storage. The Gradle connected-test task
+        // uninstalls the target app after instrumentation, so app-private files
+        // disappear before the emulator wrapper can export them.
         val fileName = if (role == "OWNER") {
             "FYNX-admin-owner-overview.png"
         } else {
             "FYNX-admin-admin-overview.png"
         }
-        val file = File(directory, fileName)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             ?: error("Could not capture the Admin Control Center emulator display")
-        FileOutputStream(file).use { output ->
-            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/FYNX")
+            put(MediaStore.Images.Media.IS_PENDING, 1)
         }
-        check(file.isFile && file.length() > 0L) {
-            "The " + role + " Admin Control Center screenshot was not written."
+        val resolver = compose.activity.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ?: error("Could not create shared media entry for " + fileName)
+        try {
+            val output = resolver.openOutputStream(uri)
+                ?: error("Could not open shared media output for " + fileName)
+            output.use { stream ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+            }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } catch (failure: Throwable) {
+            resolver.delete(uri, null, null)
+            throw failure
+        } finally {
+            bitmap.recycle()
         }
-        bitmap.recycle()
         android.util.Log.i(
             "FYNXAdminVisualTest",
-            "Captured " + role + " Control Center screen at " + file.absolutePath
+            "Captured " + role + " Control Center screenshot into shared media: " + uri
         )
     }
 }
