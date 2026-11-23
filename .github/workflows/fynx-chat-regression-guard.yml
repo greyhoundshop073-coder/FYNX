@@ -1,0 +1,20 @@
+name: FYNX Chat Regression Guard
+
+on:
+  push:
+    branches: ["fynx-chat-regression-guard"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  chat-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify completed Chat foundations
+        run: python3 scripts/verify_chat_regression_guard.py
+      - name: Android regression build
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon --build-cache
