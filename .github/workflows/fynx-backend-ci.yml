@@ -355,6 +355,12 @@ jobs:
         run: node -e "const p=require('./package.json'); if(!p.scripts || !p.scripts.start) process.exit(1); console.log('FYNX backend package OK')"
       - name: Build and syntax-check Neon Functions runtime artifacts
         run: npm run verify:neon
+      - name: Test Marketplace Saved Products and seller reactivation guards
+        run: |
+          node --check socialRoutes.js
+          node test-marketplace-saved-product-routes.mjs
+      - name: Verify Wallet route registration is single-path per runtime
+        run: node verify-wallet-route-registration.mjs
       - name: Verify production backend reachability
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.run_live_backend_probe) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[home-cert]')) }}
         continue-on-error: true

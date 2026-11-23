@@ -48,7 +48,10 @@ for (const [source, pattern, label] of [
   [settlementSource, /startTimer = true/, "timer-free settlement scan"],
   [paymentExpirySource, /export async function expireUnpaidMarketplaceReservations/, "scheduled reservation expiry"],
   [batch2Source, /export async function runMarketplaceBatch2RecoveryOnce/, "scheduled payment recovery"],
-  [scalabilitySource, /FYNX_NEON_FUNCTION/, "request-runtime background timer guard"]
+  [scalabilitySource, /FYNX_NEON_FUNCTION/, "request-runtime background timer guard"],
+  [scalabilitySource, /registerBuyerWalletRoutes\(\{ app \}\)/, "shared Buyer Wallet route registration"],
+  [scalabilitySource, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/, "shared Marketplace wallet route registration"],
+  [functionSource, /await import\("\.\/scalability\.js"\)/, "Neon Function loads shared route registration layer"]
 ]) assert.match(source, pattern, `Neon runtime is missing ${label}`);
 
 assert.ok(configSource.includes('cron: "* * * * *"'), "Neon Marketplace maintenance trigger must run every minute");
