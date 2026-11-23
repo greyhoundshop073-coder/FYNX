@@ -22,6 +22,11 @@ if (helperStartIndex < 0 || helperEndIndex < 0) {
   throw new Error("Phase 1 foundation: realtime messaging authorization helper not found");
 }
 source = source.slice(0, helperStartIndex) + replacement + source.slice(helperEndIndex);
-// Keep the bootstrap idempotent even if a previous generated runtime already contains the helper marker twice.\nsource = source.replaceAll(\n  "const fynxRealtimeMessagingTypingTargetconst fynxRealtimeMessagingTypingTarget",\n  "const fynxRealtimeMessagingTypingTarget"\n);\n
+// Keep the bootstrap idempotent if an earlier generated runtime duplicated the helper boundary.
+source = source.replaceAll(
+  "const fynxRealtimeMessagingTypingTargetconst fynxRealtimeMessagingTypingTarget",
+  "const fynxRealtimeMessagingTypingTarget"
+);
+
 await writeFile(bootstrapPath, source, "utf8");
 console.log("FYNX Phase 1 foundation bootstrap: messaging authorization helper aligned with privacy schema");
