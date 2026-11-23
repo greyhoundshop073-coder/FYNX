@@ -12,6 +12,9 @@ object FynxCallTransportHardening {
     // Retry only transient/transport-level closes. Protocol, payload-size and
     // policy failures are deterministic and retrying them just creates a
     // reconnect loop while the underlying socket contract is still invalid.
+    fun wasRealtimeFrameAccepted(socketMatchesAccount: Boolean, accountAuthorized: Boolean, socketAccepted: Boolean): Boolean =
+        socketMatchesAccount && accountAuthorized && socketAccepted
+
     fun shouldRetrySocket(closeCode: Int): Boolean = when (closeCode) {
         1000, 1002, 1003, 1007, 1008, 1009 -> false
         1001, 1011, 1012, 1013, 1014, 1006 -> true

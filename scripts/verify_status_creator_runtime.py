@@ -104,6 +104,40 @@ def find_click_target(xml_text: str, label: str) -> tuple[int, int] | None:
     return x, y
 
 
+def grant_camera_permission_if_requested(stage: str, xml_text: str) -> str:
+    """Follow the app's contextual camera permission explanation in the UI test."""
+    point = find_click_target(xml_text, "Allow camera")
+    if point is None:
+        return xml_text
+
+    adb("shell", "input", "tap", str(point[0]), str(point[1]))
+    permission_options = (
+        "While using the app",
+        "Allow while using the app",
+        "Only this time",
+        "Allow",
+    )
+    deadline = time.monotonic() + 10.0
+    latest = xml_text
+    while time.monotonic() < deadline:
+        time.sleep(0.35)
+        latest = dump_ui(f"status-{stage}-permission.xml") or latest
+        if find_click_target(latest, "Take photo") and find_click_target(latest, "Switch front/back camera"):
+            return latest
+        selected = next((find_click_target(latest, option) for option in permission_options if find_click_target(latest, option)), None)
+        if selected is not None:
+            adb("shell", "input", "tap", str(selected[0]), str(selected[1]))
+            time.sleep(0.7)
+            latest = dump_ui(f"status-{stage}-permission-granted.xml") or latest
+            return latest
+
+    FAILURES.append(
+        f"{stage}: camera permission explanation was shown, but Android's camera permission grant could not be completed."
+    )
+    screenshot(f"status-{stage}-permission-blocked.png")
+    return latest
+
+
 def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0) -> str:
     latest = dump_ui(f"status-{stage}-before.xml")
     point = find_click_target(latest, label)
@@ -113,9 +147,13 @@ def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0
         return ""
     adb("shell", "input", "tap", str(point[0]), str(point[1]))
     deadline = time.monotonic() + timeout
+    permission_checked = False
     while time.monotonic() < deadline:
         time.sleep(0.45)
         latest = dump_ui(f"status-{stage}-wait.xml") or latest
+        if stage in ("photo-camera-entry", "video-camera-entry") and not permission_checked:
+            latest = grant_camera_permission_if_requested(stage, latest)
+            permission_checked = True
         if all(find_click_target(latest, marker) is not None for marker in expected):
             screenshot(f"authenticated-status-{stage}.png")
             (ROOT / f"authenticated-status-{stage}.xml").write_text(latest + "\n", encoding="utf-8")
