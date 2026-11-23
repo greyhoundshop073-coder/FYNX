@@ -46,7 +46,7 @@ for screenshot in FYNX-admin-owner-overview.png FYNX-admin-admin-overview.png; d
   local_file="$admin_fixture_dir/$screenshot"
   if adb exec-out run-as com.fynx.app cat "files/admin-test-fixtures/$screenshot" > "$local_file" 2>/dev/null &&
       [ -s "$local_file" ] &&
-      python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); assert p.read_bytes().startswith(b"\\x89PNG\\r\\n\\x1a\\n")' "$local_file"; then
+      python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); assert p.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")' "$local_file"; then
     echo "CAPTURED: $screenshot ($(stat -c %s "$local_file") bytes)" | tee -a "$admin_fixture_status"
   else
     rm -f "$local_file"
