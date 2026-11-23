@@ -13,6 +13,7 @@ object FynxGroupsStore {
     private fun groupsKey(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): String =
         GROUPS_KEY_PREFIX + (accountKey?.let(::storageKey) ?: "signed_out")
 
+    @Synchronized
     fun load(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): List<FynxGroup> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(groupsKey(context, accountKey), null) ?: return emptyList()
         return runCatching {
@@ -43,7 +44,11 @@ object FynxGroupsStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pending = prefs.getStringSet(pendingSyncKey(context, accountKey), emptySet()).orEmpty().toMutableSet()
         pending.add(groupId)
-        prefs.edit().putStringSet(pendingSyncKey(context, accountKey), pending).apply()
+        // commit() makes the locally-created group eligible for recovery before the
+        // create flow starts its network request or the process can be killed.
+        check(prefs.edit().putStringSet(pendingSyncKey(context, accountKey), pending).commit()) {
+            "Pending group synchronization state could not be persisted."
+        }
     }
 
     @Synchronized
@@ -57,9 +62,12 @@ object FynxGroupsStore {
         val key = pendingSyncKey(context, accountKey)
         val pending = prefs.getStringSet(key, emptySet()).orEmpty().toMutableSet()
         pending.remove(groupId)
-        prefs.edit().putStringSet(key, pending).apply()
+        check(prefs.edit().putStringSet(key, pending).commit()) {
+            "Group synchronization state could not be persisted."
+        }
     }
 
+    @Synchronized
     fun save(context: Context, groups: List<FynxGroup>, accountKey: String? = FynxAuthStore.accountStorageKey(context)) {
         val array = JSONArray()
         groups.forEach { group ->
@@ -69,7 +77,12 @@ object FynxGroupsStore {
                 put("members", JSONArray().apply { group.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
             })
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(groupsKey(context, accountKey), array.toString()).apply()
+        // Do not rely on SharedPreferences.apply()'s asynchronous disk write here:
+        // force-stop immediately after group creation must not lose the only local copy.
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(groupsKey(context, accountKey), array.toString()).commit()) {
+            "Group data could not be persisted on this device."
+        }
     }
 
     fun add(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
