@@ -152,7 +152,7 @@ require('status viewer renders media captions','status.type != FynxStatusType.TE
 require('mature text emoji control','EmojiEmotions' in mature and 'showStatusEmoji' in mature)
 require('mature text editor uses responsive full view',('bottom = if (showMediaTools || showColors) 220.dp else 120.dp' in mature or 'bottom = 220.dp' in mature or 'bottom = if (showColors) 350.dp else if (showMediaTools) 150.dp else 104.dp' in mature or 'bottom = if (showColors) 440.dp else if (showMediaTools) 190.dp else 132.dp' in mature) and 'horizontal = 12.dp' in mature and '.imePadding()' in mature and 'BoxWithConstraints' in mature)
 require('mature composer Android back closes safely','BackHandler(enabled = !publishing && !recording) { onClose() }' in mature)
-require('mature voice preview before publish','FynxRemoteAudio(mediaUri.toString()' in mature and 'Voice Status ready' in mature)
+require('mature voice preview before publish','FynxRemoteAudio(mediaUri.toString()' in mature and 'Voice note ready' in mature and 'Preview below or record again' in mature)
 require('mature authenticated publish','FynxStatusClient.create(context, status, mediaId)' in mature and 'FynxStatusClient.uploadMedia(context, source, mime)' in mature)
 require('status camera owns lifecycle and back navigation','BackHandler' in camera and 'BackHandler { if (recording == null) onDismiss() }' in camera and 'cameraProvider?.unbindAll()' in camera)
 require('status camera profile identity overlay','FynxProfileRemoteClient.get(context, username)' in camera and 'profilePhotoId' in camera and 'FynxRemoteMedia("/api/media/$photoId"' in camera)
@@ -199,6 +199,10 @@ require('Marketplace web link uses FYNX host','private const val FYNX_HOST = "fy
 require('external sharing uses Android share chooser','Intent.ACTION_SEND' in share and 'Intent.createChooser(sendIntent' in share)
 require('Marketplace link parses back to Marketplace','"marketplace"->if(normalizedPath.size<=2)FynxDeepLinkDestination.Marketplace(value)' in deeplink)
 require('Marketplace product detail share button reaches the real listing share action','FynxShareActions.share(context, FynxShareActions.marketplacePayload(l.id, l.title))' in marketplace and 'onShare = {' in marketplace and 'IconButton(onClick = onShare)' in marketplace_detail and 'Icon(Icons.Default.Share, "Share"' in marketplace_detail)
+
+require('Add Status Voice selection opens Voice composer mode','selectedInitialType = FynxStatusType.VOICE' in hub and 'initialType = selectedInitialType ?: selectedInitialMedia?.let' in hub)
+require('Voice mode has an explicit start-recording action','Text("Start recording")' in mature and 'FynxStatusType.VOICE ->' in mature)
+require('Status caption field avoids nested IME padding that can lift it away from the keyboard','modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),' in mature and 'modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).imePadding(),' not in mature)
 
 failed=[label for label,ok in checks if not ok]
 for label,ok in checks: print(('GREEN' if ok else 'RED')+' - '+label)

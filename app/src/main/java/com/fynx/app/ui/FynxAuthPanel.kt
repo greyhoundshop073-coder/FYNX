@@ -52,6 +52,7 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                 localDebugAccountForLogin(context, username)
             } else null
             if (localUsername != null) {
+                FynxBackendClient.clearAccessTokenForDebugOfflineSession(context)
                 FynxAuthStore.save(context, localUsername)
                 error = null
                 onAuthenticated(localUsername)
@@ -185,6 +186,8 @@ fun FynxAuthGate(onAuthenticated: (String) -> Unit) {
                                     requestedUsername.isBlank() -> error = "Enter your username."
                                     savedLocalUsername != null -> {
                                         // Use the saved-device path immediately: no remote request or timeout.
+                                        // A stale server token must not turn offline navigation into a session-expired gate.
+                                        FynxBackendClient.clearAccessTokenForDebugOfflineSession(context)
                                         FynxAuthStore.save(context, savedLocalUsername)
                                         error = null
                                         onAuthenticated(savedLocalUsername)
