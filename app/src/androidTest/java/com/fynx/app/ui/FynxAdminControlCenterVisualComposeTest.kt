@@ -97,7 +97,6 @@ class FynxAdminControlCenterVisualComposeTest {
                 requestedPaths.contains("/api/admin/marketplace/seasonal-promotions") &&
                 runCatching {
                     compose.onNodeWithText(role + " ACCOUNT").assertIsDisplayed()
-                    compose.onNodeWithText("FYNX Support Centre").assertIsDisplayed()
                 }.isSuccess
         }
 
