@@ -327,6 +327,8 @@ jobs:
         run: node verify-marketplace-state-machine.mjs
       - name: Run Marketplace persistent shop profile verification
         run: node verify-marketplace-shop-profile.mjs
+      - name: Test shop profile PATCH preserves and removes branding fields intentionally
+        run: node test-marketplace-shop-profile-patch.mjs
       - name: Run PostgreSQL shop profile and seller review integration tests
         run: node test-marketplace-shop-reviews-db.mjs
       - name: Exercise Marketplace likes, unlike, counts, self-like and buyer purchase-history routes
