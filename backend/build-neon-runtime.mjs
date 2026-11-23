@@ -14,6 +14,7 @@ const social = await readFile(path.join(backendDir, ".fynx-runtime-socialRoutes.
 const functionSource = await readFile(path.join(backendDir, "neon-function.js"), "utf8");
 const bridgeSource = await readFile(path.join(backendDir, "neon-realtime-bridge.js"), "utf8");
 const configSource = await readFile(path.join(backendDir, "neon.ts"), "utf8");
+const deployWorkflowSource = await readFile(path.resolve(backendDir, "../.github/workflows/fynx-neon-function-deploy.yml"), "utf8");
 const jobsSource = await readFile(path.join(backendDir, "backgroundJobs.js"), "utf8");
 const settlementSource = await readFile(path.join(backendDir, "marketplaceSettlementWorker.js"), "utf8");
 const paymentExpirySource = await readFile(path.join(backendDir, "marketplacePaymentExpiry.js"), "utf8");
@@ -52,6 +53,13 @@ for (const [source, pattern, label] of [
 ]) assert.match(source, pattern, `Neon runtime is missing ${label}`);
 
 assert.ok(configSource.includes('cron: "* * * * *"'), "Neon Marketplace maintenance trigger must run every minute");
+assert.match(configSource, /FYNX_MEDIA_STORAGE_PROVIDER:\s*"neon"/, "Neon Function must explicitly select Neon media storage");
+assert.match(configSource, /FYNX_NEON_STORAGE_BUCKET:\s*"fynx-media"/, "Neon Function must target the existing FYNX media bucket");
+assert.match(configSource, /buckets:\s*\{[\s\S]*?"fynx-media":\s*\{\s*access:\s*"private"\s*\}/, "FYNX media bucket must remain private");
+assert.match(deployWorkflowSource, /--project-id patient-lab-43403708/, "Neon deployment must target the existing FYNX project");
+assert.match(deployWorkflowSource, /checkout fynx-testing/, "Neon deployment must target the populated FYNX testing branch");
+assert.doesNotMatch(deployWorkflowSource, /spring-mode-34864088|checkout fynx-dev/, "Neon deployment must not target the empty reset project/branch");
+assert.match(deployWorkflowSource, /sk_test_/, "Neon testing deployment must reject live Paystack secret keys");
 const bridgeSyntax = spawnSync(process.execPath, ["--check", path.join(backendDir, "neon-realtime-bridge.js")], { encoding: "utf8" });
 assert.equal(bridgeSyntax.status, 0, bridgeSyntax.stderr || "Neon realtime bridge syntax check failed");
 
