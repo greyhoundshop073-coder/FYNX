@@ -5,7 +5,7 @@ APP = ROOT / "app/src/main/java/com/fynx/app/ui"
 
 required = {
     "private conversation": APP / "ConversationPanel.kt",
-    "group conversation": APP / "GroupChatPanel.kt",
+    "group conversation": APP / "FynxGroupsPanel.kt",
     "chat settings": APP / "FynxChatSettingsPanel.kt",
     "group settings": APP / "FynxGroupsPanel.kt",
     "chat wallpaper": APP / "FynxChatWallpaper.kt",
@@ -20,9 +20,13 @@ if missing:
 checks = [
     ("private conversation", "ConversationPanel.kt", "FynxProductionMessaging"),
     ("private conversation persistence", "ConversationPanel.kt", "FynxChatStore"),
-    ("group history", "GroupChatPanel.kt", "loadMessages"),
-    ("group realtime", "GroupChatPanel.kt", "GroupMessage"),
-    ("group search", "GroupChatPanel.kt", "searchQuery"),
+    ("tokenless offline text queue", "FynxProductionMessaging.kt", "backendSessionUnavailable"),
+    ("disk-committed offline outbox", "FynxOfflineOutbox.kt", ".commit()"),
+    ("atomic durable group creation", "FynxGroupsStore.kt", "addPendingGroupDurably"),
+    ("durable group message persistence", "FynxGroupsPanel.kt", "saveDurably"),
+    ("group history", "FynxGroupsPanel.kt", "loadMessagePage"),
+    ("group realtime", "FynxGroupsPanel.kt", "GroupMessage"),
+    ("group search", "FynxGroupsPanel.kt", "searchQuery"),
     # The production panel uses the title-cased UI label "Chat Settings".
     ("chat settings", "FynxChatSettingsPanel.kt", "Chat Settings"),
     ("wallpaper", "FynxChatWallpaper.kt", "FynxChatWallpaperBackground"),
