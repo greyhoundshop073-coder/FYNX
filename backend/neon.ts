@@ -1,6 +1,9 @@
 import { defineConfig } from "@neon/config/v1";
 
 export default defineConfig({
+  buckets: {
+    "fynx-media": { access: "private" }
+  },
   functions: {
     fynxapi: {
       name: "FYNX testing backend",
@@ -8,6 +11,8 @@ export default defineConfig({
       env: {
         NODE_ENV: "production",
         DB_POOL_MAX: "5",
+        FYNX_MEDIA_STORAGE_PROVIDER: "neon",
+        FYNX_NEON_STORAGE_BUCKET: "fynx-media",
         JWT_SECRET: process.env.FYNX_JWT_SECRET!,
         GEMINI_API_KEY: process.env.FYNX_GEMINI_API_KEY!,
         PAYSTACK_SECRET_KEY: process.env.FYNX_PAYSTACK_SECRET_KEY!,
