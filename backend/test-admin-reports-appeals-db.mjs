@@ -111,7 +111,9 @@ try {
       mime_type TEXT NOT NULL
     );
     CREATE TABLE marketplace_orders (id UUID PRIMARY KEY);
-    CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY);
+    CREATE TABLE marketplace_listings (id BIGINT PRIMARY KEY,title TEXT NOT NULL DEFAULT '',description TEXT NOT NULL DEFAULT '');
+    CREATE TABLE social_posts (id BIGINT PRIMARY KEY,text TEXT NOT NULL DEFAULT '');
+    CREATE TABLE social_post_comments (id BIGINT PRIMARY KEY,text TEXT NOT NULL DEFAULT '');
     INSERT INTO users(id,username,display_name,session_version) VALUES
       (1,'owner','FYNX Owner',0),
       (2,'admin-two','Admin Two',0),
@@ -130,6 +132,29 @@ try {
   assert.equal(deniedReports.statusCode, 403, "ordinary users must not read Admin reports");
   const deniedAppeals = await invoke("GET", "/api/admin/appeals", { token: "regular" });
   assert.equal(deniedAppeals.statusCode, 403, "ordinary users must not read Admin appeals");
+  const adminPeopleSearch = await invoke("GET", "/api/admin/users/search", {
+    token: "admin", query: { q: "target" }
+  });
+  assert.equal(adminPeopleSearch.statusCode, 200, "ADMIN can use the protected People search");
+  assert.deepEqual(
+    adminPeopleSearch.body.users.map(user => user.username).sort(),
+    ["target-four", "target-three"],
+    "People search returns matching accounts without exposing the current operator"
+  );
+  const ordinaryPeopleSearch = await invoke("GET", "/api/admin/users/search", {
+    token: "regular", query: { q: "target" }
+  });
+  assert.equal(ordinaryPeopleSearch.statusCode, 403, "ordinary users cannot search the Admin People directory");
+  const shortPeopleSearch = await invoke("GET", "/api/admin/users/search", {
+    token: "admin", query: { q: "t" }
+  });
+  assert.equal(shortPeopleSearch.statusCode, 400, "People search requires at least two characters");
+  const wildcardPeopleSearch = await invoke("GET", "/api/admin/users/search", {
+    token: "admin", query: { q: "t%" }
+  });
+  assert.equal(wildcardPeopleSearch.statusCode, 200);
+  assert.equal(wildcardPeopleSearch.body.users.length, 0,
+    "People search must treat percent as literal text instead of a SQL wildcard");
 
   await db.query(`
     INSERT INTO fynx_account_safety(user_id,account_status,status_note) VALUES
@@ -160,23 +185,102 @@ try {
   // Content moderation has a separate queue and table, but the Overview
   // "Open reports" total must include its OPEN and UNDER_REVIEW rows too.
   await db.query(`
+    INSERT INTO social_posts(id,text) VALUES
+      (101,'Reported public post preview'),
+      (104,'Post selected for content moderation');
+    INSERT INTO social_post_comments(id,text) VALUES
+      (102,'Reported comment preview');
+    INSERT INTO marketplace_listings(id,title,description) VALUES
+      (103,'Reported listing preview','Listing details');
     INSERT INTO safety_content_reports
       (reporter_id,target_type,target_id,target_owner_id,reason,details,status)
     VALUES
       (5,'SOCIAL_POST',101,4,'SPAM','Open social post report','OPEN'),
       (5,'SOCIAL_COMMENT',102,4,'ABUSE','Content report already under review','UNDER_REVIEW'),
-      (5,'MARKETPLACE_LISTING',103,4,'MISLEADING','Resolved content report','RESOLVED')
+      (5,'MARKETPLACE_LISTING',103,4,'MISLEADING','Resolved content report','RESOLVED'),
+      (5,'SOCIAL_POST',104,4,'MISLEADING','Content report moderation transition','OPEN')
   `);
+  const activeContentQueue = await invoke("GET", "/api/admin/content-reports", {
+    token: "admin", query: { status: "ACTIVE" }
+  });
+  assert.equal(activeContentQueue.statusCode, 200);
+  assert.equal(activeContentQueue.body.reports.length, 3,
+    "Admin content queue must include OPEN and UNDER_REVIEW records but not RESOLVED records");
+  const activePost = activeContentQueue.body.reports.find(report => report.targetId === "101");
+  assert.equal(activePost?.targetType, "SOCIAL_POST");
+  assert.equal(activePost?.contentPreview, "Reported public post preview",
+    "content moderation queue returns the actual reported post preview");
+  const activeComment = activeContentQueue.body.reports.find(report => report.targetId === "102");
+  assert.equal(activeComment?.targetType, "SOCIAL_COMMENT");
+  assert.equal(activeComment?.contentPreview, "Reported comment preview",
+    "content moderation queue returns the actual reported comment preview");
+  const activeListing = await db.query("SELECT id FROM safety_content_reports WHERE target_id=104");
+  assert.equal(activeListing.rowCount, 1);
+
+  const deniedContentQueue = await invoke("GET", "/api/admin/content-reports", { token: "regular" });
+  assert.equal(deniedContentQueue.statusCode, 403,
+    "ordinary users cannot retrieve the content moderation queue");
+  const transitionReport = await db.query(
+    "SELECT id FROM safety_content_reports WHERE target_type='SOCIAL_POST' AND target_id=104"
+  );
+  const deniedContentReview = await invoke("PATCH", "/api/admin/content-reports/:reportId", {
+    token: "regular", params: { reportId: String(transitionReport.rows[0].id) },
+    body: { status: "RESOLVED" }
+  });
+  assert.equal(deniedContentReview.statusCode, 403,
+    "ordinary users cannot change content moderation decisions");
+  const invalidContentReview = await invoke("PATCH", "/api/admin/content-reports/:reportId", {
+    token: "admin", params: { reportId: String(transitionReport.rows[0].id) },
+    body: { status: "ACCEPTED" }
+  });
+  assert.equal(invalidContentReview.statusCode, 400,
+    "content moderation rejects unsupported decision states");
+  const beginContentReview = await invoke("PATCH", "/api/admin/content-reports/:reportId", {
+    token: "admin", params: { reportId: String(transitionReport.rows[0].id) },
+    body: { status: "UNDER_REVIEW", decisionNote: "Moderator started review." }
+  });
+  assert.equal(beginContentReview.statusCode, 200);
+  assert.equal(beginContentReview.body.report.status, "UNDER_REVIEW");
+  assert.equal(beginContentReview.body.auditRecorded, true);
+  const repeatedContentReview = await invoke("PATCH", "/api/admin/content-reports/:reportId", {
+    token: "admin", params: { reportId: String(transitionReport.rows[0].id) },
+    body: { status: "UNDER_REVIEW", decisionNote: "Duplicate review is not a new transition." }
+  });
+  assert.equal(repeatedContentReview.statusCode, 409,
+    "content report state machine rejects a duplicate UNDER_REVIEW transition");
+  const resolveContentReview = await invoke("PATCH", "/api/admin/content-reports/:reportId", {
+    token: "admin", params: { reportId: String(transitionReport.rows[0].id) },
+    body: { status: "RESOLVED", decisionNote: "Content moderation decision completed." }
+  });
+  assert.equal(resolveContentReview.statusCode, 200);
+  assert.equal(resolveContentReview.body.report.status, "RESOLVED");
+  const contentAudit = await invoke("GET", "/api/admin/content-reports/:reportId/audit", {
+    token: "admin", params: { reportId: String(transitionReport.rows[0].id) }
+  });
+  assert.equal(contentAudit.statusCode, 200);
+  assert.equal(contentAudit.body.audit.length, 2,
+    "each content report transition has a persisted moderation audit entry");
+  assert.deepEqual(
+    contentAudit.body.audit.map(entry => [entry.previousStatus, entry.newStatus]),
+    [["OPEN", "UNDER_REVIEW"], ["UNDER_REVIEW", "RESOLVED"]]
+  );
+  assert.ok(contentAudit.body.audit.every(entry => entry.moderatorUsername === "admin-two"));
+  const contentActivity = await db.query(
+    "SELECT COUNT(*)::int AS count FROM fynx_admin_activity WHERE action='CONTENT_REPORT_REVIEW'"
+  );
+  assert.equal(contentActivity.rows[0].count, 2,
+    "content report transitions also appear in searchable Admin activity history");
+
   const ownerDashboard = await invokeDashboard("owner");
   assert.equal(ownerDashboard.statusCode, 200);
   assert.equal(ownerDashboard.body.role, "OWNER");
-  assert.equal(ownerDashboard.body.counts.openReports, 6,
-    "Owner dashboard must count four open account reports and two open content reports");
+  assert.equal(ownerDashboard.body.counts.openReports, 7,
+    "Owner dashboard counts four open account reports plus three active content reports");
   const adminDashboard = await invokeDashboard("admin");
   assert.equal(adminDashboard.statusCode, 200);
   assert.equal(adminDashboard.body.role, "ADMIN");
-  assert.equal(adminDashboard.body.counts.openReports, 6,
-    "Admin dashboard must report the same database-backed total");
+  assert.equal(adminDashboard.body.counts.openReports, 7,
+    "Admin dashboard reports the same persisted account and content report total");
   const ordinaryDashboard = await invokeDashboard("regular");
   assert.equal(ordinaryDashboard.statusCode, 403,
     "ordinary users must not read Admin dashboard counts");
@@ -271,7 +375,7 @@ try {
   assert.equal(reReviewFinalReport.statusCode, 404, "final report states must not be changed through the open-report route");
   const dashboardAfterResolution = await invokeDashboard("admin");
   assert.equal(dashboardAfterResolution.body.counts.openReports, 5,
-    "resolving one account report must decrement the aggregate while two content reports remain open");
+    "resolving an account report after content moderation must decrement the aggregate accurately");
 
   const appealList = await invoke("GET", "/api/admin/appeals", {
     query: { limit: 50, offset: 0 }
@@ -428,7 +532,7 @@ try {
   assert.equal(finalAdminDashboard.body.counts.openReports, 60,
     "final Admin total must match the same persisted report records");
 
-  console.log("ADMIN_REPORTS_APPEALS_ROUTE_DB=GREEN (OWNER/ADMIN/ordinary authorization, aggregate account+content report counts, transitions, appeals, restoration safeguards, pagination and atomic audit rollback)");
+  console.log("ADMIN_REPORTS_APPEALS_ROUTE_DB=GREEN (OWNER/ADMIN/ordinary authorization, People search, account/content report queues and moderation audit, aggregate report counts, appeals/restoration safeguards, pagination and atomic audit rollback)");
 } finally {
   await db.query("SET search_path TO public").catch(() => {});
   await db.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
