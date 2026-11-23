@@ -64,6 +64,13 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_EMAIL_HOST: ${{ secrets.FYNX_EMAIL_HOST }}
+          FYNX_EMAIL_PORT: ${{ secrets.FYNX_EMAIL_PORT }}
+          FYNX_EMAIL_USER: ${{ secrets.FYNX_EMAIL_USER }}
+          FYNX_EMAIL_PASSWORD: ${{ secrets.FYNX_EMAIL_PASSWORD }}
+          FYNX_EMAIL_FROM: ${{ secrets.FYNX_EMAIL_FROM }}
+          FYNX_EMAIL_SECURE: ${{ secrets.FYNX_EMAIL_SECURE }}
+          FYNX_EMAIL_REQUIRE_TLS: ${{ secrets.FYNX_EMAIL_REQUIRE_TLS }}
           FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
           FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
@@ -71,8 +78,8 @@ jobs:
           FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT || '100' }}
           FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
-          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
-            echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY."
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
+            echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET and FYNX_PAYSTACK_SECRET_KEY."
             exit 1
           fi
           case "$FYNX_PAYSTACK_SECRET_KEY" in sk_test_*) ;; *) echo "::error::The FYNX testing branch requires a Paystack TEST secret (sk_test_...). Live Paystack keys are rejected."; exit 1 ;; esac
@@ -86,6 +93,13 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
+          FYNX_EMAIL_HOST: ${{ secrets.FYNX_EMAIL_HOST }}
+          FYNX_EMAIL_PORT: ${{ secrets.FYNX_EMAIL_PORT }}
+          FYNX_EMAIL_USER: ${{ secrets.FYNX_EMAIL_USER }}
+          FYNX_EMAIL_PASSWORD: ${{ secrets.FYNX_EMAIL_PASSWORD }}
+          FYNX_EMAIL_FROM: ${{ secrets.FYNX_EMAIL_FROM }}
+          FYNX_EMAIL_SECURE: ${{ secrets.FYNX_EMAIL_SECURE }}
+          FYNX_EMAIL_REQUIRE_TLS: ${{ secrets.FYNX_EMAIL_REQUIRE_TLS }}
           FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
           FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
@@ -97,6 +111,13 @@ jobs:
           cat > .env.neon.deploy <<EOF
           FYNX_JWT_SECRET=$FYNX_JWT_SECRET
           FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
+          FYNX_EMAIL_HOST=$FYNX_EMAIL_HOST
+          FYNX_EMAIL_PORT=$FYNX_EMAIL_PORT
+          FYNX_EMAIL_USER=$FYNX_EMAIL_USER
+          FYNX_EMAIL_PASSWORD=$FYNX_EMAIL_PASSWORD
+          FYNX_EMAIL_FROM=$FYNX_EMAIL_FROM
+          FYNX_EMAIL_SECURE=$FYNX_EMAIL_SECURE
+          FYNX_EMAIL_REQUIRE_TLS=$FYNX_EMAIL_REQUIRE_TLS
           FYNX_PAYSTACK_SECRET_KEY=$FYNX_PAYSTACK_SECRET_KEY
           FYNX_OFFICIAL_USERNAME=$FYNX_OFFICIAL_USERNAME
           FYNX_WALLET_TEST_MODE_ENABLED=$FYNX_WALLET_TEST_MODE_ENABLED
