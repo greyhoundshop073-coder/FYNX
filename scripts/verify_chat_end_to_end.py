@@ -70,7 +70,7 @@ if "FynxProductionMessaging.historyPage(" in conversation:
     require(conversation, r"hasOlderMessages = page.hasMore[\s\S]{0,120}olderMessagesCursor = page.nextBeforeId", "Paged private history must preserve its next-page cursor")
 require(conversation, r"realtimeClient\.connect\(\)", "ConversationPanel must connect its realtime transport")
 require(conversation, r"realtimeClient\.close\(\)", "ConversationPanel must close realtime transport on disposal")
-require(conversation, r"FynxProductionMessaging\.sendText\(context,", "ConversationPanel must send through production messaging")
+require(conversation, r"FynxProductionMessaging\.sendText\(\s*(?:context\s*,|context\s*=)", "ConversationPanel must send through production messaging")
 require(conversation, r"FynxProductionMessaging\.markRead\(context,", "ConversationPanel must persist read state through production messaging")
 require(conversation, r"realtimeClient\.acknowledgeMessage\(", "ConversationPanel must acknowledge received messages")
 require(conversation, r"realtimeClient\.sendRead\(", "ConversationPanel must send realtime read acknowledgements")
