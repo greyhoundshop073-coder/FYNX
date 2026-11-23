@@ -288,7 +288,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                 )
                             } else {
                                 Box(
-                                    Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                                    Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
