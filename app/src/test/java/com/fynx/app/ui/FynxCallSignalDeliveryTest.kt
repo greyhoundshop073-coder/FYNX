@@ -6,6 +6,11 @@ import org.junit.Test
 
 class FynxCallSignalDeliveryTest {
     @Test
+    fun serverCallErrorsAreNotDiscardedAsUnknownSignals() {
+        assertTrue(FynxCallTransportHardening.isValidCallSignal("error"))
+    }
+
+    @Test
     fun callSignalIsRejectedWithoutAnAccountMatchedSocket() {
         assertFalse(
             FynxCallTransportHardening.wasRealtimeFrameAccepted(

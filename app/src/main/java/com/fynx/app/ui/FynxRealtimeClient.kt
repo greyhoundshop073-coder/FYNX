@@ -288,7 +288,12 @@ class FynxRealtimeClient(
         val callType = root.optString("callType", "voice").trim().lowercase()
         val signalType = root.optString("signalType").trim().lowercase()
         val fromUserId = root.optString("fromUserId").trim(); val toUserId = root.optString("toUserId").trim()
-        if (!FynxCallTransportHardening.isValidCallId(callId) || !FynxCallTransportHardening.isValidCallSignal(signalType) || !FynxCallTransportHardening.isValidCallType(callType) || fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId) return null
+        val isErrorSignal = signalType == "error"
+        if (!FynxCallTransportHardening.isValidCallSignal(signalType) ||
+            !FynxCallTransportHardening.isValidCallType(callType) ||
+            (!isErrorSignal && (!FynxCallTransportHardening.isValidCallId(callId) || fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId)) ||
+            (isErrorSignal && callId.isNotBlank() && !FynxCallTransportHardening.isValidCallId(callId))
+        ) return null
         val c = root.optJSONObject("candidate")?.let {
             val candidate = it.optString("candidate").trim()
             if (candidate.isBlank() || candidate.length > 20_000) return@let null

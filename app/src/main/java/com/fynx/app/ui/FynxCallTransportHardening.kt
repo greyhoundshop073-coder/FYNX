@@ -5,7 +5,7 @@ object FynxCallTransportHardening {
     private const val MAX_CALL_ID_LENGTH = 80
     private const val MAX_SIGNAL_LENGTH = 16
     private val callIdPattern = Regex("^call[-_][a-z0-9_-]{1,70}$", RegexOption.IGNORE_CASE)
-    private val validSignals = setOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy")
+    private val validSignals = setOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy", "error")
     private val terminalSignals = setOf("reject", "end", "unavailable", "busy")
 
     // Accept both the legacy call-123 form and the hardened call_123 form.

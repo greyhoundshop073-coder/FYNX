@@ -63,10 +63,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var pendingIncomingAccept by remember { mutableStateOf(false) }
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
 
-    fun failCallSignaling(callId: String) {
+    fun failCallSignaling(callId: String, detail: String? = null) {
         scope.launch {
             val failed = session?.takeIf { it.id == callId } ?: return@launch
-            errorMessage = "FYNX couldn't reach the call service. Check your connection and try again."
+            val safeDetail = detail?.trim()?.take(160)?.takeIf { it.isNotBlank() }
+            errorMessage = safeDetail?.let { "The call could not be completed: $it" }
+                ?: "FYNX couldn't reach the call service. Check your connection and try again."
             mediaEngineForCleanup[0]?.disconnect()
             mediaConnected = false
             localVideoTrack = null
@@ -190,6 +192,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             FynxCallsStore.updateStatus(context, event.callId, "Unavailable", missed = false)
                             calls = FynxCallsStore.load(context)
                             mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
+                        }
+                        "error" -> session?.takeIf { event.callId.isBlank() || it.id == event.callId }?.let { current ->
+                            failCallSignaling(current.id, event.error)
                         }
                     }
                 }
