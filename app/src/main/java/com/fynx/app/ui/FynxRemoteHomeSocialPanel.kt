@@ -83,10 +83,13 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var lastFeedRequestAt by remember { mutableLongStateOf(0L) }
     var commentsPost by remember { mutableStateOf<FynxRemoteSocialClient.RemotePost?>(null) }
     var authorPhotos by remember { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var authorPhotoLookupsInFlight by remember { mutableStateOf<Set<String>>(emptySet()) }
     var activeStatusOwners by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
     var dismissedPeople by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendationsLoading by remember { mutableStateOf(false) }
+    var peoplePhotoLookupsInFlight by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var peoplePhotoLookupsChecked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendationsOffset by remember { mutableIntStateOf(0) }
     var peopleRecommendationsHasMore by remember { mutableStateOf(true) }
     var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
@@ -143,34 +146,48 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     fun resolveAuthorPhotos(items: List<FynxRemoteSocialClient.RemotePost>) {
         val names = items.map { it.authorUsername.removePrefix("@").trim() }
             .filter { it.isNotBlank() }
-            .distinct()
-        val normalized = names.map { it.lowercase() }
-        val cached = normalized.associateWith { username ->
+            .distinctBy { it.lowercase() }
+        val cached = names.mapNotNull { username ->
             FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
-        }
-        val known = authorPhotos.toMutableMap()
-        cached.forEach { (username, photoId) ->
-            if (!known.containsKey(username)) known[username] = photoId
-        }
-        authorPhotos = known
+                ?.let { username.lowercase() to it }
+        }.toMap()
+        if (cached.isNotEmpty()) authorPhotos = authorPhotos + cached
+
+        // A null in this screen's map means the profile was checked and has no photo.
+        // Failed requests are never inserted, so a later page/refresh can retry them.
         val missing = names.filter { username ->
             val key = username.lowercase()
-            !authorPhotos.containsKey(key) || authorPhotos[key].isNullOrBlank()
+            key !in authorPhotos && key !in authorPhotoLookupsInFlight
         }
         if (missing.isEmpty()) return
+        val requestedKeys = missing.map { it.lowercase() }.toSet()
+        authorPhotoLookupsInFlight = authorPhotoLookupsInFlight + requestedKeys
         scope.launch {
-            val resolved = missing.map { username ->
-                async(Dispatchers.IO) {
-                    val key = username.lowercase()
-                    val photoId = FynxSocialClient.searchUsers(context, username)
-                        .getOrNull()
-                        ?.firstOrNull { it.username.removePrefix("@").equals(username, true) }
-                        ?.profilePhotoMediaId
-                        ?: FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
-                    key to photoId
-                }
-            }.awaitAll().toMap()
-            authorPhotos = authorPhotos + resolved
+            try {
+                val resolved = missing.map { username ->
+                    async(Dispatchers.IO) {
+                        val key = username.lowercase()
+                        FynxHomeProfilePhotoLimiter.withPermit {
+                            val searchPhotoId = FynxSocialClient.searchUsers(context, username)
+                                .getOrNull()
+                                ?.firstOrNull { it.username.removePrefix("@").equals(username, true) }
+                                ?.profilePhotoMediaId
+                            if (!searchPhotoId.isNullOrBlank()) {
+                                FynxPreferencesStore.saveRemoteProfilePhotoId(context, username, searchPhotoId)
+                                FynxAvatarIdentityStore.publish(username, searchPhotoId)
+                                Result.success(key to searchPhotoId)
+                            } else {
+                                // Preserve the original full-profile fallback when search results
+                                // omit a photo ID, including for accounts with a photo.
+                                FynxProfileRemoteClient.get(context, username).map { key to it.profilePhotoMediaId }
+                            }
+                        }
+                    }
+                }.awaitAll().mapNotNull { it.getOrNull() }.toMap()
+                if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
+            } finally {
+                authorPhotoLookupsInFlight = authorPhotoLookupsInFlight - requestedKeys
+            }
         }
     }
     fun loadHomeMarketplace(reset: Boolean = false) {
@@ -210,12 +227,35 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     peopleRecommendations = (existing + clean).distinctBy { it.username.lowercase() }
                     peopleRecommendationsOffset = offset + parsed.size
                     peopleRecommendationsHasMore = parsed.size >= 30
-                    parsed.forEach { person ->
+                    // Recommendation rows share the same bounded request budget as
+                    // Home post authors and commenters. Successful no-photo profiles are
+                    // remembered for this Home session; failures remain retryable.
+                    val photoLookups = parsed.filter { person ->
+                        val key = person.username.removePrefix("@").trim().lowercase()
+                        person.photoId.isNullOrBlank() &&
+                            key !in peoplePhotoLookupsChecked &&
+                            key !in peoplePhotoLookupsInFlight
+                    }.distinctBy { it.username.removePrefix("@").trim().lowercase() }
+                    val requestedPhotoKeys = photoLookups.map {
+                        it.username.removePrefix("@").trim().lowercase()
+                    }.toSet()
+                    peoplePhotoLookupsInFlight = peoplePhotoLookupsInFlight + requestedPhotoKeys
+                    photoLookups.forEach { person ->
+                        val key = person.username.removePrefix("@").trim().lowercase()
                         scope.launch {
-                            FynxProfileRemoteClient.get(context, person.username).onSuccess { profile ->
-                                peopleRecommendations = peopleRecommendations.map {
-                                    if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                            try {
+                                FynxHomeProfilePhotoLimiter.withPermit {
+                                    FynxProfileRemoteClient.get(context, person.username)
+                                }.onSuccess { profile ->
+                                    peoplePhotoLookupsChecked = peoplePhotoLookupsChecked + key
+                                    if (!profile.profilePhotoMediaId.isNullOrBlank()) {
+                                        peopleRecommendations = peopleRecommendations.map {
+                                            if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                                        }
+                                    }
                                 }
+                            } finally {
+                                peoplePhotoLookupsInFlight = peoplePhotoLookupsInFlight - key
                             }
                         }
                     }

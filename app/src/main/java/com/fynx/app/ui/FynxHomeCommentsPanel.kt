@@ -98,6 +98,7 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     var replyErrorId by remember(post.id) { mutableStateOf<String?>(null) }
     var expandedReplies by remember(post.id) { mutableStateOf<Map<String, List<FynxRemoteSocialClient.RemoteComment>>>(emptyMap()) }
     var authorPhotos by remember(post.id) { mutableStateOf<Map<String, String?>>(emptyMap()) }
+    var authorPhotoLookupsInFlight by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var reactionStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentReactionState>>(emptyMap()) }
     var reactionPending by remember(post.id) { mutableStateOf<Set<String>>(emptySet()) }
     var commentEngagementStates by remember(post.id) { mutableStateOf<Map<String, FynxRemoteSocialClient.CommentEngagementState>>(emptyMap()) }
@@ -132,30 +133,41 @@ fun FynxHomeCommentsPanel(post: FynxRemoteSocialClient.RemotePost, initialCommen
     val replyingTo = replyingToId?.let { id -> availableComments.firstOrNull { it.id == id } }
 
     fun resolveCommenterPhotos(items: List<FynxRemoteSocialClient.RemoteComment>) {
+        if (isLocalPreview) return
         val names = items.map { it.authorUsername.removePrefix("@").trim() }
             .filter { it.isNotBlank() }
-            .distinct()
-        val normalized = names.map { it.lowercase() }
-        val known = authorPhotos.toMutableMap()
-        normalized.forEach { username ->
-            if (!known.containsKey(username)) {
-                known[username] = FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
-            }
-        }
-        authorPhotos = known
+            .distinctBy { it.lowercase() }
+        val cached = names.mapNotNull { username ->
+            FynxProfileRemoteClient.cachedProfilePhotoId(context, username)
+                ?.let { username.lowercase() to it }
+        }.toMap()
+        if (cached.isNotEmpty()) authorPhotos = authorPhotos + cached
+
+        // Keep checked no-photo identities in this conversation's state, but leave
+        // failed requests retryable after their in-flight marker is cleared.
         val missing = names.filter { username ->
             val key = username.lowercase()
-            !authorPhotos.containsKey(key) || authorPhotos[key].isNullOrBlank()
+            key !in authorPhotos && key !in authorPhotoLookupsInFlight
         }
         if (missing.isEmpty()) return
+        val requestedKeys = missing.map { it.lowercase() }.toSet()
+        authorPhotoLookupsInFlight = authorPhotoLookupsInFlight + requestedKeys
         scope.launch {
-            val resolved = missing.map { username ->
-                async(kotlinx.coroutines.Dispatchers.IO) {
-                    val key = username.lowercase()
-                    key to FynxProfileRemoteClient.get(context, username).getOrNull()?.profilePhotoMediaId
-                }
-            }.let { jobs -> jobs.map { it.await() }.toMap() }
-            if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
+            try {
+                val resolved = missing.map { username ->
+                    async(kotlinx.coroutines.Dispatchers.IO) {
+                        val key = username.lowercase()
+                        FynxHomeProfilePhotoLimiter.withPermit {
+                            FynxProfileRemoteClient.get(context, username).map { key to it.profilePhotoMediaId }
+                        }
+                    }
+                }.let { jobs -> jobs.map { it.await() } }
+                    .mapNotNull { it.getOrNull() }
+                    .toMap()
+                if (resolved.isNotEmpty()) authorPhotos = authorPhotos + resolved
+            } finally {
+                authorPhotoLookupsInFlight = authorPhotoLookupsInFlight - requestedKeys
+            }
         }
     }
 

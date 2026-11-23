@@ -4338,7 +4338,7 @@ def is_home_feed_runtime_surface(xml_text: str) -> bool:
     # These markers identify a different modal/viewer route rather than the feed.
     if any(find_control(xml_text, [label]) for label in (
         "Write a comment", "Close comments", "Close media viewer",
-        "Close viewer", "Like video", "Open comments",
+        "Close viewer",
     )):
         return False
     # Home intentionally hides its floating navigation after a meaningful scroll.
@@ -4500,7 +4500,11 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                 if node.attrib.get("visible-to-user", "true").lower() == "false":
                     continue
                 value = (node.attrib.get("text") or "").strip()
-                if len(value) < 14:
+                description = (node.attrib.get("content-desc") or "").strip()
+                fixture_caption = HOME_FEED_FIXTURES_SEEDED and "ci test fixture" in (value + " " + description).casefold()
+                if not value and fixture_caption:
+                    value = description
+                if len(value) < (10 if fixture_caption else 14):
                     continue
                 bounds = node.attrib.get("bounds", "")
                 try:
@@ -4511,7 +4515,7 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                     continue
                 node_width, node_height = right - left, bottom - top
                 center_y = (top + bottom) // 2
-                if node_width < width * 0.45 or node_height < 44:
+                if node_width < width * 0.45 or node_height < (18 if fixture_caption else 44):
                     continue
                 if top < height * 0.30 or bottom > height * 0.88:
                     continue
@@ -4522,18 +4526,23 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                         clickable_parent = True
                         break
                     ancestor = parents.get(id(ancestor))
-                if clickable_parent:
+                if clickable_parent and not fixture_caption:
                     continue
-                # Prefer a substantial post caption in the middle of the feed,
-                # away from the header controls, bottom navigation and media tile.
+                # Prefer a substantial production caption; explicitly-labelled
+                # local fixture captions are the safest anchor for fixture-only scans.
                 score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
+                if fixture_caption:
+                    score -= 500.0
                 x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
                 if direction == "up":
-                    # Start on the safe, non-clickable caption, but drag well above
-                    # its short text bounds so a tall portrait video can clear the
-                    # bottom navigation in one measured scroll step.
-                    start_y = min(bottom - 8, int(height * 0.82))
-                    end_y = max(int(height * 0.25), top - 480)
+                    # Start inside the fixture caption and drag vertically; this
+                    # cancels the card click and scrolls the feed itself.
+                    start_y = min(bottom - 2, int(height * 0.82))
+                    if fixture_caption:
+                        start_y = max(top + 1, min(bottom - 1, start_y))
+                        end_y = max(int(height * 0.25), start_y - int(height * 0.48))
+                    else:
+                        end_y = max(int(height * 0.25), top - 480)
                     if start_y - end_y < 300:
                         end_y = max(int(height * 0.25), start_y - 480)
                 else:
@@ -4866,6 +4875,29 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: unable to enable the local Discovery fixture preference in the disposable emulator.")
         return False
 
+    # Discovery is a For You insertion. A previously persisted Following selection
+    # must not hide the local Discovery fixture during this disposable test run.
+    feed_view_prefs = FixtureET.Element("map")
+    FixtureET.SubElement(feed_view_prefs, "string", {"name": "mode"}).text = "FOR_YOU"
+    feed_view_prefs_file = ROOT / "ci-home-feed-view.xml"
+    FixtureET.ElementTree(feed_view_prefs).write(
+        feed_view_prefs_file, encoding="utf-8", xml_declaration=True
+    )
+    staged_feed_view_prefs = "/data/local/tmp/fynx-home-feed-view.xml"
+    pushed_feed_view_prefs = run(
+        "adb", "push", str(feed_view_prefs_file), staged_feed_view_prefs, timeout=30
+    )
+    if pushed_feed_view_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the explicit For You-only Home visual fixture preference.")
+        return False
+    copied_feed_view_prefs = run(
+        "adb", "shell", "run-as", PACKAGE, "cp", staged_feed_view_prefs,
+        "shared_prefs/fynx_home_feed_view.xml"
+    )
+    if copied_feed_view_prefs.returncode != 0:
+        report.append("- NOTE: unable to seed the Home For You view in the disposable emulator.")
+        return False
+
     feed_payload = {"posts": posts, "hasMore": False, "nextCursor": None}
     prefs = FixtureET.Element("map")
     cache_key = "fynx_feed_cache_v1_" + account
@@ -4901,8 +4933,15 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: local fixture cache was written, but Home did not expose its feed after relaunch.")
         return False
 
+    persisted_feed_mode = run(
+        "adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_home_feed_view.xml"
+    )
+    if persisted_feed_mode.returncode != 0 or "FOR_YOU" not in persisted_feed_mode.stdout:
+        report.append("- NOTE: Home Feed mode fixture was not verifiably persisted as For You.")
+        return False
+
     HOME_FEED_FIXTURES_SEEDED = True
-    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; nothing was posted or uploaded.")
+    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; forced the disposable fixture to For You mode; nothing was posted or uploaded.")
     return True
 
 
@@ -5149,7 +5188,14 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     report.append(
                         "- PASS: opened a real, prepared Discovery video and captured its viewer with playback, mute, Like, Comments and Share controls; no interaction or post was submitted."
                     )
-                run("adb", "shell", "input", "keyevent", "4")
+                # Prefer the visible in-app close affordance so this journey proves
+                # the button itself works; Android Back remains a bounded recovery path.
+                close_control = find_control(viewer_xml, ["Close Discovery"])
+                if close_control:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
                 return_deadline = time.monotonic() + 15.0
                 discovery_home = ""
                 while time.monotonic() < return_deadline:
@@ -5158,6 +5204,17 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         discovery_home = candidate
                         break
                     time.sleep(0.5)
+                if not discovery_home:
+                    # Retry once through platform Back before declaring a navigation
+                    # failure; the Home-surface assertion remains mandatory.
+                    run("adb", "shell", "input", "keyevent", "4")
+                    recovery_deadline = time.monotonic() + 8.0
+                    while time.monotonic() < recovery_deadline:
+                        candidate = dump_ui("authenticated-discovery-return-home-back-recovery.xml")
+                        if candidate and is_home_feed_runtime_surface(candidate):
+                            discovery_home = candidate
+                            break
+                        time.sleep(0.5)
                 if not discovery_home:
                     FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
                     return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
@@ -5169,7 +5226,12 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 # Even a viewer that fails readiness must be dismissed. Leaving
                 # it open hides the Home navigation and corrupts every later
                 # cross-destination check in this runtime journey.
-                run("adb", "shell", "input", "keyevent", "4")
+                close_control = find_control(latest_viewer_probe, ["Close Discovery"])
+                if close_control:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
                 return_deadline = time.monotonic() + 15.0
                 discovery_home = ""
                 while time.monotonic() < return_deadline:
@@ -5178,6 +5240,15 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         discovery_home = candidate
                         break
                     time.sleep(0.5)
+                if not discovery_home:
+                    run("adb", "shell", "input", "keyevent", "4")
+                    recovery_deadline = time.monotonic() + 8.0
+                    while time.monotonic() < recovery_deadline:
+                        candidate = dump_ui("authenticated-discovery-return-home-after-readiness-failure-back-recovery.xml")
+                        if candidate and is_home_feed_runtime_surface(candidate):
+                            discovery_home = candidate
+                            break
+                        time.sleep(0.5)
                 if discovery_home:
                     current = discovery_home
                 else:
