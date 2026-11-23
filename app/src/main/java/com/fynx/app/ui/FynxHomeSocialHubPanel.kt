@@ -193,16 +193,36 @@ fun FynxHomeSocialHubPanel(
     }
 
     val gallery = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(12)
+        ActivityResultContracts.PickMultipleVisualMedia(4)
     ) { uris ->
         if (uris.isNotEmpty()) {
-            uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-            val selected = uris.distinct().take(4)
-            val nextUris = (capturedUris.filterNot { it in selected } + selected).take(4)
-            capturedUris = nextUris
-            capturedTypes = nextUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
-            selectedVisualIndex = 0
-            showComposer = true
+            // Preserve the media already attached to this draft and append only
+            // what fits. Never silently replace earlier photos or discard extra picks.
+            val selected = uris.distinct().filterNot { it in capturedUris }
+            val availableSlots = (4 - capturedUris.size).coerceAtLeast(0)
+            val accepted = selected.take(availableSlots)
+            accepted.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
+            if (accepted.isNotEmpty()) {
+                val nextUris = (capturedUris + accepted).take(4)
+                capturedUris = nextUris
+                capturedTypes = nextUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
+                selectedVisualIndex = nextUris.size - accepted.size
+                showComposer = true
+            }
+            if (selected.size > accepted.size) {
+                notice = if (availableSlots == 0) {
+                    "A post can contain up to four photos or videos. Remove an item before adding more."
+                } else {
+                    "A post can contain up to four photos or videos. Added ${accepted.size}; ${selected.size - accepted.size} selected item(s) were not added."
+                }
+            }
         }
     }
 
