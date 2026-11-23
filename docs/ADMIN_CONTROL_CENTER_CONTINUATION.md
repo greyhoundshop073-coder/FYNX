@@ -188,3 +188,17 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-23 continuation — publishing controls discoverability
+
+- Re-inspected the canonical integration branch before editing. The existing Marketplace campaign implementation already supports optional image artwork through the authenticated media uploader, campaign headline/body, CTA, product/shop/category destination, WAT schedule, edit, pause/resume and delete. The public Marketplace banner already renders seasonal campaign artwork and destination actions. This is distinct from paid seller-sponsored ads and seller Best Seller slides; do not build a duplicate advertising manager.
+- The existing Owner Music Library already supports audio selection, upload, publish, retry after catalogue failure, hide, restore and remove. Backend music writes remain OWNER-only.
+- Root cause of the reported discoverability gap: both controls were placed under the Admin Overview. The Marketplace campaign manager was not located in the Marketplace section, and the Music Library had no dedicated Owner navigation entry.
+- Grouped UI correction on this PR branch:
+  - `29723834db300bcb05db776ebd322a6b9e505f28`: move Marketplace banner campaign management into the Marketplace section, with a clear explanation that it supports campaign artwork and product/shop/category destinations.
+  - `312ce09469e374956691c86aa6b7ae683ca13ac4`: add a dedicated Owner-only Music Library section and update the Admin contract verifier to enforce both navigation locations.
+- Source re-fetch after the commits confirmed the new Owner-only Music Library tab, the Marketplace campaign panel under Marketplace, and corresponding verifier assertions.
+- CI/runtime status at handoff: the GitHub connector returned no PR-triggered workflow runs for either new commit. Do not treat this as green. The previous recorded PR #527 run had Chat/Group parity successful but Android Build and Backend CI cancelled; fresh Android, Backend and Chat/Group checks are still required on the new head. The latest known runtime screenshot PR #591 only captures OWNER/ADMIN Overview, not the Music Library or Marketplace campaign screens. Capture those dedicated sections before claiming visual completion.
+- No live Owner/Admin credentials or healthy production backend verification was available in this work session. No production campaign, music track, database row, media asset or payment was created or modified.
+- Keep PR #527 open and do not merge without the user's explicit approval. Canonical APK target remains `integration/fynx-single-apk-20261013`.
