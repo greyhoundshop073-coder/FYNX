@@ -547,7 +547,8 @@ app.post("/api/media/upload-intent", auth, async (req, res) => {
 
     // PostgreSQL retains the legacy server-upload path; Neon and R2 use signed direct uploads.
     if (!mediaStorage.supportsDirectUpload) return res.json({ useLegacyUpload: true });
-    if (!mediaStorage.isConfigured) return res.status(503).json({ error: "media object storage is not configured" });
+    // createUploadUrl performs the provider configuration check and raises the
+    // stable MEDIA_STORAGE_NOT_CONFIGURED diagnostic when required settings are absent.
     requireConfig("DATABASE_URL", DATABASE_URL);
 
     const intentId = randomUUID();
@@ -693,7 +694,13 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     if (inTransaction && client) await client.query("ROLLBACK").catch(() => {});
     if (!committed && !commitAttempted && promotedObjectKey) {
       await mediaStorage.deleteMediaObject(promotedObjectKey, promotedObjectProvider || mediaStorage.provider).catch((cleanupError) => {
-        console.error("media permanent object rollback cleanup failed", cleanupError);
+        const diagnostic = classifyMediaStorageError(cleanupError);
+        console.error("[fynx-media] permanent object rollback cleanup failed", {
+          provider: promotedObjectProvider || mediaStorage.provider,
+          code: diagnostic.code,
+          category: diagnostic.category,
+          retryable: diagnostic.retryable
+        });
       });
     } else if (!committed && commitAttempted && promotedObjectKey) {
       // COMMIT may have succeeded even if its acknowledgement was lost. Preserve the
@@ -730,7 +737,13 @@ app.post("/api/media", auth, async (req, res) => {
     } catch (databaseError) {
       if (stored.objectKey && isDefinitiveDatabaseWriteFailure(databaseError)) {
         await mediaStorage.deleteMediaObject(stored.objectKey, stored.storageProvider).catch((cleanupError) => {
-          console.error("media object rollback cleanup failed", cleanupError?.name || "Error");
+          const diagnostic = classifyMediaStorageError(cleanupError);
+          console.error("[fynx-media] media object rollback cleanup failed", {
+            provider: stored.storageProvider,
+            code: diagnostic.code,
+            category: diagnostic.category,
+            retryable: diagnostic.retryable
+          });
         });
       } else if (stored.objectKey) {
         // A transport failure can hide a successful auto-commit INSERT. Preserve the
