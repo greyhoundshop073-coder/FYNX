@@ -61,4 +61,8 @@ else
   echo "ADMIN_SCREENSHOT_EXPORT=PASS" | tee -a "$GITHUB_STEP_SUMMARY"
 fi
 
-exit "$((runtime_status != 0 ? runtime_status : admin_capture_status))"
+if [ "$runtime_status" -eq 0 ] && [ "$admin_capture_status" -ne 0 ]; then
+  runtime_status="$admin_capture_status"
+fi
+
+exit "$runtime_status"
