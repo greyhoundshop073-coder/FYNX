@@ -13,6 +13,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.UUID
 
 /** Production messaging boundary. The server is the source of truth for chat state. */
@@ -231,7 +238,7 @@ object FynxProductionMessaging {
             }
             val intent = JSONObject(intentRaw)
             val raw = if (intent.optBoolean("useLegacyUpload")) {
-                // Keep the existing PostgreSQL/Neon server-upload path for providers
+                // Keep the legacy server-upload path only for PostgreSQL; Neon/R2 use signed direct uploads.
                 // that do not expose the direct-to-R2 upload contract.
                 val legacyBody = JSONObject().apply {
                     put("mimeType", effectiveMimeType)
@@ -355,6 +362,10 @@ object FynxProductionMessaging {
         if (mediaType != null && mediaType !in VALID_MEDIA_TYPES) return Result.failure(IllegalArgumentException("Unsupported message media type."))
         if (mediaId == null && mediaType != null) return Result.failure(IllegalArgumentException("Message media is incomplete."))
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
+        val noUsableSession = requestToken.isNullOrBlank() && !FynxBackendClient.hasAccessToken(context)
+        if (allowOfflineQueue && (noUsableSession || !FynxBackendClient.isNetworkAvailable(context))) {
+            return enqueuePrivateText(context, normalizedRecipient, currentUsername, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
+        }
         val body = JSONObject().apply { put("clientMessageId", requestId); put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
             return Result.failure(IllegalStateException("Your account changed before this message could be sent. Please retry from the active account."))
@@ -366,56 +377,111 @@ object FynxProductionMessaging {
             else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
         }
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-        if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
-            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+        val transportFailure = isAmbiguousTransportFailure(result.exceptionOrNull())
+        val backendSessionUnavailable = requestToken.isNullOrBlank() && !FynxBackendClient.hasAccessToken(context)
+        if (transportFailure || backendSessionUnavailable) {
+            val recovered = if (transportFailure) {
+                history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+            } else null
             if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
             if (recovered != null) return Result.success(recovered)
             if (allowOfflineQueue && FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
-                val localId = "offline-${System.currentTimeMillis()}-${UUID.randomUUID()}"
-                val currentUserId = FynxBackendClient.currentUserId(context).getOrNull().orEmpty()
-                val item = FynxOfflineOutbox.Item(
-                    id = localId,
-                    requestId = requestId,
-                    recipient = normalizedRecipient,
-                    text = cleanText,
-                    replyToId = replyToId,
-                    mediaId = mediaId,
-                    mediaType = mediaType,
-                    voiceDurationMs = voiceDurationMs,
-                    createdAt = System.currentTimeMillis()
-                )
-                if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-                if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
-                return Result.success(
-                    RemoteMessage(
-                        id = localId,
-                        senderId = currentUserId,
-                        senderUsername = currentUsername.ifBlank { null },
-                        recipientId = "local-peer:$normalizedRecipient",
-                        recipientUsername = normalizedRecipient,
-                        text = cleanText,
-                        timestamp = item.createdAt,
-                        delivered = false,
-                        read = false,
-                        edited = false,
-                        deleted = false,
-                        replyToId = replyToId,
-                        mediaId = mediaId,
-                        mediaType = mediaType,
-                        voiceDurationMs = voiceDurationMs
-                    )
-                )
+                return enqueuePrivateText(context, normalizedRecipient, currentUsername, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
             }
         }
         return result
     }
 
+    private suspend fun enqueuePrivateText(
+        context: Context,
+        recipient: String,
+        senderUsername: String,
+        text: String,
+        replyToId: String?,
+        mediaId: String?,
+        mediaType: String?,
+        voiceDurationMs: Long,
+        requestId: String,
+        expectedAccountKey: String?,
+        requestToken: String?
+    ): Result<RemoteMessage> {
+        if (expectedAccountKey.isNullOrBlank() ||
+            !FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))
+        ) return Result.failure(IllegalStateException("Your account changed before this message could be saved for retry."))
+
+        val createdAt = System.currentTimeMillis()
+        val localId = "offline-$createdAt-${UUID.randomUUID()}"
+        val item = FynxOfflineOutbox.Item(
+            id = localId,
+            requestId = requestId,
+            recipient = recipient,
+            text = text,
+            replyToId = replyToId,
+            mediaId = mediaId,
+            mediaType = mediaType,
+            voiceDurationMs = voiceDurationMs,
+            createdAt = createdAt
+        )
+        val queued = withContext(Dispatchers.IO) {
+            FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)
+        }
+        if (!queued) return Result.failure(IllegalStateException("The message could not be saved on this device. Keep it in the composer and retry."))
+
+        return Result.success(
+            RemoteMessage(
+                id = localId,
+                senderId = "",
+                senderUsername = senderUsername.ifBlank { null },
+                recipientId = "local-peer:$recipient",
+                recipientUsername = recipient,
+                text = text,
+                timestamp = createdAt,
+                delivered = false,
+                read = false,
+                edited = false,
+                deleted = false,
+                replyToId = replyToId,
+                messagePayload = mapOf("pendingLocalUpload" to "true", "pendingLabel" to "Message"),
+                mediaId = mediaId,
+                mediaType = mediaType,
+                voiceDurationMs = voiceDurationMs
+            )
+        )
+    }
+
     fun canQueueOffline(error: Throwable?): Boolean = isAmbiguousTransportFailure(error)
 
-    private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
-        val message = error?.message.orEmpty().lowercase()
-        return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
-    }
+    private fun isAmbiguousTransportFailure(error: Throwable?): Boolean =
+        generateSequence(error) { it.cause }.any { cause ->
+            val message = cause.message.orEmpty().lowercase()
+            cause is UnknownHostException ||
+                cause is ConnectException ||
+                cause is NoRouteToHostException ||
+                cause is SocketException ||
+                cause is SocketTimeoutException ||
+                cause is InterruptedIOException ||
+                (cause is IOException && (
+                    message.contains("unable to resolve host") ||
+                        message.contains("temporary failure in name resolution") ||
+                        message.contains("network is unreachable") ||
+                        message.contains("failed to connect") ||
+                        message.contains("connection refused") ||
+                        message.contains("connection reset") ||
+                        message.contains("unexpected end of stream")
+                    )) ||
+                message.contains("timeout") ||
+                message.contains("timed out") ||
+                message.contains("connection") ||
+                message.contains("network") ||
+                message.contains("socket") ||
+                message.contains("unknownhost") ||
+                message.contains("no route to host") ||
+                message.contains("http 408") ||
+                message.contains("http 429") ||
+                message.contains("http 5") ||
+                message.contains("503") ||
+                message.contains("502")
+        }
 
     private fun List<RemoteMessage>.asReconciliationCandidate(currentUsername: String, text: String, replyToId: String?, mediaId: String?, mediaType: String?): RemoteMessage? {
         val now = System.currentTimeMillis()
@@ -501,7 +567,10 @@ object FynxProductionMessaging {
             messagePayload = normalizedPayload
         )
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-        if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
+        val queued = withContext(Dispatchers.IO) {
+            FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)
+        }
+        if (!queued) return result
 
         return Result.success(
             RemoteMessage(

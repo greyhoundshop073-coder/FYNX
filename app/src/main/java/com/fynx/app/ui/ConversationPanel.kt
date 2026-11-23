@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.editableText
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -63,6 +64,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+/** Keeps a cached private conversation usable when its remote refresh is unavailable. */
+internal fun privateChatHistoryFailureMessage(hasSavedMessages: Boolean): String =
+    if (hasSavedMessages) {
+        "Saved messages are shown. Could not refresh them yet; check your connection and retry."
+    } else {
+        "Messages could not load yet. Check your connection and retry."
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -194,6 +203,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             "image" -> "Photo"
                             "video", "video_note" -> "Video"
                             "audio" -> "Voice message"
+                            null -> if (item.messageType == "text") "Message" else "Attachment"
                             else -> "Attachment"
                         }
                     }
@@ -290,18 +300,9 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 isNewConversation = false
                 messages = (messages.filterNot { it.id == remote.id } + converted).sortedBy { it.timestamp }
                 if (remote.recipientId == myId) {
-                    if (FynxConversationPreferences.chatSounds(context, chat.username)) {
-                        FynxInChatSound.play(context)
-                    }
-                    if (FynxConversationPreferences.chatVibration(context, chat.username)) {
-                        val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator?.vibrate(VibrationEffect.createOneShot(35L, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator?.vibrate(35L)
-                        }
-                    }
+                    // Keep in-app alerts consistent with FCM: respect this chat's notification
+                    // toggle and the legacy mute setting before playing sound or vibrating.
+                    FynxInChatSound.play(context, chat.username)
                     realtimeClient.acknowledgeMessage(remote.id)
                     if (FynxConversationPreferences.chatReadReceipts(context, chat.username)) {
                         conversationScope.launch { FynxProductionMessaging.markRead(context, listOf(remote.id)) }
@@ -496,14 +497,22 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                     conversationScope.launch { FynxProductionMessaging.markRead(context, unread) }
                 }
             }.onFailure {
-                isNewConversation = messages.isEmpty()
-                networkError = "Messages could not load yet. Check your connection and retry."
+                // The local history restore runs independently; read disk here as well so
+                // a fast network failure cannot mislabel a cached conversation as empty.
+                val hasSavedMessages = withContext(Dispatchers.IO) {
+                    FynxChatStore.load(context, chat.username, null).isNotEmpty()
+                }
+                isNewConversation = !hasSavedMessages
+                networkError = privateChatHistoryFailureMessage(hasSavedMessages)
             }
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (error: Exception) {
-            networkError = "This conversation could not connect yet. Check your connection and try again."
-            isNewConversation = false
+            val hasSavedMessages = withContext(Dispatchers.IO) {
+                FynxChatStore.load(context, chat.username, null).isNotEmpty()
+            }
+            networkError = privateChatHistoryFailureMessage(hasSavedMessages)
+            isNewConversation = !hasSavedMessages
         }
     }
 
@@ -923,9 +932,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 } else {
                     FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
                         .onSuccess { remote ->
-                            currentUserId?.let { myId ->
-                                messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
-                            }
+                            val myId = currentUserId ?: remote.senderId
+                            messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
                             if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                                 FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                     .onSuccess { marketplaceContextAttached = true }
@@ -935,6 +943,12 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             editingId = null
                             replyToId = null
                             composerVideoMode = false
+                            if (remote.id.startsWith("offline-") && !remote.delivered) {
+                                networkError = "Message saved on this device and will send when the connection returns."
+                                conversationScope.launch { runCatching { FynxOfflineSync.drain(context) } }
+                            } else {
+                                networkError = null
+                            }
                         }
                         .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
                 }
@@ -1076,7 +1090,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         }
                                         newConversationRelation = "loading"
                                         relationshipRefresh++
-                                    }.onFailure { networkError = "Friend action could not be completed. Please try again." }
+                                    }.onFailure { error ->
+                                        android.util.Log.w("FYNXChat", "Friend relationship action failed", error)
+                                        networkError = "Friend action could not be completed. Please try again."
+                                    }
                                     sending = false
                                 }
                             }
@@ -1098,7 +1115,10 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                     sending = true
                                     FynxSocialClient.block(context, chat.username.removePrefix("@"))
                                         .onSuccess { networkError = "User blocked."; onBack() }
-                                        .onFailure { networkError = "This user could not be blocked yet. Please try again." }
+                                        .onFailure { error ->
+                                            android.util.Log.w("FYNXChat", "Blocking a user failed", error)
+                                            networkError = "This user could not be blocked yet. Please try again."
+                                        }
                                     sending = false
                                 }
                             }
@@ -1706,6 +1726,14 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                                         !voiceMode -> "Send message"
                                         recordingMode -> "Hold to record video note"
                                         else -> "Hold to record voice message"
+                                    }
+                                    onClick(label = if (!voiceMode) "Send message" else "Switch to video note") {
+                                        if (sending) {
+                                            false
+                                        } else {
+                                            if (!voiceMode) submitComposer() else composerVideoMode = !composerVideoMode
+                                            true
+                                        }
                                     }
                                 }
                                 .pointerInput(voiceMode, recordingMode, sending) {

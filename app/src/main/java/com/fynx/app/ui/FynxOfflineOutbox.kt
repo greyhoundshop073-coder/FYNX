@@ -59,7 +59,7 @@ object FynxOfflineOutbox {
     @Synchronized
     private fun enqueue(context: Context, name: String, item: Item): Boolean {
         val current = loadForPreferences(context, name).filterNot { it.id == item.id }
-        save(context, name, current + item)
+        if (!save(context, name, current + item)) return false
         notifyRecipient(item.recipient)
         return true
     }
@@ -69,8 +69,8 @@ object FynxOfflineOutbox {
         val name = preferencesName(context, expectedAccountKey) ?: return
         val current = loadForPreferences(context, name)
         val removed = current.firstOrNull { it.id == id }
+        if (!save(context, name, current.filterNot { it.id == id })) return
         removed?.localMediaPath?.let { path -> runCatching { File(path).delete() } }
-        save(context, name, current.filterNot { it.id == id })
         removed?.let { notifyRecipient(it.recipient) }
     }
 
@@ -78,8 +78,9 @@ object FynxOfflineOutbox {
     fun updateMediaId(context: Context, id: String, mediaId: String, expectedAccountKey: String? = null) {
         val name = preferencesName(context, expectedAccountKey) ?: return
         val current = loadForPreferences(context, name)
-        save(context, name, current.map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })
-        current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
+        if (save(context, name, current.map { item -> if (item.id == id) item.copy(mediaId = mediaId) else item })) {
+            current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
+        }
     }
 
     @Synchronized
@@ -88,10 +89,11 @@ object FynxOfflineOutbox {
         if (cleanMessageId.isBlank()) return
         val name = preferencesName(context, expectedAccountKey) ?: return
         val current = loadForPreferences(context, name)
-        save(context, name, current.map { item ->
+        if (save(context, name, current.map { item ->
             if (item.id == id) item.copy(sentMessageId = cleanMessageId) else item
-        })
-        current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
+        })) {
+            current.firstOrNull { it.id == id }?.let { notifyRecipient(it.recipient) }
+        }
     }
 
     suspend fun enqueueAttachment(context: Context, item: Item, sourceUri: Uri, mimeType: String): String? = withContext(Dispatchers.IO) {
@@ -197,7 +199,7 @@ object FynxOfflineOutbox {
         }.getOrDefault(emptyList())
     }
 
-    private fun save(context: Context, name: String, items: List<Item>) {
+    private fun save(context: Context, name: String, items: List<Item>): Boolean {
         val array = JSONArray()
         items.forEach { item ->
             array.put(JSONObject().apply {
@@ -210,6 +212,9 @@ object FynxOfflineOutbox {
                 put("sentMessageId", item.sentMessageId ?: JSONObject.NULL)
             })
         }
-        context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().putString(KEY, array.toString()).apply()
+        return context.getSharedPreferences(name, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY, array.toString())
+            .commit()
     }
 }
