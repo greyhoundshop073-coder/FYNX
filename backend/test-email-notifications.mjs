@@ -90,4 +90,18 @@ account.wallet_email_enabled = true;
 account.email_enabled = false;
 assert.equal((await deliverFynxEmailNotification(pool, event, delivery)).reason, "email notification preference disabled");
 
-console.log("PASS: verified-recipient requirement, independent Marketplace and wallet email controls, SMTP failure retry, and idempotent delivery");
+// Essential account protection notices bypass optional activity-email preferences.
+status = null;
+account.email_enabled = false;
+account.enabled = false;
+const safetyNotice = await deliverFynxEmailNotification(pool, {
+  ...event, type: "SAFETY", notificationId: "safety-account-restricted",
+  title: "FYNX Safety — Account restricted",
+  message: "Your FYNX account has a new safety status. Review the Safety Center."
+}, delivery);
+assert.equal(safetyNotice.sent, true);
+assert.equal(sent.length, 3);
+assert.equal(sent[2].to, "verified@example.com");
+assert.match(sent[2].subject, /Account restricted/);
+
+console.log("PASS: verified recipients, optional Marketplace and wallet email controls, essential safety notices, SMTP failure retry, and idempotent delivery");
