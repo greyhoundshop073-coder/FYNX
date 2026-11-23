@@ -21,7 +21,9 @@ fixture_status_file="$fixture_dir/capture-status.txt"
 
 for fixture_remote in \
   /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures \
-  /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures; do
+  /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures \
+  /sdcard/Android/data/com.fynx.app.test/files/admin-test-fixtures \
+  /sdcard/Android/data/com.fynx.app/files/admin-test-fixtures; do
   if adb shell test -d "$fixture_remote" >/dev/null 2>&1; then
     if adb pull "$fixture_remote/." "$fixture_dir/" >/dev/null 2>&1; then
       echo "CAPTURED: $fixture_remote" >> "$fixture_status_file"

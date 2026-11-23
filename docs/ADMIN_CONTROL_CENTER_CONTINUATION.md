@@ -188,3 +188,13 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-23 — publishing section discoverability and emulator evidence
+
+- Existing Owner music catalogue and Marketplace seasonal campaign implementations were reused. No duplicate uploader, catalogue or ad manager was created.
+- Owner now has a dedicated Music Library section; Owner/Admin campaign management is inside Marketplace and clearly separated from seller-sponsored ads.
+- The dashboard safety-action metric includes content moderation decisions; the canonical integration test already exercises the content-report queue and dashboard counts.
+- Added GET-only emulator fixtures that capture Owner Music Library, Owner Marketplace campaigns and Admin Marketplace campaigns, and assert that Admin cannot access the Owner-only Music Library tab.
+- Android CI is scoped to Admin-only runtime evidence on this branch; screenshot files are pulled into the runtime artifact. Chat Final Closure and Chat Group Parity/Layout are also run on this branch.
+- Screenshots and test fixtures do not create real tracks, campaigns, media objects, database rows or production mutations. Live authenticated Owner/Admin backend certification remains separate.

@@ -118,11 +118,12 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   {
     echo "# FYNX Admin Control Center runtime certification"
     echo
-    echo "- Scope: PR #527 Admin Control Center."
+    echo "- Scope: PR #582 Admin Control Center publishing sections."
     echo "- Android instrumentation exit code: ${TEST_EXIT}"
     echo "- Backend health HTTP status: ${BACKEND_STATUS}"
     echo "- Admin UI runtime: BLOCKED until the backend is healthy and a real OWNER/ADMIN test session is available."
-    echo "- Marketplace, My Shop and Wallet visual capture: NOT RUN; these are separate workstreams and are not used to fail this Admin-only PR."
+    echo "- This focused run does not certify live publishing against the production backend; live Owner/Admin authorization remains a separate gate."
+    echo "- Owner Music Library and Owner/Admin Marketplace campaign screenshots use GET-only synthetic fixtures; no publishing action is executed."
     echo "- No role, account, moderation, announcement or publishing mutation was performed."
     echo
     if [ "${TEST_EXIT}" -eq 0 ]; then

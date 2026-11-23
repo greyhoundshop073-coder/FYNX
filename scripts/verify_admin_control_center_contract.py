@@ -27,12 +27,26 @@ marketplace_checkout = MARKETPLACE_CHECKOUT.read_text(encoding="utf-8") if MARKE
 def require(condition: bool, message: str) -> None:
     if not condition:
         sys.exit(f"ADMIN_CONTROL_CENTER_CONTRACT=FAIL: {message}")
+require('if (activeSection == "Music Library" && d.role == "OWNER")' in source and
+        'add("Music Library")' in source,
+        "the Music Library must have a dedicated Owner-only Admin section")
+require('if (activeSection == "Marketplace")' in source and
+        "Marketplace banner campaigns" in source and
+        "FynxMarketplaceSeasonalPromotionAdminPanel()" in source,
+        "Marketplace campaign manager must be reachable from the Marketplace section")
+visual_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt"
+require(visual_test.is_file(), "Admin publishing section emulator screenshot tests are missing")
+visual = visual_test.read_text(encoding="utf-8")
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png"):
+    require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
+require('"GET"' in visual and "requestExecutorForTests" in visual,
+        "Admin screenshot fixtures must remain GET-only and must not perform publishing mutations")
 
 require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")
 require("ensureTrustSafetySchema(routePool)" in backend and "openReports:counts[1]+counts[2]" in backend,
         "Overview open-report total must combine the account-report and content-moderation tables")
-require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
+require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','CONTENT_REPORT_REVIEW','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
         "safetyActions24h:counts[4]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
         "24-hour safety dashboard metric must count real recorded administrative safety decisions")
 require('d.role == "OWNER" || d.role == "ADMIN"' in source, "owner/admin dashboard gate is missing")
@@ -73,8 +87,8 @@ require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
 require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
         "existing owner announcement route parameter must remain compatible")
-require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
-        "music administration must be visible only to the verified owner")
+require('if (activeSection == "Music Library" && d.role == "OWNER")' in source,
+        "music administration must be visible only to the verified owner in its dedicated section")
 require('"/api/admin/accounts/${encode(userId)}/status"' in client,
         "account status client must call the backend status route")
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,

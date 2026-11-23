@@ -287,7 +287,7 @@ export function registerAdminRoutes({ app, databasePool = pool, jwtApi = jwt, jw
       countRows('safety_reports',"status IN ('OPEN','UNDER_REVIEW')"),
       countRows('safety_content_reports',"status IN ('OPEN','UNDER_REVIEW')"),
       countRows('safety_appeals',"status IN ('OPEN','UNDER_REVIEW')"),
-      countRows('fynx_admin_activity',"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'")
+      countRows('fynx_admin_activity',"action IN ('REPORT_REVIEWED','CONTENT_REPORT_REVIEW','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'")
     ]);
     return res.json({role:req.fynxAdminRole,counts:{
       users:counts[0],
