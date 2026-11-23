@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { deliverFynxEmailNotification } from "./notificationEmail.js";
+import { queueFynxNotification } from "./notificationPush.js";
 
 const account = {
   email: "verified@example.com",
@@ -118,3 +119,46 @@ assert.equal(sent[2].to, "verified@example.com");
 assert.match(sent[2].subject, /Account restricted/);
 
 console.log("PASS: verified recipients, optional Marketplace and wallet email controls, essential safety notices, SMTP failure retry, and idempotent delivery");
+
+// Exercise the real notification-to-email bridge used by Marketplace and Wallet event hooks.
+// Push is deliberately disabled in this mock: verified-email delivery must still happen.
+account.enabled = true;
+account.email_enabled = true;
+account.marketplace_enabled = true;
+account.marketplace_email_enabled = true;
+account.wallet_enabled = true;
+account.wallet_email_enabled = true;
+const integratedSent = [];
+const integrationPool = {
+  async query(sql) {
+    if (sql.includes("CREATE TABLE IF NOT EXISTS notification_preferences")) return { rows: [] };
+    if (sql.includes("INSERT INTO fynx_notifications")) return { rows: [] };
+    if (sql.includes("SELECT u.email")) return { rows: [{ ...account }] };
+    if (sql.includes("INSERT INTO fynx_notification_delivery")) return { rows: [{ status: "PENDING" }] };
+    if (sql.includes("UPDATE fynx_notification_delivery")) return { rows: [] };
+    if (sql.includes("SELECT enabled,push_enabled")) {
+      return { rows: [{ enabled: true, push_enabled: false, category_enabled: true, quiet_mode: false }] };
+    }
+    throw new Error("Unexpected notification pipeline SQL: " + sql.slice(0, 120));
+  }
+};
+const integrationTransport = {
+  configured: true,
+  async send(message) { integratedSent.push(message); }
+};
+for (const integratedEvent of [
+  { userId: "25", type: "MARKETPLACE_ORDER", notificationId: "marketplace-paid-buyer-25", title: "Marketplace payment confirmed", message: "Your Marketplace order has been paid." },
+  { userId: "25", type: "WALLET_ACTIVITY", notificationId: "wallet-topup-25", title: "Wallet top-up received", message: "Your FYNX Wallet top-up is complete." }
+]) {
+  const queued = await queueFynxNotification(integrationPool, integratedEvent, integrationTransport);
+  assert.equal(queued.stored, true);
+  assert.equal(queued.delivered, false);
+  assert.equal(queued.emailDelivered, true);
+}
+assert.equal(integratedSent.length, 2);
+assert.ok(integratedSent.every(message => message.to === "verified@example.com"));
+assert.match(integratedSent[0].subject, /Marketplace payment confirmed/);
+assert.match(integratedSent[1].subject, /Wallet top-up received/);
+
+console.log("PASS: Marketplace and Wallet notification events reach verified email even when push alerts are disabled");
+
