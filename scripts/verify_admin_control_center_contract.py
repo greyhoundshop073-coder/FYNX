@@ -71,8 +71,10 @@ require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
 require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
         "existing owner announcement route parameter must remain compatible")
-require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
-        "music administration must be visible only to the verified owner")
+require('if (activeSection == "Music Library" && d.role == "OWNER")' in source and 'add("Music Library")' in source,
+        "the Music Library must have a dedicated Owner-only Admin section")
+require('if (activeSection == "Marketplace")' in source and "FynxMarketplaceSeasonalPromotionAdminPanel()" in source,
+        "Marketplace banner campaign management must be reachable from the Marketplace section")
 require('"/api/admin/accounts/${encode(userId)}/status"' in client,
         "account status client must call the backend status route")
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,
