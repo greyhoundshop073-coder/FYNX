@@ -1,7 +1,7 @@
 # FYNX account-deletion architecture and readiness
 
 **Review date:** 2026-11-23  
-**Canonical source baseline:** `integration/fynx-single-apk-20261013` at `dfb9b83d420b41512224ad7180eab797b9664f6d`  
+**Canonical source baseline:** `integration/fynx-single-apk-20261013` at `a99060e6d14bac257a85b679664dd6e03a385d8d`  
 **Status:** Account deletion is **not implemented or certified**. This document defines the gates for a safe implementation; it is not a live deletion request page or a promise of erasure.
 
 ## Current verified state
