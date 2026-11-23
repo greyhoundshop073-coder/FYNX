@@ -296,7 +296,7 @@ def main() -> int:
         if not FAILURES:
             photo_camera = tap(
                 "Take photo", "photo-camera-entry",
-                ("Take photo", "Switch front/back camera")
+                ("Take photo", "Switch to back camera")
             )
             if photo_camera and find_click_target(photo_camera, "Take photo") and find_click_target(photo_camera, "Switch to back camera"):
                 report.append("- PASS Status Take photo opens the shared live CameraX preview in Photo mode.")
@@ -316,7 +316,7 @@ def main() -> int:
             creator = tap("Create your status", "video-create", ("Voice", "Text"))
             video_camera = tap(
                 "Record video", "video-camera-entry",
-                ("Record video", "Switch front/back camera")
+                ("Record video", "Switch to back camera")
             ) if creator else ""
             if video_camera and find_click_target(video_camera, "Record video") and find_click_target(video_camera, "Switch to back camera"):
                 report.append("- PASS Status Record video opens the shared live CameraX preview in Video mode.")
