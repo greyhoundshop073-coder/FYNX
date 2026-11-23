@@ -2,12 +2,22 @@ name: FYNX Neon Function Deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - integration/fynx-single-apk-20261013
+    paths:
+      - "backend/**"
+      - ".github/workflows/fynx-neon-function-deploy.yml"
+
+concurrency:
+  group: fynx-neon-testing-deploy
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  deploy-development-function:
+  deploy-testing-function:
     runs-on: ubuntu-latest
     env:
       PGHOST: 127.0.0.1
@@ -54,52 +64,43 @@ jobs:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
-          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_EMAIL_HOST: ${{ secrets.FYNX_EMAIL_HOST }}
+          FYNX_EMAIL_PORT: ${{ secrets.FYNX_EMAIL_PORT }}
           FYNX_EMAIL_USER: ${{ secrets.FYNX_EMAIL_USER }}
           FYNX_EMAIL_PASSWORD: ${{ secrets.FYNX_EMAIL_PASSWORD }}
           FYNX_EMAIL_FROM: ${{ secrets.FYNX_EMAIL_FROM }}
-          FYNX_EMAIL_PORT: ${{ vars.FYNX_EMAIL_PORT || '587' }}
-          FYNX_EMAIL_SECURE: ${{ vars.FYNX_EMAIL_SECURE || 'false' }}
-          FYNX_EMAIL_REQUIRE_TLS: ${{ vars.FYNX_EMAIL_REQUIRE_TLS || 'true' }}
+          FYNX_EMAIL_SECURE: ${{ secrets.FYNX_EMAIL_SECURE }}
+          FYNX_EMAIL_REQUIRE_TLS: ${{ secrets.FYNX_EMAIL_REQUIRE_TLS }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
           FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
           FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED || 'false' }}
           FYNX_WALLET_FUNDING_MIN_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MIN_AMOUNT || '100' }}
           FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
-          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_GEMINI_API_KEY" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
-            echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY."
+          if [ -z "$NEON_API_KEY" ] || [ -z "$FYNX_JWT_SECRET" ] || [ -z "$FYNX_PAYSTACK_SECRET_KEY" ]; then
+            echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET and FYNX_PAYSTACK_SECRET_KEY."
             exit 1
           fi
+          case "$FYNX_PAYSTACK_SECRET_KEY" in sk_test_*) ;; *) echo "::error::The FYNX testing branch requires a Paystack TEST secret (sk_test_...). Live Paystack keys are rejected."; exit 1 ;; esac
           if [ "$FYNX_WALLET_TEST_MODE_ENABLED" != "false" ] || [ "$FYNX_WALLET_CARD_FUNDING_ENABLED" != "false" ]; then
             echo "::error::Initial Neon deployment must keep wallet test mode and card funding disabled until provider/runtime safety checks pass."
             exit 1
           fi
-          email_configured=false
-          for value in "$FYNX_EMAIL_HOST" "$FYNX_EMAIL_USER" "$FYNX_EMAIL_PASSWORD" "$FYNX_EMAIL_FROM"; do
-            if [ -n "$value" ]; then email_configured=true; fi
-          done
-          if [ "$email_configured" = "true" ]; then
-            if [ -z "$FYNX_EMAIL_HOST" ] || [ -z "$FYNX_EMAIL_USER" ] || [ -z "$FYNX_EMAIL_PASSWORD" ] || [ -z "$FYNX_EMAIL_FROM" ]; then
-              echo "::error::SMTP configuration is partial. Set all four SMTP secrets, or leave all four unset."
-              exit 1
-            fi
-          fi
 
-      - name: Deploy only to the isolated fynx-dev branch
+      - name: Deploy only to the existing populated fynx-testing branch
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           FYNX_JWT_SECRET: ${{ secrets.FYNX_JWT_SECRET }}
           FYNX_GEMINI_API_KEY: ${{ secrets.FYNX_GEMINI_API_KEY }}
-          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_EMAIL_HOST: ${{ secrets.FYNX_EMAIL_HOST }}
+          FYNX_EMAIL_PORT: ${{ secrets.FYNX_EMAIL_PORT }}
           FYNX_EMAIL_USER: ${{ secrets.FYNX_EMAIL_USER }}
           FYNX_EMAIL_PASSWORD: ${{ secrets.FYNX_EMAIL_PASSWORD }}
           FYNX_EMAIL_FROM: ${{ secrets.FYNX_EMAIL_FROM }}
-          FYNX_EMAIL_PORT: ${{ vars.FYNX_EMAIL_PORT || '587' }}
-          FYNX_EMAIL_SECURE: ${{ vars.FYNX_EMAIL_SECURE || 'false' }}
-          FYNX_EMAIL_REQUIRE_TLS: ${{ vars.FYNX_EMAIL_REQUIRE_TLS || 'true' }}
+          FYNX_EMAIL_SECURE: ${{ secrets.FYNX_EMAIL_SECURE }}
+          FYNX_EMAIL_REQUIRE_TLS: ${{ secrets.FYNX_EMAIL_REQUIRE_TLS }}
+          FYNX_PAYSTACK_SECRET_KEY: ${{ secrets.FYNX_PAYSTACK_SECRET_KEY }}
           FYNX_OFFICIAL_USERNAME: ${{ vars.FYNX_OFFICIAL_USERNAME || 'fynx' }}
           FYNX_WALLET_TEST_MODE_ENABLED: ${{ vars.FYNX_WALLET_TEST_MODE_ENABLED || 'false' }}
           FYNX_WALLET_CARD_FUNDING_ENABLED: ${{ vars.FYNX_WALLET_CARD_FUNDING_ENABLED || 'false' }}
@@ -107,9 +108,9 @@ jobs:
           FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
           umask 077
-          trap 'rm -f .env.neon.deploy' EXIT
           cat > .env.neon.deploy <<EOF
           FYNX_JWT_SECRET=$FYNX_JWT_SECRET
+          FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
           FYNX_EMAIL_HOST=$FYNX_EMAIL_HOST
           FYNX_EMAIL_PORT=$FYNX_EMAIL_PORT
           FYNX_EMAIL_USER=$FYNX_EMAIL_USER
@@ -117,7 +118,6 @@ jobs:
           FYNX_EMAIL_FROM=$FYNX_EMAIL_FROM
           FYNX_EMAIL_SECURE=$FYNX_EMAIL_SECURE
           FYNX_EMAIL_REQUIRE_TLS=$FYNX_EMAIL_REQUIRE_TLS
-          FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
           FYNX_PAYSTACK_SECRET_KEY=$FYNX_PAYSTACK_SECRET_KEY
           FYNX_OFFICIAL_USERNAME=$FYNX_OFFICIAL_USERNAME
           FYNX_WALLET_TEST_MODE_ENABLED=$FYNX_WALLET_TEST_MODE_ENABLED
@@ -128,6 +128,6 @@ jobs:
           # Pin the CLI to the intended project and branch before applying neon.ts.
           # The deploy command itself applies to the linked branch; it does not accept
           # project/branch flags.
-          npx --yes neon@9.2.0 link --project-id spring-mode-34864088 --no-env-pull -y
-          npx --yes neon@9.2.0 checkout fynx-dev --no-env-pull
+          npx --yes neon@9.2.0 link --project-id patient-lab-43403708 --no-env-pull -y
+          npx --yes neon@9.2.0 checkout fynx-testing --no-env-pull
           npx --yes neon@9.2.0 deploy --env .env.neon.deploy
