@@ -212,11 +212,28 @@ export function createFynxGroupCallSignalHandler({ pool, emitToUser, logger = co
       "SELECT status FROM fynx_realtime_group_call_participants WHERE call_id=$1 AND user_id=$2 LIMIT 1",
       [callId, senderId]
     );
+    if (signalType === "group_reject") {
+      if (participantState.rows[0]?.status !== "INVITED") {
+        return sendSocket(socket, groupCallEvent(call, "error", { error: "Only an invited participant can decline this call." }));
+      }
+      await pool.query(
+        "UPDATE fynx_realtime_group_call_participants SET status='REJECTED',updated_at=NOW() WHERE call_id=$1 AND user_id=$2 AND status='INVITED'",
+        [callId, senderId]
+      );
+      const roster = await participantRoster(pool, callId);
+      for (const participant of roster) {
+        await emitToUser(participant.userId, groupCallEvent(call, "group_participant_left", {
+          participant: { userId: senderId, username: user?.username || "" }
+        }));
+      }
+      return sendSocket(socket, groupCallEvent(call, "group_left", { participants: roster }));
+    }
+
     if (participantState.rows[0]?.status !== "JOINED") {
       return sendSocket(socket, groupCallEvent(call, "error", { error: "Join the group call before sending media signals." }));
     }
 
-    if (signalType === "group_leave" || signalType === "group_reject") {
+    if (signalType === "group_leave") {
       await pool.query(
         "UPDATE fynx_realtime_group_call_participants SET status=$3,updated_at=NOW() WHERE call_id=$1 AND user_id=$2",
         [callId, senderId, signalType === "group_reject" ? "REJECTED" : "LEFT"]
