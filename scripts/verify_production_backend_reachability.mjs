@@ -1,6 +1,6 @@
 const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech").replace(/\/$/, "");
 // Keep certification strict: HTTP health and database readiness are both required.
-// The URL is configurable so certification can target the active FYNX Render service.
+// The URL is configurable so certification can target the active FYNX Neon Function.
 const TIMEOUT_MS = 120_000;
 const RETRIES = 3;
 const RETRY_DELAY_MS = 10_000;
