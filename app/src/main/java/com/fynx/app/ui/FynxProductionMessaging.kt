@@ -350,7 +350,8 @@ object FynxProductionMessaging {
         allowOfflineQueue: Boolean = true,
         requestId: String = UUID.randomUUID().toString(),
         expectedAccountKey: String? = FynxAuthStore.accountStorageKey(context),
-        requestToken: String? = FynxBackendClient.accessToken(context)
+        requestToken: String? = FynxBackendClient.accessToken(context),
+        localSenderId: String? = null
     ): Result<RemoteMessage> {
         val normalizedRecipient = recipientUsername.trim().removePrefix("@").lowercase()
         val currentUsername = (FynxAuthStore.load(context).username ?: "").trim().removePrefix("@").lowercase()
@@ -364,7 +365,7 @@ object FynxProductionMessaging {
         if (voiceDurationMs !in 0L..MAX_VOICE_DURATION_MS) return Result.failure(IllegalArgumentException("Voice message duration is invalid."))
         val noUsableSession = requestToken.isNullOrBlank() && !FynxBackendClient.hasAccessToken(context)
         if (allowOfflineQueue && (noUsableSession || !FynxBackendClient.isNetworkAvailable(context))) {
-            return enqueuePrivateText(context, normalizedRecipient, currentUsername, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
+            return enqueuePrivateText(context, normalizedRecipient, currentUsername, localSenderId, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
         }
         val body = JSONObject().apply { put("clientMessageId", requestId); put("recipientUsername", normalizedRecipient); put("text", cleanText); put("replyToId", replyToId?.toLongOrNull() ?: JSONObject.NULL); put("mediaId", mediaId?.toLongOrNull() ?: JSONObject.NULL); put("mediaType", mediaType ?: JSONObject.NULL); put("voiceDurationMs", voiceDurationMs) }
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
@@ -396,6 +397,7 @@ object FynxProductionMessaging {
         context: Context,
         recipient: String,
         senderUsername: String,
+        localSenderId: String?,
         text: String,
         replyToId: String?,
         mediaId: String?,
@@ -430,7 +432,7 @@ object FynxProductionMessaging {
         return Result.success(
             RemoteMessage(
                 id = localId,
-                senderId = "",
+                senderId = localSenderId.orEmpty(),
                 senderUsername = senderUsername.ifBlank { null },
                 recipientId = "local-peer:$recipient",
                 recipientUsername = recipient,

@@ -930,7 +930,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         networkError = "Attachment could not be saved for retry. Keep it selected and try again."
                     }
                 } else {
-                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId, localSenderId = currentUserId)
                         .onSuccess { remote ->
                             val myId = currentUserId ?: remote.senderId
                             messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
