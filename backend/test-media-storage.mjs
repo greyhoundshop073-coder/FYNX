@@ -202,6 +202,23 @@ const neonUploadUrl = await neonDirectStorage.createUploadUrl({
   mimeType: "image/webp",
   byteSize: 15
 });
+
+await assert.rejects(
+  neonDirectStorage.createUploadUrl({
+    objectKey: "uploads/" + UUID,
+    mimeType: "image/webp",
+    byteSize: 0
+  }),
+  /Media upload must be between 1 byte and 12 MB/
+);
+await assert.rejects(
+  neonDirectStorage.createUploadUrl({
+    objectKey: "uploads/" + UUID,
+    mimeType: "image/webp",
+    byteSize: 12 * 1024 * 1024 + 1
+  }),
+  /Media upload must be between 1 byte and 12 MB/
+);
 assert.equal(neonUploadUrl, "https://br-floral-shape-b5mbajl5.storage.c-7.us-east-2.aws.neon.tech/fynx-media/signed-write");
 assert.deepEqual(optionsSeen[4], {
   region: "us-east-2",
