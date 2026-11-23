@@ -414,7 +414,7 @@ fun FynxAdminControlCenterPanel() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Open appeals", d.openAppeals); StatCard("Safety actions · 24h", d.safetyActions24h) }
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity").forEach { section ->
+                buildList { addAll(listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity")); if (d.role == "OWNER") add("Music Library") }.forEach { section ->
                     FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
                 }
             }
@@ -491,17 +491,14 @@ fun FynxAdminControlCenterPanel() {
                 Spacer(Modifier.height(8.dp))
                 FynxSupportHubPanel(staffOnly = true)
             }
-            if (activeSection == "Overview" && d.role == "OWNER") {
-                Spacer(Modifier.height(20.dp))
-                Text("Music Library", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
+            if (activeSection == "Music Library" && d.role == "OWNER") {
+                Spacer(Modifier.height(12.dp))
+                Text("Official FYNX Music Catalogue", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Text("Add audio, publish tracks and manage the official catalogue. Music publishing remains restricted to the verified Owner account.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
                 FynxMusicAdminPanel()
             }
-            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
-                Spacer(Modifier.height(20.dp))
-                FynxMarketplaceSeasonalPromotionAdminPanel()
-                Spacer(Modifier.height(20.dp))
-            }
+            
             if (activeSection == "Safety") {
                 Text("Reported accounts", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
@@ -713,7 +710,12 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
             if (activeSection == "Marketplace") {
-            Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Marketplace banner campaigns", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            Text("Publish FYNX offers and promotions with an optional campaign photo and a direct product, shop or category destination.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            FynxMarketplaceSeasonalPromotionAdminPanel()
+            Spacer(Modifier.height(20.dp))
+            Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(protectionError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshProtection++ }) { Text("Retry") } } }
