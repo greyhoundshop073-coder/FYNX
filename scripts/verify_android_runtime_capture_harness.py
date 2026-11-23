@@ -16,6 +16,7 @@ CHAT_SOUND_POLICY_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/FynxInChatSo
 CHAT_HISTORY_FALLBACK_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/PrivateChatHistoryFallbackTest.kt").read_text(encoding="utf-8")
 CHAT_SOUND = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxInChatSound.kt").read_text(encoding="utf-8")
 GROUPS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
+GROUP_SETTINGS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
 GROUP_CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt").read_text(encoding="utf-8")
 EMULATOR_WRAPPER = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
@@ -51,6 +52,15 @@ checks = {
         and "FynxPreferencesStore.isChatMuted(context, username)" in CHAT_SOUND
         and "chatVibration(context, username)" in CHAT_SOUND
         and "suppressesAlertWhenLegacyMuteIsEnabled" in CHAT_SOUND_POLICY_TEST
+    ),
+    "Group settings ownership transfer and leave actions use authenticated server confirmation and account-scoped local updates": (
+        "FynxGroupRemoteClient.transferOwnership(context, groupId, cleanTransferTarget)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupRemoteClient.leaveGroup(context, groupId)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupsStore.updateGroup(context, updated, expectedAccountKey)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupsStore.removeGroup(context, groupId, expectedAccountKey)" in GROUP_SETTINGS_PANEL
+        and "FynxBackendClient.isRequestSessionCurrent(" in GROUP_SETTINGS_PANEL
+        and 'GroupActionRow("Transfer ownership"' in GROUP_SETTINGS_PANEL
+        and 'GroupActionRow("Leave group"' in GROUP_SETTINGS_PANEL
     ),
     "group reconnect drain replaces confirmed server messages and preserves failed pending work": (
         "FynxGroupRemoteClient.drainPendingWork(context)" in GROUP_RECONNECT_TEST

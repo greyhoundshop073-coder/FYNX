@@ -169,3 +169,13 @@ The consolidation PR is not a final APK certification. Its prior description rec
 - The same run separately reported Home preview bounds as 0.562 for all seeded video shapes and a Home-return navigation failure after Chat/Groups. These remain separate runtime defects to diagnose from their own hierarchy/screenshot evidence; they are not silently reclassified as Chat/Groups passes.
 - Next gate: rerun the exact candidate head through Android build, unit tests, lint, instrumentation and installed-app runtime capture. Chat/Groups remains open until the exact peer history, group dialog, group conversation, offline send/reopen and process-death restoration screenshots are captured successfully.
 - No canonical merge, production database change, Railway deployment change or official APK publication was made.
+
+
+### 23 November 2026 — Selective Group ownership and leave-action recovery from PR #523
+
+- Audited PR #523 against the active candidate instead of merging its 177-commit divergent branch. The backend group-membership route was byte-identical to the candidate; the candidate already contains newer account/session-safe group settings, notification and report behavior.
+- One material UI capability was missing from the candidate's current group settings: owner-verified transfer of group ownership and authenticated member leave. Selectively restored these actions on top of the newer group settings screen.
+- Ownership transfer requires a currently stored group member other than the active user, calls the existing authenticated server endpoint, verifies the request session is still the same account, then updates account-scoped group membership roles only after server confirmation.
+- Leaving a group calls the existing authenticated server endpoint, verifies the request session, removes the group and local history only in the same account namespace, then returns to the group list.
+- Added static regression contracts for both flows and their session/account guards. This does not certify live server behavior; that remains part of backend/runtime verification.
+- PR #523 remains open pending exact-head CI and a final per-file unique-change audit. It must not be merged wholesale.
