@@ -20,7 +20,11 @@ chat_command = (
     "FYNX_CHAT_GROUPS_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 "
     "python3 scripts/verify_authenticated_runtime_navigation.py"
 )
-workflow_script = WORKFLOW.split("script: |", 1)[1].split("\n        env:", 1)[0]
+# Inspect the emulator-runner block specifically. The workflow contains other
+# multiline `script: |` blocks; splitting at the first one made this contract
+# depend on unrelated jobs and falsely rejected the one-command wrapper.
+emulator_step = WORKFLOW.split("uses: reactivecircus/android-emulator-runner@", 1)[1]
+workflow_script = emulator_step.split("script: |", 1)[1].split("\n        env:", 1)[0]
 workflow_commands = [line.strip() for line in workflow_script.splitlines() if line.strip()]
 checks = {
     "emulator runner executes compound certification through one Bash script": (
