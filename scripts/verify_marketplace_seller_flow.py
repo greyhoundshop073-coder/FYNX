@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -340,7 +341,7 @@ checks.extend([
     ("failed inventory refresh preserves prior seller rows and labels the inventory as stale", "Inventory is not current. Retry refresh before relying on listing availability." in seller_center and "Previously loaded listings are shown" in seller_center and "Could not refresh your inventory." in seller_center and 'Listing count unavailable until refresh succeeds' in seller_center and 'listings = emptyList()\n                    archivedListings = emptyList()' not in seller_center),
     ("failed or malformed payout-account refresh clears previous account and verification state", "payoutAccounts = emptyList()" in seller_center and "payoutAccount = null" in seller_center and 'accountMessage = marketplaceSafeError(failure, "Payout account status could not load.")' in seller_center),
     ("My Shop refresh button is disabled while the refresh is active", 'IconButton(onClick = { refresh() }, enabled = !loading) { Icon(Icons.Default.Refresh, "Refresh My Shop") }' in seller_center),
-    ("shop-profile save parses the response inside mapCatching so malformed success cannot strand the save spinner", 'FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())\n                                    .mapCatching { raw ->' in seller_center and 'shopSaving = false' in seller_center),
+    ("shop-profile save parses the response inside mapCatching so malformed success cannot strand the save spinner", re.search(r'FynxBackendClient\.patchJson\(context, "/api/marketplace/my-shop", payload\.toString\(\)\)\s*\.mapCatching\s*\{\s*raw\s*->', seller_center) is not None and 'shopSaving = false' in seller_center),
     ("seller orders JSON parsing is contained by mapCatching and rejects malformed order payloads", 'FynxBackendClient.get(context, "/api/marketplace/seller/orders")\n                .mapCatching { raw ->' in seller_orders and 'Seller orders response was incomplete.' in seller_orders and 'Seller orders response contains an invalid order.' in seller_orders),
     ("seller order requests reject stale responses and always clear loading for the current request", "var orderLoadGeneration by remember { mutableIntStateOf(0) }" in seller_orders and "if (requestGeneration != orderLoadGeneration) return@launch" in seller_orders and "loading = false" in seller_orders),
     ("seller-order read-only refresh avoids duplicate parent My Shop refresh and is disabled in flight", 'confirmButton = { TextButton(enabled = !loading, onClick = { load() }) { Text("Refresh") } }' in seller_orders and 'onClick = { load(); onChanged() }' not in seller_orders),
