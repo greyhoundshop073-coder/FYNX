@@ -381,7 +381,13 @@ private fun FynxPulseStat(label: String, value: String, modifier: Modifier = Mod
 }
 
 @Composable
-fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@preview", onBack: () -> Unit) {
+fun FynxGroupConversationPanel(
+    groupId: String,
+    currentUsername: String = "@preview",
+    initialIncomingGroupCall: FynxRealtimeClient.Event.GroupCall? = null,
+    onIncomingGroupCallConsumed: (String) -> Unit = {},
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val groupAccountKey = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: "signed_out"
     fun isCurrentGroupAccount(expected: String): Boolean {
@@ -433,6 +439,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
     var showLocationShare by remember { mutableStateOf(false) }
     var showContactShare by remember { mutableStateOf(false) }
     var showMore by remember { mutableStateOf(false) }
+    var showGroupCall by remember(groupId, initialIncomingGroupCall?.callId) { mutableStateOf(initialIncomingGroupCall != null) }
     var showLeaveGroupDialog by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     var leaveGroupBusy by remember(groupId, groupAccountKey) { mutableStateOf(false) }
     var leaveGroupError by remember(groupId, groupAccountKey) { mutableStateOf<String?>(null) }
@@ -1036,6 +1043,7 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     Text(groupTitle, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = glassPalette.messageText, maxLines = 1)
                     Text("${selectedGroup?.members?.size ?: 0} members", style = MaterialTheme.typography.labelSmall, color = glassPalette.messageMuted, maxLines = 1)
                 }
+                IconButton(onClick = { showGroupCall = true }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Videocam, "Start group video call", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                 IconButton(onClick = { searchOpen = !searchOpen; if (!searchOpen) searchQuery = "" }, modifier = Modifier.size(48.dp)) { Icon(if (searchOpen) Icons.Default.Close else Icons.Default.Search, "Search", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
                 Box {
                     IconButton(onClick = { showMore = true }, enabled = selectedGroup != null, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, "More", tint = glassPalette.messageText, modifier = Modifier.size(22.dp)) }
@@ -1666,6 +1674,17 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showGroupCall && selectedGroup != null) {
+        FynxGroupCallPanel(
+            groupId = groupId,
+            groupName = selectedGroup.name,
+            currentUsername = currentUsername,
+            initialInvite = initialIncomingGroupCall,
+            onInviteConsumed = onIncomingGroupCallConsumed,
+            onDismiss = { showGroupCall = false; initialIncomingGroupCall?.let { onIncomingGroupCallConsumed(it.callId) } }
         )
     }
 

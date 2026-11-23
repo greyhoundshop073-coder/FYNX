@@ -108,6 +108,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
     var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
+    var pendingIncomingGroupCall by remember { mutableStateOf<FynxRealtimeClient.Event.GroupCall?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
     var marketplaceProfileUsername by remember { mutableStateOf<String?>(null) }
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
@@ -149,6 +150,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         callTarget = null
         callVideo = false
         pendingIncomingCall = null
+        pendingIncomingGroupCall = null
         marketplaceListingId = null
         marketplaceProfileUsername = null
         marketplaceStatusDraft = null
@@ -197,7 +199,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 context = context,
                 onMessage = {},
                 onEvent = { event ->
-                    if (event is FynxRealtimeClient.Event.Call &&
+                    if (event is FynxRealtimeClient.Event.GroupCall &&
+                        event.signalType == "group_invite" &&
+                        pendingIncomingGroupCall == null &&
+                        event.groupId.isNotBlank()
+                    ) {
+                        pendingIncomingGroupCall = event
+                        openChat = null
+                        openGroup = event.groupId
+                        profileUser = null
+                        selected = "Groups"
+                    } else if (event is FynxRealtimeClient.Event.Call &&
                         FynxIncomingCallRouting.shouldRouteInvite(
                             signalType = event.signalType,
                             currentScreen = currentSelected,
@@ -412,7 +424,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         }
     }) }; return }
     if (openChat != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) } }; return }
-    if (openGroup != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) } }; return }
+    if (openGroup != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", initialIncomingGroupCall = pendingIncomingGroupCall?.takeIf { it.groupId == openGroup }, onIncomingGroupCallConsumed = { callId -> if (pendingIncomingGroupCall?.callId == callId) pendingIncomingGroupCall = null }, onBack = { openGroup = null }) } }; return }
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         // Home uses one LazyColumn for the real feed. Observe its nested-scroll deltas
