@@ -214,6 +214,19 @@ try {
   assert.equal(activeComment?.targetType, "SOCIAL_COMMENT");
   assert.equal(activeComment?.contentPreview, "Reported comment preview",
     "content moderation queue returns the actual reported comment preview");
+  const initialOwnerDashboard = await invokeDashboard("owner");
+  assert.equal(initialOwnerDashboard.statusCode, 200);
+  assert.equal(initialOwnerDashboard.body.role, "OWNER");
+  assert.equal(initialOwnerDashboard.body.counts.openReports, 7,
+    "Owner dashboard counts four open account reports plus three active content reports");
+  const initialAdminDashboard = await invokeDashboard("admin");
+  assert.equal(initialAdminDashboard.statusCode, 200);
+  assert.equal(initialAdminDashboard.body.role, "ADMIN");
+  assert.equal(initialAdminDashboard.body.counts.openReports, 7,
+    "Admin dashboard reports the same persisted account and content report total");
+  const ordinaryDashboard = await invokeDashboard("regular");
+  assert.equal(ordinaryDashboard.statusCode, 403,
+    "ordinary users must not read Admin dashboard counts");
   const activeListing = await db.query("SELECT id FROM safety_content_reports WHERE target_id=104");
   assert.equal(activeListing.rowCount, 1);
 
@@ -270,20 +283,9 @@ try {
   );
   assert.equal(contentActivity.rows[0].count, 2,
     "content report transitions also appear in searchable Admin activity history");
-
-  const ownerDashboard = await invokeDashboard("owner");
-  assert.equal(ownerDashboard.statusCode, 200);
-  assert.equal(ownerDashboard.body.role, "OWNER");
-  assert.equal(ownerDashboard.body.counts.openReports, 7,
-    "Owner dashboard counts four open account reports plus three active content reports");
-  const adminDashboard = await invokeDashboard("admin");
-  assert.equal(adminDashboard.statusCode, 200);
-  assert.equal(adminDashboard.body.role, "ADMIN");
-  assert.equal(adminDashboard.body.counts.openReports, 7,
-    "Admin dashboard reports the same persisted account and content report total");
-  const ordinaryDashboard = await invokeDashboard("regular");
-  assert.equal(ordinaryDashboard.statusCode, 403,
-    "ordinary users must not read Admin dashboard counts");
+  const dashboardAfterContentReview = await invokeDashboard("admin");
+  assert.equal(dashboardAfterContentReview.body.counts.openReports, 6,
+    "resolving one of three active content reports decrements the aggregate by exactly one");
 
   const validAppeal = await db.query(
     "INSERT INTO safety_appeals(user_id,report_id,subject,details,status) VALUES(3,$1,'Restore my account','The account restriction was applied in error.','OPEN') RETURNING id",
