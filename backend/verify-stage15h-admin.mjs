@@ -38,3 +38,7 @@ console.log(`Stage 15H admin verification passed (${checks.length} checks)`);
 const supportIntegration = spawnSync(process.execPath, ['test-support-routes.mjs'], { stdio: 'inherit', env: process.env });
 if (supportIntegration.error) throw supportIntegration.error;
 if (supportIntegration.status !== 0) throw new Error(`Support database integration test failed (exit ${supportIntegration.status}).`);
+
+const announcementIntegration = spawnSync(process.execPath, ['test-admin-announcements-db.mjs'], { stdio: 'inherit', env: process.env });
+if (announcementIntegration.error) throw announcementIntegration.error;
+if (announcementIntegration.status !== 0) throw new Error(`Admin announcement database integration test failed (exit ${announcementIntegration.status}).`);
