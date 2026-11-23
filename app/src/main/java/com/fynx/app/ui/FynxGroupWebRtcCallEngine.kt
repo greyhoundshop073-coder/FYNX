@@ -90,6 +90,8 @@ class FynxGroupWebRtcCallEngine(
         }
     }
 
+    fun isReadyForCall(): Boolean = started && audioTrack != null && (!videoEnabled || videoTrack != null)
+
     fun hasPeer(userId: String): Boolean = peers.containsKey(userId)
 
     fun ensurePeer(userId: String): Boolean {

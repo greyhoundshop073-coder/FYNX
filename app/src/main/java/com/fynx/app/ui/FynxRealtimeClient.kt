@@ -54,6 +54,14 @@ class FynxRealtimeClient(
         data class Typing(val userId: String, val isTyping: Boolean) : Event
         data class Presence(val userId: String, val online: Boolean) : Event
         data class GroupMessage(val groupId: String, val messageJson: String) : Event
+        data class GroupCallParticipant(val userId: String, val username: String)
+        data class GroupCall(
+            val groupId: String, val callId: String, val callType: String, val signalType: String,
+            val creatorId: String = "", val fromUserId: String = "",
+            val participants: List<GroupCallParticipant> = emptyList(),
+            val participant: GroupCallParticipant? = null, val sdp: String? = null,
+            val candidate: IceCandidatePayload? = null, val error: String? = null
+        ) : Event
         data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null) : Event
     }
     data class IceCandidatePayload(val candidate: String, val sdpMid: String?, val sdpMLineIndex: Int?, val usernameFragment: String?) {
@@ -212,6 +220,7 @@ class FynxRealtimeClient(
                             val message = root.optJSONObject("message")
                             if (groupId.isNotBlank() && message != null) emitEvent(Event.GroupMessage(groupId, message.toString()))
                         }
+                        "group_call" -> parseGroupCallEvent(root)?.let(::emitEvent)
                         "call" -> parseCallEvent(root)?.let { callEvent ->
                             if (callEvent.signalType == "invite") {
                                 val caller = callEvent.fromUsername?.removePrefix("@").orEmpty().ifBlank { callEvent.fromUserId }
@@ -276,6 +285,47 @@ class FynxRealtimeClient(
         val jitter = Random.nextLong(0L, 501L)
         reconnectHandler.postDelayed({ if (isSocketStillAuthorized(expectedAccountKey)) connectInternal() }, exponentialDelay + jitter)
     }
+    private fun parseGroupCallEvent(root: JSONObject): Event.GroupCall? {
+        val groupId = root.optString("groupId").trim()
+        val callId = root.optString("callId").trim()
+        val callType = root.optString("callType", "video").trim().lowercase()
+        val signalType = root.optString("signalType").trim().lowercase()
+        val allowed = setOf("group_invite", "group_created", "group_roster", "group_participant_joined",
+            "group_participant_left", "group_offer", "group_answer", "group_ice", "group_full",
+            "group_busy", "group_ended", "group_left", "error")
+        if (groupId.isBlank() || groupId.length > 80 || callId.isBlank() || callId.length > 80 ||
+            callType !in setOf("voice", "video") || signalType !in allowed) return null
+        fun parseParticipant(value: JSONObject?): Event.GroupCallParticipant? {
+            if (value == null) return null
+            val id = value.optString("userId").trim()
+            if (id.isBlank() || id.length > 32) return null
+            return Event.GroupCallParticipant(id, value.optString("username").trim().take(80))
+        }
+        val roster = root.optJSONArray("participants")
+        val participants = buildList {
+            if (roster != null) for (i in 0 until minOf(roster.length(), 4)) {
+                parseParticipant(roster.optJSONObject(i))?.let { add(it) }
+            }
+        }
+        val candidate = root.optJSONObject("candidate")?.let { value ->
+            val sdp = value.optString("candidate").trim()
+            if (sdp.isBlank() || sdp.length > 20_000) null else IceCandidatePayload(
+                sdp, if (value.isNull("sdpMid")) null else value.optString("sdpMid").take(100),
+                if (value.isNull("sdpMLineIndex")) null else value.optInt("sdpMLineIndex"),
+                if (value.isNull("usernameFragment")) null else value.optString("usernameFragment").take(200)
+            )
+        }
+        val sdp = root.optString("sdp").takeIf { it.isNotBlank() && it.length <= 200_000 }
+        if ((signalType == "group_offer" || signalType == "group_answer") && sdp == null) return null
+        if (signalType == "group_ice" && candidate == null) return null
+        return Event.GroupCall(
+            groupId, callId, callType, signalType, root.optString("creatorId").take(32),
+            root.optString("fromUserId").take(32), participants,
+            parseParticipant(root.optJSONObject("participant")), sdp, candidate,
+            root.optString("error").takeIf { it.isNotBlank() }?.take(300)
+        )
+    }
+
     private fun parseCallEvent(root: JSONObject): Event.Call? {
         val rawCallId = root.optString("callId").trim()
         val callId = when { rawCallId.startsWith("call_") -> rawCallId.replaceFirst("call_", "call-"); else -> rawCallId }
@@ -293,6 +343,27 @@ class FynxRealtimeClient(
         if (signalType == "ice" && c == null) return null
         return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
     }
+    private fun sendGroupCall(groupId: String, callId: String, signalType: String, extra: JSONObject? = null): Boolean {
+        if (groupId.isBlank() || groupId.length > 80 || callId.isBlank() || callId.length > 80) return false
+        return sendJson(JSONObject().apply {
+            put("type", "group_call"); put("groupId", groupId); put("callId", callId); put("signalType", signalType)
+            extra?.keys()?.forEach { put(it, extra.get(it)) }
+        })
+    }
+    fun sendGroupCallCreate(groupId: String, callId: String, video: Boolean) =
+        sendGroupCall(groupId, callId, "group_create", JSONObject().put("callType", if (video) "video" else "voice"))
+    fun sendGroupCallJoin(groupId: String, callId: String) = sendGroupCall(groupId, callId, "group_join")
+    fun sendGroupCallLeave(groupId: String, callId: String) = sendGroupCall(groupId, callId, "group_leave")
+    fun sendGroupCallReject(groupId: String, callId: String) = sendGroupCall(groupId, callId, "group_reject")
+    fun sendGroupCallEnd(groupId: String, callId: String) = sendGroupCall(groupId, callId, "group_end")
+    fun sendGroupCallOffer(groupId: String, callId: String, targetUserId: String, sdp: String, video: Boolean) =
+        sendGroupCall(groupId, callId, "group_offer", JSONObject().put("toUserId", targetUserId).put("sdp", sdp).put("callType", if (video) "video" else "voice"))
+    fun sendGroupCallAnswer(groupId: String, callId: String, targetUserId: String, sdp: String, video: Boolean) =
+        sendGroupCall(groupId, callId, "group_answer", JSONObject().put("toUserId", targetUserId).put("sdp", sdp).put("callType", if (video) "video" else "voice"))
+    fun sendGroupCallIce(groupId: String, callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) =
+        sendGroupCall(groupId, callId, "group_ice", JSONObject().put("toUserId", targetUserId).put("callType", if (video) "video" else "voice")
+            .put("candidate", JSONObject().put("candidate", candidate.sdp).put("sdpMid", candidate.sdpMid)
+                .put("sdpMLineIndex", candidate.sdpMLineIndex)))
     fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
@@ -305,22 +376,13 @@ class FynxRealtimeClient(
     fun sendTyping(recipientId: String, isTyping: Boolean) = sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().put("type", "message_ack").put("messageId", it)) } }
-    private fun sendJson(payload: JSONObject) {
-        val accountKey = currentAccountKey()
-        if (accountKey.isNullOrBlank()) return
+    private fun sendJson(payload: JSONObject): Boolean {
+        val accountKey = currentAccountKey() ?: return false
         val value = payload.toString()
-        val type = payload.optString("type")
-        val sent = synchronized(socketCreationLock) {
+        return synchronized(socketCreationLock) {
             val activeSocket = socket
-            if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) false else activeSocket.send(value)
-        }
-        if (sent) return
-        if (type != "read" && type != "message_ack") return
-        synchronized(pendingLock) {
-            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
-            pendingAccountKey = accountKey
-            if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
-            pendingPayloads.addLast(value)
+            if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) false
+            else activeSocket.send(value)
         }
     }
     private fun flushPending(webSocket: WebSocket) {
