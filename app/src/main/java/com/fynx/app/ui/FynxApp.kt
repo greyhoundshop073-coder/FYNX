@@ -107,6 +107,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
+    var callListingId by remember { mutableStateOf<String?>(null) }
+    var callProductTitle by remember { mutableStateOf<String?>(null) }
+    var callSellerUsername by remember { mutableStateOf<String?>(null) }
     var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
     var pendingIncomingGroupCall by remember { mutableStateOf<FynxRealtimeClient.Event.GroupCall?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
@@ -149,6 +152,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         postOpenCommentId = null
         callTarget = null
         callVideo = false
+        callListingId = null
+        callProductTitle = null
+        callSellerUsername = null
         pendingIncomingCall = null
         pendingIncomingGroupCall = null
         marketplaceListingId = null
@@ -782,7 +788,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 onBack = { selected = "Marketplace" },
                 onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
             )
-            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
+            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { listingId, productTitle, username -> callTarget = username; callVideo = true; callListingId = listingId; callProductTitle = productTitle; callSellerUsername = username; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
                 val draft = FynxDeepLinkParser.marketplaceStatusDraftText(listingId, title)
                 if (draft.isNotBlank()) {
                     marketplaceStatusDraft = draft
