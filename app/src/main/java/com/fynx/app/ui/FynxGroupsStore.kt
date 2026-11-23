@@ -38,6 +38,52 @@ object FynxGroupsStore {
 
     private fun pendingSyncKey(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): String = PENDING_SYNC_PREFIX + groupsKey(context, accountKey)
 
+    /**
+     * Atomically persist a newly-created group and its pending server-sync marker.
+     * A force-stop between two separate writes could otherwise leave a local group
+     * with no marker, allowing a later empty remote response to hide it.
+     */
+    @Synchronized
+    fun addPendingGroupDurably(
+        context: Context,
+        group: FynxGroup,
+        accountKey: String? = FynxAuthStore.accountStorageKey(context)
+    ): Boolean {
+        val valid = FynxGroupsBatch1.create(group) ?: return false
+        val current = load(context, accountKey)
+        if (current.any { it.name.equals(valid.name, ignoreCase = true) } ||
+            current.any { it.id == valid.id }
+        ) return false
+
+        val array = JSONArray()
+        (current + valid).forEach { value ->
+            array.put(JSONObject().apply {
+                put("id", value.id)
+                put("name", value.name)
+                put("description", value.description)
+                put("visibility", value.visibility.name)
+                put("ownerUsername", value.ownerUsername)
+                put("groupPhotoMediaId", value.groupPhotoMediaId ?: "")
+                put("members", JSONArray().apply {
+                    value.members.forEach { member ->
+                        put(JSONObject().apply {
+                            put("username", member.username)
+                            put("role", member.role.name)
+                        })
+                    }
+                })
+            })
+        }
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pendingKey = pendingSyncKey(context, accountKey)
+        val pending = prefs.getStringSet(pendingKey, emptySet()).orEmpty().toMutableSet()
+        pending.add(valid.id)
+        return prefs.edit()
+            .putString(groupsKey(context, accountKey), array.toString())
+            .putStringSet(pendingKey, pending)
+            .commit()
+    }
+
     @Synchronized
     fun markPendingSync(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)) {
         if (groupId.isBlank()) return
