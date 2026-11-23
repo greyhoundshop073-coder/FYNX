@@ -34,7 +34,13 @@ checks = {
     "new-member history visibility is disabled until the server advertises support": "canEditPermissions&&showHistoryPolicySupported" in normalized_settings and "This server does not yet support saving and enforcing new-member history visibility" in settings,
     "group media saving uses the local gallery preference for received media only": normalized_active.count("autoSaveToGallery=FynxConversationPreferences.groupSaveMedia(context,groupId)&&!message.fromMe") >= 2,
     "story-to-group is not advertised as a text-only message until a real Status share flow exists": "onStoryShare" not in active and "Share a story to group" not in active and "Story shared to group" not in active and "onStoryShare" not in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSocialBatch.kt").read_text(encoding="utf-8"),
-    "group message sync does not clear a local persistence error immediately after setting it": active.find("if (showError) syncMessage = null") < active.find('FynxChatStore.save(context, "group_$groupId", mergedMessages)') and "Your group messages could not be saved locally. Please try again." in active,
+    "group history persists the final post-receipt snapshot without a stale overwrite": (
+        "var messagesToPersist = mergedMessages" in active
+        and "applyGroupReadReceiptUpdates(" in active
+        and "messagesToPersist = withReceipts" in active
+        and 'FynxChatStore.save(context, "group_$groupId", messagesToPersist)' in active
+        and 'FynxChatStore.save(context, "group_$groupId", mergedMessages)' not in active
+    ),
     "production startup registers group, membership and content routes exactly once": all(token in scalability for token in ["registerGroupRoutes({ app })", "registerGroupMembershipRoutes({ app })", "registerGroupContentRoutes({ app })"]) and "registerGroupInviteRoutes" not in scalability,
     "server exposes authenticated recent conversations and bounded private-history paging": all(token in server for token in ['app.get("/api/messages/recent"', "hasPageContract", "nextBeforeId"]),
     "Chat list hydrates from the remote conversation endpoint while preserving local pending messages": "FynxProductionMessaging.recentConversations(" in chat_list and "FynxChatStore.savePreviews(context, merged, expectedAccountUsername)" in chat_list and "pendingLocal" in chat_list,

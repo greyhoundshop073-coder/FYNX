@@ -168,7 +168,12 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
                 Text(if (section == "Chats") "Chats" else "Groups", style = MaterialTheme.typography.headlineSmall)
                 Text(if (showArchived) "Archived conversations" else "Messages and groups in one place", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            TextButton(onClick = { section = if (section == "Chats") "Groups" else "Chats" }) {
+            TextButton(
+                onClick = { section = if (section == "Chats") "Groups" else "Chats" },
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = if (section == "Chats") "Open Groups" else "Open Chats"
+                }
+            ) {
                 Text(if (section == "Chats") "Groups" else "Chats")
             }
         }
@@ -375,7 +380,7 @@ fun ChatsPanel(onOpenChat: (ChatPreview) -> Unit, onOpenGroup: (String) -> Unit 
             Spacer(Modifier.height(10.dp))
             OutlinedButton(onClick = onCreateGroup, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Create group" }) { Text("＋ Create group") }
         } else {
-            Button(onClick = onCreateGroup) { Text("＋ New group") }
+            Button(onClick = onCreateGroup, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Create group" }) { Text("＋ New group") }
             Spacer(Modifier.height(10.dp))
             if (groups.isEmpty()) {
                 Text("No groups yet", style = MaterialTheme.typography.titleMedium)

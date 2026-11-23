@@ -97,12 +97,13 @@ object FynxOfflineSync {
                 if (!FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
                 val currentUserId = FynxBackendClient.currentUserId(context).getOrNull()
                 if (currentUserId.isNullOrBlank() || !FynxBackendClient.isRequestSessionCurrent(accountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) break
-                FynxChatStore.replaceMessage(
+                val replacedDurably = FynxChatStore.replaceMessageDurably(
                     context,
                     conversationStoreKey(context, item),
                     item.id,
                     FynxProductionMessaging.toChatMessage(remote, currentUserId)
                 )
+                if (!replacedDurably) break
                 FynxOfflineOutbox.markSent(context, item.id, remote.id, accountKey)
                 // Keep this item until the attached listing context is also accepted.
                 // The stable requestId makes a retry safe if the message already exists.

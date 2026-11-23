@@ -9,10 +9,12 @@ object FynxGroupsStore {
     private const val PREFS = "fynx_groups_store"
     private const val GROUPS_KEY_PREFIX = "groups_"
     private const val PENDING_SYNC_PREFIX = "pending_sync_"
+    private const val REVISION_PREFIX = "revision_"
 
     private fun groupsKey(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): String =
         GROUPS_KEY_PREFIX + (accountKey?.let(::storageKey) ?: "signed_out")
 
+    @Synchronized
     fun load(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): List<FynxGroup> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(groupsKey(context, accountKey), null) ?: return emptyList()
         return runCatching {
@@ -37,13 +39,23 @@ object FynxGroupsStore {
 
     private fun pendingSyncKey(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): String = PENDING_SYNC_PREFIX + groupsKey(context, accountKey)
 
+    private fun revisionKey(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): String =
+        REVISION_PREFIX + groupsKey(context, accountKey)
+
+    @Synchronized
+    fun revision(context: Context, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Long =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(revisionKey(context, accountKey), 0L)
+
     @Synchronized
     fun markPendingSync(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)) {
         if (groupId.isBlank()) return
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pending = prefs.getStringSet(pendingSyncKey(context, accountKey), emptySet()).orEmpty().toMutableSet()
         pending.add(groupId)
-        prefs.edit().putStringSet(pendingSyncKey(context, accountKey), pending).apply()
+        prefs.edit()
+            .putStringSet(pendingSyncKey(context, accountKey), pending)
+            .putLong(revisionKey(context, accountKey), revision(context, accountKey) + 1L)
+            .commit()
     }
 
     @Synchronized
@@ -56,11 +68,70 @@ object FynxGroupsStore {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val key = pendingSyncKey(context, accountKey)
         val pending = prefs.getStringSet(key, emptySet()).orEmpty().toMutableSet()
-        pending.remove(groupId)
-        prefs.edit().putStringSet(key, pending).apply()
+        val changed = pending.remove(groupId)
+        if (changed) {
+            prefs.edit()
+                .putStringSet(key, pending)
+                .putLong(revisionKey(context, accountKey), revision(context, accountKey) + 1L)
+                .commit()
+        }
     }
 
+    @Synchronized
+    fun addPendingGroupDurably(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+        val valid = FynxGroupsBatch1.create(group) ?: return false
+        val current = load(context, accountKey)
+        if (current.any { it.name.equals(valid.name, ignoreCase = true) } || current.any { it.id == valid.id }) return false
+        val array = JSONArray()
+        (current + valid).forEach { value ->
+            array.put(JSONObject().apply {
+                put("id", value.id); put("name", value.name); put("description", value.description)
+                put("visibility", value.visibility.name); put("ownerUsername", value.ownerUsername); put("groupPhotoMediaId", value.groupPhotoMediaId ?: "")
+                put("members", JSONArray().apply { value.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
+            })
+        }
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pendingKey = pendingSyncKey(context, accountKey)
+        val pending = prefs.getStringSet(pendingKey, emptySet()).orEmpty().toMutableSet().apply { add(valid.id) }
+        return prefs.edit()
+            .putString(groupsKey(context, accountKey), array.toString())
+            .putStringSet(pendingKey, pending)
+            .putLong(revisionKey(context, accountKey), revision(context, accountKey) + 1L)
+            .commit()
+    }
+
+    @Synchronized
     fun save(context: Context, groups: List<FynxGroup>, accountKey: String? = FynxAuthStore.accountStorageKey(context)) {
+        saveDurably(context, groups, accountKey)
+    }
+
+    @Synchronized
+    fun saveDurably(context: Context, groups: List<FynxGroup>, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.edit()
+            .putString(groupsKey(context, accountKey), encodeGroups(groups))
+            .putLong(revisionKey(context, accountKey), revision(context, accountKey) + 1L)
+            .commit()
+    }
+
+    /** Applies a remote snapshot only when no newer local group mutation happened during the request. */
+    @Synchronized
+    fun saveIfRevisionMatches(
+        context: Context,
+        groups: List<FynxGroup>,
+        accountKey: String?,
+        expectedRevision: Long
+    ): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = revisionKey(context, accountKey)
+        if (prefs.getLong(key, 0L) != expectedRevision) return false
+        return prefs.edit()
+            .putString(groupsKey(context, accountKey), encodeGroups(groups))
+            .putLong(key, expectedRevision + 1L)
+            .commit()
+    }
+
+    private fun encodeGroups(groups: List<FynxGroup>): String {
         val array = JSONArray()
         groups.forEach { group ->
             array.put(JSONObject().apply {
@@ -69,30 +140,28 @@ object FynxGroupsStore {
                 put("members", JSONArray().apply { group.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
             })
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(groupsKey(context, accountKey), array.toString()).apply()
+        return array.toString()
     }
 
     fun add(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         val valid = FynxGroupsBatch1.create(group) ?: return false
         val groups = load(context, accountKey)
         if (groups.any { it.name.equals(valid.name, ignoreCase = true) }) return false
-        save(context, groups + valid, accountKey)
-        return true
+        return saveDurably(context, groups + valid, accountKey)
     }
 
     fun updateGroup(context: Context, updated: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (FynxGroupsBatch1.validate(updated).isNotEmpty()) return false
         val groups = load(context, accountKey)
         if (groups.none { it.id == updated.id }) return false
-        save(context, groups.map { if (it.id == updated.id) updated else it }, accountKey)
-        return true
+        return saveDurably(context, groups.map { if (it.id == updated.id) updated else it }, accountKey)
     }
 
     fun removeGroup(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (groupId.isBlank()) return false
         val groups = load(context, accountKey)
         if (groups.none { it.id == groupId }) return false
-        save(context, groups.filterNot { it.id == groupId }, accountKey)
+        if (!saveDurably(context, groups.filterNot { it.id == groupId }, accountKey)) return false
         // A removed group must never be recreated by a later reconnect drain.
         markSynced(context, groupId, accountKey)
         // The message store resolves its own account namespace; never clear the new
