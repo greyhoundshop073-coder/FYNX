@@ -5,6 +5,35 @@
 set +e
 mkdir -p fynx-runtime-screenshots
 
+if [ "${FYNX_ADMIN_VISUAL_CAPTURE_ONLY:-0}" = "1" ]; then
+  echo "::notice::Capturing the existing Owner/Admin Control Center composable with read-only Android-test fixtures."
+  ./gradlew connectedDebugAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=com.fynx.app.ui.FynxAdminControlCenterVisualComposeTest \
+    --no-daemon --build-cache
+  TEST_EXIT=$?
+  adb logcat -d -v threadtime > fynx-runtime-screenshots/admin-visual-instrumentation-logcat.txt 2>&1
+  {
+    echo "# FYNX Owner/Admin Control Center — Android visual capture"
+    echo
+    echo "- UI: existing production FynxAdminControlCenterPanel Compose screen."
+    echo "- Device: disposable Android emulator; screenshots are device captures, not mockups."
+    echo "- Fixture mode: instrumentation-only GET responses from FynxBackendClient.requestExecutorForTests."
+    echo "- Roles shown: OWNER and ADMIN labels from local visual fixtures, not live account sessions."
+    echo "- Safety: fixture rejects every non-GET request; no production database or account is touched."
+    echo "- Android instrumentation exit code: ${TEST_EXIT}"
+    echo "- Screenshots: FYNX-admin-owner-overview.png and FYNX-admin-admin-overview.png when captured."
+    if [ "${TEST_EXIT}" -eq 0 ]; then
+      echo
+      echo "## Result: GREEN — both production Compose role layouts were captured."
+    else
+      echo
+      echo "## Result: RED — Admin visual instrumentation did not complete; inspect the Android test log."
+    fi
+  } > fynx-runtime-screenshots/FYNX-admin-visual-capture.md
+  exit "${TEST_EXIT}"
+fi
+
+
 if [ "${FYNX_CHAT_OFFLINE_INSTRUMENTATION_ONLY:-0}" = "1" ]; then
   # Run the focused Chat offline-outbox device tests without any server login,
   # Marketplace navigation, backend probe, or remote fixture dependency.

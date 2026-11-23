@@ -289,3 +289,23 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
 print("SERVER_AUTHORITATIVE_ROLE_AND_SECTION_NAVIGATION=GREEN")
+
+# Owner/Admin screenshot evidence is generated from the existing production
+# Compose panel with instrumentation-only, GET-only transport fixtures.
+VISUAL_TEST = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminControlCenterVisualComposeTest.kt"
+RUNTIME_RUNNER = ROOT / "scripts/run_android_runtime_certification.sh"
+EMULATOR_WRAPPER = ROOT / "scripts/run_android_runtime_emulator_certification.sh"
+require(VISUAL_TEST.is_file(), "Owner/Admin Android visual capture test is missing")
+visual_test = VISUAL_TEST.read_text(encoding="utf-8")
+runtime_runner = RUNTIME_RUNNER.read_text(encoding="utf-8")
+emulator_wrapper = EMULATOR_WRAPPER.read_text(encoding="utf-8")
+require("FynxAdminControlCenterPanel()" in visual_test and "FynxTheme(accent = FynxAccent.Blue" in visual_test,
+        "Owner/Admin screenshots must render the existing production Compose panel with the approved FYNX theme")
+require("FynxBackendClient.requestExecutorForTests" in visual_test and '                "GET",' in visual_test,
+        "Owner/Admin visual fixtures must use the test transport and reject non-GET operations")
+require("FYNX-admin-owner-overview.png" in visual_test and "FYNX-admin-admin-overview.png" in visual_test,
+        "both Owner and Admin overview screenshots must be captured")
+require("FYNX_ADMIN_VISUAL_CAPTURE_ONLY" in runtime_runner and "com.fynx.app.ui.FynxAdminControlCenterVisualComposeTest" in runtime_runner,
+        "focused Admin visual capture must run on the Android emulator")
+require("admin-test-fixtures" in emulator_wrapper and "FYNX_ADMIN_VISUAL_CAPTURE_ONLY" in workflow,
+        "Android CI must pull and upload the Owner/Admin screenshot evidence")
