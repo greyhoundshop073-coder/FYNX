@@ -122,7 +122,7 @@ def grant_camera_permission_if_requested(stage: str, xml_text: str) -> str:
     while time.monotonic() < deadline:
         time.sleep(0.35)
         latest = dump_ui(f"status-{stage}-permission.xml") or latest
-        if find_click_target(latest, "Take photo") and find_click_target(latest, "Switch front/back camera"):
+        if find_click_target(latest, "Take photo") and (find_click_target(latest, "Switch to back camera") or find_click_target(latest, "Switch to front camera")):
             return latest
         selected = next((find_click_target(latest, option) for option in permission_options if find_click_target(latest, option)), None)
         if selected is not None:
@@ -136,6 +136,38 @@ def grant_camera_permission_if_requested(stage: str, xml_text: str) -> str:
     )
     screenshot(f"status-{stage}-permission-blocked.png")
     return latest
+
+
+def exercise_camera_lens_switch(stage: str, shutter_label: str) -> bool:
+    """Verify both emulated lenses bind and the shutter becomes ready after each switch."""
+    latest = dump_ui(f"status-{stage}-lens-before.xml")
+    transitions = (
+        ("Switch to back camera", "Switch to front camera"),
+        ("Switch to front camera", "Switch to back camera"),
+    )
+    for index, (current_label, next_label) in enumerate(transitions, start=1):
+        point = find_click_target(latest, current_label)
+        if point is None:
+            FAILURES.append(f"{stage}: camera lens switch control '{current_label}' was not available.")
+            screenshot(f"status-{stage}-lens-{index}-control-missing.png")
+            return False
+        adb("shell", "input", "tap", str(point[0]), str(point[1]))
+        deadline = time.monotonic() + 12.0
+        switched = False
+        while time.monotonic() < deadline:
+            time.sleep(0.45)
+            latest = dump_ui(f"status-{stage}-lens-{index}-wait.xml") or latest
+            if find_click_target(latest, shutter_label) and find_click_target(latest, next_label):
+                screenshot(f"authenticated-status-{stage}-lens-{index}.png")
+                switched = True
+                break
+        if not switched:
+            FAILURES.append(
+                f"{stage}: camera did not become ready on the expected lens after switching to '{next_label}'."
+            )
+            screenshot(f"status-{stage}-lens-{index}-failed.png")
+            return False
+    return True
 
 
 def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0) -> str:
@@ -211,7 +243,7 @@ def main() -> int:
     report = [
         "# FYNX Status creator runtime check",
         "",
-        "- Scope: Home own-Status + button, creator entry, Voice/Text choices, and safe dismissal.",
+        "- Scope: Home own-Status + button, creator entry, Voice/Text choices, contextual camera permission, Photo/Video preview, front/rear lens switching, and safe dismissal.",
         "- Session: uses the already-running CI UI session; debug-local access is not server authentication.",
         "- Safety: no status, text, photo, voice recording, or media is created or submitted.",
     ]
@@ -266,9 +298,11 @@ def main() -> int:
                 "Take photo", "photo-camera-entry",
                 ("Take photo", "Switch front/back camera")
             )
-            if photo_camera and find_click_target(photo_camera, "Take photo") and find_click_target(photo_camera, "Switch front/back camera"):
+            if photo_camera and find_click_target(photo_camera, "Take photo") and find_click_target(photo_camera, "Switch to back camera"):
                 report.append("- PASS Status Take photo opens the shared live CameraX preview in Photo mode.")
                 screenshot("authenticated-status-photo-camera-mode.png")
+                if exercise_camera_lens_switch("photo", "Take photo"):
+                    report.append("- PASS front/rear camera switching binds both lenses and restores the ready Photo shutter.")
             else:
                 FAILURES.append("Status Take photo did not open the shared CameraX preview in Photo mode.")
             if photo_camera:
@@ -284,7 +318,7 @@ def main() -> int:
                 "Record video", "video-camera-entry",
                 ("Record video", "Switch front/back camera")
             ) if creator else ""
-            if video_camera and find_click_target(video_camera, "Record video") and find_click_target(video_camera, "Switch front/back camera"):
+            if video_camera and find_click_target(video_camera, "Record video") and find_click_target(video_camera, "Switch to back camera"):
                 report.append("- PASS Status Record video opens the shared live CameraX preview in Video mode.")
                 screenshot("authenticated-status-video-camera-mode.png")
             else:
