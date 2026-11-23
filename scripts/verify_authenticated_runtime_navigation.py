@@ -209,7 +209,7 @@ DIAGNOSTIC_MARKERS = (
     "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
     "Your communities in one place", "Open create group dialog", "Create group dialog", "New group", "No groups yet",
-    "Group name input", "Description input"
+    "Group name", "Description"
 )
 
 def visible_marker_summary(xml_text:str)->str:
@@ -3076,7 +3076,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         manager_xml,
         ["Create group"],
         "chat-groups-open-create-dialog",
-        ["Group name input"],
+        ["Group name"],
     )
     if not dialog:
         FAILURES.append("The dedicated Groups manager did not open its real create-group dialog.")
@@ -3091,8 +3091,8 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         FAILURES.append("The Create action was enabled while both required group fields were empty.")
         return ""
     report.append("- PASS: the blank group form keeps Create disabled until valid name and description are supplied.")
-    name_field = find_control(dialog, ["Group name input"], exact_only=True)
-    description_field = find_control(dialog, ["Description input"], exact_only=True)
+    name_field = find_control(dialog, ["Group name"], exact_only=True)
+    description_field = find_control(dialog, ["Description"], exact_only=True)
     if not name_field or not description_field:
         FAILURES.append(
             "The real group creation dialog did not expose distinct accessible Group name and Description inputs; "
@@ -3107,7 +3107,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         return ""
     time.sleep(0.35)
     after_name = dismiss_ime_if_visible("chat-groups-create-fixture-name.xml")
-    description_field = find_control(after_name, ["Description input"], exact_only=True)
+    description_field = find_control(after_name, ["Description"], exact_only=True)
     if not description_field:
         FAILURES.append("The group creation dialog lost its named Description input after entering the group name.")
         screenshot("chat-groups-create-description-missing.png")
@@ -3131,10 +3131,10 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     latest = ""
     while time.monotonic() < deadline:
         latest = dump_ui("chat-groups-created-local-fixture.xml")
-        if find_control(latest, [f"Open group {group_name}"]):
+        if find_control(latest, [group_name]):
             break
         time.sleep(0.4)
-    if not find_control(latest, [f"Open group {group_name}"]):
+    if not find_control(latest, [group_name]):
         FAILURES.append("The app did not show the newly created group in its Groups list.")
         return ""
     screenshot("chat-groups-created-fixture.png")
@@ -3183,15 +3183,15 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
     deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
         groups_again = dump_ui("chat-groups-groups-after-conversation.xml")
-        if find_control(groups_again, [f"Open group {group_name}"]):
+        if find_control(groups_again, [group_name]):
             break
         time.sleep(0.4)
-    if not find_control(groups_again, [f"Open group {group_name}"]):
+    if not find_control(groups_again, [group_name]):
         FAILURES.append("Back navigation did not return to the Groups list with the persisted fixture.")
         return ""
     reopened = tap_control(
         groups_again,
-        [f"Open group {group_name}"],
+        [group_name],
         "chat-groups-reopen-persisted-fixture",
         [group_name, "Message..."],
     )
@@ -5840,7 +5840,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                     created_groups_xml = dump_ui("chat-groups-created-fixture-list.xml")
                     group_xml = tap_control(
                         created_groups_xml,
-                        [f"Open group {group_name}"],
+                        [group_name],
                         "chat-groups-open-created-fixture",
                         [group_name, "Message..."],
                     )
