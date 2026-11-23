@@ -48,6 +48,7 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var preferenceSaveError by remember { mutableStateOf<String?>(null) }
     var preferenceSaveVersion by remember { mutableIntStateOf(0) }
     val preferenceSaveMutex = remember { Mutex() }
+    val preferencesLatest by rememberUpdatedState(notificationPreferences)
     val pushEnabledLatest by rememberUpdatedState(notificationPreferences.pushEnabled)
     var remoteUnreadCount by remember { mutableIntStateOf(0) }
     var showOverflow by remember { mutableStateOf(false) }
@@ -80,6 +81,16 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                 androidNotificationsAllowed = granted
                 if (granted && pushEnabledLatest) {
                     scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
+                } else if (!granted && pushEnabledLatest) {
+                    // Permission may have been revoked in Android settings while FYNX was backgrounded.
+                    // Disable server push for this account too; verified-email notices remain independent.
+                    scope.launch {
+                        FynxNotificationPreferencesClient.update(
+                            context,
+                            preferencesLatest.copy(pushEnabled = false)
+                        ).onSuccess { notificationPreferences = it }
+                            .onFailure { preferenceSaveError = "Android push permission is off. FYNX email notifications are unaffected." }
+                    }
                 }
                 loadRemoteNotifications()
             }
