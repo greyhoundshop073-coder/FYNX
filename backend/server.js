@@ -656,9 +656,9 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     const permanentInfo = await mediaStorage.inspectMediaObject(promotedObjectKey, intentProvider);
     if (permanentInfo.byteSize !== Number(intent.byte_size) ||
         permanentInfo.mimeType !== String(intent.mime_type).toLowerCase()) {
-      await client.query("ROLLBACK");
-      inTransaction = false;
-      return res.status(502).json({ error: "promoted media object failed verification" });
+      // Route the mismatch through the common catch so the unreferenced promoted
+      // object is deleted before the failed finalization is returned to the client.
+      throw new Error("promoted media object failed verification");
     }
 
     const inserted = await client.query(

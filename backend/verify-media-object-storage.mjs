@@ -46,6 +46,8 @@ assert.match(server, /if \(!mediaStorage\.isObjectStorageProvider\(intentProvide
 assert.match(server, /storage_provider, object_key\) VALUES \(\$1,\$2,NULL,\$3,\$4,\$5\)/);
 assert.match(server, /mediaStorage\.provider/);
 assert.match(server, /const permanentInfo = await mediaStorage\.inspectMediaObject/);
+assert.match(server, /throw new Error\("promoted media object failed verification"\)/);
+assert.match(server, /deleteMediaObject\(promotedObjectKey, promotedObjectProvider/);
 assert.match(server, /objectInfo\.byteSize !== Number\(intent\.byte_size\)/);
 assert.match(server, /objectInfo\.mimeType !== String\(intent\.mime_type\)/);
 assert.match(server, /cleanupExpiredMediaUploadIntents/);
