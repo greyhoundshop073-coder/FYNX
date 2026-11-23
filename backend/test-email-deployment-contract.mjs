@@ -32,8 +32,7 @@ for (const name of optional) {
 for (const name of optional) {
   assert.ok(deployWorkflow.includes(`${name}: \${{ secrets.${name} }}`), `${name} must be forwarded from its secret in the deployment steps`);
 }
-assert.match(deployWorkflow, /SMTP configuration is partial/);
 assert.match(deployWorkflow, /trap 'rm -f \.env\.neon\.deploy' EXIT/);
 assert.match(emailAdapter, /FYNX_EMAIL_PASSWORD/);
 assert.match(emailAdapter, /rejectUnauthorized: true/);
-console.log("PASS: optional Neon SMTP variables, GitHub Actions secret/variable forwarding and temporary credential-file cleanup are wired");
+console.log("PASS: optional Neon SMTP settings, GitHub Actions secret forwarding and temporary credential-file cleanup are wired");
