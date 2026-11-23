@@ -2053,7 +2053,7 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
                             showCaptureControls = true
                         },
                         modifier = Modifier.size(42.dp)
-                    ) { Icon(Icons.Default.Cameraswitch, if (lens == CameraSelector.LENS_FACING_FRONT) "Switch to back camera" else "Switch to front camera", tint = Color.White) }
+                    ) { Icon(Icons.Default.Cameraswitch, "Switch front/back camera", tint = Color.White) }
                     Text("Flip", color = Color.White, style = MaterialTheme.typography.labelSmall)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
