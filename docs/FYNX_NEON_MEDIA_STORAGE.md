@@ -46,7 +46,7 @@ The canonical app does not currently expose a generic user-facing `DELETE /api/m
 
 ## Diagnostics and resilience
 
-The backend uses bounded object-store operations and returns stable diagnostics without exposing raw provider messages, credentials or signed URLs:
+The backend enforces a bounded deadline for each object-store operation, including the full streamed response-body read (not only the initial response headers), and returns stable diagnostics without exposing raw provider messages, credentials or signed URLs:
 
 - `MEDIA_STORAGE_NOT_CONFIGURED` / `MEDIA_STORAGE_BUCKET_UNAVAILABLE`: missing or unavailable endpoint, bucket or configuration.
 - `MEDIA_STORAGE_AUTHENTICATION_FAILED`: invalid credentials or access denied.

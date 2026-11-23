@@ -182,11 +182,14 @@ export function createMediaStorage({
     return clients.get(name);
   }
 
-  async function sendObjectCommand(name, command) {
+  async function sendObjectCommand(name, command, consumeResponse) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), operationTimeoutMs);
     try {
-      return await getClient(name).send(command, { abortSignal: controller.signal });
+      const response = await getClient(name).send(command, { abortSignal: controller.signal });
+      // Keep the same deadline active while consuming streamed response bytes. S3 SDK
+      // send() can resolve after headers arrive, before the object body has finished.
+      return consumeResponse ? await consumeResponse(response) : response;
     } catch (error) {
       if (controller.signal.aborted) {
         const timeoutError = new Error("FYNX media storage operation timed out.");
@@ -236,8 +239,11 @@ export function createMediaStorage({
   async function getMediaObjectBytes(objectKey, sourceProvider = provider) {
     const config = configFor(sourceProvider);
     const key = validateObjectKey(objectKey);
-    const result = await sendObjectCommand(sourceProvider, new GetObjectCommand({ Bucket: config.bucket, Key: key }));
-    return bodyToBuffer(result?.Body);
+    return sendObjectCommand(
+      sourceProvider,
+      new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+      (result) => bodyToBuffer(result?.Body)
+    );
   }
 
   async function deleteMediaObject(objectKey, sourceProvider = provider) {

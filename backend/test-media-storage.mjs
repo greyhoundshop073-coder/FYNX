@@ -315,5 +315,35 @@ await assert.rejects(
   (error) => classifyMediaStorageError(error).code === "MEDIA_STORAGE_NETWORK_FAILURE"
 );
 
+// The S3 request can resolve after response headers while its body is still streaming.
+// The operation deadline must remain active until all media bytes have been consumed.
+const timeoutDuringDownload = createMediaStorage({
+  env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "neon" },
+  operationTimeoutMs: 20,
+  clientFactory() {
+    return {
+      async send(_command, options = {}) {
+        return {
+          Body: {
+            async *[Symbol.asyncIterator]() {
+              await new Promise((_resolve, reject) => {
+                options.abortSignal?.addEventListener("abort", () => {
+                  const error = new Error("response stream aborted by timeout");
+                  error.name = "AbortError";
+                  reject(error);
+                }, { once: true });
+              });
+            }
+          }
+        };
+      }
+    };
+  }
+});
+await assert.rejects(
+  timeoutDuringDownload.getMediaObjectBytes("media/" + UUID, "neon"),
+  (error) => classifyMediaStorageError(error).code === "MEDIA_STORAGE_NETWORK_FAILURE"
+);
+
 console.log("FYNX MEDIA OBJECT STORAGE: GREEN");
 console.log("Neon path-style write/read/signing, R2 dual-read compatibility, cleanup, validation and PostgreSQL fallback: PASS");
