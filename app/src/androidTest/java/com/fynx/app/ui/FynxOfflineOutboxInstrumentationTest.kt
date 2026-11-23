@@ -403,8 +403,7 @@ class FynxOfflineOutboxInstrumentationTest {
             members = listOf(FynxGroupMember(testUsername, FynxGroupRole.ADMIN))
         )
         try {
-            assertTrue(FynxGroupsStore.add(context, group, testUsername))
-            FynxGroupsStore.markPendingSync(context, groupId, testUsername)
+            assertTrue(FynxGroupsStore.addPendingGroupDurably(context, group, testUsername))
             val restored = FynxGroupsStore.load(context, testUsername).single { it.id == groupId }
             assertEquals(testUsername, restored.ownerUsername)
             assertEquals(FynxGroupRole.ADMIN, restored.members.single().role)
