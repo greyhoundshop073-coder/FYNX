@@ -7,6 +7,7 @@ client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMultiMediaPostClient.kt"
 refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 startup = (ROOT / "backend/package.json").read_text(encoding="utf-8")
+draft_store = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt").read_text(encoding="utf-8")
 
 checks = [
     ("multi-media client uses the real authenticated upload path", "FynxProductionMessaging.uploadMedia" in client),
@@ -23,6 +24,14 @@ checks = [
     ("backend exposes authorized post media", "app.get('/api/social/posts/:id/media'" in backend and "visibleSocialPost(postId, req.user.sub)" in backend),
     ("production prestart installs multi-media backend", "socialMultiMediaBootstrap.js" in startup and "installSocialMultiMedia" in startup),
     ("composer routes publishing through the multi-media client", "FynxMultiMediaPostClient.createPost" in composer),
+    ("gallery picker is capped at the supported four media items", "PickMultipleVisualMedia(4)" in composer),
+    ("adding gallery selections preserves existing draft media instead of replacing it", "val selected = uris.distinct().filterNot { it in capturedUris }" in composer and "val nextUris = (capturedUris + accepted).take(4)" in composer),
+    ("gallery overflow is explicitly explained rather than silently discarded", "selected.size > accepted.size" in composer and "selected item(s) were not added" in composer),
+    ("draft storage is private and account-scoped", 'PREFS_PREFIX = "fynx_post_drafts_"' in draft_store and "FynxAuthStore.accountStorageKey(context)" in draft_store),
+    ("drafts copy media into durable app files and restore only existing files", 'File(context.filesDir, "post_drafts")' in draft_store and "target.outputStream()" in draft_store and "if (!File(path).isFile) return@mapNotNull null" in draft_store),
+    ("one draft preserves all four ordered media paths and their aligned media types", "require(media.size <= 4)" in draft_store and "mediaPaths = mediaPaths" in draft_store and "mediaTypes = media.map { it.second }" in draft_store),
+    ("draft list retains multiple saved drafts", "MAX_DRAFTS = 12" in draft_store and "take(MAX_DRAFTS)" in draft_store),
+    ("composer restores saved media and media types in the same order", "capturedUris = draft.mediaPaths.map { Uri.fromFile(java.io.File(it)) }" in composer and "capturedTypes = draft.mediaTypes" in composer),
     ("composer keeps real caption support", "What's on your mind?" in composer and 'put("text", caption)' in client and "val caption = text.trim().take(4000)" in client),
 ]
 
