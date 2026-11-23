@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
 
 function callIdIsValid(value) {
   return typeof value === "string" && /^call_[a-z0-9_]+$/i.test(value) && value.length <= 80;
@@ -303,6 +304,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
   globalThis.__fynxNeonRegisterConnection = registerConnection;
   globalThis.__fynxNeonDisconnect = disconnect;
   globalThis.__fynxNeonHandleCall = handleCall;
+  globalThis.__fynxNeonHandleGroupCall = createFynxGroupCallSignalHandler({ pool, emitToUser, logger });
 
   const timer = setInterval(() => { void poll(); }, 1_000);
   timer.unref?.();

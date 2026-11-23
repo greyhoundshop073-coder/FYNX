@@ -19,6 +19,7 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
+import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -298,6 +299,10 @@ function broadcastToUser(userId, payload) {
     });
   }
 }
+const handleNodeGroupCallSignal = createFynxGroupCallSignalHandler({
+  pool,
+  emitToUser: async (userId, payload) => broadcastToUser(userId, payload)
+});
 async function broadcastMessage(message) {
   const payload = { type: "message", message };
   broadcastToUser(message.senderId, payload);
@@ -1426,6 +1431,14 @@ if (wss) {
       try {
         const body = JSON.parse(raw.toString());
         const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
+        if (body?.type === "group_call") {
+          const handleGroupCall = process.env.FYNX_NEON_FUNCTION === "1"
+            ? globalThis.__fynxNeonHandleGroupCall
+            : handleNodeGroupCallSignal;
+          if (typeof handleGroupCall !== "function") return sendSocket(socket, { type: "group_call", groupId: body.groupId, callId: body.callId, signalType: "error", error: "group call service unavailable" });
+          await handleGroupCall(userId, user, socket, body);
+          return;
+        }
         if (body?.type !== "call") return;
         if (process.env.FYNX_NEON_FUNCTION === "1") {
           const handleCall = globalThis.__fynxNeonHandleCall;

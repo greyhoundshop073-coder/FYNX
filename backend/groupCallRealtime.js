@@ -47,6 +47,7 @@ function groupCallEvent(call, signalType, extra = {}) {
     callId: String(call.id),
     groupId: String(call.group_id),
     callType: call.media_type,
+    creatorId: String(call.creator_id || call.creatorId || ""),
     signalType,
     ...extra
   };
