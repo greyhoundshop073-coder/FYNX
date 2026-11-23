@@ -102,6 +102,45 @@ After the owner authorises the preceding work and the existing product scope is 
 
 Certification must distinguish local tests, automated CI, emulator/device evidence, staging integration and real production-provider verification.
 
+### Work package 7 — Cross-feature performance and resource isolation
+
+**Status: DEFERRED — investigation recorded; no implementation authorised.**
+
+The purpose is to make FYNX feel responsive when people move between or use multiple areas. For example, heavy Home/Feed activity should not unnecessarily delay Chat, Groups, Marketplace, Wallet or active calls. Because Android features share a process and device resources, the engineering goal is controlled resource use, workload isolation and priority—not a claim that one feature can have absolutely zero impact on another.
+
+Preliminary code-review observations from 2026-11-23 (not runtime certification):
+
+- FYNX currently uses a single Android app module and central app/navigation state. The selected destination is displayed; this does not mean every screen is continuously rendered. Shared app-level state and effects nevertheless create common resource and change-impact paths.
+- Backend requests already use background IO dispatching and a shared concurrency limit. This is a useful safety foundation, but a global request limit can let optional Home requests compete with time-sensitive Chat, call or commerce requests.
+- Home performs multiple content and supporting-data loads. Existing request and profile-photo limits, lazy lists, media caching, sampled image decoding and poster-based video previews are positive foundations.
+- A signed-in notification refresh currently runs on a periodic interval and should be reviewed for lifecycle, efficiency and delivery requirements.
+- The activity has a fixed launch-screen delay that should be measured before deciding whether it is still necessary.
+- The inspected Android build setup did not show a dedicated Android Macrobenchmark/performance-certification suite. Existing backend performance checks do not prove Android UI, startup, memory or frame performance.
+- No representative physical-device stress measurements were available during this source review. Therefore this review does not certify that the app is currently fast or slow.
+
+When authorised, investigate and implement only evidence-backed improvements, considering:
+
+1. **Priority-aware network scheduling:** reserve capacity for incoming/active calls, Chat delivery and essential financial/order operations; prioritise the visible screen; schedule ordinary content next; keep recommendations, speculative prefetch and background refresh low-priority, cancellable and deferrable.
+2. **Feature-scoped work:** ensure each feature's asynchronous work is lifecycle-aware, cancellable when no longer relevant, and does not leave unnecessary observers, timers or requests running after navigation.
+3. **Media budgets:** use appropriately sized thumbnails, bounded image/video work, cache limits and controlled prefetch. Avoid decoding or retaining large media unnecessarily.
+4. **Main-thread discipline:** keep network, disk, parsing and expensive computation off the UI thread; investigate slow frames, recomposition/layout churn, memory pressure and ANRs using Android profiling tools.
+5. **Startup and background efficiency:** measure cold/warm/hot startup; review fixed delays, periodic polling, work scheduling and battery/network use before changing behaviour.
+6. **Independent failure behaviour:** optional Home recommendations or discovery failures must not block core messaging, Marketplace browsing or other unrelated features.
+7. **Device/network coverage:** test affordable and lower-memory Android devices, constrained connectivity and reconnect scenarios, not only a high-end emulator.
+
+Required future verification:
+
+- Add Android Macrobenchmark coverage for startup and representative navigation/scroll interactions; assess Baseline Profiles using measured results.
+- Use Android Studio Memory Profiler and Perfetto/JankStats or equivalent evidence to inspect memory, CPU contention, frame timing and jank.
+- Run a controlled simultaneous-use scenario: scroll Home and load media while browsing Marketplace images/details, sending and receiving Chat messages, opening Groups and using an AI request. Include active-call scenarios when the call stack is ready for reliable testing.
+- Compare isolated-feature baselines against concurrent-use results on representative devices and normal/weak networks. Record cold/warm startup, frame/jank behaviour, memory/peak memory, request latency, dropped/failed work, battery/network impact and recovery after navigation.
+- Verify that critical Chat/call/commerce work remains responsive under optional Home/feed load. Define numeric acceptance thresholds before implementation rather than inventing them after tests.
+- Run regression tests on the actual canonical integrated APK and record APK provenance. A source change, passing unit test or screenshot alone is not performance certification.
+
+This work must improve the existing architecture rather than introduce unnecessary Android processes, duplicate networking stacks or a broad rewrite. First map current ownership and concurrency, then make the smallest coherent changes supported by profiling evidence.
+
+**Reopen condition:** only when the owner explicitly authorises this performance work after the currently approved FYNX scope is in a suitable state. Until then, do not create a performance branch, PR, benchmark module or code change on the strength of this note alone.
+
 ## 4. Additional future capabilities — ideas only
 
 These ideas are not established as complete product requirements and must not be implemented until separately researched, prioritised and approved.
@@ -155,8 +194,8 @@ At that time:
 **Owner decision as of 2026-11-23:**
 
 - Existing approved FYNX work remains the priority.
-- Work packages 2–6 and the additional ideas in this document are deferred for future planning.
-- No new product expansion work is authorised by this document.
+- Work packages 2–7 and the additional ideas in this document are deferred for future planning.
+- No new product expansion or performance implementation work is authorised by this document.
 - This document is a reference for later; it must not create scattered work or delay current delivery.
 
 ---
