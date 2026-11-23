@@ -339,4 +339,79 @@ class FynxOfflineOutboxInstrumentationTest {
         }
     }
 
+    @Test
+    fun plainTextOfflineSendPersistsPendingBubbleAndDrainsWithStableId() = runBlocking {
+        val recipient = "plain-text-offline-${UUID.randomUUID()}"
+        val requestId = "plain-text-request-${UUID.randomUUID()}"
+        var online = false
+        var acceptedClientId: String? = null
+        FynxBackendClient.requestExecutorForTests = { _, method, path, body, _ ->
+            when {
+                method == "GET" && path == "/api/me" -> """{"user":{"id":"local-user"}}"""
+                method == "GET" && path.startsWith("/api/messages/") -> """{"messages":[]}"""
+                method == "POST" && path == "/api/messages" && !online ->
+                    throw java.io.IOException("Unable to resolve host")
+                method == "POST" && path == "/api/messages" && online -> {
+                    val request = org.json.JSONObject(requireNotNull(body))
+                    acceptedClientId = request.getString("clientMessageId")
+                    """{"message":{"id":"880001","sender_id":"local-user","sender_username":"$testUsername","recipient_id":"peer","recipient_username":"$recipient","text":"Queued while offline","timestamp":${System.currentTimeMillis()},"delivered":true,"read":false,"edited":false,"deleted":false}}"""
+                }
+                else -> throw AssertionError("Unexpected test transport request: $method $path")
+            }
+        }
+        try {
+            assertTrue("DNS failures must be recognized as retryable", FynxProductionMessaging.canQueueOffline(java.io.IOException("Unable to resolve host")))
+            val result = FynxProductionMessaging.sendText(
+                context = context,
+                recipientUsername = recipient,
+                text = "Queued while offline",
+                requestId = requestId,
+                expectedAccountKey = testUsername,
+                requestToken = null
+            )
+            assertTrue("An offline text send should become a local pending message", result.isSuccess)
+            val pending = result.getOrThrow()
+            assertTrue(pending.id.startsWith("offline-"))
+            assertFalse(pending.delivered)
+            FynxChatStore.save(context, recipient, listOf(FynxProductionMessaging.toChatMessage(pending, "local-user")))
+            assertEquals("The pending bubble must survive a fresh store read", pending.id, FynxChatStore.load(context, recipient).single().id)
+            assertEquals(requestId, FynxOfflineOutbox.load(context).single().requestId)
+
+            online = true
+            assertEquals(1, FynxOfflineSync.drain(context))
+            assertEquals(requestId, acceptedClientId)
+            assertTrue(FynxOfflineOutbox.load(context).isEmpty())
+            val accepted = FynxChatStore.load(context, recipient).single()
+            assertEquals("880001", accepted.id)
+            assertTrue(accepted.delivered)
+        } finally {
+            FynxBackendClient.requestExecutorForTests = null
+            FynxOfflineOutbox.load(context).forEach { FynxOfflineOutbox.remove(context, it.id, expectedAccountKey = testUsername) }
+            FynxChatStore.clear(context, recipient)
+        }
+    }
+
+    @Test
+    fun locallyCreatedGroupsAndPendingSyncSurviveFreshStoreReads() {
+        val groupId = "durable-group-${UUID.randomUUID()}"
+        val group = FynxGroup(
+            id = groupId,
+            name = "Durable test group",
+            description = "Local persistence test",
+            visibility = FynxGroupVisibility.PRIVATE,
+            ownerUsername = testUsername,
+            members = listOf(FynxGroupMember(testUsername, FynxGroupRole.ADMIN))
+        )
+        try {
+            assertTrue(FynxGroupsStore.add(context, group, testUsername))
+            FynxGroupsStore.markPendingSync(context, groupId, testUsername)
+            val restored = FynxGroupsStore.load(context, testUsername).single { it.id == groupId }
+            assertEquals(testUsername, restored.ownerUsername)
+            assertEquals(FynxGroupRole.ADMIN, restored.members.single().role)
+            assertTrue(FynxGroupsStore.pendingSyncGroups(context, testUsername).contains(groupId))
+        } finally {
+            FynxGroupsStore.removeGroup(context, groupId, testUsername)
+        }
+    }
+
 }
