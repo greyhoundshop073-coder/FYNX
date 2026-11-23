@@ -3,6 +3,9 @@ package com.fynx.app.ui
 import android.graphics.Bitmap
 import android.content.ContentValues
 import android.provider.MediaStore
+import android.os.Handler
+import android.os.HandlerThread
+import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -16,6 +19,8 @@ import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Captures the existing production Owner/Admin Control Center composable on an
@@ -39,6 +44,36 @@ class FynxAdminControlCenterVisualComposeTest {
     @Test
     fun capturesAdminControlCenterOverview() {
         captureOverview("ADMIN")
+    }
+
+    private fun captureFynxWindow(): Bitmap {
+        val window = compose.activity.window
+        val decor = window.decorView
+        check(decor.width > 0 && decor.height > 0) {
+            "FYNX Admin window has no laid-out content to capture"
+        }
+        val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
+        val thread = HandlerThread("FYNX-admin-window-capture").apply { start() }
+        val latch = CountDownLatch(1)
+        var copyResult = PixelCopy.ERROR_UNKNOWN
+        try {
+            PixelCopy.request(window, bitmap, { result ->
+                copyResult = result
+                latch.countDown()
+            }, Handler(thread.looper))
+            check(latch.await(15, TimeUnit.SECONDS)) {
+                "Timed out capturing the FYNX Admin app window"
+            }
+            check(copyResult == PixelCopy.SUCCESS) {
+                "PixelCopy could not capture the FYNX Admin app window; result=$copyResult"
+            }
+            return bitmap
+        } catch (failure: Throwable) {
+            bitmap.recycle()
+            throw failure
+        } finally {
+            thread.quitSafely()
+        }
     }
 
     private fun captureOverview(role: String) {
@@ -111,17 +146,17 @@ class FynxAdminControlCenterVisualComposeTest {
         assertTrue("Revenue fixture was not requested", requestedPaths.contains("/api/admin/revenue"))
         assertTrue("Support fixture was not requested", requestedPaths.contains("/api/support/access"))
 
-        val suffix = if (role == "OWNER") "owner" else "admin"
-        // Save into shared Pictures media storage. The Gradle connected-test task
-        // uninstalls the target app after instrumentation, so app-private files
-        // disappear before the emulator wrapper can export them.
+        // Capture the app's own Window surface rather than the whole emulator
+        // display. System-owned dialogs (for example Pixel Launcher ANR prompts)
+        // are separate windows and must not be included in FYNX visual evidence.
+        // Save into shared Pictures media storage because connected tests uninstall
+        // the target app after instrumentation.
         val fileName = if (role == "OWNER") {
             "FYNX-admin-owner-overview.png"
         } else {
             "FYNX-admin-admin-overview.png"
         }
-        val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-            ?: error("Could not capture the Admin Control Center emulator display")
+        val bitmap = captureFynxWindow()
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
