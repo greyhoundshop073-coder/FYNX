@@ -39,18 +39,18 @@ admin_fixture_status="$admin_fixture_dir/capture-status.txt"
 : > "$admin_fixture_status"
 admin_capture_status=0
 
-# Android 11+ restricts adb pull from /sdcard/Android/data. The test writes
-# into the debuggable target app's internal files directory, which is exported
-# reliably through run-as instead.
+# The instrumentation tests publish PNGs into shared MediaStore Pictures/FYNX.
+# This survives the connected-test task uninstalling the debug target package.
 for screenshot in FYNX-admin-owner-overview.png FYNX-admin-admin-overview.png; do
   local_file="$admin_fixture_dir/$screenshot"
-  if adb exec-out run-as com.fynx.app cat "files/admin-test-fixtures/$screenshot" > "$local_file" 2>/dev/null &&
+  remote_file="/sdcard/Pictures/FYNX/$screenshot"
+  if adb pull "$remote_file" "$local_file" >/dev/null 2>&1 &&
       [ -s "$local_file" ] &&
       python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); assert p.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")' "$local_file"; then
     echo "CAPTURED: $screenshot ($(stat -c %s "$local_file") bytes)" | tee -a "$admin_fixture_status"
   else
     rm -f "$local_file"
-    echo "NOT_CAPTURED: $screenshot missing or invalid in com.fynx.app internal files" | tee -a "$admin_fixture_status"
+    echo "NOT_CAPTURED: $screenshot missing or invalid in shared emulator Pictures/FYNX" | tee -a "$admin_fixture_status"
     admin_capture_status=1
   fi
 done
