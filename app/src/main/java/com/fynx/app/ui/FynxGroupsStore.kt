@@ -85,7 +85,8 @@ object FynxGroupsStore {
         }
     }
 
-    fun add(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+    @Synchronized
+fun add(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         val valid = FynxGroupsBatch1.create(group) ?: return false
         val groups = load(context, accountKey)
         if (groups.any { it.name.equals(valid.name, ignoreCase = true) }) return false
@@ -93,7 +94,8 @@ object FynxGroupsStore {
         return true
     }
 
-    fun updateGroup(context: Context, updated: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+    @Synchronized
+fun updateGroup(context: Context, updated: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (FynxGroupsBatch1.validate(updated).isNotEmpty()) return false
         val groups = load(context, accountKey)
         if (groups.none { it.id == updated.id }) return false
@@ -101,7 +103,8 @@ object FynxGroupsStore {
         return true
     }
 
-    fun removeGroup(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+    @Synchronized
+fun removeGroup(context: Context, groupId: String, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
         if (groupId.isBlank()) return false
         val groups = load(context, accountKey)
         if (groups.none { it.id == groupId }) return false
