@@ -387,7 +387,7 @@ object FynxProductionMessaging {
             if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
             if (recovered != null) return Result.success(recovered)
             if (allowOfflineQueue && FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
-                return enqueuePrivateText(context, normalizedRecipient, currentUsername, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
+                return enqueuePrivateText(context, normalizedRecipient, currentUsername, localSenderId, cleanText, replyToId, mediaId, mediaType, voiceDurationMs, requestId, expectedAccountKey, requestToken)
             }
         }
         return result
