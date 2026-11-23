@@ -921,10 +921,19 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                         networkError = "Attachment could not be saved for retry. Keep it selected and try again."
                     }
                 } else {
-                    FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
+                    val sendRequestId = java.util.UUID.randomUUID().toString()
+                    FynxProductionMessaging.sendText(
+                        context = context,
+                        recipientUsername = chat.username.removePrefix("@"),
+                        text = value,
+                        replyToId = replyToId,
+                        requestId = sendRequestId
+                    )
                         .onSuccess { remote ->
                             currentUserId?.let { myId ->
-                                messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
+                                val accepted = FynxProductionMessaging.toChatMessage(remote, myId)
+                                messages = (messages.filterNot { it.id == remote.id || it.id == accepted.id } + accepted).sortedBy { it.timestamp }
+                                withContext(Dispatchers.IO) { FynxChatStore.save(context, chat.username, messages) }
                             }
                             if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                                 FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
@@ -936,7 +945,54 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             replyToId = null
                             composerVideoMode = false
                         }
-                        .onFailure { networkError = "Message not sent yet. Your message is saved; check your connection and retry." }
+                        .onFailure { error ->
+                            if (FynxProductionMessaging.canQueueOffline(error)) {
+                                val createdAt = System.currentTimeMillis()
+                                val localId = "offline-$createdAt-${java.util.UUID.randomUUID()}"
+                                val accountKey = FynxAuthStore.accountStorageKey(context)
+                                val queued = FynxOfflineOutbox.enqueue(
+                                    context,
+                                    FynxOfflineOutbox.Item(
+                                        id = localId,
+                                        requestId = sendRequestId,
+                                        recipient = chat.username.trim().removePrefix("@"),
+                                        text = value,
+                                        replyToId = replyToId,
+                                        mediaId = null,
+                                        mediaType = null,
+                                        voiceDurationMs = 0L,
+                                        createdAt = createdAt,
+                                        marketplaceListingId = marketplaceListingId
+                                    ),
+                                    expectedAccountKey = accountKey
+                                )
+                                if (queued) {
+                                    val pending = ChatMessage(
+                                        text = value,
+                                        fromMe = true,
+                                        id = localId,
+                                        timestamp = createdAt,
+                                        delivered = false,
+                                        read = false,
+                                        replyToId = replyToId
+                                    )
+                                    messages = (messages.filterNot { it.id == localId } + pending).sortedBy { it.timestamp }
+                                    withContext(Dispatchers.IO) { FynxChatStore.save(context, chat.username, messages) }
+                                    text = ""
+                                    editingId = null
+                                    replyToId = null
+                                    composerVideoMode = false
+                                    hasPendingOutbox = true
+                                    networkError = "Message saved on this device. It will send automatically when the connection returns."
+                                    runCatching { FynxOfflineSync.drain(context) }
+                                    restorePendingOutboxMessages()
+                                } else {
+                                    networkError = "Message could not be saved for retry. Keep it in the composer and try again."
+                                }
+                            } else {
+                                networkError = "Message not sent. Check the details and try again."
+                            }
+                        }
                 }
             }
             sending = false
