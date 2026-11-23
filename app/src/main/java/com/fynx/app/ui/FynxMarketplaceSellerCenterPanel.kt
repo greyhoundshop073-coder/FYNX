@@ -1081,7 +1081,7 @@ internal fun FynxMarketplaceSellerCenterPanel(
                             shopMessage = null
                             shopError = null
                             scope.launch {
-                                val saveResult = runCatching {
+                                val uploadResult = runCatching {
                                     val logoMediaId = when {
                                         shopLogoUri != null -> uploadFynxShopBrandImage(context, shopLogoUri!!)
                                         shopLogoClearRequested -> null
@@ -1092,39 +1092,46 @@ internal fun FynxMarketplaceSellerCenterPanel(
                                         shopCoverClearRequested -> null
                                         else -> shopCoverMediaId
                                     }
-                                    val payload = JSONObject()
+                                    JSONObject()
                                         .put("shopName", shopName.trim())
                                         .put("description", shopDescription.trim())
                                         .put("location", shopLocation.trim())
                                         .put("contactPhone", shopContactPhone.trim())
                                         .put("logoMediaId", logoMediaId ?: JSONObject.NULL)
                                         .put("coverMediaId", coverMediaId ?: JSONObject.NULL)
-                                    val raw = FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString()).getOrThrow()
-                                    JSONObject(raw).optJSONObject("shop")
-                                        ?: throw IllegalStateException("Shop profile response was incomplete.")
                                 }
-                                saveResult
-                                    .onSuccess { profile ->
-                                        val savedName = profile.optString("shopName")
-                                        val savedDescription = profile.optString("description")
-                                        val savedLocation = profile.optString("location")
-                                        val savedContactPhone = profile.optString("contactPhone")
-                                        shopName = savedName
-                                        shopDescription = savedDescription
-                                        shopLocation = savedLocation
-                                        shopContactPhone = savedContactPhone
-                                        shopLogoMediaId = profile.optString("logoMediaId").takeIf { it.isNotBlank() && it != "null" }
-                                        shopCoverMediaId = profile.optString("coverMediaId").takeIf { it.isNotBlank() && it != "null" }
-                                        shopLogoUri = null
-                                        shopCoverUri = null
-                                        shopLogoClearRequested = false
-                                        shopCoverClearRequested = false
-                                        shopBrandingDirty = false
-                                        shopProfileSavedSignature = marketplaceShopProfileSignature(
-                                            savedName, savedDescription, savedLocation, savedContactPhone
-                                        )
-                                        shopMessage = "Shop profile saved."
-                                        shopError = null
+                                uploadResult
+                                    .onSuccess { payload ->
+                                        FynxBackendClient.patchJson(context, "/api/marketplace/my-shop", payload.toString())
+                                            .mapCatching { raw ->
+                                                JSONObject(raw).optJSONObject("shop")
+                                                    ?: throw IllegalStateException("Shop profile response was incomplete.")
+                                            }
+                                            .onSuccess { profile ->
+                                                val savedName = profile.optString("shopName")
+                                                val savedDescription = profile.optString("description")
+                                                val savedLocation = profile.optString("location")
+                                                val savedContactPhone = profile.optString("contactPhone")
+                                                shopName = savedName
+                                                shopDescription = savedDescription
+                                                shopLocation = savedLocation
+                                                shopContactPhone = savedContactPhone
+                                                shopLogoMediaId = profile.optString("logoMediaId").takeIf { it.isNotBlank() && it != "null" }
+                                                shopCoverMediaId = profile.optString("coverMediaId").takeIf { it.isNotBlank() && it != "null" }
+                                                shopLogoUri = null
+                                                shopCoverUri = null
+                                                shopLogoClearRequested = false
+                                                shopCoverClearRequested = false
+                                                shopBrandingDirty = false
+                                                shopProfileSavedSignature = marketplaceShopProfileSignature(
+                                                    savedName, savedDescription, savedLocation, savedContactPhone
+                                                )
+                                                shopMessage = "Shop profile saved."
+                                                shopError = null
+                                            }
+                                            .onFailure { failure ->
+                                                shopError = marketplaceSafeError(failure, "Shop profile could not be saved.")
+                                            }
                                     }
                                     .onFailure { failure ->
                                         shopError = marketplaceSafeError(failure, "Shop profile could not be saved.")
