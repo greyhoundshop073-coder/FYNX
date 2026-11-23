@@ -203,6 +203,7 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                             "image" -> "Photo"
                             "video", "video_note" -> "Video"
                             "audio" -> "Voice message"
+                            null -> if (item.messageType == "text") "Message" else "Attachment"
                             else -> "Attachment"
                         }
                     }
@@ -931,9 +932,8 @@ fun ConversationPanel(chat: ChatPreview, marketplaceListingId: String? = null, o
                 } else {
                     FynxProductionMessaging.sendText(context, chat.username.removePrefix("@"), value, replyToId)
                         .onSuccess { remote ->
-                            currentUserId?.let { myId ->
-                                messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
-                            }
+                            val myId = currentUserId ?: remote.senderId
+                            messages = (messages.filterNot { it.id == remote.id } + FynxProductionMessaging.toChatMessage(remote, myId)).sortedBy { it.timestamp }
                             if (!marketplaceContextAttached && !marketplaceListingId.isNullOrBlank()) {
                                 FynxR6GIntegrationClient.attachListingToMessage(context, remote.id, marketplaceListingId)
                                     .onSuccess { marketplaceContextAttached = true }

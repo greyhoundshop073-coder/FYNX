@@ -50,7 +50,26 @@ check('group message pages expose a stable server policy scope for invalidating 
 check('group screen does not display cached delivered history before server authorization', 'messages = local.second.filterNot { it.delivered }' in active_group_panel)
 check('group refresh and older-page loading retain only messages authorized under the current history scope', 'mergeGroupMessageRefresh' in active_group_panel and 'authorizedGroupHistoryScope != pageHistoryScope' in active_group_panel and 'authorizedOlderGroupMessageIds' in active_group_panel)
 check('group store scopes local removal and pending-sync cleanup to the initiating account', 'accountKey: String? = FynxAuthStore.accountStorageKey(context)' in groups_store and 'markSynced(context, groupId, accountKey)' in groups_store and 'if (FynxAuthStore.accountStorageKey(context) == accountKey)' in groups_store and 'FynxChatStore.clear(context, "group_$groupId")' in groups_store)
-groups_namespace_scoped = ('val expectedAccountKey = accountKey' in active_group_panel and 'FynxGroupsStore.load(context, expectedAccountKey)' in active_group_panel and 'FynxGroupsStore.add(context, group, expectedAccountKey)' in active_group_panel and 'FynxGroupsStore.markPendingSync(context, group.id, expectedAccountKey)' in active_group_panel) or ('FynxGroupsStore.load(context, accountKey)' in active_group_panel and 'FynxGroupsStore.add(context, group, accountKey)' in active_group_panel and 'FynxGroupsStore.markPendingSync(context, group.id, accountKey)' in active_group_panel)
+groups_namespace_scoped = (
+    'val expectedAccountKey = accountKey' in active_group_panel
+    and 'FynxGroupsStore.load(context, expectedAccountKey)' in active_group_panel
+    and (
+        'FynxGroupsStore.addPendingGroupDurably(context, group, expectedAccountKey)' in active_group_panel
+        or (
+            'FynxGroupsStore.add(context, group, expectedAccountKey)' in active_group_panel
+            and 'FynxGroupsStore.markPendingSync(context, group.id, expectedAccountKey)' in active_group_panel
+        )
+    )
+) or (
+    'FynxGroupsStore.load(context, accountKey)' in active_group_panel
+    and (
+        'FynxGroupsStore.addPendingGroupDurably(context, group, accountKey)' in active_group_panel
+        or (
+            'FynxGroupsStore.add(context, group, accountKey)' in active_group_panel
+            and 'FynxGroupsStore.markPendingSync(context, group.id, accountKey)' in active_group_panel
+        )
+    )
+)
 check('offline group creation, sync and updates retain the initiating account namespace', groups_namespace_scoped and 'FynxGroupsStore.updateGroup(context, updatedGroup, groupAccountKey.takeUnless { it == "signed_out" })' in active_group_panel)
 check('revoked group access removes only the initiating account group and clears its conversation cache', 'isAccessDeniedOrMissing(error)' in active_group_panel and 'FynxGroupsStore.removeGroup(context, groupId, groupAccountKey.takeUnless { it == "signed_out" })' in active_group_panel and 'You no longer have access to this group.' in active_group_panel and 'FynxGroupsStore.load(context, groupAccountKey.takeUnless { it == "signed_out" })' in active_group_panel)
 check('backend client identifies group membership 403/404 responses', 'fun isAccessDeniedOrMissing(error: Throwable)' in backend_client and 'httpError?.status == 403 || httpError?.status == 404' in backend_client)

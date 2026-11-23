@@ -197,6 +197,12 @@ checks = [
         and "video can consume the gesture instead of the parent LazyColumn scrolling" in navigation,
     ),
     (
+        "local Home fixture traversal uses the actual caption as a safe scroll anchor",
+        "fixture_caption = HOME_FEED_FIXTURES_SEEDED" in navigation
+        and "score -= 500.0" in navigation
+        and "start_y = max(top + 1, min(bottom - 1, start_y))" in navigation,
+    ),
+    (
         "final Home navigation detection requires the visible bottom Home label",
         'text_value != "home" and description != "home"' in navigation
         and 'node.attrib.get("visible-to-user", "true")' in navigation

@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import java.io.File
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.IOException
@@ -62,8 +63,7 @@ class FynxGroupReconnectDrainInstrumentationTest {
             ownerUsername = username,
             members = listOf(FynxGroupMember(username, FynxGroupRole.ADMIN))
         )
-        assertTrue(FynxGroupsStore.add(context, group, username))
-        FynxGroupsStore.markPendingSync(context, group.id, username)
+        assertTrue(FynxGroupsStore.addPendingGroupDurably(context, group, username))
 
         pendingMessage = ChatMessage(
             text = "Pending group message after reconnect",
@@ -74,8 +74,17 @@ class FynxGroupReconnectDrainInstrumentationTest {
             read = false,
             senderUsername = username
         )
-        FynxChatStore.save(context, "group_${group.id}", listOf(pendingMessage))
+        assertTrue(FynxChatStore.saveDurably(context, "group_${group.id}", listOf(pendingMessage)))
         assertEquals(pendingMessage.id, FynxChatStore.load(context, "group_${group.id}").single().id)
+        val groupPreferencesFile = File(context.applicationInfo.dataDir, "shared_prefs/fynx_groups_store.xml")
+        assertTrue("Group preferences must be committed before force-stop", groupPreferencesFile.isFile)
+        val groupPreferencesOnDisk = groupPreferencesFile.readText()
+        assertTrue("The group record must be on disk", groupPreferencesOnDisk.contains(group.id))
+        assertTrue("Group definition and pending-sync marker must both be committed",
+            groupPreferencesOnDisk.split(group.id).size - 1 >= 2)
+        val chatPreferencesFile = File(context.applicationInfo.dataDir, "shared_prefs/fynx_chat_store.xml")
+        assertTrue("Group history preferences must be committed before force-stop", chatPreferencesFile.isFile)
+        assertTrue("The pending group message must be on disk", chatPreferencesFile.readText().contains(pendingMessage.text))
     }
 
     @After

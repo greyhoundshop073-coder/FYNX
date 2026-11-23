@@ -3370,16 +3370,29 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
     if not cold_home:
         return ""
     cold_chat = tap_control(cold_home, ["Chat"], "group-chat-after-process-restart", ["Messages and groups in one place"])
-    cold_groups = tap_control(cold_chat, ["Groups"], "group-groups-after-process-restart", ["Create group"]) if cold_chat else ""
-    cold_group = tap_control(
-        cold_groups,
-        [f"Open group {group_name}"],
-        "group-chat-cold-reopen",
-        [group_name, "Message..."],
-    ) if cold_groups else ""
-    if not cold_group or message_text not in cold_group:
-        FAILURES.append("The offline group message did not survive force-stop and cold application relaunch.")
-        screenshot("group-chat-restored-after-process-death-failed.png")
+    if not cold_chat:
+        FAILURES.append("The Chat destination could not be reopened after process death; group persistence was not assessed.")
+        return ""
+    cold_groups = tap_control(cold_chat, ["Groups"], "group-groups-after-process-restart", ["Create group"])
+    if not cold_groups:
+        FAILURES.append("The Groups list could not be reopened after process death; group persistence was not assessed.")
+        return ""
+    group_open_label = f"Open group {group_name}"
+    if not find_control(cold_groups, [group_open_label]):
+        FAILURES.append(
+            f"The local group '{group_name}' was absent from the Groups list after force-stop and cold relaunch; "
+            "message persistence was not assessed because the group could not be opened."
+        )
+        screenshot("group-chat-group-missing-after-process-death.png")
+        return ""
+    cold_group = tap_control(cold_groups, [group_open_label], "group-chat-cold-reopen", [group_name, "Message..."])
+    if not cold_group:
+        FAILURES.append("The persisted group row was visible after restart, but its conversation could not be reopened.")
+        screenshot("group-chat-reopen-after-process-death-failed.png")
+        return ""
+    if message_text not in cold_group:
+        FAILURES.append("The persisted group reopened after process death, but its offline message was absent from the conversation.")
+        screenshot("group-chat-message-missing-after-process-death.png")
         return ""
     screenshot("group-chat-restored-after-process-death.png")
     (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + chr(10), encoding="utf-8")
@@ -4681,7 +4694,11 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                 if node.attrib.get("visible-to-user", "true").lower() == "false":
                     continue
                 value = (node.attrib.get("text") or "").strip()
-                if len(value) < 14:
+                description = (node.attrib.get("content-desc") or "").strip()
+                fixture_caption = HOME_FEED_FIXTURES_SEEDED and "ci test fixture" in (value + " " + description).casefold()
+                if not value and fixture_caption:
+                    value = description
+                if len(value) < (10 if fixture_caption else 14):
                     continue
                 bounds = node.attrib.get("bounds", "")
                 try:
@@ -4692,7 +4709,7 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                     continue
                 node_width, node_height = right - left, bottom - top
                 center_y = (top + bottom) // 2
-                if node_width < width * 0.45 or node_height < 44:
+                if node_width < width * 0.45 or node_height < (18 if fixture_caption else 44):
                     continue
                 if top < height * 0.30 or bottom > height * 0.88:
                     continue
@@ -4703,18 +4720,23 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                         clickable_parent = True
                         break
                     ancestor = parents.get(id(ancestor))
-                if clickable_parent:
+                if clickable_parent and not fixture_caption:
                     continue
                 # Prefer a substantial post caption in the middle of the feed,
                 # away from the header controls, bottom navigation and media tile.
                 score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
+                if fixture_caption:
+                    score -= 500.0
                 x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
                 if direction == "up":
-                    # Start on the safe, non-clickable caption, but drag well above
-                    # its short text bounds so a tall portrait video can clear the
-                    # bottom navigation in one measured scroll step.
-                    start_y = min(bottom - 8, int(height * 0.82))
-                    end_y = max(int(height * 0.25), top - 480)
+                    # Start inside the fixture caption and drag vertically; this
+                    # cancels the card click and scrolls the feed itself.
+                    start_y = min(bottom - 2, int(height * 0.82))
+                    if fixture_caption:
+                        start_y = max(top + 1, min(bottom - 1, start_y))
+                        end_y = max(int(height * 0.25), start_y - int(height * 0.48))
+                    else:
+                        end_y = max(int(height * 0.25), top - 480)
                     if start_y - end_y < 300:
                         end_y = max(int(height * 0.25), start_y - 480)
                 else:

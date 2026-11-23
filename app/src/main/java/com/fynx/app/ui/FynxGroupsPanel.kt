@@ -239,8 +239,7 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
                 createError = null
                 if (!sessionIsCurrent()) return@launch
                 val savedLocally = withContext(Dispatchers.IO) {
-                    val added = FynxGroupsStore.add(context, group, expectedAccountKey)
-                    if (added) FynxGroupsStore.markPendingSync(context, group.id, expectedAccountKey)
+                    val added = FynxGroupsStore.addPendingGroupDurably(context, group, expectedAccountKey)
                     added to FynxGroupsStore.load(context, expectedAccountKey)
                 }
                 if (!sessionIsCurrent()) return@launch
@@ -570,26 +569,56 @@ fun FynxGroupConversationPanel(groupId: String, currentUsername: String = "@prev
         val message = ChatMessage(normalized, true, UUID.randomUUID().toString(), delivered = false, read = false, replyToId = replyTarget)
         val updatedMessages = messages + message
         messages = updatedMessages
-        FynxChatStore.save(context, "group_$groupId", updatedMessages)
-        text = ""
-        replyToId = null
         sending = true
         scope.launch {
-            if (!isCurrentGroupAccount(requestAccountKey)) return@launch
-            FynxGroupRemoteClient.sendMessage(context, groupId, message, requestAccountKey, requestToken)
-                .onSuccess { remote ->
-                    if (!isCurrentGroupAccount(requestAccountKey)) return@onSuccess
-                    val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
-                    messages = messages.map { if (it.id == message.id) serverMessage else it }
-                    FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = null
+            if (!isCurrentGroupAccount(requestAccountKey)) {
+                sending = false
+                return@launch
+            }
+            val queuedOnDisk = withContext(Dispatchers.IO) {
+                FynxChatStore.saveDurably(context, "group_$groupId", updatedMessages)
+            }
+            if (!queuedOnDisk) {
+                if (isCurrentGroupAccount(requestAccountKey)) {
+                    messages = messages.filterNot { it.id == message.id }
+                    text = normalized
+                    replyToId = replyTarget
+                    syncMessage = "This message could not be saved on this device. Your text is still in the composer; try again."
+                    sending = false
                 }
-                .onFailure {
-                    if (!isCurrentGroupAccount(requestAccountKey)) return@onFailure
-                    messages = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
-                    FynxChatStore.save(context, "group_$groupId", messages)
-                    syncMessage = "Message not sent yet. It is saved; tap Retry to try again."
+                return@launch
+            }
+            text = ""
+            replyToId = null
+            if (!isCurrentGroupAccount(requestAccountKey)) {
+                sending = false
+                return@launch
+            }
+
+            val result = FynxGroupRemoteClient.sendMessage(context, groupId, message, requestAccountKey, requestToken)
+            if (!isCurrentGroupAccount(requestAccountKey)) {
+                sending = false
+                return@launch
+            }
+            if (result.isSuccess) {
+                val remote = result.getOrThrow()
+                val serverMessage = FynxGroupRemoteClient.toChatMessage(remote, currentUsername, FynxBackendClient.baseUrl(context))
+                val acceptedSnapshot = messages.map { if (it.id == message.id) serverMessage else it }
+                messages = acceptedSnapshot
+                val acceptedStored = withContext(Dispatchers.IO) {
+                    FynxChatStore.replaceMessageDurably(context, "group_$groupId", message.id, serverMessage)
                 }
+                syncMessage = if (acceptedStored) null else
+                    "The server accepted this message, but its updated receipt could not be saved on this device. Reopen the group to refresh it."
+            } else {
+                val pendingSnapshot = messages.map { if (it.id == message.id) it.copy(delivered = false, read = false) else it }
+                messages = pendingSnapshot
+                val pendingStored = withContext(Dispatchers.IO) {
+                    FynxChatStore.saveDurably(context, "group_$groupId", pendingSnapshot)
+                }
+                syncMessage = if (pendingStored) "Message not sent yet. It is saved; tap Retry to try again."
+                else "Message is still visible, but its retry state could not be confirmed on disk. Keep the app open and retry."
+            }
             if (isCurrentGroupAccount(requestAccountKey)) sending = false
         }
     }

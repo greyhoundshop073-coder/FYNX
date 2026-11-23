@@ -71,6 +71,15 @@ object FynxChatStore {
 
     @Synchronized
     fun save(context: Context, chatKey: String, messages: List<ChatMessage>) {
+        saveInternal(context, chatKey, messages, durable = false)
+    }
+
+    @Synchronized
+    fun saveDurably(context: Context, chatKey: String, messages: List<ChatMessage>): Boolean =
+        saveInternal(context, chatKey, messages, durable = true)
+
+    @Synchronized
+    private fun saveInternal(context: Context, chatKey: String, messages: List<ChatMessage>, durable: Boolean): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val storageKey = key(context, chatKey)
         val previous = prefs.getString(storageKey, null)?.let { parseMessages(it, null) }.orEmpty()
@@ -79,12 +88,12 @@ object FynxChatStore {
         // A transient/failed remote history response must never erase an already
         // established local conversation. The screen can reconcile authoritative
         // data later, but persistence must keep the last known good history.
-        if (syncInitialized && previous.isNotEmpty() && messages.isEmpty()) return
+        if (syncInitialized && previous.isNotEmpty() && messages.isEmpty()) return true
 
         val aliases = loadOutboxReplacements(prefs, context, chatKey)
         val reconciliation = reconcilePendingOutboxMessages(messages, previous, aliases)
         val persistedMessages = reconciliation.messages
-        saveOutboxReplacements(prefs, context, chatKey, reconciliation.remainingAliases)
+        if (!saveOutboxReplacements(prefs, context, chatKey, reconciliation.remainingAliases, durable)) return false
 
         // ConversationPanel keeps local state responsive while production edit/delete
         // operations are sent to the server. The server remains the source of truth.
@@ -140,28 +149,41 @@ object FynxChatStore {
                 }
             )
         }
-        prefs.edit()
+        val editor = prefs.edit()
             .putString(storageKey, array.toString())
             .putBoolean(syncKey(context, chatKey), true)
-            .apply()
+        return if (durable) editor.commit() else {
+            editor.apply()
+            true
+        }
     }
 
     /** Replace or insert a pending/outbox message with the authoritative server message. */
     @Synchronized
     fun replaceMessage(context: Context, chatKey: String, localId: String, replacement: ChatMessage) {
+        replaceMessageInternal(context, chatKey, localId, replacement, durable = false)
+    }
+
+    @Synchronized
+    fun replaceMessageDurably(context: Context, chatKey: String, localId: String, replacement: ChatMessage): Boolean =
+        replaceMessageInternal(context, chatKey, localId, replacement, durable = true)
+
+    @Synchronized
+    private fun replaceMessageInternal(context: Context, chatKey: String, localId: String, replacement: ChatMessage, durable: Boolean): Boolean {
         val current = load(context, chatKey)
         val reconciled = if (current.any { it.id == localId }) {
             current.map { if (it.id == localId) replacement else it }
         } else {
             current.filterNot { it.id == replacement.id } + replacement
         }
-        save(context, chatKey, reconciled)
-
-        // Keep a local-ID -> server-ID alias so a late Compose snapshot cannot
-        // overwrite the successful server replacement with the pending local item.
+        val saved = if (durable) saveDurably(context, chatKey, reconciled) else {
+            save(context, chatKey, reconciled)
+            true
+        }
+        if (!saved) return false
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val aliases = loadOutboxReplacements(prefs, context, chatKey) + (localId to replacement.id)
-        saveOutboxReplacements(prefs, context, chatKey, aliases)
+        return saveOutboxReplacements(prefs, context, chatKey, aliases, durable)
     }
 
     private suspend fun retryServerOperation(operation: suspend () -> Result<*>) {
@@ -347,13 +369,15 @@ object FynxChatStore {
         prefs: android.content.SharedPreferences,
         context: Context,
         chatKey: String,
-        aliases: Map<String, String>
-    ) {
+        aliases: Map<String, String>,
+        durable: Boolean = false
+    ): Boolean {
         val editor = prefs.edit()
-        if (aliases.isEmpty()) {
-            editor.remove(outboxReplacementKey(context, chatKey)).apply()
-        } else {
-            editor.putString(outboxReplacementKey(context, chatKey), JSONObject(aliases).toString()).apply()
+        if (aliases.isEmpty()) editor.remove(outboxReplacementKey(context, chatKey))
+        else editor.putString(outboxReplacementKey(context, chatKey), JSONObject(aliases).toString())
+        return if (durable) editor.commit() else {
+            editor.apply()
+            true
         }
     }
 

@@ -2,6 +2,7 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
+import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -124,6 +125,34 @@ class FynxOfflineOutboxInstrumentationTest {
         assertFalse("Removing the queued item must delete its app-owned media copy", storedFile.exists())
         queuedMediaFile = null
         queuedId = null
+    }
+
+    @Test
+    fun plainTextPendingMessageIsCommittedToDiskBeforeQueueReportsSuccess() {
+        val item = FynxOfflineOutbox.Item(
+            id = "offline-plain-${UUID.randomUUID()}",
+            requestId = "plain-request-${UUID.randomUUID()}",
+            recipient = "plain-recipient",
+            text = "Offline plain text survives process death",
+            replyToId = null,
+            mediaId = null,
+            mediaType = null,
+            voiceDurationMs = 0L,
+            createdAt = System.currentTimeMillis()
+        )
+        queuedId = item.id
+        assertTrue("The local account must accept its pending text item",
+            FynxOfflineOutbox.enqueue(context, item, expectedAccountKey = testUsername))
+        val encodedAccount = Base64.encodeToString(
+            testUsername.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val preferencesFile = File(context.applicationInfo.dataDir, "shared_prefs/fynx_offline_outbox_$encodedAccount.xml")
+        assertTrue("The outbox preference file must exist after enqueue returns", preferencesFile.isFile)
+        val onDisk = preferencesFile.readText()
+        assertTrue("The pending message ID must already be on disk", onDisk.contains(item.id))
+        assertTrue("The pending message text must already be on disk", onDisk.contains(item.text))
+        assertEquals(item.id, FynxOfflineOutbox.load(context).single().id)
     }
 
     @Test
