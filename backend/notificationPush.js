@@ -151,7 +151,7 @@ export async function queueFynxNotification(pool, {
   sourceUsername = null,
   route = "fynx://home",
   notificationId = null
-}) {
+}, emailTransport) {
   try {
     if (!pool || !userId) return { stored: false, delivered: false, reason: "database unavailable" };
     await ensureSchema(pool);
@@ -159,7 +159,7 @@ export async function queueFynxNotification(pool, {
     const safeTitle = safeText(title, "FYNX");
     const safeMessage = safeText(message, "You have a new FYNX notification.");
     await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,route,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username,route=EXCLUDED.route`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80), safeText(route, "fynx://home", 500)]);
-    const email = await deliverFynxEmailNotification(pool, { userId, type, notificationId: id, title: safeTitle, message: safeMessage })
+    const email = await deliverFynxEmailNotification(pool, { userId, type, notificationId: id, title: safeTitle, message: safeMessage }, emailTransport)
       .catch(error => ({ sent: false, reason: "email notification delivery failed" }));
     if (!(await pushAllowed(pool, userId, type))) {
       return { stored: true, delivered: false, reason: "notification preference disabled", emailDelivered: Boolean(email.sent), emailReason: email.reason, id };
