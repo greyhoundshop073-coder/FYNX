@@ -414,7 +414,13 @@ object FynxProductionMessaging {
 
     private fun isAmbiguousTransportFailure(error: Throwable?): Boolean {
         val message = error?.message.orEmpty().lowercase()
-        return message.contains("timeout") || message.contains("timed out") || message.contains("connection") || message.contains("network") || message.contains("socket") || message.contains("http 408") || message.contains("http 429") || message.contains("http 5") || message.contains("503") || message.contains("502")
+        return listOf(
+            "timeout", "timed out", "connection", "network", "socket",
+            "unable to resolve host", "no address associated with hostname",
+            "failed to connect", "network is unreachable", "connection refused",
+            "unknownhostexception", "eofexception",
+            "http 408", "http 429", "http 5", "503", "502"
+        ).any(message::contains)
     }
 
     private fun List<RemoteMessage>.asReconciliationCandidate(currentUsername: String, text: String, replyToId: String?, mediaId: String?, mediaType: String?): RemoteMessage? {

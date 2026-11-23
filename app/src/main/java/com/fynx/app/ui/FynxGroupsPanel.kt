@@ -127,6 +127,15 @@ fun FynxGroupsPanel(currentUsername: String = "@preview", onOpenGroup: (String) 
         if (!sessionIsCurrent()) return@LaunchedEffect
         groups = localGroups
         if (!expectedAccountKey.isNullOrBlank() && !requestToken.isNullOrBlank()) {
+            // Reconcile locally-created groups and queued group messages before
+            // refreshing the remote list. This is the cold-start/reopen recovery
+            // path for a group whose first sync was interrupted by force-stop.
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    FynxGroupRemoteClient.drainPendingWork(context)
+                }
+            }
+            if (!sessionIsCurrent()) return@LaunchedEffect
             FynxGroupRemoteClient.loadMyGroups(context, expectedAccountKey, requestToken).onSuccess { remoteGroups ->
                 if (sessionIsCurrent()) {
                     val pendingIds = FynxGroupsStore.pendingSyncGroups(context, expectedAccountKey)
