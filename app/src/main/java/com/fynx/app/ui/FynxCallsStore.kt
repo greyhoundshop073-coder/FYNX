@@ -10,7 +10,8 @@ data class FynxCallRecord(
     val type: String,
     val time: String,
     val missed: Boolean = false,
-    val status: String = "Completed"
+    val status: String = "Completed",
+    val username: String? = null
 )
 
 object FynxCallsStore {
@@ -40,7 +41,8 @@ object FynxCallsStore {
                             type = type,
                             time = item.optString("time").trim().ifBlank { "Recent" },
                             missed = missed,
-                            status = item.optString("status").trim().ifBlank { if (missed) "Missed" else "Completed" }
+                            status = item.optString("status").trim().ifBlank { if (missed) "Missed" else "Completed" },
+                            username = item.optString("username").trim().removePrefix("@").takeIf { it.isNotBlank() }
                         ))
                     }
                 }
@@ -62,6 +64,7 @@ object FynxCallsStore {
                     put("time", call.time)
                     put("missed", call.missed)
                     put("status", call.status)
+                    put("username", call.username?.trim()?.removePrefix("@")?.takeIf { it.isNotBlank() })
                 })
             }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

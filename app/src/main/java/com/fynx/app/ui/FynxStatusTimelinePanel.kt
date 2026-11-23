@@ -227,48 +227,16 @@ private fun StatusAvatar(
     status: FynxStatus? = null,
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val cachedPhotoId = remember(ownerUsername) {
-        if (status != null) {
-            FynxProfileRemoteClient.cachedProfilePhotoId(context, status.ownerUsername)
-        } else {
-            FynxProfileRemoteClient.cachedProfilePhotoId(context, ownerUsername)
-        }
-    }
-    var profilePhotoMediaId by remember(ownerUsername) { mutableStateOf(cachedPhotoId) }
-    var remoteProfileLoaded by remember(ownerUsername) { mutableStateOf(false) }
-    LaunchedEffect(ownerUsername) {
-        remoteProfileLoaded = false
-        if (status != null) {
-            FynxProfileRemoteClient.get(context, status.ownerUsername)
-                .onSuccess {
-                    profilePhotoMediaId = it.profilePhotoMediaId
-                    remoteProfileLoaded = true
-                }
-                .onFailure {
-                    remoteProfileLoaded = false
-                }
-        } else {
-            FynxProfileRemoteClient.get(context, ownerUsername)
-                .onSuccess {
-                    profilePhotoMediaId = it.profilePhotoMediaId
-                    remoteProfileLoaded = true
-                }
-                .onFailure {
-                    remoteProfileLoaded = false
-                }
-        }
-    }
-    val avatarId = if (remoteProfileLoaded) profilePhotoMediaId else cachedPhotoId
+    val avatarOwnerUsername = status?.ownerUsername?.takeIf { it.isNotBlank() } ?: ownerUsername
     Box(modifier.size(58.dp)) {
         Box(Modifier.fillMaxSize().border(2.dp, Color(0xFF22C55E), CircleShape).padding(3.dp)) {
-            if (!avatarId.isNullOrBlank()) {
-                FynxRemoteProfileAvatar(avatarId, ownerDisplayName, Modifier.fillMaxSize().clip(CircleShape), ownerUsername = ownerUsername)
-            } else {
-                Box(Modifier.fillMaxSize().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Text(ownerDisplayName.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-            }
+            // The shared resolver observes profile-photo changes and explicit removals.
+            FynxRemoteProfileAvatar(
+                mediaId = null,
+                contentDescription = ownerDisplayName,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
+                ownerUsername = avatarOwnerUsername
+            )
         }
         if (showAdd) {
             Box(Modifier.size(22.dp).align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
@@ -832,9 +800,12 @@ private fun FynxStatusStoryViewer(
                                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
                                     items(viewers, key = { it.username }) { viewer ->
                                         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(42.dp)) {
-                                                Box(contentAlignment = Alignment.Center) { Text(viewer.displayName.trim().firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.SemiBold) }
-                                            }
+                                            FynxRemoteProfileAvatar(
+                                                mediaId = null,
+                                                contentDescription = viewer.displayName.ifBlank { viewer.username },
+                                                modifier = Modifier.size(42.dp),
+                                                ownerUsername = viewer.username
+                                            )
                                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                                 Text(viewer.displayName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
                                                 Text("@${viewer.username} · ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(viewer.viewedAtMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

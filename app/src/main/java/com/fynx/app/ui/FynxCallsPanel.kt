@@ -36,6 +36,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var video by remember { mutableStateOf(initialVideo) }
     var targetUserId by remember { mutableStateOf(initialIncomingUserId) }
     var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
+    var targetAvatarUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() && it != initialIncomingUserId }) }
     var endingCall by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var calls by remember { mutableStateOf(FynxCallsStore.load(context)) }
@@ -97,9 +98,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             video = event.callType.equals("video", true)
                             targetUserId = event.fromUserId
                             targetUsername = incomingName
+                            targetAvatarUsername = event.fromUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
                             activeCall = incomingName
                             session = FynxCallSession(event.callId, event.fromUsername ?: event.fromUserId, listOf(incomingName), if (video) FynxCallType.VIDEO else FynxCallType.VOICE, FynxCallState.RINGING)
-                            FynxCallsStore.add(context, FynxCallRecord(event.callId, "@$incomingName", if (video) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming"))
+                            FynxCallsStore.add(context, FynxCallRecord(event.callId, "@$incomingName", if (video) "Video call" else "Voice call", "Just now", missed = true, status = "Incoming", username = event.fromUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }))
                             calls = FynxCallsStore.load(context)
                         }
                         "accept" -> if (session?.id == event.callId) {
@@ -177,7 +179,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         val username = name.removePrefix("@").trim()
         if (username.isBlank()) return
         mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false
-        video = isVideo; activeCall = username; targetUsername = username; errorMessage = null
+        video = isVideo; activeCall = username; targetUsername = username; targetAvatarUsername = username; errorMessage = null
         scope.launch {
             val resolvedId = resolveUser(username)
             if (resolvedId == null) { errorMessage = "We couldn't find @$username. Please check the username and try again."; activeCall = null; session = null; return@launch }
@@ -185,7 +187,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             val id = "call-${System.currentTimeMillis()}"
             val newSession = FynxCallSession(id, "me", listOf("@$username"), if (isVideo) FynxCallType.VIDEO else FynxCallType.VOICE, FynxCallState.CONNECTING)
             session = newSession
-            FynxCallsStore.add(context, FynxCallRecord(id, "@$username", if (isVideo) "Video call" else "Voice call", "Just now", status = "Outgoing"))
+            FynxCallsStore.add(context, FynxCallRecord(id, "@$username", if (isVideo) "Video call" else "Voice call", "Just now", status = "Outgoing", username = username))
             calls = FynxCallsStore.load(context)
             val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
             if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
@@ -208,7 +210,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 if (initialVideo) "Video call" else "Voice call",
                 "Just now",
                 missed = true,
-                status = "Incoming"
+                status = "Incoming",
+                username = initialName?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() && it != initialIncomingUserId }
             )
         )
         calls = FynxCallsStore.load(context)
@@ -233,7 +236,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
 
     if (activeCall != null && session != null) {
-        FynxActiveCallPanel(name = activeCall!!, session = session!!, currentUsername = currentUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
+        FynxActiveCallPanel(name = activeCall!!, session = session!!, currentUsername = currentUsername, avatarUsername = targetAvatarUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack,
             onAnswer = {
                 val current = session!!
                 val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
@@ -276,6 +279,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         Spacer(Modifier.height(10.dp))
         val filtered = when (filter) { FynxCallHistoryFilter.ALL -> calls; FynxCallHistoryFilter.MISSED -> calls.filter { it.missed }; FynxCallHistoryFilter.VIDEO -> calls.filter { it.type == "Video call" }; FynxCallHistoryFilter.VOICE -> calls.filter { it.type == "Voice call" } }
         if (filtered.isEmpty()) Card(Modifier.fillMaxWidth()) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Call, null); Spacer(Modifier.height(8.dp)); Text("No calls here", style = MaterialTheme.typography.titleMedium); Text("Your call history will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(filtered, key = { it.id }) { call -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { FynxRemoteProfileAvatar(mediaId = null, contentDescription = call.name, modifier = Modifier.size(44.dp).clip(CircleShape), ownerUsername = call.name); Spacer(Modifier.width(10.dp)); Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, null); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(call.name, style = MaterialTheme.typography.titleMedium); Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall); Text(call.status, style = MaterialTheme.typography.labelSmall) }; IconButton(onClick = { beginOutgoing(call.name, call.type == "Video call") }) { Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}") } } } } }
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) { items(filtered, key = { it.id }) { call -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) { FynxRemoteProfileAvatar(mediaId = null, contentDescription = call.name, modifier = Modifier.size(44.dp).clip(CircleShape), ownerUsername = call.username); Spacer(Modifier.width(10.dp)); Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, null); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(call.name, style = MaterialTheme.typography.titleMedium); Text("${call.type} • ${call.time}", style = MaterialTheme.typography.bodySmall); Text(call.status, style = MaterialTheme.typography.labelSmall) }; IconButton(onClick = { beginOutgoing(call.username ?: call.name, call.type == "Video call") }) { Icon(if (call.type == "Video call") Icons.Default.Videocam else Icons.Default.Call, "Call ${call.name}") } } } } }
     }
 }

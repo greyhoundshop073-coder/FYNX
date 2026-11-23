@@ -15,7 +15,7 @@ REQUIRED = {
     "ChatsPanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "NotificationPanel.kt": ["FynxRemoteProfileAvatar(", "FynxProfileRemoteClient"],
     "FynxHomeCommentsPanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
-    "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "profilePhotoMediaId"],
+    "FynxStatusTimelinePanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = avatarOwnerUsername", "val avatarOwnerUsername = status?.ownerUsername"],
     "FynxMarketplacePanel.kt": ["FynxProfileRemoteClient", "photoId", "MarketplaceSellerCard", "FynxRemoteProfileAvatar(", "ownerUsername = l.sellerUsername", "detailSellerPhotoId"],
     "FynxMarketplaceReferenceProductComponents.kt": ["MarketplaceReferenceProductCard(", "FynxRemoteProfileAvatar(", "ownerUsername = listing.sellerUsername"],
     "FynxMarketplaceSellerStoreDialog.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = username"],
@@ -29,8 +29,8 @@ REQUIRED = {
     "FynxApp.kt": ["FynxRemoteProfileAvatar(", "remoteMyPhotoId", "ownerUsername = myProfile.username", "currentUsername = authSession.username"],
     "FynxGroupsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = member.username"],
     "ConversationPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = chat.username"],
-    "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.name", "currentUsername: String? = null", "currentUsername = currentUsername"],
-    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = name", "FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = name", "ownerUsername = currentUsername?.takeIf { it.isNotBlank() }"],
+    "FynxCallsPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = call.username", "username = username", "currentUsername: String? = null", "currentUsername = currentUsername", "avatarUsername = targetAvatarUsername"],
+    "FynxActiveCallPanel.kt": ["FynxRemoteProfileAvatar(", "ownerUsername = avatarUsername", "FynxCallRemotePlaceholder(name, Modifier.fillMaxSize(), ownerUsername = avatarUsername", "ownerUsername = currentUsername?.takeIf { it.isNotBlank() }"],
     "FynxProfileRemoteClient.kt": ["profilePhotoMediaId", "saveRemoteProfilePhotoId", "FynxAvatarIdentityStore.publish"],
     "FynxPreferencesStore.kt": ["loadRemoteProfilePhotoId", "saveRemoteProfilePhotoId"],
 }
@@ -65,6 +65,17 @@ remote_media = (UI / "FynxRemoteMedia.kt").read_text(encoding="utf-8")
 for needle in ("cachedOwnerPhotoExists", "cachedOwnerPhotoId", "else -> mediaId?.trim()?.takeIf { it.isNotBlank() }"):
     if needle not in remote_media:
         errors.append(f"FynxRemoteMedia.kt: missing avatar ID fallback/removal safeguard: {needle}")
+
+status_timeline = (UI / "FynxStatusTimelinePanel.kt").read_text(encoding="utf-8")
+if "FynxProfileRemoteClient.hydrateAvatarIfMissing(context, normalizedOwner)" not in remote_media:
+    errors.append("shared avatar resolver does not hydrate username-only avatar cache misses")
+if "avatarHydrationsInFlight" not in client or "hasCachedProfilePhotoEntry(context, normalized)" not in client:
+    errors.append("shared avatar hydration must deduplicate profile GETs and respect authoritative cache entries")
+if "FynxProfileRemoteClient.get(context, avatarOwnerUsername)" in status_timeline:
+    errors.append("Status avatar still duplicates profile hydration outside the shared resolver")
+app = (UI / "FynxApp.kt").read_text(encoding="utf-8")
+if "remoteMyProfileLoaded" not in app or "else if (!remoteMyProfileLoaded) FynxProfileImage" not in app:
+    errors.append("app header may resurrect a stale local photo after authoritative remote-photo removal")
 
 if errors:
     print("PROFILE AVATAR CONTRACT RED")
