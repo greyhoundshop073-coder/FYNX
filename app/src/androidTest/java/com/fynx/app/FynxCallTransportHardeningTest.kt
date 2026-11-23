@@ -8,13 +8,13 @@ import org.junit.Test
 class FynxCallTransportHardeningTest {
     @Test
     fun accepts_supported_call_signals() {
-        listOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy")
+        listOf("invite", "accept", "reject", "end", "offer", "answer", "ice", "unavailable", "busy", "error")
             .forEach { signal -> assertTrue("expected supported signal: $signal", FynxCallTransportHardening.isValidCallSignal(signal)) }
     }
 
     @Test
     fun rejects_invalid_call_signals() {
-        listOf("", "error", "CALL", "invite-now", "x".repeat(17))
+        listOf("", "CALL", "invite-now", "x".repeat(17))
             .forEach { signal -> assertFalse("expected invalid signal: $signal", FynxCallTransportHardening.isValidCallSignal(signal)) }
     }
 
