@@ -218,3 +218,11 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - No Chat application code or Admin production endpoint was changed for this correction.
 - The Admin contract verifier now checks both the emulator-step selection and the KVM prerequisite selection.
 - Re-run all affected checks on the new final PR head. The previous emulator attempt is not considered screenshot proof unless its artifact contains all three required files and the evidence manifest.
+
+
+## 2026-11-23 — Android screenshot-test compilation correction
+
+- The first emulator run successfully passed the Android build and KVM setup, but Android test compilation failed before tests ran because this Compose test dependency does not expose the imported `assertDoesNotExist` extension.
+- Replaced that unsupported extension with the supported semantics-collection query `onAllNodesWithText(...).fetchSemanticsNodes().isEmpty()`, preserving the runtime assertion that ADMIN cannot see the Owner-only Music Library tab.
+- The Admin contract verifier now requires this negative-visibility assertion so it cannot silently disappear from the instrumentation test.
+- No production Kotlin UI, backend route, or Chat implementation changed in this correction. Re-run the emulator suite before treating screenshot evidence as complete.

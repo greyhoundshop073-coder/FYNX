@@ -41,6 +41,8 @@ for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marke
     require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
 require('"GET"' in visual and "requestExecutorForTests" in visual,
         "Admin screenshot fixtures must remain GET-only and must not perform publishing mutations")
+require('check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty())' in visual,
+        "Admin emulator fixture must assert that the Owner-only Music Library tab is hidden from ADMIN")
 
 require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")

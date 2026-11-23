@@ -6,9 +6,9 @@ import android.os.HandlerThread
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -61,7 +61,7 @@ class FynxAdminPublishingSectionsVisualTest {
     @Test
     fun adminCanReachMarketplaceCampaignManagerAndCaptureIt() {
         launchAs("ADMIN")
-        compose.onNodeWithText("Music Library").assertDoesNotExist()
+        check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty()) { "ADMIN must not see Owner-only Music Library navigation" }
         compose.onNodeWithText("Marketplace").performClick()
         compose.onNodeWithText("Marketplace banner campaigns").assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
