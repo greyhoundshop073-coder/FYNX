@@ -80,6 +80,18 @@ assert.match(sent[0].subject, /FYNX: Marketplace payment confirmed/);
 assert.equal((await deliverFynxEmailNotification(pool, event, delivery)).reason, "duplicate or already pending");
 assert.equal(sent.length, 1);
 
+// Existing Marketplace price-watch events use the same verified-email channel.
+status = null;
+const priceAlert = await deliverFynxEmailNotification(pool, {
+  ...event, type: "MARKETPLACE_PRICE", notificationId: "marketplace-price-watch-25",
+  title: "Price dropped",
+  message: "A watched Marketplace listing has dropped in price."
+}, delivery);
+assert.equal(priceAlert.sent, true);
+assert.equal(sent.length, 2);
+assert.equal(sent[1].to, "verified@example.com");
+assert.match(sent[1].subject, /Price dropped/);
+
 // Wallet email delivery uses its own opt-in category and respects the master setting.
 status = null;
 account.wallet_email_enabled = false;
@@ -101,8 +113,8 @@ const safetyNotice = await deliverFynxEmailNotification(pool, {
 }, delivery);
 assert.equal(safetyNotice.sent, true);
 assert.equal(safetyNotice.reason, "sent");
-assert.equal(sent.length, 2);
-assert.equal(sent[1].to, "verified@example.com");
-assert.match(sent[1].subject, /Account restricted/);
+assert.equal(sent.length, 3);
+assert.equal(sent[2].to, "verified@example.com");
+assert.match(sent[2].subject, /Account restricted/);
 
 console.log("PASS: verified recipients, optional Marketplace and wallet email controls, essential safety notices, SMTP failure retry, and idempotent delivery");
