@@ -3071,7 +3071,7 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
         FAILURES.append("Chat -> Groups -> New group did not open the dedicated Groups manager.")
         return ""
     # Match the actual accessibility label on FynxGroupsPanel's plus button.
-    # The Group name input is required before this counts as an opened dialog.
+    # The Group name field is required before this counts as an opened dialog.
     dialog = tap_control(
         manager_xml,
         ["Create group"],
