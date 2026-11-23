@@ -1,6 +1,6 @@
 import { createEmailDelivery } from "./emailDelivery.js";
 
-const supportedEmailTypes = new Set(["MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY"]);
+const supportedEmailTypes = new Set(["MARKETPLACE_ORDER", "MARKETPLACE_PRICE", "WALLET_ACTIVITY", "SAFETY"]);
 const emailDelivery = createEmailDelivery();
 
 function cleanText(value, fallback, max = 500) {
@@ -41,11 +41,13 @@ export async function deliverFynxEmailNotification(pool, {
   if (!account || !account.email_verified_at || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
     return { sent: false, reason: "no verified email address" };
   }
-  const categoryEnabled = kind === "WALLET_ACTIVITY"
-    ? Boolean(account.wallet_enabled && account.wallet_email_enabled)
-    : Boolean(account.marketplace_enabled && account.marketplace_email_enabled);
-  if (!account.enabled || !account.email_enabled || !categoryEnabled) {
-    return { sent: false, reason: "email notification preference disabled" };
+  if (kind !== "SAFETY") {
+    const categoryEnabled = kind === "WALLET_ACTIVITY"
+      ? Boolean(account.wallet_enabled && account.wallet_email_enabled)
+      : Boolean(account.marketplace_enabled && account.marketplace_email_enabled);
+    if (!account.enabled || !account.email_enabled || !categoryEnabled) {
+      return { sent: false, reason: "email notification preference disabled" };
+    }
   }
 
   const id = String(notificationId).slice(0, 180);
