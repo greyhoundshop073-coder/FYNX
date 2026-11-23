@@ -26,11 +26,11 @@ for (const name of optional) {
   assert.ok(deployWorkflow.includes(`${name}=$${name}`), `${name} must be written to the temporary deploy env file`);
   assert.ok(deployGuide.includes(name), `${name} must be documented for secure operator setup`);
 }
-for (const name of ["FYNX_EMAIL_HOST", "FYNX_EMAIL_USER", "FYNX_EMAIL_PASSWORD", "FYNX_EMAIL_FROM"]) {
+for (const name of optional) {
   assert.ok(deployWorkflow.includes(`secrets.${name}`), `${name} must come from a GitHub Actions secret`);
 }
-for (const name of ["FYNX_EMAIL_PORT", "FYNX_EMAIL_SECURE", "FYNX_EMAIL_REQUIRE_TLS"]) {
-  assert.ok(deployWorkflow.includes(`vars.${name}`), `${name} must be an Actions variable`);
+for (const name of optional) {
+  assert.ok(deployWorkflow.includes(`${name}: \${{ secrets.${name} }}`), `${name} must be forwarded from its secret in the deployment steps`);
 }
 assert.match(deployWorkflow, /SMTP configuration is partial/);
 assert.match(deployWorkflow, /trap 'rm -f \.env\.neon\.deploy' EXIT/);
