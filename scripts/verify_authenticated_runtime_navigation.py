@@ -208,7 +208,7 @@ DIAGNOSTIC_MARKERS = (
     "FYNX Features", "Search FYNX tools", "FYNX Wallet", "Understand your money", "Balance details", "Reserved", "Withdrawal pending", "Marketplace", "Search products, sellers or categories", "Cart", "Sell something", "Switch front/back camera", "Recording",
     "Video preview", "Play video full screen", "Pause full-screen video", "Play full-screen video", "Unmute full-screen video", "Mute full-screen video", "Close media viewer", "Open Discovery video", "Like video", "Unlike video", "Open comments", "Share video", "Unmute Discovery video", "Mute Discovery video", "Pause Discovery video", "Play Discovery video", "Close Discovery",
     "Welcome back", "Sign In", "Signing in", "Create a new account", "Username", "Password",
-    "Your communities in one place", "Open create group dialog", "Create group dialog",
+    "Your communities in one place", "Open create group dialog", "Create group dialog", "New group", "No groups yet",
     "Group name input", "Description input"
 )
 
@@ -3058,12 +3058,12 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     if not run_suffix:
         run_suffix = str(int(time.time()))
     group_name = "FYNX CI Group " + run_suffix
-    # The Groups section's unique "Create group" action opens the dedicated
-    # Groups manager. Require its unique subtitle before locating the manager's
-    # separate plus button, which opens the actual creation dialog.
+    # The ChatsPanel Groups section exposes the "New group" action. Its callback
+    # navigates to the dedicated Groups manager; that screen then exposes the
+    # separate "Create group" icon button which opens the actual form.
     manager_xml = tap_control(
         groups_xml,
-        ["Create group"],
+        ["New group"],
         "chat-groups-open-groups-manager",
         ["Your communities in one place"],
     )
@@ -5820,7 +5820,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
         chat_again = tap_control(home_again, ["Chat"], "chat-groups-reopen-chat", ["Messages and groups in one place"])
     else:
         chat_again = ""
-    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])
+    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["New group"])
     if not groups_xml:
         FAILURES.append("Chat -> Groups did not expose the real Groups list.")
     else:
