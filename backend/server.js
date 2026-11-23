@@ -501,6 +501,16 @@ app.post("/api/assistant", auth, async (req, res) => {
   }
 });
 
+function isDefinitiveDatabaseWriteFailure(error) {
+  const code = typeof error?.code === "string" ? error.code : "";
+  // Connection failures and server restarts can occur after PostgreSQL has committed
+  // but before the client receives confirmation. In those cases, never delete the
+  // object: the metadata outcome is uncertain and the row may already reference it.
+  return /^[0-9A-Z]{5}$/.test(code) &&
+    !code.startsWith("08") &&
+    !["57P01", "57P02", "57P03"].includes(code);
+}
+
 function respondWithMediaStorageError(res, error, operation) {
   const diagnostic = classifyMediaStorageError(error);
   const isPostgresError = typeof error?.code === "string" &&
@@ -572,6 +582,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
   let inTransaction = false;
   let promotedObjectKey = null;
   let promotedObjectProvider = null;
+  let commitAttempted = false;
   let committed = false;
   try {
     const intentId = typeof req.body?.intentId === "string" ? req.body.intentId.trim() : "";
@@ -670,6 +681,7 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
       "UPDATE message_media_upload_intents SET completed_media_id = $2, completed_at = NOW() WHERE id = $1",
       [intentId, media.id]
     );
+    commitAttempted = true;
     await client.query("COMMIT");
     inTransaction = false;
     committed = true;
@@ -679,9 +691,16 @@ app.post("/api/media/upload-complete", auth, async (req, res) => {
     });
   } catch (error) {
     if (inTransaction && client) await client.query("ROLLBACK").catch(() => {});
-    if (!committed && promotedObjectKey) {
+    if (!committed && !commitAttempted && promotedObjectKey) {
       await mediaStorage.deleteMediaObject(promotedObjectKey, promotedObjectProvider || mediaStorage.provider).catch((cleanupError) => {
         console.error("media permanent object rollback cleanup failed", cleanupError);
+      });
+    } else if (!committed && commitAttempted && promotedObjectKey) {
+      // COMMIT may have succeeded even if its acknowledgement was lost. Preserve the
+      // object so a retry can return the committed media row instead of a broken link.
+      console.error("[fynx-media] commit outcome uncertain; permanent object preserved", {
+        provider: promotedObjectProvider,
+        reason: "database_commit_acknowledgement_missing"
       });
     }
     return respondWithMediaStorageError(res, error, "upload completion");
@@ -709,7 +728,18 @@ app.post("/api/media", auth, async (req, res) => {
     try {
       result = await pool.query("INSERT INTO message_media (owner_id, mime_type, data, byte_size, storage_provider, object_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, mime_type, byte_size", [req.user.sub, mimeType, stored.storageProvider === "postgres" ? data : null, data.length, stored.storageProvider, stored.objectKey]);
     } catch (databaseError) {
-      if (stored.objectKey) await mediaStorage.deleteMediaObject(stored.objectKey).catch((cleanupError) => console.error("media object rollback cleanup", cleanupError));
+      if (stored.objectKey && isDefinitiveDatabaseWriteFailure(databaseError)) {
+        await mediaStorage.deleteMediaObject(stored.objectKey, stored.storageProvider).catch((cleanupError) => {
+          console.error("media object rollback cleanup failed", cleanupError?.name || "Error");
+        });
+      } else if (stored.objectKey) {
+        // A transport failure can hide a successful auto-commit INSERT. Preserve the
+        // object when its metadata commit outcome cannot be established.
+        console.error("[fynx-media] media metadata outcome uncertain; permanent object preserved", {
+          provider: stored.storageProvider,
+          reason: "database_write_acknowledgement_missing"
+        });
+      }
       throw databaseError;
     }
     return res.status(201).json({ media: { id: String(result.rows[0].id), mimeType: result.rows[0].mime_type, byteSize: result.rows[0].byte_size } });
