@@ -100,8 +100,9 @@ const safetyNotice = await deliverFynxEmailNotification(pool, {
   message: "Your FYNX account has a new safety status. Review the Safety Center."
 }, delivery);
 assert.equal(safetyNotice.sent, true);
-assert.equal(sent.length, 3);
-assert.equal(sent[2].to, "verified@example.com");
-assert.match(sent[2].subject, /Account restricted/);
+assert.equal(safetyNotice.reason, "sent");
+assert.equal(sent.length, 2);
+assert.equal(sent[1].to, "verified@example.com");
+assert.match(sent[1].subject, /Account restricted/);
 
 console.log("PASS: verified recipients, optional Marketplace and wallet email controls, essential safety notices, SMTP failure retry, and idempotent delivery");
