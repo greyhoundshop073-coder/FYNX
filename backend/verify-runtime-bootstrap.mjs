@@ -4,6 +4,11 @@ import assert from "node:assert/strict";
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
 const scalability = await readFile(new URL("./scalability.js", import.meta.url), "utf8");
+const preload = await readFile(new URL("./renderScalabilityPreload.js", import.meta.url), "utf8");
+const realtimeBootstrap = await readFile(new URL("./realtimeIsolationBootstrap.js", import.meta.url), "utf8");
+const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url), "utf8");
+const supportRoutes = await readFile(new URL("./supportRoutes.js", import.meta.url), "utf8");
+const neonFunction = await readFile(new URL("./neon-function.js", import.meta.url), "utf8");
 const normalizedServer = server.replace(/\s+/g, " ").toLowerCase();
 assert.ok(!normalizedServer.includes("update users set verified = false;"),
   "backend startup must never reset existing users verification status");
@@ -43,7 +48,41 @@ for (const contract of [
 ]) assert.match(bootstrap, contract, `runtime guard missing contract: ${contract}`);
 assert.match(packageJson.scripts.prestart, /verify-runtime-bootstrap\.mjs/,
   "runtime bootstrap verifier must run before service startup");
-console.log("Runtime bootstrap integrity checks passed.");
+
+// Certify the actual Node production entrypoint without changing server.js.
+// Admin and Support are installed by the preloaded scalability layer after
+// serverBootstrap creates the canonical Express app; the request gate must
+// hold dispatch until both route modules and guards finish registration.
+assert.match(packageJson.scripts.start, /--import \.\/renderScalabilityPreload\.js realtimeIsolationBootstrap\.js/,
+  "production start command must preload the production scalability layer");
+assert.match(preload, /import ["']\.\/scalability\.js["']/,
+  "production preload must install scalability before the application entrypoint");
+assert.match(realtimeBootstrap, /await import\(["']\.\/serverBootstrap\.js["']\)/,
+  "realtime bootstrap must import the generated canonical server outside runtime-only builds");
+assert.match(adminRoutes, /export function registerAdminRoutes\(/,
+  "Admin route module must expose its production registration function");
+assert.match(supportRoutes, /export function registerSupportRoutes\(/,
+  "Support route module must expose its production registration function");
+for (const [pattern, label] of [
+  [/import \{ registerAdminRoutes \} from ["']\.\/adminRoutes\.js["']/, "Admin route module import"],
+  [/import \{ registerSupportRoutes \} from ["']\.\/supportRoutes\.js["']/, "Support route module import"],
+  [/await routeRegistrationReady/, "request dispatch registration barrier"],
+  [/registerAdminRoutes\(\{ app \}\)/, "Admin route registration"],
+  [/registerSupportRoutes\(\{ app \}\)/, "Support route registration"],
+  [/resolveRouteRegistration\(\)/, "successful registration barrier release"],
+  [/rejectRouteRegistration\(error\)/, "failed registration barrier rejection"]
+]) assert.match(scalability, pattern, `production startup is missing ${label}`);
+const gateIndex = scalability.indexOf("await routeRegistrationReady");
+const adminRegistrationIndex = scalability.indexOf("registerAdminRoutes({ app })");
+const supportRegistrationIndex = scalability.indexOf("registerSupportRoutes({ app })");
+const releaseIndex = scalability.indexOf("resolveRouteRegistration()");
+assert.ok(gateIndex >= 0 && gateIndex < adminRegistrationIndex &&
+  adminRegistrationIndex < supportRegistrationIndex && supportRegistrationIndex < releaseIndex,
+  "request dispatch must remain gated until Admin and Support routes are registered");
+assert.ok(neonFunction.indexOf('await import("./scalability.js")') <
+  neonFunction.indexOf('await import("./.fynx-runtime-server.js")'),
+  "Neon Function runtime must preload the same Admin/Support route-registration hook before importing the generated server");
+console.log("Runtime bootstrap integrity checks passed (Admin and Support production registration chain included).");
 
 for (const contract of [
   "registerBusinessRoutes({ app, auth })",

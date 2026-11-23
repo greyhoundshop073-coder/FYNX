@@ -75,11 +75,11 @@ async function invoke(method, path, {
   return res;
 }
 
-async function invokeDashboard() {
+async function invokeDashboard(token = "owner") {
   const handlers = routes.get("GET /api/admin/dashboard");
   assert.ok(handlers && handlers.length === 2);
   const [authenticate, handler] = handlers;
-  const req = { get(name) { return name.toLowerCase() === "authorization" ? "Bearer owner" : ""; } };
+  const req = { get(name) { return name.toLowerCase() === "authorization" ? `Bearer ${token}` : ""; } };
   const res = createResponse();
   await authenticate(req, res, () => handler(req, res));
   return res;
@@ -157,6 +157,29 @@ try {
   );
   const largeReportId = String(largeReport.rows[0].id);
 
+  // Content moderation has a separate queue and table, but the Overview
+  // "Open reports" total must include its OPEN and UNDER_REVIEW rows too.
+  await db.query(`
+    INSERT INTO safety_content_reports
+      (reporter_id,target_type,target_id,target_owner_id,reason,details,status)
+    VALUES
+      (5,'SOCIAL_POST',101,4,'SPAM','Open social post report','OPEN'),
+      (5,'SOCIAL_COMMENT',102,4,'ABUSE','Content report already under review','UNDER_REVIEW'),
+      (5,'MARKETPLACE_LISTING',103,4,'MISLEADING','Resolved content report','RESOLVED')
+  `);
+  const ownerDashboard = await invokeDashboard("owner");
+  assert.equal(ownerDashboard.statusCode, 200);
+  assert.equal(ownerDashboard.body.role, "OWNER");
+  assert.equal(ownerDashboard.body.counts.openReports, 6,
+    "Owner dashboard must count four open account reports and two open content reports");
+  const adminDashboard = await invokeDashboard("admin");
+  assert.equal(adminDashboard.statusCode, 200);
+  assert.equal(adminDashboard.body.role, "ADMIN");
+  assert.equal(adminDashboard.body.counts.openReports, 6,
+    "Admin dashboard must report the same database-backed total");
+  const ordinaryDashboard = await invokeDashboard("regular");
+  assert.equal(ordinaryDashboard.statusCode, 403,
+    "ordinary users must not read Admin dashboard counts");
 
   const validAppeal = await db.query(
     "INSERT INTO safety_appeals(user_id,report_id,subject,details,status) VALUES(3,$1,'Restore my account','The account restriction was applied in error.','OPEN') RETURNING id",
@@ -246,6 +269,9 @@ try {
     body: { status: "DISMISSED" }
   });
   assert.equal(reReviewFinalReport.statusCode, 404, "final report states must not be changed through the open-report route");
+  const dashboardAfterResolution = await invokeDashboard("admin");
+  assert.equal(dashboardAfterResolution.body.counts.openReports, 5,
+    "resolving one account report must decrement the aggregate while two content reports remain open");
 
   const appealList = await invoke("GET", "/api/admin/appeals", {
     query: { limit: 50, offset: 0 }
@@ -395,7 +421,14 @@ try {
   const appealIds = new Set(appealsPageOne.body.appeals.map(item => item.id));
   assert.ok(appealsPageTwo.body.appeals.every(item => !appealIds.has(item.id)), "appeal pages must not overlap");
 
-  console.log("ADMIN_REPORTS_APPEALS_ROUTE_DB=GREEN (role protection, report transitions, appeal locking/final decisions, linked restoration, mismatched/unlinked safeguards, pagination and atomic audit rollback)");
+  const finalOwnerDashboard = await invokeDashboard("owner");
+  const finalAdminDashboard = await invokeDashboard("admin");
+  assert.equal(finalOwnerDashboard.body.counts.openReports, 60,
+    "final Owner total must reflect 58 open account reports plus two open content reports");
+  assert.equal(finalAdminDashboard.body.counts.openReports, 60,
+    "final Admin total must match the same persisted report records");
+
+  console.log("ADMIN_REPORTS_APPEALS_ROUTE_DB=GREEN (OWNER/ADMIN/ordinary authorization, aggregate account+content report counts, transitions, appeals, restoration safeguards, pagination and atomic audit rollback)");
 } finally {
   await db.query("SET search_path TO public").catch(() => {});
   await db.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
