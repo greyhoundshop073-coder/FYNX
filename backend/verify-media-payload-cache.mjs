@@ -48,7 +48,7 @@ assert.ok(socialMediaRoute.indexOf("if(!r.rows[0])") < socialMediaRoute.indexOf(
 assert.match(socialBootstrap, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s*\n\s*FROM message_media mm/);
 assert.doesNotMatch(socialBootstrap, /SELECT mm\.mime_type, mm\.data/);
 assert.match(serverSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);
-assert.match(serverSource, /import \{ mediaStorage, redirectStoredMedia \} from "\.\/mediaStorage\.js";/);
+assert.match(serverSource, /import \{ classifyMediaStorageError, mediaStorage, redirectStoredMedia \} from "\.\/mediaStorage\.js";/);
 assert.match(cacheSource, /import \{ mediaStorage \} from "\.\/mediaStorage\.js";/);
 assert.match(marketplaceSource, /import \{ getCachedMediaPayload \} from '\.\/mediaPayloadCache\.js';/);
 assert.match(socialSource, /import \{ getCachedMediaPayload \} from "\.\/mediaPayloadCache\.js";/);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { createMediaStorage, MediaStorageConfigurationError } from "./mediaStorage.js";
+import { classifyMediaStorageError, createMediaStorage, MediaStorageConfigurationError } from "./mediaStorage.js";
 
 const UUID = "f35c2d80-4f45-4a33-b5b2-bb94928f9a11";
 const calls = [];
@@ -19,7 +19,7 @@ const fakeClient = {
   }
 };
 const common = {
-  FYNX_NEON_S3_ENDPOINT: "https://br-floral-shape.storage.c-7.us-east-2.aws.neon.tech",
+  FYNX_NEON_S3_ENDPOINT: "https://br-floral-shape-b5mbajl5.storage.c-7.us-east-2.aws.neon.tech",
   FYNX_NEON_S3_REGION: "us-east-2",
   FYNX_NEON_S3_ACCESS_KEY_ID: "nak_test_access_key",
   FYNX_NEON_S3_SECRET_ACCESS_KEY: "nsk_test_secret_access_key",
@@ -52,6 +52,13 @@ const storage = createMediaStorage({
 assert.equal(storage.provider, "neon");
 assert.equal(storage.isObjectStorageEnabled, true);
 assert.equal(storage.isConfigured, true);
+assert.equal(storage.supportsDirectUpload, true);
+assert.equal(storage.isObjectStorageProvider("neon"), true);
+assert.equal(storage.isObjectStorageProvider("r2"), true);
+assert.equal(storage.isObjectStorageProvider("postgres"), false);
+assert.equal(storage.isConfiguredFor("neon"), true);
+assert.equal(storage.isConfiguredFor("r2"), true);
+assert.equal(storage.isConfiguredFor("unknown"), false);
 const stored = await storage.putMediaObject({ data: Buffer.from("new-media-bytes"), mimeType: "image/webp" });
 assert.deepEqual(stored, { storageProvider: "neon", objectKey: "media/" + UUID });
 assert.equal(calls[0].constructor.name, "PutObjectCommand");
@@ -104,6 +111,9 @@ assert.deepEqual(optionsSeen[1], {
 const r2Url = await storage.createDownloadUrl("media/" + UUID, "r2");
 assert.equal(r2Url, "https://signed.example/fynx-media");
 await storage.getMediaObjectBytes("media/" + UUID, "r2");
+await storage.inspectMediaObject("uploads/" + UUID, "r2");
+await storage.promoteUploadedObject("uploads/" + UUID, "media/" + UUID, "r2");
+assert.equal(calls.at(-1).input.Bucket, "fynx-r2-media");
 await storage.deleteMediaObject("media/" + UUID, "r2");
 assert.deepEqual(optionsSeen[2], {
   region: "auto",
@@ -118,11 +128,13 @@ const r2Storage = createMediaStorage({
     calls.push(command);
     assert.equal(options.expiresIn, 300);
     assert.equal(command.constructor.name, "PutObjectCommand");
+    assert.equal(command.input.ContentLength, 15);
     return "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write";
   },
   idFactory: () => UUID
 });
 assert.equal(r2Storage.provider, "r2");
+assert.equal(r2Storage.supportsDirectUpload, true);
 assert.deepEqual(
   await r2Storage.putMediaObject({ data: Buffer.from("r2-new-media"), mimeType: "video/mp4" }),
   { storageProvider: "r2", objectKey: "media/" + UUID }
@@ -134,7 +146,8 @@ assert.equal(optionsSeen[3].forcePathStyle, undefined);
 
 const uploadUrl = await r2Storage.createUploadUrl({
   objectKey: "uploads/" + UUID,
-  mimeType: "image/webp"
+  mimeType: "image/webp",
+  byteSize: 15
 });
 assert.equal(uploadUrl, "https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com/signed-write");
 assert.deepEqual(await r2Storage.inspectMediaObject("uploads/" + UUID), {
@@ -151,18 +164,84 @@ assert.deepEqual(await r2Storage.inspectMediaObject("media/" + UUID), {
   mimeType: "image/webp"
 });
 await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp" }),
+  r2Storage.createUploadUrl({ objectKey: "media/" + UUID, mimeType: "image/webp", byteSize: 15 }),
   /Invalid FYNX temporary upload object key/
 );
 await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "image/webp", expiresInSeconds: 30 }),
+  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "image/webp", byteSize: 15, expiresInSeconds: 30 }),
   /expiry must be between 60 and 600 seconds/
 );
 await assert.rejects(
-  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "application/pdf" }),
+  r2Storage.createUploadUrl({ objectKey: "uploads/" + UUID, mimeType: "application/pdf", byteSize: 15 }),
   /Unsupported FYNX media type/
 );
 await r2Storage.deleteMediaObject("uploads/" + UUID, "r2");
+assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
+
+// Neon Object Storage uses the same signed PUT / HEAD / COPY lifecycle, with
+// path-style addressing and the branch-scoped Neon S3 endpoint.
+const neonDirectStorage = createMediaStorage({
+  env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "neon" },
+  clientFactory(options) { optionsSeen.push(options); return fakeClient; },
+  async signUrlFactory(_client, command, options) {
+    calls.push(command);
+    assert.equal(options.expiresIn, 300);
+    assert.equal(command.constructor.name, "PutObjectCommand");
+    assert.equal(command.input.Bucket, "fynx-media");
+    assert.equal(command.input.Key, "uploads/" + UUID);
+    assert.equal(command.input.ContentType, "image/webp");
+    assert.equal(command.input.ContentLength, 15);
+    return "https://br-floral-shape-b5mbajl5.storage.c-7.us-east-2.aws.neon.tech/fynx-media/signed-write";
+  },
+  idFactory: () => UUID
+});
+assert.equal(neonDirectStorage.provider, "neon");
+assert.equal(neonDirectStorage.supportsDirectUpload, true);
+const neonUploadUrl = await neonDirectStorage.createUploadUrl({
+  objectKey: "uploads/" + UUID,
+  mimeType: "image/webp",
+  byteSize: 15
+});
+
+await assert.rejects(
+  neonDirectStorage.createUploadUrl({
+    objectKey: "uploads/" + UUID,
+    mimeType: "image/webp",
+    byteSize: 0
+  }),
+  /Media upload must be between 1 byte and 12 MB/
+);
+await assert.rejects(
+  neonDirectStorage.createUploadUrl({
+    objectKey: "uploads/" + UUID,
+    mimeType: "image/webp",
+    byteSize: 12 * 1024 * 1024 + 1
+  }),
+  /Media upload must be between 1 byte and 12 MB/
+);
+assert.equal(neonUploadUrl, "https://br-floral-shape-b5mbajl5.storage.c-7.us-east-2.aws.neon.tech/fynx-media/signed-write");
+assert.deepEqual(optionsSeen[4], {
+  region: "us-east-2",
+  endpoint: common.FYNX_NEON_S3_ENDPOINT,
+  credentials: { accessKeyId: common.FYNX_NEON_S3_ACCESS_KEY_ID, secretAccessKey: common.FYNX_NEON_S3_SECRET_ACCESS_KEY },
+  forcePathStyle: true
+});
+assert.deepEqual(await neonDirectStorage.inspectMediaObject("uploads/" + UUID), {
+  byteSize: 15,
+  mimeType: "image/webp"
+});
+await neonDirectStorage.promoteUploadedObject("uploads/" + UUID, "media/" + UUID);
+assert.equal(calls.at(-1).constructor.name, "CopyObjectCommand");
+assert.equal(calls.at(-1).input.Bucket, "fynx-media");
+assert.equal(calls.at(-1).input.Key, "media/" + UUID);
+assert.equal(calls.at(-1).input.CopySource, "fynx-media/uploads/" + UUID);
+assert.deepEqual(await neonDirectStorage.inspectMediaObject("media/" + UUID), {
+  byteSize: 15,
+  mimeType: "image/webp"
+});
+await neonDirectStorage.deleteMediaObject("uploads/" + UUID, "neon");
+assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
+await neonDirectStorage.deleteMediaObject("media/" + UUID, "neon");
 assert.equal(calls.at(-1).constructor.name, "DeleteObjectCommand");
 
 await assert.rejects(storage.createDownloadUrl("../private-file"), /Invalid FYNX media object key/);
@@ -175,6 +254,7 @@ const postgresStorage = createMediaStorage({
 });
 assert.equal(postgresStorage.provider, "postgres");
 assert.equal(postgresStorage.isObjectStorageEnabled, false);
+assert.equal(postgresStorage.supportsDirectUpload, false);
 assert.deepEqual(
   await postgresStorage.putMediaObject({ data: Buffer.from("legacy"), mimeType: "image/jpeg" }),
   { storageProvider: "postgres", objectKey: null }
@@ -182,6 +262,7 @@ assert.deepEqual(
 
 const incompleteNeon = createMediaStorage({ env: { FYNX_MEDIA_STORAGE_PROVIDER: "neon" } });
 assert.equal(incompleteNeon.isConfigured, false);
+assert.equal(incompleteNeon.supportsDirectUpload, true);
 await assert.rejects(
   incompleteNeon.putMediaObject({ data: Buffer.from("test"), mimeType: "image/jpeg" }),
   (error) => error instanceof MediaStorageConfigurationError && error.statusCode === 503
@@ -189,6 +270,79 @@ await assert.rejects(
 assert.throws(
   () => createMediaStorage({ env: { FYNX_MEDIA_STORAGE_PROVIDER: "gcs" } }),
   MediaStorageConfigurationError
+);
+
+
+const diagnosticCases = [
+  [new MediaStorageConfigurationError(), "MEDIA_STORAGE_NOT_CONFIGURED", "configuration"],
+  [Object.assign(new Error("Request has expired"), { name: "RequestExpired", code: "RequestExpired" }), "MEDIA_STORAGE_SIGNATURE_EXPIRED", "signature_expired"],
+  [Object.assign(new Error("Access denied"), { name: "AccessDenied", code: "AccessDenied", $metadata: { httpStatusCode: 403 } }), "MEDIA_STORAGE_AUTHENTICATION_FAILED", "authentication"],
+  [Object.assign(new Error("Missing key"), { name: "NoSuchKey", $metadata: { httpStatusCode: 404 } }), "MEDIA_STORAGE_OBJECT_NOT_FOUND", "missing_object"],
+  [Object.assign(new Error("Connection reset"), { code: "ECONNRESET" }), "MEDIA_STORAGE_NETWORK_FAILURE", "network"]
+];
+for (const [error, code, category] of diagnosticCases) {
+  const diagnostic = classifyMediaStorageError(error);
+  assert.equal(diagnostic.code, code);
+  assert.equal(diagnostic.category, category);
+  assert.equal(typeof diagnostic.retryable, "boolean");
+  assert.equal(diagnostic.publicMessage.includes(error.message), false);
+}
+assert.equal(
+  classifyMediaStorageError(Object.assign(new Error("Signature mismatch"), { code: "SignatureDoesNotMatch" })).category,
+  "authentication"
+);
+assert.equal(classifyMediaStorageError(new Error("Unexpected provider failure")).code, "MEDIA_STORAGE_PROVIDER_ERROR");
+
+const timeoutStorage = createMediaStorage({
+  env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "neon" },
+  operationTimeoutMs: 20,
+  clientFactory() {
+    return {
+      send(_command, options = {}) {
+        return new Promise((_resolve, reject) => {
+          options.abortSignal?.addEventListener("abort", () => {
+            const error = new Error("request aborted by timeout");
+            error.name = "AbortError";
+            reject(error);
+          }, { once: true });
+        });
+      }
+    };
+  }
+});
+await assert.rejects(
+  timeoutStorage.putMediaObject({ data: Buffer.from("timeout"), mimeType: "image/jpeg" }),
+  (error) => classifyMediaStorageError(error).code === "MEDIA_STORAGE_NETWORK_FAILURE"
+);
+
+// The S3 request can resolve after response headers while its body is still streaming.
+// The operation deadline must remain active until all media bytes have been consumed.
+const timeoutDuringDownload = createMediaStorage({
+  env: { ...common, FYNX_MEDIA_STORAGE_PROVIDER: "neon" },
+  operationTimeoutMs: 20,
+  clientFactory() {
+    return {
+      async send(_command, options = {}) {
+        return {
+          Body: {
+            async *[Symbol.asyncIterator]() {
+              await new Promise((_resolve, reject) => {
+                options.abortSignal?.addEventListener("abort", () => {
+                  const error = new Error("response stream aborted by timeout");
+                  error.name = "AbortError";
+                  reject(error);
+                }, { once: true });
+              });
+            }
+          }
+        };
+      }
+    };
+  }
+});
+await assert.rejects(
+  timeoutDuringDownload.getMediaObjectBytes("media/" + UUID, "neon"),
+  (error) => classifyMediaStorageError(error).code === "MEDIA_STORAGE_NETWORK_FAILURE"
 );
 
 console.log("FYNX MEDIA OBJECT STORAGE: GREEN");
