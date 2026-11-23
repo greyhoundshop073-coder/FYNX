@@ -49,7 +49,7 @@ assert.match(server, /const permanentInfo = await mediaStorage\.inspectMediaObje
 assert.match(server, /throw new Error\("promoted media object failed verification"\)/);
 assert.match(server, /deleteMediaObject\(promotedObjectKey, promotedObjectProvider/);
 assert.match(server, /let commitAttempted = false/);
-assert.match(server, /commitAttempted = true;\\s*await client\.query\("COMMIT"\)/);
+assert.match(server, /commitAttempted = true;\s*await client\.query\("COMMIT"\)/);
 assert.match(server, /if \(!committed && !commitAttempted && promotedObjectKey\)/);
 assert.match(server, /commit outcome uncertain; permanent object preserved/);
 assert.match(server, /isDefinitiveDatabaseWriteFailure/);
