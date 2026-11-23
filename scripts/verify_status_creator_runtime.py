@@ -152,8 +152,13 @@ def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0
         time.sleep(0.45)
         latest = dump_ui(f"status-{stage}-wait.xml") or latest
         if stage in ("photo-camera-entry", "video-camera-entry") and not permission_checked:
-            latest = grant_camera_permission_if_requested(stage, latest)
-            permission_checked = True
+            permission_prompt_visible = find_click_target(latest, "Allow camera") is not None
+            camera_controls_visible = all(find_click_target(latest, marker) is not None for marker in expected)
+            if permission_prompt_visible:
+                latest = grant_camera_permission_if_requested(stage, latest)
+                permission_checked = True
+            elif camera_controls_visible:
+                permission_checked = True
         if all(find_click_target(latest, marker) is not None for marker in expected):
             screenshot(f"authenticated-status-{stage}.png")
             (ROOT / f"authenticated-status-{stage}.xml").write_text(latest + "\n", encoding="utf-8")
