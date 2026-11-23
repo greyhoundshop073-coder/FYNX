@@ -76,6 +76,8 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
     const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 800) : '';
     const location = typeof req.body?.location === 'string' ? req.body.location.trim().slice(0, 160) : '';
     const contactPhone = typeof req.body?.contactPhone === 'string' ? req.body.contactPhone.trim().slice(0, 40) : '';
+    const hasLogoMediaId = Object.prototype.hasOwnProperty.call(req.body || {}, 'logoMediaId');
+    const hasCoverMediaId = Object.prototype.hasOwnProperty.call(req.body || {}, 'coverMediaId');
     const logoMediaId = req.body?.logoMediaId == null || req.body.logoMediaId === '' ? null : String(req.body.logoMediaId).trim();
     const coverMediaId = req.body?.coverMediaId == null || req.body.coverMediaId === '' ? null : String(req.body.coverMediaId).trim();
     const mediaIds = [logoMediaId, coverMediaId].filter(Boolean);
@@ -98,11 +100,11 @@ export function registerMarketplaceShopProfileRoutes({ app, pool, auth }) {
           description = EXCLUDED.description,
           location = EXCLUDED.location,
           contact_phone = EXCLUDED.contact_phone,
-          logo_media_id = EXCLUDED.logo_media_id,
-          cover_media_id = EXCLUDED.cover_media_id,
+          logo_media_id = CASE WHEN $8 THEN EXCLUDED.logo_media_id ELSE marketplace_shop_profiles.logo_media_id END,
+          cover_media_id = CASE WHEN $9 THEN EXCLUDED.cover_media_id ELSE marketplace_shop_profiles.cover_media_id END,
           updated_at = NOW()
         RETURNING shop_name, description, location, contact_phone, logo_media_id, cover_media_id, updated_at
-      `, [req.user.sub, shopName, description, location, contactPhone, logoMediaId, coverMediaId]);
+      `, [req.user.sub, shopName, description, location, contactPhone, logoMediaId, coverMediaId, hasLogoMediaId, hasCoverMediaId]);
       const user = await pool.query('SELECT username, display_name FROM users WHERE id=$1 LIMIT 1', [req.user.sub]);
       if (!user.rows[0]) return res.status(404).json({ error: 'seller account not found' });
       return res.json({ shop: publicProfile({ ...user.rows[0], ...result.rows[0] }) });

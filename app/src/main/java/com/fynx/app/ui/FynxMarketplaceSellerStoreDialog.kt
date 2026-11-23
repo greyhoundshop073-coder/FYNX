@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -286,12 +287,37 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                                 )
                             } else {
+                                Box(
+                                    Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Storefront,
+                                        contentDescription = "Shop logo not set",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                            }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 FynxRemoteProfileAvatar(
                                     photoId,
                                     profileName.ifBlank { username },
-                                    Modifier.size(64.dp).clip(CircleShape),
+                                    Modifier.size(36.dp).clip(CircleShape),
                                     ownerUsername = username
                                 )
+                                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Text("Seller account", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        profileName.ifBlank { "@" + username.removePrefix("@") },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -311,15 +337,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                         overflow = TextOverflow.Ellipsis,
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                    if (profileName.isNotBlank() && !profileName.equals(storeName, ignoreCase = true)) {
-                                        Text(
-                                            "by " + profileName,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
                                     Text(
                                         "@${username.removePrefix("@")}",
                                         style = MaterialTheme.typography.labelSmall,
