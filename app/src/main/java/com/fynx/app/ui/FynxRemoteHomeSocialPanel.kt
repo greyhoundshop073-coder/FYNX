@@ -88,6 +88,8 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
     var peopleRecommendations by remember { mutableStateOf<List<HomePeopleRecommendation>>(emptyList()) }
     var dismissedPeople by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendationsLoading by remember { mutableStateOf(false) }
+    var peoplePhotoLookupsInFlight by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var peoplePhotoLookupsChecked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var peopleRecommendationsOffset by remember { mutableIntStateOf(0) }
     var peopleRecommendationsHasMore by remember { mutableStateOf(true) }
     var authorStatusViewer by remember { mutableStateOf<List<FynxStatus>?>(null) }
@@ -225,12 +227,35 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
                     peopleRecommendations = (existing + clean).distinctBy { it.username.lowercase() }
                     peopleRecommendationsOffset = offset + parsed.size
                     peopleRecommendationsHasMore = parsed.size >= 30
-                    parsed.forEach { person ->
+                    // Recommendation rows share the same bounded request budget as
+                    // Home post authors and commenters. Successful no-photo profiles are
+                    // remembered for this Home session; failures remain retryable.
+                    val photoLookups = parsed.filter { person ->
+                        val key = person.username.removePrefix("@").trim().lowercase()
+                        person.photoId.isNullOrBlank() &&
+                            key !in peoplePhotoLookupsChecked &&
+                            key !in peoplePhotoLookupsInFlight
+                    }.distinctBy { it.username.removePrefix("@").trim().lowercase() }
+                    val requestedPhotoKeys = photoLookups.map {
+                        it.username.removePrefix("@").trim().lowercase()
+                    }.toSet()
+                    peoplePhotoLookupsInFlight = peoplePhotoLookupsInFlight + requestedPhotoKeys
+                    photoLookups.forEach { person ->
+                        val key = person.username.removePrefix("@").trim().lowercase()
                         scope.launch {
-                            FynxProfileRemoteClient.get(context, person.username).onSuccess { profile ->
-                                peopleRecommendations = peopleRecommendations.map {
-                                    if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                            try {
+                                FynxHomeProfilePhotoLimiter.withPermit {
+                                    FynxProfileRemoteClient.get(context, person.username)
+                                }.onSuccess { profile ->
+                                    peoplePhotoLookupsChecked = peoplePhotoLookupsChecked + key
+                                    if (!profile.profilePhotoMediaId.isNullOrBlank()) {
+                                        peopleRecommendations = peopleRecommendations.map {
+                                            if (it.username.equals(person.username, true)) it.copy(photoId = profile.profilePhotoMediaId) else it
+                                        }
+                                    }
                                 }
+                            } finally {
+                                peoplePhotoLookupsInFlight = peoplePhotoLookupsInFlight - key
                             }
                         }
                     }

@@ -362,11 +362,20 @@ fun FynxHomeDiscoveryViewer(
                     FynxDiscoveryFullscreenVideo(video, isActive = page == pagerState.currentPage)
                 }
             }
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(12.dp)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(12.dp)
+                    .size(48.dp)
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onDismiss)
+                    .semantics {
+                        contentDescription = "Close Discovery"
+                        role = androidx.compose.ui.semantics.Role.Button
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Close, "Close Discovery", tint = Color.White)
+                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
             }
             currentVideo?.let { video ->
                 Column(

@@ -5188,7 +5188,14 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                     report.append(
                         "- PASS: opened a real, prepared Discovery video and captured its viewer with playback, mute, Like, Comments and Share controls; no interaction or post was submitted."
                     )
-                run("adb", "shell", "input", "keyevent", "4")
+                # Prefer the visible in-app close affordance so this journey proves
+                # the button itself works; Android Back remains a bounded recovery path.
+                close_control = find_control(viewer_xml, ["Close Discovery"])
+                if close_control:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
                 return_deadline = time.monotonic() + 15.0
                 discovery_home = ""
                 while time.monotonic() < return_deadline:
@@ -5197,6 +5204,17 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         discovery_home = candidate
                         break
                     time.sleep(0.5)
+                if not discovery_home:
+                    # Retry once through platform Back before declaring a navigation
+                    # failure; the Home-surface assertion remains mandatory.
+                    run("adb", "shell", "input", "keyevent", "4")
+                    recovery_deadline = time.monotonic() + 8.0
+                    while time.monotonic() < recovery_deadline:
+                        candidate = dump_ui("authenticated-discovery-return-home-back-recovery.xml")
+                        if candidate and is_home_feed_runtime_surface(candidate):
+                            discovery_home = candidate
+                            break
+                        time.sleep(0.5)
                 if not discovery_home:
                     FAILURES.append("Discovery video viewer did not return to the Home feed safely.")
                     return dump_ui("authenticated-discovery-return-home-timeout.xml") or viewer_xml
@@ -5208,7 +5226,12 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                 # Even a viewer that fails readiness must be dismissed. Leaving
                 # it open hides the Home navigation and corrupts every later
                 # cross-destination check in this runtime journey.
-                run("adb", "shell", "input", "keyevent", "4")
+                close_control = find_control(latest_viewer_probe, ["Close Discovery"])
+                if close_control:
+                    _, close_x, close_y = close_control
+                    run("adb", "shell", "input", "tap", str(close_x), str(close_y))
+                else:
+                    run("adb", "shell", "input", "keyevent", "4")
                 return_deadline = time.monotonic() + 15.0
                 discovery_home = ""
                 while time.monotonic() < return_deadline:
@@ -5217,6 +5240,15 @@ def capture_home_feed_visuals(home_xml: str, *, require_real_media: bool = True)
                         discovery_home = candidate
                         break
                     time.sleep(0.5)
+                if not discovery_home:
+                    run("adb", "shell", "input", "keyevent", "4")
+                    recovery_deadline = time.monotonic() + 8.0
+                    while time.monotonic() < recovery_deadline:
+                        candidate = dump_ui("authenticated-discovery-return-home-after-readiness-failure-back-recovery.xml")
+                        if candidate and is_home_feed_runtime_surface(candidate):
+                            discovery_home = candidate
+                            break
+                        time.sleep(0.5)
                 if discovery_home:
                     current = discovery_home
                 else:

@@ -215,6 +215,22 @@ checks = [
         and "refusing to tap an obscured control" in navigation,
     ),
     (
+        "Home People recommendations deduplicate profile hydration and share the same four-request limit",
+        "peoplePhotoLookupsInFlight" in home
+        and "peoplePhotoLookupsChecked" in home
+        and "FynxHomeProfilePhotoLimiter.withPermit" in home
+        and "person.photoId.isNullOrBlank()" in home
+        and "key !in peoplePhotoLookupsChecked" in home
+        and "finally {" in home
+        and "MAX_CONCURRENT_REQUESTS = 4" in photo_limiter,
+    ),
+    (
+        "Discovery close affordance is an explicitly clickable accessible button",
+        '.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onDismiss)' in discovery
+        and 'contentDescription = "Close Discovery"' in discovery
+        and 'role = androidx.compose.ui.semantics.Role.Button' in discovery,
+    ),
+    (
         "opening Discovery records each page view once rather than double-counting the first view",
         "FynxDiscoveryClient.recordView(context, video.id)" in discovery
         and "fun openHomeDiscoveryViewer(index: Int)" in home
