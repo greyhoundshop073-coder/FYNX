@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# Final CI gate for the controlled, owner-managed FYNX music catalogue.
+
 ROOT = Path(__file__).resolve().parents[1]
 composer = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt").read_text(encoding="utf-8")
 catalogue = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMusicCatalogueClient.kt").read_text(encoding="utf-8")
