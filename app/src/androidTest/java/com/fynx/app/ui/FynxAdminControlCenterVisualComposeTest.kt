@@ -116,7 +116,12 @@ class FynxAdminControlCenterVisualComposeTest {
             "admin-test-fixtures"
         )
         check(directory.mkdirs() || directory.isDirectory)
-        val file = File(directory, "FYNX-admin-" + suffix + "-overview.png")
+        val fileName = if (role == "OWNER") {
+            "FYNX-admin-owner-overview.png"
+        } else {
+            "FYNX-admin-admin-overview.png"
+        }
+        val file = File(directory, fileName)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             ?: error("Could not capture the Admin Control Center emulator display")
         FileOutputStream(file).use { output ->
