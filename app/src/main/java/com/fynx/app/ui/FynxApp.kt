@@ -225,6 +225,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         pendingIncomingCall = event
                         callTarget = null
                         callVideo = event.callType.equals("video", true)
+                        callListingId = event.listingId
+                        callProductTitle = event.productTitle
+                        callSellerUsername = event.sellerUsername
                         openChat = null
                         openGroup = null
                         profileUser = null
@@ -896,7 +899,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null })
+            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, initialListingId = pendingIncomingCall?.listingId ?: callListingId, initialProductTitle = pendingIncomingCall?.productTitle ?: callProductTitle, initialSellerUsername = pendingIncomingCall?.sellerUsername ?: callSellerUsername, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null; callListingId = null; callProductTitle = null; callSellerUsername = null })
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })

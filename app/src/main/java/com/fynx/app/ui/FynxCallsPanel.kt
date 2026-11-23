@@ -29,12 +29,15 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}, onOutgoingCallConsumed: () -> Unit = {}) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, initialListingId: String? = null, initialProductTitle: String? = null, initialSellerUsername: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}, onOutgoingCallConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
     var video by remember { mutableStateOf(initialVideo) }
     var targetUserId by remember { mutableStateOf(initialIncomingUserId) }
+    var callListingId by remember(initialIncomingCallId, initialListingId) { mutableStateOf(initialListingId) }
+    var callProductTitle by remember(initialIncomingCallId, initialProductTitle) { mutableStateOf(initialProductTitle) }
+    var callSellerUsername by remember(initialIncomingCallId, initialSellerUsername) { mutableStateOf(initialSellerUsername) }
     var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
     var targetAvatarUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() && it != initialIncomingUserId }) }
     var endingCall by remember { mutableStateOf(false) }
@@ -197,7 +200,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 calls = FynxCallsStore.load(context)
             } else {
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) }
+                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video, callListingId) }
                 FynxCallsStore.updateStatus(context, current.id, "Calling")
                 calls = FynxCallsStore.load(context)
             }
@@ -234,7 +237,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
             if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
                 mediaEngine.connect(newSession); mediaConnected = true
-                realtimeClient.sendCallInvite(id, resolvedId, isVideo)
+                realtimeClient.sendCallInvite(id, resolvedId, isVideo, callListingId)
                 FynxCallsStore.updateStatus(context, id, "Calling")
                 calls = FynxCallsStore.load(context)
             } else permissionLauncher.launch(required)
@@ -285,6 +288,16 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     val activeSession = session
     val activePeerName = activeCall
     if (activePeerName != null && activeSession != null) {
+        if (!callProductTitle.isNullOrBlank() && !callListingId.isNullOrBlank()) {
+            Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("MARKETPLACE LIVE PROOF", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(callProductTitle.orEmpty(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text("Listing #${callListingId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    callSellerUsername?.let { Text("Seller: @${it.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+                }
+            }
+        }
         FynxActiveCallPanel(name = activePeerName, session = activeSession, currentUsername = currentUsername, avatarUsername = targetAvatarUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack, errorMessage = errorMessage,
             onAnswer = {
                 val current = session ?: return@FynxActiveCallPanel

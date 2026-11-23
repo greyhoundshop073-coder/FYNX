@@ -62,7 +62,7 @@ class FynxRealtimeClient(
             val participant: GroupCallParticipant? = null, val sdp: String? = null,
             val candidate: IceCandidatePayload? = null, val error: String? = null
         ) : Event
-        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null) : Event
+        data class Call(val callId: String, val callType: String, val fromUserId: String, val toUserId: String, val signalType: String, val sdp: String? = null, val candidate: IceCandidatePayload? = null, val fromUsername: String? = null, val error: String? = null, val listingId: String? = null, val productTitle: String? = null, val sellerUsername: String? = null) : Event
     }
     data class IceCandidatePayload(val candidate: String, val sdpMid: String?, val sdpMLineIndex: Int?, val usernameFragment: String?) {
         fun toWebRtcCandidate(): IceCandidate = IceCandidate(sdpMid, sdpMLineIndex ?: 0, candidate)
@@ -341,7 +341,7 @@ class FynxRealtimeClient(
         val sdp = root.optString("sdp").takeIf { it.isNotBlank() && it.length <= 200_000 }
         if ((signalType == "offer" || signalType == "answer") && sdp == null) return null
         if (signalType == "ice" && c == null) return null
-        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() })
+        return Event.Call(callId, callType, fromUserId, toUserId, signalType, sdp, c, root.optString("fromUsername").takeIf { it.isNotBlank() }, root.optString("error").takeIf { it.isNotBlank() }, root.optString("listingId").takeIf { it.isNotBlank() }, root.optString("productTitle").takeIf { it.isNotBlank() }?.take(180), root.optString("sellerUsername").takeIf { it.isNotBlank() }?.take(80))
     }
     private fun sendGroupCall(groupId: String, callId: String, signalType: String, extra: JSONObject? = null): Boolean {
         if (groupId.isBlank() || groupId.length > 80 || callId.isBlank() || callId.length > 80) return false
@@ -364,7 +364,9 @@ class FynxRealtimeClient(
         sendGroupCall(groupId, callId, "group_ice", JSONObject().put("toUserId", targetUserId).put("callType", if (video) "video" else "voice")
             .put("candidate", JSONObject().put("candidate", candidate.sdp).put("sdpMid", candidate.sdpMid)
                 .put("sdpMLineIndex", candidate.sdpMLineIndex)))
-    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "invite")
+    fun sendCallInvite(callId: String, targetUserId: String, video: Boolean, listingId: String? = null) =
+        sendCall(callId, targetUserId, if (video) "video" else "voice", "invite",
+            listingId?.takeIf { it.isNotBlank() }?.let { JSONObject().put("listingId", it) })
     fun sendCallAccept(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "accept")
     fun sendCallReject(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "reject")
     fun sendCallBusy(callId: String, targetUserId: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "busy")
