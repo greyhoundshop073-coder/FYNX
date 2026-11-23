@@ -59,6 +59,7 @@ assert.match(configSource, /buckets:\s*\{[\s\S]*?"fynx-media":\s*\{\s*access:\s*
 assert.match(deployWorkflowSource, /--project-id patient-lab-43403708/, "Neon deployment must target the existing FYNX project");
 assert.match(deployWorkflowSource, /checkout fynx-testing/, "Neon deployment must target the populated FYNX testing branch");
 assert.doesNotMatch(deployWorkflowSource, /spring-mode-34864088|checkout fynx-dev/, "Neon deployment must not target the empty reset project/branch");
+assert.match(deployWorkflowSource, /sk_test_/, "Neon testing deployment must reject live Paystack secret keys");
 const bridgeSyntax = spawnSync(process.execPath, ["--check", path.join(backendDir, "neon-realtime-bridge.js")], { encoding: "utf8" });
 assert.equal(bridgeSyntax.status, 0, bridgeSyntax.stderr || "Neon realtime bridge syntax check failed");
 

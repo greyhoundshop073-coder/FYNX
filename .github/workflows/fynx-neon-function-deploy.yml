@@ -75,6 +75,7 @@ jobs:
             echo "::error::Required deployment secrets are missing. Check NEON_API_KEY, FYNX_JWT_SECRET, FYNX_GEMINI_API_KEY and FYNX_PAYSTACK_SECRET_KEY."
             exit 1
           fi
+          case "$FYNX_PAYSTACK_SECRET_KEY" in sk_test_*) ;; *) echo "::error::The FYNX testing branch requires a Paystack TEST secret (sk_test_...). Live Paystack keys are rejected."; exit 1 ;; esac
           if [ "$FYNX_WALLET_TEST_MODE_ENABLED" != "false" ] || [ "$FYNX_WALLET_CARD_FUNDING_ENABLED" != "false" ]; then
             echo "::error::Initial Neon deployment must keep wallet test mode and card funding disabled until provider/runtime safety checks pass."
             exit 1
