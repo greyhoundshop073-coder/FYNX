@@ -33,7 +33,7 @@ require("FynxAdminClient.dashboard(context)" in source, "role must be fetched fr
 require("ensureTrustSafetySchema(routePool)" in backend and "openReports:counts[1]+counts[2]" in backend,
         "Overview open-report total must combine the account-report and content-moderation tables")
 require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
-        "safetyActions24h:counts[3]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
+        "safetyActions24h:counts[4]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
         "24-hour safety dashboard metric must count real recorded administrative safety decisions")
 require('d.role == "OWNER" || d.role == "ADMIN"' in source, "owner/admin dashboard gate is missing")
 require('if (d.role == "OWNER")' in source, "owner-only admin management gate is missing")
