@@ -110,10 +110,9 @@ class FynxAdminControlCenterVisualComposeTest {
         assertTrue("Support fixture was not requested", requestedPaths.contains("/api/support/access"))
 
         val suffix = if (role == "OWNER") "owner" else "admin"
-        val directory = File(
-            checkNotNull(compose.activity.getExternalFilesDir(null)),
-            "admin-test-fixtures"
-        )
+        // Internal app storage is readable by adb through run-as on this debuggable
+        // instrumentation build; Android 11+ blocks ordinary adb pull from Android/data.
+        val directory = File(compose.activity.filesDir, "admin-test-fixtures")
         check(directory.mkdirs() || directory.isDirectory)
         val fileName = if (role == "OWNER") {
             "FYNX-admin-owner-overview.png"
