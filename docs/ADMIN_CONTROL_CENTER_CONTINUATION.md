@@ -209,3 +209,12 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Extended the Admin contract verifier to guard the emulator trigger, required screenshot collection and absence of unrelated Chat push triggers.
 - The screenshot fixtures remain GET-only. A successful screenshot run proves the real Android UI rendered for synthetic read-only responses; it does not prove live publishing, real media uploads or production OWNER/ADMIN authorization.
 - This is a workflow and evidence-integrity correction only. It does not change login, production data, or other feature implementations.
+
+
+## 2026-11-23 — Emulator prerequisites and pre-existing CI assertion correction
+
+- The first corrected PR run selected the Admin emulator step but skipped the preceding KVM permission step. Added the Admin PR head to that prerequisite so the hardware-accelerated emulator receives the same device permissions as other runtime-certified branches.
+- The Backend CI failure was traced to a stale regex in `scripts/verify_chat_end_to_end.py`: it required `FynxProductionMessaging.sendText(context,` on one line, while the unchanged canonical `ConversationPanel.kt` uses a normal multiline call. The verifier now accepts whitespace/newlines between the opening parenthesis and `context`.
+- No Chat application code or Admin production endpoint was changed for this correction.
+- The Admin contract verifier now checks both the emulator-step selection and the KVM prerequisite selection.
+- Re-run all affected checks on the new final PR head. The previous emulator attempt is not considered screenshot proof unless its artifact contains all three required files and the evidence manifest.

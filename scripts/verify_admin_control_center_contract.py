@@ -302,6 +302,11 @@ emulator_step_end = emulator_workflow.index("timeout-minutes:", emulator_step_st
 emulator_step = emulator_workflow[emulator_step_start:emulator_step_end]
 require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in emulator_step,
         "Admin PR must actually select the Android emulator/instrumentation step")
+kvm_step_start = emulator_workflow.index("- name: Enable KVM permissions for Android emulator")
+kvm_step_end = emulator_workflow.index("run: |", kvm_step_start)
+kvm_step = emulator_workflow[kvm_step_start:kvm_step_end]
+require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in kvm_step,
+        "Admin PR must select the KVM permission setup before starting the hardware-accelerated emulator")
 for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png"):
     require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
 require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
