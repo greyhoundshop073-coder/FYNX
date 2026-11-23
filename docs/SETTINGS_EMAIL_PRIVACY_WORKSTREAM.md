@@ -47,11 +47,11 @@ CI should run the Android build/tests and the backend email/deployment contracts
 
 ## Transactional email notifications
 
-Verified email addresses can receive important Marketplace and Wallet activity notices. This is transactional account activity, not promotional email. The implementation sends only after a confirmed event and respects the account-level email master switch plus Marketplace or Wallet email preference:
+Verified email addresses can receive important Marketplace, Wallet and account-safety notices. These are transactional/security messages, not promotional email. Routine Marketplace and Wallet notices are sent only after a confirmed event and respect the account-level email master switch plus category email preference. Essential safety notices are not suppressed by optional activity-email switches:
 
-- Marketplace: Paystack payment confirmation, FYNX Wallet order payment, seller fulfillment progress, the other party opening a protection case, and unpaid order cancellation to the seller.
+- Marketplace: Paystack payment confirmation, FYNX Wallet order payment, seller fulfillment progress, the other party opening a protection case, unpaid order cancellation to the seller, and watched-price changes.
 - Wallet: confirmed top-ups and completed, failed or reversed withdrawals.
-- Security/account-protection notices remain a separate safety channel and are not suppressed by the activity-email switches.
+- Safety: essential account lock/restriction status notices; these require a verified address and configured SMTP, but bypass optional activity-email switches.
 
 The app notification is stored independently from email/push delivery. The email delivery ledger uses a deterministic notification ID and verified destination to avoid duplicate sends; a failed delivery is recorded as failed rather than shown as sent. User preference defaults are enabled for existing accounts; users can turn off all activity emails or separately disable Marketplace and Wallet email updates.
 
