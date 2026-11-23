@@ -1,4 +1,4 @@
-const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://fynx-backend-testing-testing.up.railway.app").replace(/\/$/, "");
+const BASE_URL = (process.env.FYNX_PRODUCTION_BASE_URL || "https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech").replace(/\/$/, "");
 // Keep certification strict: HTTP health and database readiness are both required.
 // The URL is configurable so certification can target the active FYNX Render service.
 const TIMEOUT_MS = 120_000;
