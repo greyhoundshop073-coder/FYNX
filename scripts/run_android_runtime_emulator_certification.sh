@@ -35,4 +35,39 @@ for fixture_remote in \
   fi
 done
 
+
+if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ] && [ "$runtime_status" -eq 0 ]; then
+  expected_admin_screenshots=(
+    "FYNX-admin-owner-music-library.png"
+    "FYNX-admin-owner-marketplace-campaigns.png"
+    "FYNX-admin-admin-marketplace-campaigns.png"
+  )
+  missing_admin_screenshots=0
+  for screenshot in "${expected_admin_screenshots[@]}"; do
+    if [ ! -s "$fixture_dir/$screenshot" ]; then
+      echo "::error::Required Admin emulator screenshot is missing: $fixture_dir/$screenshot"
+      missing_admin_screenshots=1
+    else
+      echo "::notice::Verified Admin emulator screenshot: $fixture_dir/$screenshot"
+    fi
+  done
+  if [ "$missing_admin_screenshots" -ne 0 ]; then
+    runtime_status=1
+  else
+    {
+      echo "# FYNX Admin emulator screenshot evidence"
+      echo
+      echo "- Source: Android instrumentation on this exact workflow commit."
+      echo "- Fixtures: synthetic GET-only responses; no publishing or production mutations."
+      echo "- Verified files:"
+      for screenshot in "${expected_admin_screenshots[@]}"; do
+        echo "  - `$screenshot`"
+      done
+      echo "- Result: ADMIN_SCREENSHOT_EVIDENCE=GREEN"
+    } > fynx-runtime-screenshots/FYNX-admin-screenshot-evidence.md
+  fi
+elif [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::error::Admin screenshot collection is not certified because Android instrumentation did not pass."
+fi
+
 exit "$runtime_status"

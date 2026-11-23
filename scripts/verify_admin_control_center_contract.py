@@ -294,6 +294,22 @@ workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="ut
 runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete-20261112" in workflow,
         "Admin PR must select its own runtime certification scope")
+emulator_workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+emulator_runner = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
+admin_branch = "workstream4/admin-trust-support-music-20261123"
+emulator_step_start = emulator_workflow.index("- name: Run Android instrumentation tests and capture the real FYNX UI")
+emulator_step_end = emulator_workflow.index("timeout-minutes:", emulator_step_start)
+emulator_step = emulator_workflow[emulator_step_start:emulator_step_end]
+require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in emulator_step,
+        "Admin PR must actually select the Android emulator/instrumentation step")
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png"):
+    require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
+require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
+        "Admin emulator certification must fail when any required screenshot is absent")
+chat_final_workflow = (ROOT / ".github/workflows/fynx-chat-final-closure.yml").read_text(encoding="utf-8")
+chat_parity_workflow = (ROOT / ".github/workflows/fynx-chat-group-parity-layout.yml").read_text(encoding="utf-8")
+require(admin_branch not in chat_final_workflow and admin_branch not in chat_parity_workflow,
+        "Admin branch must not create unrelated Chat workflow push triggers")
 require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
         "FYNX-admin-runtime-certification.md" in runtime_runner and
         "ADMIN_RUNTIME_BLOCKED" in runtime_runner and

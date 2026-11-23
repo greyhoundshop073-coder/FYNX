@@ -198,3 +198,14 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Added GET-only emulator fixtures that capture Owner Music Library, Owner Marketplace campaigns and Admin Marketplace campaigns, and assert that Admin cannot access the Owner-only Music Library tab.
 - Android CI is scoped to Admin-only runtime evidence on this branch; screenshot files are pulled into the runtime artifact. Chat Final Closure and Chat Group Parity/Layout are also run on this branch.
 - Screenshots and test fixtures do not create real tracks, campaigns, media objects, database rows or production mutations. Live authenticated Owner/Admin backend certification remains separate.
+
+
+## 2026-11-23 — Admin emulator trigger and evidence gate correction
+
+- Root cause: the Admin branch had `FYNX_ADMIN_VISUALS_ONLY=1` and an artifact upload condition, but its PR head was absent from the condition that actually starts the Android emulator/instrumentation step. The build could therefore pass without running the three Admin screenshot tests.
+- Corrected the Android emulator step selection for `workstream4/admin-trust-support-music-20261123`.
+- The emulator runner now treats all three Admin screenshot files as required evidence after a successful instrumentation run. A missing file makes the runtime job fail; a manifest records the exact files only after all three are present.
+- Removed the Admin branch from the push triggers of Chat Final Closure and Chat Group Parity/Layout. Their normal pull-request checks remain unchanged.
+- Extended the Admin contract verifier to guard the emulator trigger, required screenshot collection and absence of unrelated Chat push triggers.
+- The screenshot fixtures remain GET-only. A successful screenshot run proves the real Android UI rendered for synthetic read-only responses; it does not prove live publishing, real media uploads or production OWNER/ADMIN authorization.
+- This is a workflow and evidence-integrity correction only. It does not change login, production data, or other feature implementations.
