@@ -67,3 +67,115 @@ The correction commit is `c3854dfe3ea61c7854ac464733f8f3854a7c8771`. Android, Ba
 ## Release boundary
 
 The consolidation PR is not a final APK certification. Its prior description records Marketplace/My Shop/Wallet live screens and the production backend probe as unverified/blocked. The official APK must still be built from the approved canonical integration source after approval; this ledger does not authorize merging PR #563 or changing the canonical branch.
+
+
+## Current operational checkpoint — 2026-11-22 (PR #580; supersedes 2026-11-20 status for this workstream)
+
+**Canonical branch:** `integration/fynx-single-apk-20261013`  
+**Canonical base SHA used by candidate:** `dfb9b83d420b41512224ad7180eab797b9664f6d`  
+**Active candidate PR:** [#580](https://github.com/greyhoundshop073-coder/FYNX/pull/580), OPEN and UNMERGED  
+**Candidate branch:** `fix/canonical-local-runtime-visual-modes-20261122`  
+**Candidate head at checkpoint:** `e1c3bcf149dff2246ca7123867910958323b0037`
+
+### Grouped work added to the candidate
+
+- Home Feed runtime detection no longer treats normal post interactions as modal routes.
+- The disposable local Discovery fixture explicitly persists and verifies `FOR_YOU` before its local videos are scanned.
+- Groups tab uses a unique `Open Groups` accessibility description and the runtime verifier requires that exact control.
+- Chat/Groups account/group read-receipt capability state is scoped and the authoritative final message snapshot is persisted with stale-session guards.
+- Added focused receipt tests, two-account isolation instrumentation and offline message persistence/cold-restart coverage.
+- Backend group-history capability tests and Chat/Groups parity/closure contracts were updated.
+- Added/updated the runtime/workflow handoff and permanent engineering standard (see #581 port recorded on the next candidate head).
+
+### Exact-head evidence at time of checkpoint
+
+- Android source/contract gates: PASSED on #45058308486, including camera script syntax, Home video/Discovery, Home lifecycle, R5A Groups security, Status source/runtime contract, Marketplace/Wallet and H12 gates.
+- Backend CI: PASSED on #45058308499; production reachability was SKIPPED and remains unverified.
+- Chat/Groups parity/layout static contracts: PASSED on #45058308496; Android regression build was still running.
+- Android fast build/test/lint: still running in #45058308486.
+- Installed-app runtime capture and final screenshots/hierarchy: NOT YET VERIFIED on this head.
+- Earlier Chat Closure Android unit/lint/debug APK workflow #45057973421 passed on ancestor #781da8b; the Chat source files were unchanged afterward, but this is not a substitute for the latest full exact-head checks.
+- No feature-branch APK is the shared canonical APK. No official APK is published.
+
+### Related PR disposition
+
+- #574 Chat/Groups source changes were selectively ported to #580; keep #574 OPEN until the candidate has passed its checks and the final integration disposition is confirmed.
+- #581 global engineering standard is being ported into the same candidate; do not treat documentation or a feature-branch PR as canonical integration.
+- #155 currently has a head SHA identical to the canonical branch and targets `main`; it contains no unique change relative to canonical and should be closed as superseded rather than merged into the delivery path.
+- Divergent #535/#573/#171 and old consolidation-base PRs must be reviewed per-file; do not wholesale merge them.
+
+### Next acceptance gates
+
+1. Complete #45058308486 Android build, unit tests, lint, instrumentation and installed-app runtime capture.
+2. Complete #45058308496 Android regression build.
+3. Verify exact-head Chat/Groups closure and collect local UI evidence.
+4. Review Home/Discovery, Camera, Status and Marketplace/My Shop runtime reports/screenshots, keeping live-service blockers separate.
+5. Reconcile the remaining unique PR work into one candidate branch, then build the shared APK only from the approved canonical commit after authorization.
+
+**Release boundary:** This candidate is not merged into canonical, no production configuration/data was changed, and no official APK was published.
+
+### 22 November 2026 — Runtime evidence correction and next grouped repair
+
+- PR #580 exact-head run #45059210784: Android instrumentation passed (83 tests, 0 failed, 1 skipped); installed-app runtime capture remained RED.
+- Actual Groups screen screenshot exists; the runtime selector expected `Create group` but the rendered button was `＋ New group`. The button is being given a stable accessibility label.
+- Offline private message was still in the composer after the old tap. The send control now has an accessibility click action; the verifier uses IME Send first and confirms the message appears outside the EditText before declaring success.
+- Discovery fixtures were seeded but, with only three feed posts, the insertion was after the last post. Short test feeds now place Discovery after the first post to make it reachable.
+- Home ratio/Discovery viewer and Home final navigation remain unresolved; Status capture reported no running app process after Camera. No FATAL/ANR marker was found in the available logcat, so this is not yet evidence of an app crash.
+- Next gate: rerun exact-head build, instrumentation and emulator screenshots; keep backend, multi-account delivery, Wallet/Paystack and official APK certification explicitly separate until their prerequisites are available.
+
+**Release boundary:** PR #580 remains a feature candidate. No canonical merge, production change or official APK publication has occurred.
+
+### 22 November 2026 — Neon Object Storage selectively integrated into candidate
+
+- PR #572 head `494be03a025955825ef75579fae1e4e574f224fe` was integrated into the PR #580 feature candidate, not canonical. Its backend CI passed; Android build and instrumentation passed (83 tests, 0 failed, 1 skipped), while its installed-app visual runtime remained RED on separate Chat/Groups, Home, Camera, and authenticated Marketplace/Wallet journeys.
+- Candidate now includes Neon/R2 direct signed media uploads, provider-pinned upload intent completion/cleanup, strict trusted-host checks, no bearer-token forwarding to object storage, PostgreSQL fallback, and backend/Android storage tests.
+- Live Neon upload, HEAD validation, authorized retrieval, expiry and cleanup remain UNVERIFIED until a healthy test service and branch-scoped credentials are available. No production credentials, bucket, configuration or data were changed.
+
+**Release boundary:** feature candidate only; no canonical merge or official APK publication.
+
+### 22 November 2026 — Selective Chat reliability port from #535
+
+- Reviewed the divergent #535 branch per-file and selectively ported its unique private-history fallback, per-chat alert policy and deterministic group reconnect-drain tests into the #580 candidate.
+- Private chat now distinguishes saved-history refresh failure from an empty first-load failure. In-app alert sound/vibration now respects per-chat notification and mute settings. Group reconnect tests verify successful server-ID replacement and preservation of pending group/message work after a simulated failure.
+- All added tests use local fixtures/injected transports. They do not certify live delivery, FCM or backend readiness.
+
+**Release boundary:** feature candidate only; no canonical merge, production change or official APK publication.
+
+### 22 November 2026 — Camera video editor accessibility correction
+
+- Real Camera evidence showed the Text rail action and Video FX tiles on screen but without stable accessible names. Added merged accessibility labels to the shared rail-action and effect-tile clickable surfaces, and added harness contracts for both.
+- Next exact-head runtime must demonstrate video text entry, Cinematic/Warm Film selection, and a completed edited MP4 export. This source repair is not yet runtime-certified.
+
+### 22 November 2026 — Groups accessibility and large-history fixture
+
+- Groups list cards now expose merged `Open group <name>` accessibility labels on their actual clickable surfaces.
+- The disposable Chat runtime fixture now verifies 1,002 persisted account-scoped messages, including the two visible conversation messages at the end of the history. Added a harness contract for this stress case.
+- Preserved the candidate's newer group read-receipt final-snapshot persistence logic.
+
+**Release boundary:** feature candidate only; no canonical merge or official APK publication.
+
+### 22 November 2026 — Instrumentation fixture assertion correction
+
+- Run #45067248420: APK build and unit tests passed; Android instrumentation reported 86 tests, 1 failed, 1 skipped. The only failure was two stale fixture assertions expecting 2 messages after the same test now seeds and verifies 1,002 messages. Both stale assertions now expect 1,002.
+- Runtime navigation was not attempted because the instrumentation gate correctly stopped the sequence. The next exact-head run must repeat instrumentation before runtime certification.
+
+
+### 23 November 2026 — Exact-head Chat/Groups runtime failure diagnosis and grouped repair
+
+- Exact-head candidate commit `c02e0dcb120ca46ab729fd6721bc608ce99a9aa8` built successfully; Android instrumentation completed 86 tests with zero failures and one explicitly skipped live-Railway probe. Backend CI, Chat/Groups parity and Chat final-closure checks passed.
+- The installed-app visual stage remained RED. The log showed the focused private-chat verifier opened a conversation but did not prove it was the seeded peer. The harness used a generic "first clickable row" heuristic even though the disposable fixture has a unique, stable peer label. The focused run now selects the exact `Open chat with FYNX Runtime Peer` accessibility row and requires the real message composer.
+- The group-creation runtime selector required `Group name input` and `Description input`, but the actual two Compose OutlinedTextFields exposed only their visible labels. Added stable accessibility content descriptions to those real fields; no group-creation behavior or login flow was changed.
+- Added regression contracts for exact peer selection and both group-field labels.
+- The same run separately reported Home preview bounds as 0.562 for all seeded video shapes and a Home-return navigation failure after Chat/Groups. These remain separate runtime defects to diagnose from their own hierarchy/screenshot evidence; they are not silently reclassified as Chat/Groups passes.
+- Next gate: rerun the exact candidate head through Android build, unit tests, lint, instrumentation and installed-app runtime capture. Chat/Groups remains open until the exact peer history, group dialog, group conversation, offline send/reopen and process-death restoration screenshots are captured successfully.
+- No canonical merge, production database change, Railway deployment change or official APK publication was made.
+
+
+### 23 November 2026 — Selective Group ownership and leave-action recovery from PR #523
+
+- Audited PR #523 against the active candidate instead of merging its 177-commit divergent branch. The backend group-membership route was byte-identical to the candidate; the candidate already contains newer account/session-safe group settings, notification and report behavior.
+- One material UI capability was missing from the candidate's current group settings: owner-verified transfer of group ownership and authenticated member leave. Selectively restored these actions on top of the newer group settings screen.
+- Ownership transfer requires a currently stored group member other than the active user, calls the existing authenticated server endpoint, verifies the request session is still the same account, then updates account-scoped group membership roles only after server confirmation.
+- Leaving a group calls the existing authenticated server endpoint, verifies the request session, removes the group and local history only in the same account namespace, then returns to the group list.
+- Added static regression contracts for both flows and their session/account guards. This does not certify live server behavior; that remains part of backend/runtime verification.
+- PR #523 remains open pending exact-head CI and a final per-file unique-change audit. It must not be merged wholesale.

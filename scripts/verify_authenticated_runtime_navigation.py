@@ -294,6 +294,43 @@ def has_accessibility_label(xml_text: str, labels: list[str]) -> bool:
     )
 
 
+def find_visible_node(xml_text:str, labels:list[str]):
+    """Find a visible semantic node even when it is an editable field or static label, not clickable."""
+    if not xml_text:
+        return None
+    wanted = [label.strip().casefold() for label in labels]
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+    candidates = []
+    for node in root.iter("node"):
+        if node.attrib.get("visible-to-user", "true").lower() == "false":
+            continue
+        values = (
+            (node.attrib.get("text") or "").strip().casefold(),
+            (node.attrib.get("content-desc") or "").strip().casefold(),
+            (node.attrib.get("resource-id") or "").strip().casefold(),
+        )
+        if any(value and any(label == value or label in value for label in wanted) for value in values):
+            center = _center(node)
+            if center:
+                candidates.append((node, center))
+    if not candidates:
+        return None
+    # Prefer the most specific semantic node, not a broad parent container.
+    node, center = min(candidates, key=lambda item: (
+        sum(len(value) for value in (
+            (item[0].attrib.get("text") or "").strip(),
+            (item[0].attrib.get("content-desc") or "").strip(),
+            (item[0].attrib.get("resource-id") or "").strip(),
+        ) if value),
+        (item[0].attrib.get("bounds") or "").count(","),
+    ))
+    label = (node.attrib.get("text") or node.attrib.get("content-desc") or node.attrib.get("resource-id") or "").strip()
+    return label, center[0], center[1]
+
+
 def find_control(xml_text:str, labels:list[str], *, exact_only: bool = False):
     if not xml_text: return None
     wanted=[x.lower() for x in labels]
@@ -1547,10 +1584,10 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
             # Direct-on-media text journey: the typing field is invisible apart from the cursor.
             photo_text_xml = tap_control(
-                second_editor, ["Text"], f"{prefix}-camera-photo-text-tool", ["Text on media"]
+                second_editor, ["Text"], f"{prefix}-camera-photo-text-tool", ["Add text overlay"], exact_only=True
             )
             if photo_text_xml:
-                text_field = find_control(photo_text_xml, ["Text on media"])
+                text_field = find_visible_node(photo_text_xml, ["Text on media"])
                 if text_field:
                     _, tx, ty = text_field
                     run("adb", "shell", "input", "tap", str(tx), str(ty))
@@ -2358,15 +2395,15 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     # Timing is available only after a text overlay is created and selected. The
     # previous verifier searched for the timing title before selecting any overlay.
     video_text_xml = tap_control(
-        editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Text on media"]
+        editor, ["Text"], f"{prefix}-camera-video-text-tool", ["Add text overlay"], exact_only=True
     )
     if video_text_xml:
         add_overlay_xml = tap_control(
             video_text_xml, ["Add text overlay", "+ Add"], f"{prefix}-camera-video-text-add",
-            ["Text on media"]
+            ["Add text overlay"]
         )
         if add_overlay_xml:
-            video_text_field = find_control(add_overlay_xml, ["Text on media"])
+            video_text_field = find_visible_node(add_overlay_xml, ["Text on media"])
             if video_text_field:
                 _, vx, vy = video_text_field
                 run("adb", "shell", "input", "tap", str(vx), str(vy))
@@ -3145,6 +3182,131 @@ def create_local_group_fixture_through_ui(groups_xml: str) -> str:
     return group_name
 
 
+def force_stop_and_restore_local_home(name:str)->str:
+    """Kill the app process, cold-launch FYNX and verify local session restoration."""
+    stopped=run("adb","shell","am","force-stop",PACKAGE,timeout=15)
+    if stopped.returncode != 0:
+        FAILURES.append(name+": Android could not force-stop the FYNX application process.")
+        return ""
+    remaining=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if (remaining.stdout or "").strip():
+        FAILURES.append(name+": the FYNX process remained alive after force-stop; process death was not proven.")
+        return ""
+    home=restore_home_after_restart(name)
+    if not home or not is_authenticated_home_surface(home):
+        FAILURES.append(name+": the local session did not restore the authenticated Home surface after cold relaunch.")
+        screenshot(name+"-failed.png")
+        return ""
+    relaunched=run("adb","shell","pidof",PACKAGE,timeout=10)
+    if not (relaunched.stdout or "").strip():
+        FAILURES.append(name+": the FYNX process was not alive after cold relaunch.")
+        return ""
+    screenshot(name+".png")
+    report.append("- PASS: force-stopped the FYNX process, confirmed exit, cold-launched the app and restored its local Home session.")
+    return home
+
+
+def send_and_reopen_local_private_fixture(private_xml: str) -> str:
+    """Send a private message offline, reopen its conversation, then prove cold-process restoration."""
+    run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
+    if not run_suffix:
+        run_suffix = str(int(time.time()))
+    private_message = "FYNX_private_offline_QA_" + run_suffix
+
+    focused = tap_control(private_xml, ["Message composer", "Edit message composer", "Chat message composer area", "Message..."], "private-offline-composer-focus")
+    if not focused:
+        FAILURES.append("The private conversation did not expose its accessible message composer.")
+        return ""
+    if input_text(private_message).returncode != 0:
+        FAILURES.append("The private offline test message could not be entered in the real composer.")
+        return ""
+    time.sleep(0.5)
+    ready = dump_ui("private-offline-send-ready.xml")
+    send_control = find_control(ready, ["Send message"], exact_only=True)
+    if not send_control:
+        FAILURES.append("Typing a private offline message did not expose the real Send message action.")
+        screenshot("private-offline-send-action-missing.png")
+        return ""
+    screenshot("private-offline-send-action.png")
+
+    def message_is_in_composer(xml_text: str) -> bool:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return False
+        return any(
+            node.attrib.get("class") == "android.widget.EditText"
+            and private_message in (node.attrib.get("text") or "")
+            for node in root.iter("node")
+        )
+
+    def message_is_in_conversation(xml_text: str) -> bool:
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return False
+        return any(
+            node.attrib.get("class") != "android.widget.EditText"
+            and private_message in (node.attrib.get("text") or "")
+            for node in root.iter("node")
+        )
+
+    # The composer advertises IME_ACTION_SEND. Use the keyboard's real Send action
+    # first; if the emulator keyboard does not dispatch it, retry through the now
+    # explicitly accessible Send message control using a fresh hierarchy.
+    run("adb", "shell", "input", "keyevent", "66")
+    sent = ""
+    for _ in range(16):
+        time.sleep(0.4)
+        sent = dump_ui("private-offline-send-ime-wait.xml")
+        if message_is_in_conversation(sent) and not message_is_in_composer(sent):
+            break
+    if not message_is_in_conversation(sent) or message_is_in_composer(sent):
+        ready_to_tap = dump_ui("private-offline-send-button-retry.xml") or sent
+        send_control = find_control(ready_to_tap, ["Send message"], exact_only=True)
+        if send_control:
+            _, send_x, send_y = send_control
+            run("adb", "shell", "input", "tap", str(send_x), str(send_y))
+        for _ in range(24):
+            time.sleep(0.4)
+            sent = dump_ui("private-offline-send-button-wait.xml")
+            if message_is_in_conversation(sent) and not message_is_in_composer(sent):
+                break
+    sent = dismiss_ime_if_visible("private-offline-send-ime-dismissed.xml") or sent
+    if not message_is_in_conversation(sent) or message_is_in_composer(sent):
+        FAILURES.append("The private offline message remained in the composer instead of appearing as a conversation message after IME and accessible-button send attempts.")
+        screenshot("private-offline-send-not-confirmed.png")
+        return ""
+    screenshot("private-chat-sent-offline.png")
+    report.append("- PASS: sent a private message with emulator Wi-Fi and mobile data disabled; it appeared in the real conversation.")
+
+    run("adb", "shell", "input", "keyevent", "4")
+    time.sleep(0.8)
+    chat_list = dump_ui("private-chat-list-after-offline-send.xml")
+    reopened = tap_first_real_chat_or_group_if_present(chat_list, "private-chat-reopen-after-offline-send")
+    if not reopened or private_message not in reopened:
+        FAILURES.append("The private offline message did not survive leaving and reopening its conversation.")
+        screenshot("private-chat-offline-reopen-failed.png")
+        return ""
+    screenshot("private-chat-reopened-offline.png")
+    (ROOT / "private-chat-reopened-offline.xml").write_text(reopened + "\n", encoding="utf-8")
+    report.append("- PASS: the private offline message remained visible after leaving and reopening the conversation.")
+
+    cold_home = force_stop_and_restore_local_home("private-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat = tap_control(cold_home, ["Chat"], "private-chat-after-process-restart", ["Messages and groups in one place"])
+    cold_private = tap_first_real_chat_or_group_if_present(cold_chat, "private-chat-cold-reopen") if cold_chat else ""
+    if not cold_private or private_message not in cold_private:
+        FAILURES.append("The private offline message did not survive force-stop and cold application relaunch.")
+        screenshot("private-chat-restored-after-process-death-failed.png")
+        return ""
+    screenshot("private-chat-restored-after-process-death.png")
+    (ROOT / "private-chat-restored-after-process-death.xml").write_text(cold_private + "\n", encoding="utf-8")
+    report.append("- PASS: the private conversation and its offline message were restored after actual process death and cold relaunch.")
+    return cold_private
+
+
 def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
     """Send via the real group composer, then leave and reopen the persisted group."""
     run_suffix = re.sub(r"[^A-Za-z0-9]", "", os.environ.get("GITHUB_RUN_ID", ""))[-10:]
@@ -3203,7 +3365,39 @@ def send_and_reopen_local_group_fixture(group_xml: str, group_name: str) -> str:
         report.append("- PASS: offline group-send failure stayed visible as a saved, retryable message.")
     else:
         report.append("- NOTE: local message persistence passed; this visual run does not certify backend delivery or receipt by another account.")
-    return reopened
+
+    cold_home = force_stop_and_restore_local_home("group-chat-process-restart")
+    if not cold_home:
+        return ""
+    cold_chat = tap_control(cold_home, ["Chat"], "group-chat-after-process-restart", ["Messages and groups in one place"])
+    if not cold_chat:
+        FAILURES.append("The Chat destination could not be reopened after process death; group persistence was not assessed.")
+        return ""
+    cold_groups = tap_control(cold_chat, ["Groups"], "group-groups-after-process-restart", ["Create group"])
+    if not cold_groups:
+        FAILURES.append("The Groups list could not be reopened after process death; group persistence was not assessed.")
+        return ""
+    group_open_label = f"Open group {group_name}"
+    if not find_control(cold_groups, [group_open_label]):
+        FAILURES.append(
+            f"The local group '{group_name}' was absent from the Groups list after force-stop and cold relaunch; "
+            "message persistence was not assessed because the group could not be opened."
+        )
+        screenshot("group-chat-group-missing-after-process-death.png")
+        return ""
+    cold_group = tap_control(cold_groups, [group_open_label], "group-chat-cold-reopen", [group_name, "Message..."])
+    if not cold_group:
+        FAILURES.append("The persisted group row was visible after restart, but its conversation could not be reopened.")
+        screenshot("group-chat-reopen-after-process-death-failed.png")
+        return ""
+    if message_text not in cold_group:
+        FAILURES.append("The persisted group reopened after process death, but its offline message was absent from the conversation.")
+        screenshot("group-chat-message-missing-after-process-death.png")
+        return ""
+    screenshot("group-chat-restored-after-process-death.png")
+    (ROOT / "group-chat-restored-after-process-death.xml").write_text(cold_group + chr(10), encoding="utf-8")
+    report.append("- PASS: the offline group and message were restored after actual process death and cold relaunch.")
+    return cold_group
 
 def exercise_notification_route(route:str, name:str)->bool:
     if not route: return False
@@ -3244,7 +3438,7 @@ def login():
     )
     if VISUALS_ONLY and home_already_visible:
         if FORCE_LOCAL_VISUALS or not PASSWORD:
-            LOGIN_MODE="reused debug-only local UI session (not server-authenticated)"
+            LOGIN_MODE="debug-only local UI entry (not server-authenticated)"
             return xml, ""
         token_present = secure_access_token_persisted()
         if token_present is True:
@@ -4338,7 +4532,7 @@ def is_home_feed_runtime_surface(xml_text: str) -> bool:
     # These markers identify a different modal/viewer route rather than the feed.
     if any(find_control(xml_text, [label]) for label in (
         "Write a comment", "Close comments", "Close media viewer",
-        "Close viewer", "Like video", "Open comments",
+        "Close viewer",
     )):
         return False
     # Home intentionally hides its floating navigation after a meaningful scroll.
@@ -4500,7 +4694,11 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                 if node.attrib.get("visible-to-user", "true").lower() == "false":
                     continue
                 value = (node.attrib.get("text") or "").strip()
-                if len(value) < 14:
+                description = (node.attrib.get("content-desc") or "").strip()
+                fixture_caption = HOME_FEED_FIXTURES_SEEDED and "ci test fixture" in (value + " " + description).casefold()
+                if not value and fixture_caption:
+                    value = description
+                if len(value) < (10 if fixture_caption else 14):
                     continue
                 bounds = node.attrib.get("bounds", "")
                 try:
@@ -4511,7 +4709,7 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                     continue
                 node_width, node_height = right - left, bottom - top
                 center_y = (top + bottom) // 2
-                if node_width < width * 0.45 or node_height < 44:
+                if node_width < width * 0.45 or node_height < (18 if fixture_caption else 44):
                     continue
                 if top < height * 0.30 or bottom > height * 0.88:
                     continue
@@ -4522,18 +4720,23 @@ def _home_content_scroll_point(xml_text: str, width: int, height: int, direction
                         clickable_parent = True
                         break
                     ancestor = parents.get(id(ancestor))
-                if clickable_parent:
+                if clickable_parent and not fixture_caption:
                     continue
                 # Prefer a substantial post caption in the middle of the feed,
                 # away from the header controls, bottom navigation and media tile.
                 score = abs(center_y - height * 0.64) - min(node_height, 280) * 0.20 - min(len(value), 180) * 0.08
+                if fixture_caption:
+                    score -= 500.0
                 x = max(20, min(width - 20, left + min(28, max(8, node_width // 16))))
                 if direction == "up":
-                    # Start on the safe, non-clickable caption, but drag well above
-                    # its short text bounds so a tall portrait video can clear the
-                    # bottom navigation in one measured scroll step.
-                    start_y = min(bottom - 8, int(height * 0.82))
-                    end_y = max(int(height * 0.25), top - 480)
+                    # Start inside the fixture caption and drag vertically; this
+                    # cancels the card click and scrolls the feed itself.
+                    start_y = min(bottom - 2, int(height * 0.82))
+                    if fixture_caption:
+                        start_y = max(top + 1, min(bottom - 1, start_y))
+                        end_y = max(int(height * 0.25), start_y - int(height * 0.48))
+                    else:
+                        end_y = max(int(height * 0.25), top - 480)
                     if start_y - end_y < 300:
                         end_y = max(int(height * 0.25), start_y - 480)
                 else:
@@ -4866,6 +5069,30 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: unable to enable the local Discovery fixture preference in the disposable emulator.")
         return False
 
+    # Discovery is intentionally a For You feature. A previous local run may have
+    # persisted Following mode in the disposable emulator; make the fixture state
+    # deterministic without changing a real account or release preference.
+    feed_view_prefs = FixtureET.Element("map")
+    FixtureET.SubElement(feed_view_prefs, "string", {"name": "mode"}).text = "FOR_YOU"
+    feed_view_prefs_file = ROOT / "ci-home-feed-view.xml"
+    FixtureET.ElementTree(feed_view_prefs).write(
+        feed_view_prefs_file, encoding="utf-8", xml_declaration=True
+    )
+    staged_feed_view_prefs = "/data/local/tmp/fynx-home-feed-view.xml"
+    pushed_feed_view_prefs = run(
+        "adb", "push", str(feed_view_prefs_file), staged_feed_view_prefs, timeout=30
+    )
+    if pushed_feed_view_prefs.returncode != 0:
+        report.append("- NOTE: unable to stage the explicit For You-only Home visual fixture preference.")
+        return False
+    copied_feed_view_prefs = run(
+        "adb", "shell", "run-as", PACKAGE, "cp", staged_feed_view_prefs,
+        "shared_prefs/fynx_home_feed_view.xml"
+    )
+    if copied_feed_view_prefs.returncode != 0:
+        report.append("- NOTE: unable to seed the Home For You view in the disposable emulator.")
+        return False
+
     feed_payload = {"posts": posts, "hasMore": False, "nextCursor": None}
     prefs = FixtureET.Element("map")
     cache_key = "fynx_feed_cache_v1_" + account
@@ -4901,8 +5128,15 @@ def seed_offline_home_feed_visual_fixtures(username: str) -> bool:
         report.append("- NOTE: local fixture cache was written, but Home did not expose its feed after relaunch.")
         return False
 
+    persisted_feed_mode = run(
+        "adb", "shell", "run-as", PACKAGE, "cat", "shared_prefs/fynx_home_feed_view.xml"
+    )
+    if persisted_feed_mode.returncode != 0 or "FOR_YOU" not in persisted_feed_mode.stdout:
+        report.append("- NOTE: Home Feed mode fixture was not verifiably persisted as For You.")
+        return False
+
     HOME_FEED_FIXTURES_SEEDED = True
-    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; nothing was posted or uploaded.")
+    report.append("- PASS: seeded 3 clearly labelled local CI videos (portrait 360x640, landscape 640x360, square 480x480) in the disposable emulator's account-scoped cache only; forced the disposable fixture to For You mode; nothing was posted or uploaded.")
     return True
 
 
@@ -5700,7 +5934,19 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # In local-only mode, a dedicated instrumentation fixture seeds one disposable
         # peer and two messages in the account-scoped store. Never accept an empty self-chat
         # as proof of the private-chat journey.
-        private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
+        if CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS:
+            # The focused local fixture has one deliberately named peer. Select that
+            # exact row instead of guessing the first clickable row (which can be a
+            # section/header/menu surface and open a different conversation).
+            private_xml = tap_control(
+                chat_xml,
+                ["Open chat with FYNX Runtime Peer"],
+                "private-chat-entry",
+                ["Message composer", "Edit message composer", "Chat message composer area"],
+                exact_only=True,
+            )
+        else:
+            private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
         if FORCE_LOCAL_VISUALS and local_fixture_state is not None:
             if not local_fixture_state.get("fixture_ready"):
                 before_ready = bool(local_fixture_state_before_theme and local_fixture_state_before_theme.get("fixture_ready"))
@@ -5739,6 +5985,14 @@ if CHAT_GROUPS_VISUALS_ONLY:
             (ROOT/"private-chat-inside.xml").write_text(private_xml+"\n", encoding="utf-8")
             if FORCE_LOCAL_VISUALS:
                 report.append("- PASS: captured the real private ConversationPanel with two persisted disposable peer/owner messages from the local test fixture.")
+                if not set_emulator_network_enabled(False):
+                    FAILURES.append("Could not disable emulator Wi-Fi and mobile data for the private offline-send journey.")
+                else:
+                    try:
+                        private_xml = send_and_reopen_local_private_fixture(private_xml)
+                    finally:
+                        if not set_emulator_network_enabled(True):
+                            FAILURES.append("Could not restore emulator Wi-Fi and mobile data after the private offline-send journey.")
             else:
                 report.append("- PASS: captured the real private ConversationPanel.")
         else:
@@ -5749,7 +6003,10 @@ if CHAT_GROUPS_VISUALS_ONLY:
         chat_again = tap_control(home_again, ["Chat"], "chat-groups-reopen-chat", ["Messages and groups in one place"])
     else:
         chat_again = ""
-    groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])
+    groups_xml = tap_control(
+        chat_again, ["Open Groups"], "chat-groups-groups-tab",
+        ["Create group"], exact_only=True
+    )
     if not groups_xml:
         FAILURES.append("Chat -> Groups did not expose the real Groups list.")
     else:
@@ -5795,6 +6052,15 @@ if CHAT_GROUPS_VISUALS_ONLY:
         "chat-groups-created-fixture.png",
         "group-chat-inside.png",
     ]
+    if FORCE_LOCAL_VISUALS:
+        required_images += [
+            "private-chat-sent-offline.png",
+            "private-chat-reopened-offline.png",
+            "private-chat-process-restart.png",
+            "private-chat-restored-after-process-death.png",
+            "group-chat-process-restart.png",
+            "group-chat-restored-after-process-death.png",
+        ]
     missing = [name for name in required_images if not (ROOT/name).is_file() or (ROOT/name).stat().st_size < 12000]
     if missing:
         FAILURES.append("Chat/Groups screenshot evidence is missing or undersized: " + ", ".join(missing))
@@ -5805,6 +6071,7 @@ if CHAT_GROUPS_VISUALS_ONLY:
                "- Debug-local entry certifies rendered UI/navigation only, not live account authentication, server delivery, FCM or backend data.",
                "- The disposable group is created through the app UI while emulator Wi-Fi and mobile data are disabled, then verified in the emulator account's FynxGroupsStore; it is not inserted into the production backend.",
                "- The fixture has only its creating account as a local ADMIN; it does not prove a second member, server membership or two-account delivery.",
+               "- In local-only mode, private and group messages must survive navigation reopening and a verified force-stop/cold relaunch; this proves device persistence only, not remote delivery.",
                "- No real production user, group, message, payment or Marketplace record is created by this capture path.",
                "", f"## Result: {'RED' if FAILURES else ('PARTIAL — GROUP RUNTIME BLOCKED' if GROUP_RUNTIME_BLOCKED else 'GREEN')}"]
     if FAILURES:

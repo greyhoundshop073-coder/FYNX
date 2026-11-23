@@ -21,7 +21,9 @@ checks = [
         and '"home_discovery_videos"' in client
         and '"ci-home-discovery-portrait"' in client
         and "FynxDiscoveryClient.localVisualFixtureVideos(context)" in home
-        and "ci-home-discovery-fixtures.xml" in navigation,
+        and "ci-home-discovery-fixtures.xml" in navigation
+        and "shared_prefs/fynx_home_feed_view.xml" in navigation
+        and '"FOR_YOU"' in navigation,
     ),
     (
         "runtime certification exercises both repost choices and the original-media quote composer without submitting",
@@ -193,6 +195,12 @@ checks = [
         "runtime feed scrolling starts from visible non-clickable captions on full-width landscape clips",
         '_home_content_scroll_point(current, width, height, "up")' in navigation
         and "video can consume the gesture instead of the parent LazyColumn scrolling" in navigation,
+    ),
+    (
+        "local Home fixture traversal uses the actual caption as a safe scroll anchor",
+        "fixture_caption = HOME_FEED_FIXTURES_SEEDED" in navigation
+        and "score -= 500.0" in navigation
+        and "start_y = max(top + 1, min(bottom - 1, start_y))" in navigation,
     ),
     (
         "final Home navigation detection requires the visible bottom Home label",

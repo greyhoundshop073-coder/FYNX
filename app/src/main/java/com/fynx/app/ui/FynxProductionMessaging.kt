@@ -231,7 +231,7 @@ object FynxProductionMessaging {
             }
             val intent = JSONObject(intentRaw)
             val raw = if (intent.optBoolean("useLegacyUpload")) {
-                // Keep the existing PostgreSQL/Neon server-upload path for providers
+                // Keep the legacy server-upload path only for PostgreSQL; Neon/R2 use signed direct uploads.
                 // that do not expose the direct-to-R2 upload contract.
                 val legacyBody = JSONObject().apply {
                     put("mimeType", effectiveMimeType)
@@ -366,8 +366,12 @@ object FynxProductionMessaging {
             else Result.failure(IllegalStateException("The message was sent from the previous account session. Switch back to check its delivery."))
         }
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-        if (isAmbiguousTransportFailure(result.exceptionOrNull())) {
-            val recovered = history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+        val transportFailure = isAmbiguousTransportFailure(result.exceptionOrNull())
+        val backendSessionUnavailable = requestToken.isNullOrBlank() && !FynxBackendClient.hasAccessToken(context)
+        if (transportFailure || backendSessionUnavailable) {
+            val recovered = if (transportFailure) {
+                history(context, normalizedRecipient).getOrNull()?.asReconciliationCandidate(currentUsername, cleanText, replyToId, mediaId, mediaType)
+            } else null
             if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
             if (recovered != null) return Result.success(recovered)
             if (allowOfflineQueue && FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) {
@@ -385,7 +389,10 @@ object FynxProductionMessaging {
                     createdAt = System.currentTimeMillis()
                 )
                 if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-                if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
+                val queued = withContext(Dispatchers.IO) {
+                    FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)
+                }
+                if (!queued) return result
                 return Result.success(
                     RemoteMessage(
                         id = localId,
@@ -501,7 +508,10 @@ object FynxProductionMessaging {
             messagePayload = normalizedPayload
         )
         if (!FynxBackendClient.isRequestSessionCurrent(expectedAccountKey, FynxAuthStore.accountStorageKey(context), requestToken, FynxBackendClient.accessToken(context))) return result
-        if (!FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)) return result
+        val queued = withContext(Dispatchers.IO) {
+            FynxOfflineOutbox.enqueue(context, item, expectedAccountKey)
+        }
+        if (!queued) return result
 
         return Result.success(
             RemoteMessage(

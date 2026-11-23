@@ -29,9 +29,11 @@ internal fun canEditGroupRemotePermissions(isAdmin: Boolean, hasAccessToken: Boo
     isAdmin && hasAccessToken && permissionsLoaded && !permissionsSaving
 
 @Composable
-fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boolean=false,onBack:()->Unit={},onClearHistory:()->Unit={}){
+fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boolean=false,onBack:()->Unit={},onClearHistory:()->Unit={},onGroupLeft:()->Unit=onBack){
     val context=LocalContext.current;val scope=rememberCoroutineScope();val prefs=remember(groupId){FynxConversationPreferences.group(context,groupId)};val storedGroup=remember(groupId){FynxGroupsStore.load(context).firstOrNull{it.id==groupId}}
     var currentGroup by remember(groupId){mutableStateOf(storedGroup)}
+    val activeUsername = FynxAuthStore.load(context).username?.removePrefix("@")?.trim().orEmpty()
+    val isOwner = currentGroup?.ownerUsername?.removePrefix("@")?.equals(activeUsername, true) == true
     var photoBusy by remember(groupId){mutableStateOf(false)}
     var photoMessage by remember(groupId){mutableStateOf<String?>(null)}
     val photoPicker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
@@ -47,7 +49,7 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
             }.onFailure{photoMessage=it.message?:"Photo upload failed."}
             photoBusy=false
         }
-    };var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))};var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))};var sendMessages by remember(groupId){mutableStateOf(true)};var sendMedia by remember(groupId){mutableStateOf(true)};var addMembers by remember(groupId){mutableStateOf(true)};var inviteLinks by remember(groupId){mutableStateOf(false)};var approveNewMembers by remember(groupId){mutableStateOf(false)};var disappearingSeconds by remember(groupId){mutableStateOf(0)};var showHistoryToNewMembers by remember(groupId){mutableStateOf(true)};var showHistoryPolicySupported by remember(groupId){mutableStateOf(false)};var joinRequestApprovalSupported by remember(groupId){mutableStateOf(false)};var invitePreviewSupported by remember(groupId){mutableStateOf(false)};var permissionsLoading by remember(groupId){mutableStateOf(false)};var permissionsLoaded by remember(groupId){mutableStateOf(false)};var permissionsSaving by remember(groupId){mutableStateOf(false)};var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)};val canEditPermissions = canEditGroupRemotePermissions(isAdmin, FynxBackendClient.hasAccessToken(context), permissionsLoaded, permissionsSaving);var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))};var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))};var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")};var showWallpaper by remember{mutableStateOf(false)};var showClearDialog by remember{mutableStateOf(false)};var showResetDialog by remember{mutableStateOf(false)};var showEditInfo by remember{mutableStateOf(false)};var editName by remember{mutableStateOf(currentGroup?.name?:groupName)};var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())};var infoMessage by remember{mutableStateOf<String?>(null)};var savingInfo by remember{mutableStateOf(false)};var inviteMessage by remember{mutableStateOf<String?>(null)};var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)};var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())};var requestsLoading by remember(groupId){mutableStateOf(false)};var requestAction by remember(groupId){mutableStateOf<String?>(null)};var showReportDialog by remember(groupId){mutableStateOf(false)};var reportReason by remember(groupId){mutableStateOf("")};var reportBusy by remember(groupId){mutableStateOf(false)};var reportSubmitted by remember(groupId){mutableStateOf(false)};var reportMessage by remember(groupId){mutableStateOf<String?>(null)}
+    };var notifications by remember(groupId){mutableStateOf(prefs.getBoolean("notifications",true))};var mute by remember(groupId){mutableStateOf(prefs.getBoolean("mute",false))};var sendMessages by remember(groupId){mutableStateOf(true)};var sendMedia by remember(groupId){mutableStateOf(true)};var addMembers by remember(groupId){mutableStateOf(true)};var inviteLinks by remember(groupId){mutableStateOf(false)};var approveNewMembers by remember(groupId){mutableStateOf(false)};var disappearingSeconds by remember(groupId){mutableStateOf(0)};var showHistoryToNewMembers by remember(groupId){mutableStateOf(true)};var showHistoryPolicySupported by remember(groupId){mutableStateOf(false)};var joinRequestApprovalSupported by remember(groupId){mutableStateOf(false)};var invitePreviewSupported by remember(groupId){mutableStateOf(false)};var permissionsLoading by remember(groupId){mutableStateOf(false)};var permissionsLoaded by remember(groupId){mutableStateOf(false)};var permissionsSaving by remember(groupId){mutableStateOf(false)};var permissionsMessage by remember(groupId){mutableStateOf<String?>(null)};val canEditPermissions = canEditGroupRemotePermissions(isAdmin, FynxBackendClient.hasAccessToken(context), permissionsLoaded, permissionsSaving);var saveMedia by remember(groupId){mutableStateOf(prefs.getBoolean("save_media",false))};var chatHistory by remember(groupId){mutableStateOf(prefs.getBoolean("chat_history",true))};var appearance by remember(groupId){mutableStateOf(prefs.getString("appearance","FYNX Default")?:"FYNX Default")};var showWallpaper by remember{mutableStateOf(false)};var showClearDialog by remember{mutableStateOf(false)};var showResetDialog by remember{mutableStateOf(false)};var showEditInfo by remember{mutableStateOf(false)};var editName by remember{mutableStateOf(currentGroup?.name?:groupName)};var editDescription by remember{mutableStateOf(currentGroup?.description.orEmpty())};var infoMessage by remember{mutableStateOf<String?>(null)};var savingInfo by remember{mutableStateOf(false)};var inviteMessage by remember{mutableStateOf<String?>(null)};var activeInviteToken by remember(groupId){mutableStateOf<String?>(null)};var joinRequests by remember(groupId){mutableStateOf<List<FynxGroupRemoteClient.RemoteJoinRequest>>(emptyList())};var requestsLoading by remember(groupId){mutableStateOf(false)};var requestAction by remember(groupId){mutableStateOf<String?>(null)};var showReportDialog by remember(groupId){mutableStateOf(false)};var reportReason by remember(groupId){mutableStateOf("")};var reportBusy by remember(groupId){mutableStateOf(false)};var reportSubmitted by remember(groupId){mutableStateOf(false)};var reportMessage by remember(groupId){mutableStateOf<String?>(null)};var showTransferDialog by remember(groupId){mutableStateOf(false)};var showLeaveDialog by remember(groupId){mutableStateOf(false)};var transferTargetUsername by remember(groupId){mutableStateOf("")};var groupActionBusy by remember(groupId){mutableStateOf(false)};var groupActionMessage by remember(groupId){mutableStateOf<String?>(null)}
     fun save(key:String,value:Boolean)=prefs.edit().putBoolean(key,value).apply()
     val permissionAccountKey = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
     suspend fun refreshServerPermissions() {
@@ -150,6 +152,128 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
             }
         }
     }
+    val cleanTransferTarget = transferTargetUsername.trim().removePrefix("@")
+    val transferTargetIsMember = currentGroup?.members?.any { it.username.removePrefix("@").equals(cleanTransferTarget, true) } == true
+    if (showTransferDialog) AlertDialog(
+        onDismissRequest = { if (!groupActionBusy) showTransferDialog = false },
+        title = { Text("Transfer group ownership") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("The new owner must already be a member. You will remain in the group as a moderator.")
+                if (!FynxBackendClient.hasAccessToken(context)) Text("Reconnect to FYNX before transferring ownership.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                groupActionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                OutlinedTextField(
+                    value = transferTargetUsername,
+                    onValueChange = { transferTargetUsername = it.take(80) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !groupActionBusy && FynxBackendClient.hasAccessToken(context),
+                    label = { Text("New owner username") }
+                )
+                if (cleanTransferTarget.isNotBlank() && !transferTargetIsMember) Text("Choose an existing group member.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                if (cleanTransferTarget.equals(activeUsername, true)) Text("Choose another group member.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !groupActionBusy && FynxBackendClient.hasAccessToken(context) && permissionAccountKey != null && cleanTransferTarget.isNotBlank() && transferTargetIsMember && !cleanTransferTarget.equals(activeUsername, true),
+                onClick = {
+                    val group = currentGroup ?: return@TextButton
+                    val expectedAccountKey = permissionAccountKey ?: return@TextButton
+                    val expectedToken = FynxBackendClient.accessToken(context) ?: return@TextButton
+                    groupActionBusy = true
+                    groupActionMessage = null
+                    scope.launch {
+                        try {
+                            val result = FynxGroupRemoteClient.transferOwnership(context, groupId, cleanTransferTarget)
+                            val sessionCurrent = FynxBackendClient.isRequestSessionCurrent(
+                                expectedAccountKey,
+                                FynxAuthStore.accountStorageKey(context),
+                                expectedToken,
+                                FynxBackendClient.accessToken(context)
+                            )
+                            if (!sessionCurrent) {
+                                groupActionMessage = "Your account changed. Reopen group settings before continuing."
+                            } else {
+                                result.onSuccess { owner ->
+                                    val oldOwner = group.ownerUsername.removePrefix("@")
+                                    val updated = group.copy(
+                                        ownerUsername = owner,
+                                        members = group.members.map { member ->
+                                            when {
+                                                member.username.removePrefix("@").equals(owner, true) -> member.copy(role = FynxGroupRole.ADMIN)
+                                                member.username.removePrefix("@").equals(oldOwner, true) -> member.copy(role = FynxGroupRole.MODERATOR)
+                                                else -> member
+                                            }
+                                        }
+                                    )
+                                    currentGroup = updated
+                                    if (FynxGroupsStore.updateGroup(context, updated, expectedAccountKey)) {
+                                        transferTargetUsername = ""
+                                        showTransferDialog = false
+                                        android.widget.Toast.makeText(context, "Group ownership transferred.", android.widget.Toast.LENGTH_SHORT).show()
+                                        onBack()
+                                    } else {
+                                        groupActionMessage = "Ownership changed on the server. Reopen the group to refresh its local member roles."
+                                    }
+                                }.onFailure {
+                                    groupActionMessage = "Ownership could not be transferred. Check the selected member and try again."
+                                }
+                            }
+                        } finally {
+                            groupActionBusy = false
+                        }
+                    }
+                }
+            ) { Text(if (groupActionBusy) "Transferring…" else "Transfer ownership") }
+        },
+        dismissButton = { TextButton(enabled = !groupActionBusy, onClick = { showTransferDialog = false }) { Text("Cancel") } }
+    )
+    if (showLeaveDialog) AlertDialog(
+        onDismissRequest = { if (!groupActionBusy) showLeaveDialog = false },
+        title = { Text("Leave this group?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("You will no longer receive group messages or appear in its member list. Your previous messages remain with the group.")
+                if (!FynxBackendClient.hasAccessToken(context)) Text("Reconnect to FYNX before leaving this group.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                groupActionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !groupActionBusy && FynxBackendClient.hasAccessToken(context) && permissionAccountKey != null, onClick = {
+                val expectedAccountKey = permissionAccountKey ?: return@TextButton
+                val expectedToken = FynxBackendClient.accessToken(context) ?: return@TextButton
+                groupActionBusy = true
+                groupActionMessage = null
+                scope.launch {
+                    try {
+                        val result = FynxGroupRemoteClient.leaveGroup(context, groupId)
+                        val sessionCurrent = FynxBackendClient.isRequestSessionCurrent(
+                            expectedAccountKey,
+                            FynxAuthStore.accountStorageKey(context),
+                            expectedToken,
+                            FynxBackendClient.accessToken(context)
+                        )
+                        if (!sessionCurrent) {
+                            groupActionMessage = "Your account changed. Reopen FYNX before continuing."
+                        } else {
+                            result.onSuccess {
+                                FynxGroupsStore.removeGroup(context, groupId, expectedAccountKey)
+                                showLeaveDialog = false
+                                android.widget.Toast.makeText(context, "You left the group.", android.widget.Toast.LENGTH_SHORT).show()
+                                onGroupLeft()
+                            }.onFailure {
+                                groupActionMessage = "You could not leave this group. If you own it, transfer ownership first."
+                            }
+                        }
+                    } finally {
+                        groupActionBusy = false
+                    }
+                }
+            }) { Text(if (groupActionBusy) "Leaving…" else "Leave group") }
+        },
+        dismissButton = { TextButton(enabled = !groupActionBusy, onClick = { showLeaveDialog = false }) { Text("Cancel") } }
+    )
     if(showReportDialog) AlertDialog(
         onDismissRequest = { if (!reportBusy) showReportDialog = false },
         title = { Text("Report this group") },
@@ -209,6 +333,10 @@ fun FynxGroupSettingsPanel(groupId:String,groupName:String="Group",isAdmin:Boole
             inviteMessage?.let{Text(it,Modifier.padding(top=6.dp),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         }
         GroupSettingsSection("Group management",Icons.Default.Settings){
+            groupActionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            if (isOwner) GroupActionRow("Transfer ownership", "Choose an existing member as the new owner", Icons.Default.GroupAdd) { groupActionMessage = null; transferTargetUsername = ""; showTransferDialog = true }
+            else GroupActionRow("Leave group", "Leave this group on your account", Icons.Default.DeleteOutline) { groupActionMessage = null; showLeaveDialog = true }
+            if (isOwner) Text("As the owner, transfer ownership before leaving the group.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             GroupActionRow("Report group","Send a safety report to FYNX",Icons.Default.Security){reportMessage=null;reportReason="";reportSubmitted=false;showReportDialog=true}
             GroupActionRow("Clear local group history","Remove the saved conversation from this device",Icons.Default.DeleteOutline){showClearDialog=true}
             GroupActionRow("Reset local group settings","Restore FYNX defaults for local preferences",Icons.Default.RestartAlt){showResetDialog=true}

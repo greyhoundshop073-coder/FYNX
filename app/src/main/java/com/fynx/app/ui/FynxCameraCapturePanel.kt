@@ -191,7 +191,7 @@ private fun CameraEditorRailAction(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.width(58.dp),
+        modifier = Modifier.width(58.dp).semantics(mergeDescendants = true) { contentDescription = label },
         shape = RoundedCornerShape(14.dp),
         color = if (selected) Color(0xFF007FFF).copy(alpha = 0.82f) else Color(0xFF25364A).copy(alpha = 0.38f),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
@@ -2468,7 +2468,7 @@ private fun CameraEffectTile(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 112.dp),
+        modifier = modifier.heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = label },
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {

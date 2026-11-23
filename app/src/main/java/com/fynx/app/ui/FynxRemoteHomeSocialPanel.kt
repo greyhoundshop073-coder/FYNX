@@ -505,7 +505,14 @@ fun FynxRemoteHomeSocialPanel(modifier: Modifier = Modifier, currentUsername: St
         if (feedMode == "FOLLOWING" || selected.isEmpty() || posts.isEmpty()) {
             emptyMap()
         } else {
-            val first = (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
+            // With a short feed, place Discovery immediately after the first post.
+            // This keeps the second major Home surface discoverable instead of burying
+            // it after the last item in a three-post feed.
+            val first = if (discoveryVideos.isNotEmpty() && "discovery" in selected && posts.size <= 3) {
+                0
+            } else {
+                (2 + (seed % 5L).toInt()).coerceAtMost(posts.lastIndex)
+            }
             val second = if (posts.size > 8) {
                 (8 + ((seed / 11L) % (posts.size - 8).toLong()).toInt()).coerceAtMost(posts.lastIndex)
             } else {

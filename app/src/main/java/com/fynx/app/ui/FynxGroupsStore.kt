@@ -60,6 +60,28 @@ object FynxGroupsStore {
         prefs.edit().putStringSet(key, pending).apply()
     }
 
+    @Synchronized
+    fun addPendingGroupDurably(context: Context, group: FynxGroup, accountKey: String? = FynxAuthStore.accountStorageKey(context)): Boolean {
+        val valid = FynxGroupsBatch1.create(group) ?: return false
+        val current = load(context, accountKey)
+        if (current.any { it.name.equals(valid.name, ignoreCase = true) } || current.any { it.id == valid.id }) return false
+        val array = JSONArray()
+        (current + valid).forEach { value ->
+            array.put(JSONObject().apply {
+                put("id", value.id); put("name", value.name); put("description", value.description)
+                put("visibility", value.visibility.name); put("ownerUsername", value.ownerUsername); put("groupPhotoMediaId", value.groupPhotoMediaId ?: "")
+                put("members", JSONArray().apply { value.members.forEach { member -> put(JSONObject().apply { put("username", member.username); put("role", member.role.name) }) } })
+            })
+        }
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pendingKey = pendingSyncKey(context, accountKey)
+        val pending = prefs.getStringSet(pendingKey, emptySet()).orEmpty().toMutableSet().apply { add(valid.id) }
+        return prefs.edit()
+            .putString(groupsKey(context, accountKey), array.toString())
+            .putStringSet(pendingKey, pending)
+            .commit()
+    }
+
     fun save(context: Context, groups: List<FynxGroup>, accountKey: String? = FynxAuthStore.accountStorageKey(context)) {
         val array = JSONArray()
         groups.forEach { group ->

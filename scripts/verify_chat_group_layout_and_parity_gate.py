@@ -19,6 +19,14 @@ def require(label, condition):
 # The route check prevents a green gate from certifying an unused legacy screen.
 require("app routes group conversations to the active FynxGroupConversationPanel", "FynxGroupConversationPanel(groupId = openGroup!!" in APP)
 require("active group conversation protects top system inset", "statusBarsPadding" in ACTIVE_GROUP)
+require(
+    "group history persists the post-receipt snapshot and cannot overwrite readBy with stale pre-receipt messages",
+    "var messagesToPersist = mergedMessages" in ACTIVE_GROUP
+    and "applyGroupReadReceiptUpdates(" in ACTIVE_GROUP
+    and "messagesToPersist = withReceipts" in ACTIVE_GROUP
+    and 'FynxChatStore.save(context, "group_$groupId", messagesToPersist)' in ACTIVE_GROUP
+)
+ 
 PURE_BLACK_PALETTE = GLASS_THEME.split("FynxGlassThemeId.PURE_BLACK ->", 1)[1].split("FynxGlassThemeId.AURORA ->", 1)[0]
 require("Pure Black Glass uses only true black background gradient stops while preserving other themes", "id, Color(0xFF000000), Color(0xFF000000), Color(0xFF000000)," in PURE_BLACK_PALETTE and "Color(0xFF080B18)" not in PURE_BLACK_PALETTE and "Color(0xFF182B52)" not in PURE_BLACK_PALETTE and "FynxGlassThemeId.AURORA" in GLASS_THEME and "FynxGlassThemeId.EMERALD" in GLASS_THEME)
 require("active group conversation has bottom content padding", "contentPadding = PaddingValues(bottom" in ACTIVE_GROUP)
@@ -26,6 +34,37 @@ require("active group conversation uses 48dp minimum touch targets", "Modifier.s
 require("active group conversation supports message search", "searchQuery" in ACTIVE_GROUP)
 require("active group conversation supports reply targets", "replyToId" in ACTIVE_GROUP)
 require("active group conversation loads authenticated paginated remote history", "FynxGroupRemoteClient.loadMessagePage(context, groupId)" in ACTIVE_GROUP)
+RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+require(
+    "focused Chat/Groups runtime sends a private message offline and checks local persistence",
+    "FYNX_private_offline_QA_" in RUNTIME_NAV
+    and "private-chat-reopened-offline.png" in RUNTIME_NAV
+)
+require(
+    "focused Chat/Groups runtime proves private and group history survive real process death",
+    'run("adb","shell","am","force-stop",PACKAGE' in RUNTIME_NAV
+    and "private-chat-restored-after-process-death.png" in RUNTIME_NAV
+    and "group-chat-restored-after-process-death.png" in RUNTIME_NAV
+)
+GROUP_REMOTE = (UI / "FynxGroupRemoteClient.kt").read_text(encoding="utf-8")
+GROUP_ROUTES = (ROOT / "backend/groupRoutes.js").read_text(encoding="utf-8")
+GROUP_CONTENT_TEST = (ROOT / "backend/test-group-content-routes.mjs").read_text(encoding="utf-8")
+require(
+    "group read-receipt capability is explicit and scoped to the signed-in account and group",
+    "ConcurrentHashMap<String, Boolean>" in GROUP_REMOTE
+    and "groupReadReceiptScope(context, groupId)" in GROUP_REMOTE
+    and "FynxAuthStore.accountStorageKey(context)" in GROUP_REMOTE
+    and "supportsReadReceipts" in GROUP_REMOTE
+    and "root.optBoolean(\"supportsServerSearch\", false)" in GROUP_REMOTE
+    and "groupReadReceiptsSupported" not in GROUP_REMOTE
+)
+require(
+    "backend group history explicitly advertises and tests search and read-receipt capabilities",
+    "supportsServerSearch:true" in GROUP_ROUTES
+    and "supportsReadReceipts:true" in GROUP_ROUTES
+    and "assert.equal(firstPage.body.supportsServerSearch, true" in GROUP_CONTENT_TEST
+    and "assert.equal(firstPage.body.supportsReadReceipts, true" in GROUP_CONTENT_TEST
+)
 require("active group conversation handles realtime group-message events", "FynxRealtimeClient.Event.GroupMessage" in ACTIVE_GROUP and "realtime.connect()" in ACTIVE_GROUP)
 require("active group realtime connection is cancelled and closed with the screen", "awaitCancellation()" in ACTIVE_GROUP and "realtime.close()" in ACTIVE_GROUP)
 require("failed group messages remain visible instead of being silently deleted", "it.copy(delivered = false, read = false)" in ACTIVE_GROUP and "messages = messages.map" in ACTIVE_GROUP)

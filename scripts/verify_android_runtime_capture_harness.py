@@ -10,7 +10,13 @@ RUNNER = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encod
 RUNTIME_NAV = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 STATUS_RUNTIME = (ROOT / "scripts/verify_status_creator_runtime.py").read_text(encoding="utf-8")
 CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/ChatsPanel.kt").read_text(encoding="utf-8")
+CONVERSATION_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/ConversationPanel.kt").read_text(encoding="utf-8")
+GROUP_RECONNECT_TEST = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxGroupReconnectDrainInstrumentationTest.kt").read_text(encoding="utf-8")
+CHAT_SOUND_POLICY_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/FynxInChatSoundPolicyTest.kt").read_text(encoding="utf-8")
+CHAT_HISTORY_FALLBACK_TEST = (ROOT / "app/src/test/java/com/fynx/app/ui/PrivateChatHistoryFallbackTest.kt").read_text(encoding="utf-8")
+CHAT_SOUND = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxInChatSound.kt").read_text(encoding="utf-8")
 GROUPS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupsPanel.kt").read_text(encoding="utf-8")
+GROUP_SETTINGS_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxGroupSettingsPanel.kt").read_text(encoding="utf-8")
 GROUP_CHAT_PANEL = (ROOT / "app/src/main/java/com/fynx/app/ui/GroupChatPanel.kt").read_text(encoding="utf-8")
 EMULATOR_WRAPPER = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
 WORKFLOW = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
@@ -23,6 +29,45 @@ chat_command = (
 workflow_script = WORKFLOW.split("script: |", 1)[1].split("\n        env:", 1)[0]
 workflow_commands = [line.strip() for line in workflow_script.splitlines() if line.strip()]
 checks = {
+    "private-chat local runtime fixture stress-tests 1,000 persisted history messages": (
+        "val historyStressMessages = (0 until 1_000).map" in FIXTURE
+        and "assertEquals(1_002, restoredHistory.size)" in FIXTURE
+        and "assertEquals(ownerReply.id, restoredHistory[1_001].id)" in FIXTURE
+    ),
+    "camera editor rail actions expose stable accessible labels": (
+        'Modifier.width(58.dp).semantics(mergeDescendants = true) { contentDescription = label }' in CAMERA
+    ),
+    "camera effect tiles expose their names as clickable accessibility controls": (
+        'modifier = modifier.heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = label }' in CAMERA
+    ),
+    "private chat keeps cached history visible when remote history refresh fails": (
+        "privateChatHistoryFailureMessage(hasSavedMessages: Boolean)" in CONVERSATION_PANEL
+        and "FynxChatStore.load(context, chat.username, null).isNotEmpty()" in CONVERSATION_PANEL
+        and "Saved messages are shown. Could not refresh them yet" in CONVERSATION_PANEL
+        and "privateChatHistoryFailureMessage(hasSavedMessages = true)" in CHAT_HISTORY_FALLBACK_TEST
+    ),
+    "private chat in-app sound and vibration respect per-chat notification and mute settings": (
+        "FynxInChatSound.play(context, chat.username)" in CONVERSATION_PANEL
+        and "shouldPlayInChatAlert(" in CHAT_SOUND
+        and "FynxPreferencesStore.isChatMuted(context, username)" in CHAT_SOUND
+        and "chatVibration(context, username)" in CHAT_SOUND
+        and "suppressesAlertWhenLegacyMuteIsEnabled" in CHAT_SOUND_POLICY_TEST
+    ),
+    "Group settings ownership transfer and leave actions use authenticated server confirmation and account-scoped local updates": (
+        "FynxGroupRemoteClient.transferOwnership(context, groupId, cleanTransferTarget)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupRemoteClient.leaveGroup(context, groupId)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupsStore.updateGroup(context, updated, expectedAccountKey)" in GROUP_SETTINGS_PANEL
+        and "FynxGroupsStore.removeGroup(context, groupId, expectedAccountKey)" in GROUP_SETTINGS_PANEL
+        and "FynxBackendClient.isRequestSessionCurrent(" in GROUP_SETTINGS_PANEL
+        and 'GroupActionRow("Transfer ownership"' in GROUP_SETTINGS_PANEL
+        and 'GroupActionRow("Leave group"' in GROUP_SETTINGS_PANEL
+    ),
+    "group reconnect drain replaces confirmed server messages and preserves failed pending work": (
+        "FynxGroupRemoteClient.drainPendingWork(context)" in GROUP_RECONNECT_TEST
+        and "reconnectDrainSyncsPendingGroupAndReplacesTheUndeliveredMessage" in GROUP_RECONNECT_TEST
+        and "failedGroupCreationSyncKeepsTheGroupAndItsMessageQueued" in GROUP_RECONNECT_TEST
+        and "assertFalse(saved.single().delivered)" in GROUP_RECONNECT_TEST
+    ),
     "emulator runner executes compound certification through one Bash script": (
         workflow_commands == ["bash scripts/run_android_runtime_emulator_certification.sh"]
         and "if [ \"$preflight_status\" -eq 0 ]; then" in EMULATOR_WRAPPER
@@ -53,9 +98,19 @@ checks = {
         and 'Text("Before you use contact matching"' in CONTACTS_PANEL
     ),
     "Groups-tab capture waits for the Groups-specific action, not the Chats-section New group button": (
-        'groups_xml = tap_control(chat_again, ["Groups"], "chat-groups-groups-tab", ["Create group"])' in RUNTIME_NAV
+        'groups_xml = tap_control(\n        chat_again, ["Open Groups"], "chat-groups-groups-tab",\n        ["Create group"], exact_only=True\n    )' in RUNTIME_NAV
+        and 'contentDescription = if (section == "Chats") "Open Groups" else "Open Chats"' in CHAT_PANEL
         and 'contentDescription = "Create group"' in CHAT_PANEL
         and 'Text("＋ New group")' in CHAT_PANEL
+    ),
+    "focused Chat runtime selects the exact seeded peer instead of a guessed first row": (
+        'if CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS:' in RUNTIME_NAV
+        and '["Open chat with FYNX Runtime Peer"]' in RUNTIME_NAV
+        and 'exact_only=True,' in RUNTIME_NAV
+    ),
+    "group creation fields expose stable labels to accessibility and runtime automation": (
+        'contentDescription = "Group name input"' in GROUPS_PANEL
+        and 'contentDescription = "Description input"' in GROUPS_PANEL
     ),
     "Groups manager and dialog use the actual Create group accessibility label": (
         '["Create group"],\n        "chat-groups-open-groups-manager"' in RUNTIME_NAV
@@ -66,6 +121,15 @@ checks = {
         'for back_label in ("Back", "Back to Chats", "Back to Marketplace")' in STATUS_RUNTIME
         and 'find_click_target(current, back_label)' in STATUS_RUNTIME
         and 'IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ArrowBack, "Back"' in GROUP_CHAT_PANEL
+    ),
+    "Home runtime keeps ordinary post actions inside the feed and restores navigation": (
+        '"Close viewer",\n    )):' in RUNTIME_NAV
+        and 'restore_home_feed_top(home_xml)' in RUNTIME_NAV
+    ),
+    "offline Home Discovery fixture is deterministic and opens For You": (
+        'ci-home-feed-view.xml' in RUNTIME_NAV
+        and 'shared_prefs/fynx_home_feed_view.xml' in RUNTIME_NAV
+        and '"FOR_YOU"' in RUNTIME_NAV
     ),
     "camera callback uses a public SAM interface": (
         "fun interface FynxCameraEditedCaptureCallback" in CAMERA
