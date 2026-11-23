@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { ensureBuyerWalletSchema } from './buyerWallet.js';
 import { ensureMarketplaceSettlementSchema } from './marketplaceSettlement.js';
+import { queueFynxNotification } from './notificationPush.js';
 
 const { Pool } = pg;
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -323,7 +324,7 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
       try {
         await client.query('BEGIN');
         const order = (await client.query(`
-          SELECT id,buyer_id,seller_id,total_amount,buyer_total,seller_net_amount,
+          SELECT id,buyer_id,seller_id,product_snapshot,total_amount,buyer_total,seller_net_amount,
                  marketplace_fee,currency,status,payment_reference,payment_method
             FROM marketplace_orders
            WHERE id=$1
@@ -352,6 +353,21 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
           }
           if (prior.status === 'SUCCEEDED' && order.status === 'PAID' && order.payment_method === 'FYNX_WALLET') {
             await client.query('COMMIT');
+            const orderTitle = String(order.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+            await Promise.all([
+              queueFynxNotification(pool, {
+                userId: order.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+                message: `Your payment for ${orderTitle} was confirmed from your FYNX Wallet. Follow the order in Marketplace.`,
+                targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+                notificationId: `marketplace-wallet-payment-${order.id}-buyer`
+              }),
+              queueFynxNotification(pool, {
+                userId: order.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+                message: `A buyer paid for ${orderTitle} using FYNX Wallet. Open My Shop to manage this order.`,
+                targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+                notificationId: `marketplace-wallet-payment-${order.id}-seller`
+              })
+            ]);
             return res.json({ status: 'PAID', orderId: String(order.id), reference: prior.reference, amount: Number(prior.amount), idempotent: true });
           }
           await client.query('ROLLBACK');
@@ -487,6 +503,21 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
           })
         ]);
         await client.query('COMMIT');
+        const orderTitle = String(order.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+        await Promise.all([
+          queueFynxNotification(pool, {
+            userId: order.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+            message: `Your payment for ${orderTitle} was confirmed from your FYNX Wallet. Follow the order in Marketplace.`,
+            targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+            notificationId: `marketplace-wallet-payment-${order.id}-buyer`
+          }),
+          queueFynxNotification(pool, {
+            userId: order.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+            message: `A buyer paid for ${orderTitle} using FYNX Wallet. Open My Shop to manage this order.`,
+            targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+            notificationId: `marketplace-wallet-payment-${order.id}-seller`
+          })
+        ]);
         return res.status(200).json({
           status: 'PAID',
           orderId: String(order.id),
@@ -530,7 +561,7 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
         )).rows[0];
         if (!group) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'checkout group not found' }); }
         const children = (await client.query(
-          "SELECT o.id,o.buyer_id,o.seller_id,o.product_subtotal,o.delivery_fee,o.marketplace_fee,o.marketplace_fee_buyer,o.marketplace_fee_seller,o.seller_net_amount,o.buyer_total,o.total_amount,o.currency,o.status,o.payment_method,o.payment_reference FROM marketplace_checkout_group_items gi JOIN marketplace_orders o ON o.id=gi.order_id WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o",
+          "SELECT o.id,o.buyer_id,o.seller_id,o.product_snapshot,o.product_subtotal,o.delivery_fee,o.marketplace_fee,o.marketplace_fee_buyer,o.marketplace_fee_seller,o.seller_net_amount,o.buyer_total,o.total_amount,o.currency,o.status,o.payment_method,o.payment_reference FROM marketplace_checkout_group_items gi JOIN marketplace_orders o ON o.id=gi.order_id WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o",
           [group.id]
         )).rows;
         if (!children.length) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'checkout group has no protected orders' }); }
@@ -548,6 +579,23 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
             return res.status(409).json({ error: 'previous Wallet checkout payment requires reconciliation before retry' });
           }
           await client.query('COMMIT');
+          for (const child of children) {
+            const orderTitle = String(child.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+            await Promise.all([
+              queueFynxNotification(pool, {
+                userId: child.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+                message: `Your payment for ${orderTitle} was confirmed from your FYNX Wallet. Follow the order in Marketplace.`,
+                targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+                notificationId: `marketplace-wallet-payment-${child.id}-buyer`
+              }),
+              queueFynxNotification(pool, {
+                userId: child.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+                message: `A buyer paid for ${orderTitle} using FYNX Wallet. Open My Shop to manage this order.`,
+                targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+                notificationId: `marketplace-wallet-payment-${child.id}-seller`
+              })
+            ]);
+          }
           return res.json({
             status: 'PAID', checkoutId: String(group.id), reference: String(group.wallet_payment_reference),
             amount: Number(group.buyer_total), currency: 'NGN', childOrderCount: children.length, idempotent: true
@@ -634,6 +682,23 @@ export function registerBuyerWalletMarketplaceRoutes({ app }) {
         );
         if (!paidGroup.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Wallet checkout could not be committed; refresh the checkout before retrying' }); }
         await client.query('COMMIT');
+        for (const child of children) {
+          const orderTitle = String(child.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+          await Promise.all([
+            queueFynxNotification(pool, {
+              userId: child.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+              message: `Your payment for ${orderTitle} was confirmed from your FYNX Wallet. Follow the order in Marketplace.`,
+              targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+              notificationId: `marketplace-wallet-payment-${child.id}-buyer`
+            }),
+            queueFynxNotification(pool, {
+              userId: child.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+              message: `A buyer paid for ${orderTitle} using FYNX Wallet. Open My Shop to manage this order.`,
+              targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+              notificationId: `marketplace-wallet-payment-${child.id}-seller`
+            })
+          ]);
+        }
         return res.status(200).json({
           status: 'PAID', checkoutId: String(group.id), reference: groupReference,
           amount: allocation.totalCents / 100, currency: 'NGN', childOrderCount: allocation.children.length, idempotent: false

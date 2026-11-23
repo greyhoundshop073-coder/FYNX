@@ -631,7 +631,7 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
 
   const currentStatus = String(operation.status || '').toUpperCase();
   if (eventName === 'transfer.success') {
-    if (currentStatus === 'SUCCEEDED') return { matched: true, idempotent: true };
+    if (currentStatus === 'SUCCEEDED') return { matched: true, status: 'SUCCEEDED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount), idempotent: true };
     if (currentStatus !== 'PENDING') return { matched: true, idempotent: true };
     await postWalletInternalLedgerTransaction(client, {
       walletId: operation.wallet_id,
@@ -661,11 +661,11 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
       }),
       operation.id
     ]);
-    return { matched: true, status: 'SUCCEEDED' };
+    return { matched: true, status: 'SUCCEEDED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount) };
   }
 
   if (eventName === 'transfer.failed') {
-    if (currentStatus === 'FAILED') return { matched: true, idempotent: true };
+    if (currentStatus === 'FAILED') return { matched: true, status: 'FAILED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount), idempotent: true };
     if (currentStatus !== 'PENDING') return { matched: true, idempotent: true };
     await postWalletInternalLedgerTransaction(client, {
       walletId: operation.wallet_id,
@@ -688,11 +688,11 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
       JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerStatus: transfer.status || 'failed' }),
       operation.id
     ]);
-    return { matched: true, status: 'FAILED' };
+    return { matched: true, status: 'FAILED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount) };
   }
 
   if (eventName === 'transfer.reversed') {
-    if (currentStatus === 'REVERSED') return { matched: true, idempotent: true };
+    if (currentStatus === 'REVERSED') return { matched: true, status: 'REVERSED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount), idempotent: true };
     if (currentStatus !== 'SUCCEEDED') return { matched: true, idempotent: true };
     await postWalletInternalLedgerTransaction(client, {
       walletId: operation.wallet_id,
@@ -713,7 +713,7 @@ async function reconcileWalletTransferEvent(client, eventName, transfer) {
       JSON.stringify({ ...(operation.metadata || {}), transferEvent: eventName, providerStatus: transfer.status || 'reversed' }),
       operation.id
     ]);
-    return { matched: true, status: 'REVERSED' };
+    return { matched: true, status: 'REVERSED', userId: String(operation.user_id), operationId: String(operation.id), amount: Number(operation.amount) };
   }
   return { matched: true, ignored: true };
 }
@@ -811,7 +811,7 @@ async function reconcileWalletHostedFunding(reference, userId = null, { allowNot
     }
     if (intent.status === 'SUCCEEDED') {
       await client.query('COMMIT');
-      return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), idempotent: true };
+      return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), userId: String(intent.user_id), idempotent: true };
     }
     if (!['PENDING','PROCESSING'].includes(String(intent.status).toUpperCase())) {
       await client.query('ROLLBACK');
@@ -872,7 +872,7 @@ async function reconcileWalletHostedFunding(reference, userId = null, { allowNot
        WHERE id=$2
     `, [normalizedReference, intent.id]);
     await client.query('COMMIT');
-    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), credited: true };
+    return { matched: true, status: 'SUCCEEDED', reference: normalizedReference, amount: Number(intent.amount), userId: String(intent.user_id), credited: true };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;
@@ -1004,7 +1004,7 @@ export async function handleBuyerWalletPaystackEvent(eventName, data = {}) {
     `, [transactionId, wallet.id, 'PAYSTACK-DVA-CLEARING-' + reference, amount, 'PAYSTACK-DVA-AVAILABLE-' + reference]);
     await client.query("UPDATE buyer_wallet_transactions SET status='SUCCEEDED' WHERE id=$1", [transactionId]);
     await client.query('COMMIT');
-    return { handled: true, matched: true, credited: true };
+    return { handled: true, matched: true, credited: true, userId: String(wallet.user_id), amount: providerAmount / 100, reference };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error?.code === '23505') return { handled: true, matched: true, idempotent: true };

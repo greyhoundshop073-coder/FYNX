@@ -15,7 +15,14 @@ export default defineConfig({
         FYNX_WALLET_TEST_MODE_ENABLED: process.env.FYNX_WALLET_TEST_MODE_ENABLED!,
         FYNX_WALLET_CARD_FUNDING_ENABLED: process.env.FYNX_WALLET_CARD_FUNDING_ENABLED!,
         FYNX_WALLET_FUNDING_MIN_AMOUNT: process.env.FYNX_WALLET_FUNDING_MIN_AMOUNT!,
-        FYNX_WALLET_FUNDING_MAX_AMOUNT: process.env.FYNX_WALLET_FUNDING_MAX_AMOUNT!
+        FYNX_WALLET_FUNDING_MAX_AMOUNT: process.env.FYNX_WALLET_FUNDING_MAX_AMOUNT!,
+        FYNX_EMAIL_HOST: { value: process.env.FYNX_EMAIL_HOST, required: false },
+        FYNX_EMAIL_PORT: { value: process.env.FYNX_EMAIL_PORT, required: false },
+        FYNX_EMAIL_USER: { value: process.env.FYNX_EMAIL_USER, required: false },
+        FYNX_EMAIL_PASSWORD: { value: process.env.FYNX_EMAIL_PASSWORD, required: false },
+        FYNX_EMAIL_FROM: { value: process.env.FYNX_EMAIL_FROM, required: false },
+        FYNX_EMAIL_SECURE: { value: process.env.FYNX_EMAIL_SECURE, required: false },
+        FYNX_EMAIL_REQUIRE_TLS: { value: process.env.FYNX_EMAIL_REQUIRE_TLS, required: false }
       }
     }
   },

@@ -42,6 +42,64 @@ export function createEmailAuthController({
   const configured = Boolean(emailDelivery?.configured && typeof emailDelivery.send === "function");
   const canHash = typeof tokenSecret === "string" && tokenSecret.length >= 32;
 
+  let pendingEmailSchemaPromise;
+  async function ensurePendingEmailSchema() {
+    if (!pool) return;
+    if (!pendingEmailSchemaPromise) {
+      pendingEmailSchemaPromise = pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_verification_code_hash TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_verification_expires_at TIMESTAMPTZ;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_verification_attempts INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_email_verification_last_sent_at TIMESTAMPTZ;
+        CREATE UNIQUE INDEX IF NOT EXISTS users_pending_email_lower_unique_idx
+          ON users (LOWER(pending_email))
+          WHERE pending_email IS NOT NULL AND pending_email <> '';
+      `).catch(error => { pendingEmailSchemaPromise = undefined; throw error; });
+    }
+    await pendingEmailSchemaPromise;
+  }
+  async function sendSecurityNotice(address, subject, text) {
+    if (!configured || !isValidEmail(address)) return false;
+    try {
+      await emailDelivery.send({ to: address, subject, text });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function requestVerificationForUser(userId) {
+    if (!pool) return { ok: false, reason: "unavailable" };
+    if (!configured) return { ok: false, reason: "delivery_not_configured" };
+    await ensurePendingEmailSchema();
+    const result = await pool.query(
+      `SELECT id,email,email_verified_at,email_verification_last_sent_at,
+              pending_email,pending_email_verification_last_sent_at
+       FROM users WHERE id=$1 LIMIT 1`,
+      [userId]
+    );
+    const user = result.rows?.[0];
+    if (!user) return { ok: false, reason: "not_found" };
+    if (user.pending_email && isValidEmail(user.pending_email)) {
+      const lastPendingSentAt = user.pending_email_verification_last_sent_at
+        ? new Date(user.pending_email_verification_last_sent_at).getTime() : 0;
+      if (lastPendingSentAt > 0 && now().getTime() - lastPendingSentAt < CODE_RESEND_COOLDOWN_MS) {
+        return { ok: false, reason: "cooldown" };
+      }
+      const sentPending = await sendPendingEmailVerification(user, { respectCooldown: true });
+      return sentPending ? { ok: true, reason: "sent" } : { ok: false, reason: "delivery_failed" };
+    }
+    if (user.email_verified_at) return { ok: false, reason: "already_verified" };
+    if (!isValidEmail(user.email)) return { ok: false, reason: "email_missing" };
+    const lastSentAt = user.email_verification_last_sent_at
+      ? new Date(user.email_verification_last_sent_at).getTime() : 0;
+    if (lastSentAt > 0 && now().getTime() - lastSentAt < CODE_RESEND_COOLDOWN_MS) {
+      return { ok: false, reason: "cooldown" };
+    }
+    const sent = await sendVerificationForUser(user, { respectCooldown: true });
+    return sent ? { ok: true, reason: "sent" } : { ok: false, reason: "delivery_failed" };
+  }
   async function sendVerificationForUser(user, { respectCooldown = false } = {}) {
     if (!pool || !canHash || !configured || !user?.id || !isValidEmail(user.email)) return false;
     const code = generateCode();
@@ -81,56 +139,146 @@ export function createEmailAuthController({
     }
   }
 
+  async function sendPendingEmailVerification(user, { respectCooldown = false } = {}) {
+    if (!pool || !canHash || !configured || !user?.id || !isValidEmail(user.pending_email)) return false;
+    const code = generateCode();
+    if (!/^\d{6}$/.test(code)) throw new Error("Email code generator returned an invalid code.");
+    const hashed = digest(code, "email-verification", tokenSecret);
+    const issuedAt = now();
+    const expiresAt = new Date(issuedAt.getTime() + EMAIL_CODE_TTL_MS);
+    const updated = await pool.query(
+      `UPDATE users SET pending_email_verification_code_hash = $2,
+           pending_email_verification_expires_at = $3,
+           pending_email_verification_attempts = 0,
+           pending_email_verification_last_sent_at = $4
+       WHERE id = $1 AND pending_email = $5
+         AND ($6::bigint = 0 OR pending_email_verification_last_sent_at IS NULL
+              OR pending_email_verification_last_sent_at <= $4 - ($6::bigint * INTERVAL '1 millisecond'))
+       RETURNING id`,
+      [user.id, hashed, expiresAt, issuedAt, user.pending_email, respectCooldown ? CODE_RESEND_COOLDOWN_MS : 0]
+    );
+    if (!updated.rows?.length) return false;
+    try {
+      await emailDelivery.send({
+        to: user.pending_email,
+        subject: "Verify your new FYNX email address",
+        text: "Your FYNX email-change verification code is " + code + ". It expires in 15 minutes. Your current verified email remains on your account until you verify this new address. If you did not request this, ignore this email."
+      });
+      return true;
+    } catch {
+      await pool.query(
+        `UPDATE users SET pending_email_verification_code_hash = NULL,
+                           pending_email_verification_expires_at = NULL,
+                           pending_email_verification_attempts = 0
+         WHERE id = $1 AND pending_email_verification_code_hash = $2`,
+        [user.id, hashed]
+      ).catch(() => {});
+      return false;
+    }
+  }
   async function verifyEmail(emailInput, codeInput) {
     if (!pool || !canHash) return false;
+    await ensurePendingEmailSchema();
     const email = normalizeEmail(emailInput);
     const code = typeof codeInput === "string" ? codeInput.trim() : "";
     if (!isValidEmail(email) || !/^\d{6}$/.test(code)) return false;
     const result = await pool.query(
-      `SELECT id, email_verification_code_hash, email_verification_expires_at,
-              email_verification_attempts, email_verified_at
-       FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      `SELECT id,email,email_verified_at,
+              email_verification_code_hash,email_verification_expires_at,email_verification_attempts,
+              pending_email,pending_email_verification_code_hash,
+              pending_email_verification_expires_at,pending_email_verification_attempts
+       FROM users
+       WHERE LOWER(email)=LOWER($1) OR LOWER(pending_email)=LOWER($1)
+       ORDER BY CASE WHEN LOWER(pending_email)=LOWER($1) THEN 0 ELSE 1 END
+       LIMIT 1`,
       [email]
     );
     const user = result.rows?.[0];
-    if (!user || user.email_verified_at || !user.email_verification_code_hash) return false;
-    const expiry = new Date(user.email_verification_expires_at).getTime();
-    const attempts = Number(user.email_verification_attempts || 0);
+    if (!user) return false;
+    const pendingChange = normalizeEmail(user.pending_email) === email;
+    const storedHash = pendingChange ? user.pending_email_verification_code_hash : user.email_verification_code_hash;
+    const expiresAt = pendingChange ? user.pending_email_verification_expires_at : user.email_verification_expires_at;
+    const attempts = Number(pendingChange ? user.pending_email_verification_attempts || 0 : user.email_verification_attempts || 0);
+    if ((!pendingChange && user.email_verified_at) || !storedHash) return false;
+    const expiry = new Date(expiresAt).getTime();
     if (!Number.isFinite(expiry) || expiry <= now().getTime() || attempts >= MAX_CODE_ATTEMPTS) {
-      await pool.query(
-        `UPDATE users SET email_verification_code_hash = NULL,
-                           email_verification_expires_at = NULL,
-                           email_verification_attempts = 0
-         WHERE id = $1 AND email_verification_code_hash = $2`,
-        [user.id, user.email_verification_code_hash]
-      );
+      if (pendingChange) {
+        await pool.query(
+          `UPDATE users SET pending_email=NULL,pending_email_verification_code_hash=NULL,
+                             pending_email_verification_expires_at=NULL,pending_email_verification_attempts=0,
+                             pending_email_verification_last_sent_at=NULL
+           WHERE id=$1 AND pending_email=$2 AND pending_email_verification_code_hash=$3`,
+          [user.id,email,storedHash]
+        );
+      } else {
+        await pool.query(
+          `UPDATE users SET email_verification_code_hash=NULL,email_verification_expires_at=NULL,
+                             email_verification_attempts=0
+           WHERE id=$1 AND email_verification_code_hash=$2`,
+          [user.id,storedHash]
+        );
+      }
       return false;
     }
     const submitted = digest(code, "email-verification", tokenSecret);
-    if (!constantTimeHexEqual(submitted, user.email_verification_code_hash)) {
+    if (!constantTimeHexEqual(submitted, storedHash)) {
       const nextAttempts = attempts + 1;
-      await pool.query(
-        `UPDATE users SET email_verification_attempts = $3,
-             email_verification_code_hash = CASE WHEN $3 >= $4 THEN NULL ELSE email_verification_code_hash END,
-             email_verification_expires_at = CASE WHEN $3 >= $4 THEN NULL ELSE email_verification_expires_at END
-         WHERE id = $1 AND email_verification_code_hash = $2`,
-        [user.id, user.email_verification_code_hash, nextAttempts, MAX_CODE_ATTEMPTS]
-      );
+      if (pendingChange) {
+        await pool.query(
+          `UPDATE users SET pending_email_verification_attempts=$3,
+               pending_email=CASE WHEN $3 >= $4 THEN NULL ELSE pending_email END,
+               pending_email_verification_code_hash=CASE WHEN $3 >= $4 THEN NULL ELSE pending_email_verification_code_hash END,
+               pending_email_verification_expires_at=CASE WHEN $3 >= $4 THEN NULL ELSE pending_email_verification_expires_at END,
+               pending_email_verification_last_sent_at=CASE WHEN $3 >= $4 THEN NULL ELSE pending_email_verification_last_sent_at END
+           WHERE id=$1 AND pending_email_verification_code_hash=$2`,
+          [user.id,storedHash,nextAttempts,MAX_CODE_ATTEMPTS]
+        );
+      } else {
+        await pool.query(
+          `UPDATE users SET email_verification_attempts=$3,
+               email_verification_code_hash=CASE WHEN $3 >= $4 THEN NULL ELSE email_verification_code_hash END,
+               email_verification_expires_at=CASE WHEN $3 >= $4 THEN NULL ELSE email_verification_expires_at END
+           WHERE id=$1 AND email_verification_code_hash=$2`,
+          [user.id,storedHash,nextAttempts,MAX_CODE_ATTEMPTS]
+        );
+      }
       return false;
     }
+    if (pendingChange) {
+      const updated = await pool.query(
+        `UPDATE users SET email=pending_email,email_verified_at=NOW(),
+             email_verification_code_hash=NULL,email_verification_expires_at=NULL,
+             email_verification_attempts=0,email_verification_last_sent_at=NULL,
+             pending_email=NULL,pending_email_verification_code_hash=NULL,
+             pending_email_verification_expires_at=NULL,pending_email_verification_attempts=0,
+             pending_email_verification_last_sent_at=NULL
+         WHERE id=$1 AND LOWER(pending_email)=LOWER($5)
+           AND pending_email_verification_code_hash=$2
+           AND pending_email_verification_expires_at>$3
+           AND pending_email_verification_attempts<$4
+         RETURNING id`,
+        [user.id,storedHash,now(),MAX_CODE_ATTEMPTS,email]
+      );
+      if (!updated.rows?.length) return false;
+      if (user.email_verified_at && isValidEmail(user.email) && normalizeEmail(user.email)!==email) {
+        await sendSecurityNotice(
+          user.email,
+          "Your FYNX account email was changed",
+          "The email address on your FYNX account was changed to " + email + ". If you did not make this change, secure your account and contact FYNX support through the app."
+        );
+      }
+      return true;
+    }
     const updated = await pool.query(
-      `UPDATE users SET email_verified_at = NOW(),
-           email_verification_code_hash = NULL,
-           email_verification_expires_at = NULL,
-           email_verification_attempts = 0
-       WHERE id = $1 AND email_verification_code_hash = $2
-         AND email_verification_expires_at > $3 AND email_verification_attempts < $4
+      `UPDATE users SET email_verified_at=NOW(),email_verification_code_hash=NULL,
+           email_verification_expires_at=NULL,email_verification_attempts=0
+       WHERE id=$1 AND email_verification_code_hash=$2
+         AND email_verification_expires_at>$3 AND email_verification_attempts<$4
        RETURNING id`,
-      [user.id, user.email_verification_code_hash, now(), MAX_CODE_ATTEMPTS]
+      [user.id,storedHash,now(),MAX_CODE_ATTEMPTS]
     );
     return Boolean(updated.rows?.length);
   }
-
   async function requestVerification(emailInput) {
     if (!pool || !configured) return false;
     const email = normalizeEmail(emailInput);
@@ -199,7 +347,7 @@ export function createEmailAuthController({
     if (!isValidEmail(email) || !/^\d{6}$/.test(code) ||
         typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128) return false;
     const result = await pool.query(
-      `SELECT id, password_reset_code_hash, password_reset_expires_at, password_reset_attempts
+      `SELECT id, password_reset_code_hash, password_reset_expires_at, password_reset_attempts, email
        FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL LIMIT 1`,
       [email]
     );
@@ -241,28 +389,115 @@ export function createEmailAuthController({
        RETURNING id`,
       [user.id, passwordHash, user.password_reset_code_hash, now(), MAX_CODE_ATTEMPTS]
     );
-    return Boolean(updated.rows?.length);
+    if (!updated.rows?.length) return false;
+    await sendSecurityNotice(
+      user.email,
+      "Your FYNX password was changed",
+      "Your FYNX account password was changed. If you did not make this change, use password recovery and contact FYNX support through the app."
+    );
+    return true;
   }
 
   async function attachEmail(userId, password, emailInput) {
     if (!pool || !canHash || !bcrypt || typeof password !== "string" || !password) return { status: 400, sent: false };
+    await ensurePendingEmailSchema();
     const email = normalizeEmail(emailInput);
     if (!isValidEmail(email)) return { status: 400, sent: false };
-    const found = await pool.query("SELECT id, password_hash FROM users WHERE id = $1 LIMIT 1", [userId]);
-    const user = found.rows?.[0];
-    if (!user || !(await bcrypt.compare(password, user.password_hash))) return { status: 401, sent: false };
-    const updated = await pool.query(
-      `UPDATE users SET email = $2, email_verified_at = NULL,
-           email_verification_code_hash = NULL, email_verification_expires_at = NULL,
-           email_verification_attempts = 0, email_verification_last_sent_at = NULL
-       WHERE id = $1 RETURNING id, email`,
-      [userId, email]
+    const found = await pool.query(
+      `SELECT id,password_hash,email,email_verified_at,pending_email,pending_email_verification_last_sent_at
+       FROM users WHERE id=$1 LIMIT 1`,
+      [userId]
     );
-    if (!updated.rows?.[0]) return { status: 404, sent: false };
-    return { status: 200, sent: await sendVerificationForUser(updated.rows[0]) };
+    const user = found.rows?.[0];
+    if (!user || !(await bcrypt.compare(password,user.password_hash))) return { status: 401, sent: false };
+    const previousEmail = normalizeEmail(user.email);
+    if (previousEmail === email && user.email_verified_at) {
+      return { status: 200, sent: false, email: user.email, unchanged: true };
+    }
+    if (previousEmail === email && !user.email_verified_at) {
+      const sent = await sendVerificationForUser(user);
+      return { status: sent ? 200 : 503, sent, email: user.email };
+    }
+    const lastSentAt = user.pending_email_verification_last_sent_at
+      ? new Date(user.pending_email_verification_last_sent_at).getTime() : 0;
+    if (lastSentAt > 0 && now().getTime() - lastSentAt < CODE_RESEND_COOLDOWN_MS) {
+      return { status: 429, sent: false, email: user.pending_email || user.email, retained: true };
+    }
+    const duplicate = await pool.query(
+      `SELECT id FROM users
+       WHERE id<>$2 AND (LOWER(email)=LOWER($1) OR LOWER(pending_email)=LOWER($1))
+       LIMIT 1`,
+      [email,userId]
+    );
+    if (duplicate.rows?.length) return { status: 409, sent: false };
+    if (!configured) return { status: 503, sent: false, email: user.pending_email || user.email, retained: true };
+    const code = generateCode();
+    if (!/^\d{6}$/.test(code)) throw new Error("Email code generator returned an invalid code.");
+    const hashed = digest(code,"email-verification",tokenSecret);
+    const issuedAt = now();
+    const expiresAt = new Date(issuedAt.getTime()+EMAIL_CODE_TTL_MS);
+    const staged = await pool.query(
+      `UPDATE users SET pending_email=$2,pending_email_verification_code_hash=$3,
+           pending_email_verification_expires_at=$4,pending_email_verification_attempts=0,
+           pending_email_verification_last_sent_at=$5
+       WHERE id=$1 AND email IS NOT DISTINCT FROM $6
+         AND email_verified_at IS NOT DISTINCT FROM $7
+       RETURNING id`,
+      [userId,email,hashed,expiresAt,issuedAt,user.email,user.email_verified_at ?? null]
+    );
+    if (!staged.rows?.length) return { status: 409, sent: false, email: user.email, retained: true };
+    try {
+      await emailDelivery.send({
+        to: email,
+        subject: "Verify your new FYNX email address",
+        text: "Your FYNX email-change verification code is " + code + ". It expires in 15 minutes. Your current verified email remains on your account until you verify this new address. If you did not request this, ignore this email."
+      });
+    } catch {
+      await pool.query(
+        `UPDATE users SET pending_email=NULL,pending_email_verification_code_hash=NULL,
+                           pending_email_verification_expires_at=NULL,pending_email_verification_attempts=0,
+                           pending_email_verification_last_sent_at=NULL
+         WHERE id=$1 AND pending_email=$2 AND pending_email_verification_code_hash=$3`,
+        [userId,email,hashed]
+      ).catch(() => {});
+      return { status: 503, sent: false, email: user.email, retained: true };
+    }
+    return { status: 200, sent: true, email, pendingVerification: true };
   }
-
   function registerRoutes(app, auth) {
+    app.get("/api/auth/email/status", auth, async (req, res) => {
+      try {
+        await ensurePendingEmailSchema();
+        const result = await pool.query(
+          "SELECT email, email_verified_at, pending_email FROM users WHERE id = $1 LIMIT 1",
+          [req.user?.sub]
+        );
+        const user = result.rows?.[0];
+        if (!user) return sendJson(res, 404, { error: "Account not found." });
+        return sendJson(res, 200, {
+          email: isValidEmail(user.pending_email) ? user.pending_email : (user.email || ""),
+          emailVerified: isValidEmail(user.pending_email) ? false : Boolean(user.email_verified_at),
+          pendingEmail: isValidEmail(user.pending_email)
+        });
+      } catch {
+        return sendJson(res, 503, { error: "Email settings are temporarily unavailable." });
+      }
+    });
+
+    app.post("/api/auth/email/resend", auth, async (req, res) => {
+      try {
+        const result = await requestVerificationForUser(req.user?.sub);
+        if (result.ok) return sendJson(res, 200, { ok: true, emailVerificationSent: true });
+        if (result.reason === "not_found") return sendJson(res, 404, { error: "Account not found." });
+        if (result.reason === "already_verified") return sendJson(res, 409, { error: "This email address is already verified." });
+        if (result.reason === "email_missing") return sendJson(res, 400, { error: "Add a valid email address before requesting a code." });
+        if (result.reason === "cooldown") return sendJson(res, 429, { error: "Please wait one minute before requesting another verification email." });
+        return sendJson(res, 503, { error: "Email delivery is unavailable. Try again later." });
+      } catch {
+        return sendJson(res, 503, { error: "Email delivery is temporarily unavailable." });
+      }
+    });
+
     app.post("/api/auth/email/verify", async (req, res) => {
       try {
         if (await verifyEmail(req.body?.email, req.body?.code)) return sendJson(res, 200, { ok: true, emailVerified: true });
@@ -304,9 +539,17 @@ export function createEmailAuthController({
     app.post("/api/auth/email/attach", auth, async (req, res) => {
       try {
         const result = await attachEmail(req.user?.sub, req.body?.password, req.body?.email);
-        if (result.status === 200) return sendJson(res, 200, { ok: true, emailVerificationSent: result.sent });
+        if (result.status === 200) return sendJson(res, 200, {
+          ok: true,
+          email: result.email || "",
+          emailVerificationSent: result.sent,
+          pendingEmailVerification: Boolean(result.pendingVerification),
+          unchanged: Boolean(result.unchanged)
+        });
         if (result.status === 401) return sendJson(res, 401, { error: "Current password is incorrect." });
-        if (result.status === 409) return sendJson(res, 409, { error: "That email address is already connected to another FYNX account." });
+        if (result.status === 409) return sendJson(res, 409, { error: "That email address is already connected to another FYNX account, or your email settings changed. Your previous address was kept." });
+        if (result.status === 429) return sendJson(res, 429, { error: "Please wait one minute before requesting another email change. Your existing verified address remains active." });
+        if (result.status === 503) return sendJson(res, 503, { error: "Email delivery is unavailable. Your previous email address and verification state were kept. Try again later." });
         return sendJson(res, result.status, { error: "A valid email address and current password are required." });
       } catch (error) {
         if (error?.code === "23505") return sendJson(res, 409, { error: "That email address is already connected to another FYNX account." });
@@ -317,6 +560,7 @@ export function createEmailAuthController({
 
   return Object.freeze({
     isValidEmail, sendVerificationForUser, verifyEmail, requestVerification,
-    requestPasswordReset, confirmPasswordReset, attachEmail, registerRoutes
+    requestVerificationForUser, requestPasswordReset, confirmPasswordReset,
+    attachEmail, registerRoutes
   });
 }

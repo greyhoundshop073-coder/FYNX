@@ -30,7 +30,9 @@ object FynxNotificationPreferencesClient {
             put("enabled", preferences.enabled); put("pushEnabled", preferences.pushEnabled); put("reactionsEnabled", preferences.reactionsEnabled)
             put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled)
             put("storiesEnabled", preferences.storiesEnabled); put("remindersEnabled", preferences.remindersEnabled); put("groupEnabled", preferences.groupEnabled)
-            put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled); put("quietMode", preferences.quietMode)
+            put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled)
+            put("emailEnabled", preferences.emailEnabled); put("marketplaceEmailEnabled", preferences.marketplaceEmailEnabled); put("walletEmailEnabled", preferences.walletEmailEnabled)
+            put("quietMode", preferences.quietMode)
         }
         return FynxBackendClient.patchJson(context, "/api/notification-preferences", body.toString()).mapCatching { raw ->
             parse(JSONObject(raw).optJSONObject("preferences") ?: JSONObject()).also { cache(context, it) }
@@ -62,7 +64,9 @@ object FynxNotificationPreferencesClient {
         put("enabled", preferences.enabled); put("pushEnabled", preferences.pushEnabled); put("reactionsEnabled", preferences.reactionsEnabled)
         put("commentsEnabled", preferences.commentsEnabled); put("friendRequestsEnabled", preferences.friendRequestsEnabled); put("messagesEnabled", preferences.messagesEnabled)
         put("storiesEnabled", preferences.storiesEnabled); put("remindersEnabled", preferences.remindersEnabled); put("groupEnabled", preferences.groupEnabled)
-        put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled); put("quietMode", preferences.quietMode)
+        put("marketplaceEnabled", preferences.marketplaceEnabled); put("walletEnabled", preferences.walletEnabled)
+        put("emailEnabled", preferences.emailEnabled); put("marketplaceEmailEnabled", preferences.marketplaceEmailEnabled); put("walletEmailEnabled", preferences.walletEmailEnabled)
+        put("quietMode", preferences.quietMode)
     }
 
     private fun parse(json: JSONObject) = FynxNotificationPreferences(
@@ -71,6 +75,10 @@ object FynxNotificationPreferencesClient {
         friendRequestsEnabled = json.optBoolean("friendRequestsEnabled", true), messagesEnabled = json.optBoolean("messagesEnabled", true),
         storiesEnabled = json.optBoolean("storiesEnabled", true), remindersEnabled = json.optBoolean("remindersEnabled", true),
         groupEnabled = json.optBoolean("groupEnabled", true), marketplaceEnabled = json.optBoolean("marketplaceEnabled", true),
-        walletEnabled = json.optBoolean("walletEnabled", true), quietMode = json.optBoolean("quietMode", false)
+        walletEnabled = json.optBoolean("walletEnabled", true),
+        emailEnabled = json.optBoolean("emailEnabled", true),
+        marketplaceEmailEnabled = json.optBoolean("marketplaceEmailEnabled", true),
+        walletEmailEnabled = json.optBoolean("walletEmailEnabled", true),
+        quietMode = json.optBoolean("quietMode", false)
     )
 }

@@ -13,6 +13,9 @@ data class FynxNotificationPreferences(
     val groupEnabled: Boolean = true,
     val marketplaceEnabled: Boolean = true,
     val walletEnabled: Boolean = true,
+    val emailEnabled: Boolean = true,
+    val marketplaceEmailEnabled: Boolean = true,
+    val walletEmailEnabled: Boolean = true,
     val quietMode: Boolean = false
 )
 

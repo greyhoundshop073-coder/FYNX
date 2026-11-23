@@ -29,7 +29,24 @@ Repository **Variables** are optional for the first development deployment. The 
 - `FYNX_WALLET_FUNDING_MIN_AMOUNT` — defaults to `100` (NGN).
 - `FYNX_WALLET_FUNDING_MAX_AMOUNT` — defaults to `100000` (NGN).
 
-These defaults let the core API deploy without activating wallet funding or real payments. Do not change the wallet flags for the initial Neon deployment. Wallet test-mode behavior needs a separate runtime safety review because the current test-mode gate includes a Railway testing-environment check.
+Email delivery is optional for the API deployment. To enable account verification, password recovery and account-security notices on the isolated Function, add all four repository **Secrets**:
+
+- `FYNX_EMAIL_HOST` — SMTP hostname from the email provider.
+- `FYNX_EMAIL_USER` — SMTP username.
+- `FYNX_EMAIL_PASSWORD` — SMTP password or provider-issued app password.
+- `FYNX_EMAIL_FROM` — sender address authorised by that provider.
+
+Optional transport **Variables**:
+
+- `FYNX_EMAIL_PORT` — defaults to `587`.
+- `FYNX_EMAIL_SECURE` — defaults to `false`; use `true` for implicit TLS on port 465.
+- `FYNX_EMAIL_REQUIRE_TLS` — defaults to `true`; keeps STARTTLS mandatory when implicit TLS is off.
+
+Set all four SMTP secrets together or leave all four unset. A partial configuration fails the manual deployment validation. The workflow passes these values into a permission-restricted temporary env file and removes the file when the deploy step ends; `neon.ts` declares them as optional Function variables. Do not put SMTP credentials in source code, chat messages, issue comments or artifacts. With the secrets absent, the email adapter stays fail-closed and the app must show email delivery as unavailable rather than claiming that an email was sent.
+
+After setting the secrets and optional variables in GitHub Actions, run **Actions → FYNX Neon Function Deploy → Run workflow** to apply the change to `fynx-dev`. This source change does not deploy SMTP or prove delivery. After deployment, send a test message to a controlled mailbox and inspect the provider's delivery result before enabling the user-facing flow for testers.
+
+These defaults let the core API deploy without activating wallet funding or real payments. Do not change the wallet flags for the initial Neon deployment. Wallet test-mode behavior needs a separate runtime safety review.
 
 Then open **Actions → FYNX Neon Function Deploy → Run workflow**. The workflow deploys only to `fynx-dev`. It is manual-only; ordinary pushes do not deploy a backend. This workflow is pinned to the development branch and must not be repointed to `production` or `live-recovery-20261101`.
 

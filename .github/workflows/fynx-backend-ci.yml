@@ -67,6 +67,9 @@ jobs:
           node test-email-delivery.mjs
           node --check emailAuthRoutes.js
           node test-email-auth.mjs
+          node --check notificationEmail.js
+          node test-email-notifications.mjs
+          node test-email-deployment-contract.mjs
       - name: Check backend JavaScript
         run: |
           node --check server.js

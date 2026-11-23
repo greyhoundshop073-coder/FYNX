@@ -1085,6 +1085,15 @@ private fun AccountProfileSettingsPanel(
     val context = LocalContext.current
     var infoTitle by remember { mutableStateOf<String?>(null) }
     var infoText by remember { mutableStateOf("") }
+    var emailSettingsOpen by remember { mutableStateOf(false) }
+
+    if (emailSettingsOpen) {
+        AccountEmailSettingsPanel(
+            phoneNumber = FynxAuthStore.storedPhone(context).orEmpty(),
+            onBack = { emailSettingsOpen = false }
+        )
+        return
+    }
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -1141,16 +1150,9 @@ private fun AccountProfileSettingsPanel(
             }
             item {
                 SettingsReferenceRow(Icons.Default.Info, "Phone & Email",
-                    "View the phone number saved with this account",
+                    "View your saved phone number and manage email verification",
                     androidx.compose.ui.graphics.Color(0xFFCB8A35)) {
-                    val phone = FynxAuthStore.storedPhone(context)
-                    infoTitle = "Phone & Email"
-                    infoText = buildString {
-                        append("Phone number: ")
-                        append(phone ?: "No phone number is saved on this device.")
-                        append("\n\nEmail: No email address is currently available in the saved account details.")
-                        append("\n\nChanging contact details requires a verified account flow, which is not yet available here. Your details have not been changed.")
-                    }
+                    emailSettingsOpen = true
                 }
             }
             item { SettingsSectionTitle("ACCOUNT CONTROLS") }

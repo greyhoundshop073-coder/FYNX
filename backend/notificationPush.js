@@ -1,4 +1,5 @@
 import { createSign } from "node:crypto";
+import { deliverFynxEmailNotification } from "./notificationEmail.js";
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "fynx-f0868";
 const FIREBASE_SERVICE_ACCOUNT_JSON = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "";
@@ -70,6 +71,9 @@ async function ensureSchema(pool) {
       group_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       marketplace_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       wallet_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      marketplace_email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      wallet_email_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       quiet_mode BOOLEAN NOT NULL DEFAULT FALSE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -100,6 +104,9 @@ async function ensureSchema(pool) {
     );
     CREATE INDEX IF NOT EXISTS fynx_notification_delivery_status_idx ON fynx_notification_delivery(status,updated_at);
     ALTER TABLE fynx_notifications ADD COLUMN IF NOT EXISTS route TEXT;
+    ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS marketplace_email_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS wallet_email_enabled BOOLEAN NOT NULL DEFAULT TRUE;
   `).catch(error => { schemaPromise = undefined; throw error; });
   return schemaPromise;
 }
@@ -152,15 +159,19 @@ export async function queueFynxNotification(pool, {
     const safeTitle = safeText(title, "FYNX");
     const safeMessage = safeText(message, "You have a new FYNX notification.");
     await pool.query(`INSERT INTO fynx_notifications(id,user_id,type,title,message,target_id,source_username,route,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()) ON CONFLICT(id,user_id) DO UPDATE SET title=EXCLUDED.title,message=EXCLUDED.message,target_id=EXCLUDED.target_id,source_username=EXCLUDED.source_username,route=EXCLUDED.route`, [id, userId, type, safeTitle, safeMessage, targetId == null ? null : String(targetId).slice(0, 200), sourceUsername == null ? null : String(sourceUsername).slice(0, 80), safeText(route, "fynx://home", 500)]);
-    if (!(await pushAllowed(pool, userId, type))) return { stored: true, delivered: false, reason: "notification preference disabled", id };
-    if (!fynxPushConfigured()) return { stored: true, delivered: false, reason: "firebase server credentials not configured", id };
+    const email = await deliverFynxEmailNotification(pool, { userId, type, notificationId: id, title: safeTitle, message: safeMessage })
+      .catch(error => ({ sent: false, reason: "email notification delivery failed" }));
+    if (!(await pushAllowed(pool, userId, type))) {
+      return { stored: true, delivered: false, reason: "notification preference disabled", emailDelivered: Boolean(email.sent), emailReason: email.reason, id };
+    }
+    if (!fynxPushConfigured()) return { stored: true, delivered: false, reason: "firebase server credentials not configured", emailDelivered: Boolean(email.sent), emailReason: email.reason, id };
     const devices = (await pool.query(`SELECT provider,token FROM notification_devices WHERE user_id=$1 AND enabled=TRUE AND provider='fcm'`, [userId])).rows;
     let delivered = 0;
     for (const device of devices) {
       const result = await sendFcm(pool, { userId, device, notificationId: id, type, title: safeTitle, message: safeMessage, route });
       if (result) delivered += 1;
     }
-    return { stored: true, delivered: delivered > 0, deliveredCount: delivered, id };
+    return { stored: true, delivered: delivered > 0, deliveredCount: delivered, emailDelivered: Boolean(email.sent), emailReason: email.reason, id };
   } catch (error) {
     console.error("FYNX notification delivery", error);
     return { stored: false, delivered: false, reason: "notification delivery failed" };

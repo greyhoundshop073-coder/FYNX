@@ -3,6 +3,7 @@ import { getCachedMediaPayload } from './mediaPayloadCache.js';
 import { redirectStoredMedia } from './mediaStorage.js';
 import { registerMarketplaceShippingTimeline } from './marketplaceShippingTimeline.js';
 import { isMarketplaceDestinationCovered } from './marketplaceShipping.js';
+import { queueFynxNotification } from './notificationPush.js';
 
 export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
   let schemaPromise;
@@ -301,6 +302,18 @@ export function registerMarketplaceCompletionRoutes({ app, pool, auth }) {
       }
       await recordFulfillmentEvent(client, id, req.user.sub, localArrivalAssignment ? 'LOCAL_DRIVER_ARRIVAL_REPORTED' : `FULFILLMENT_${requested}`, current, requested, { fulfillmentMethod: order.fulfillment_method, note: note || null, deliveryMode: localArrivalAssignment ? 'SELLER_LOCAL' : undefined });
       await client.query('COMMIT');
+      const orderTitle = String(order.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+      const fulfillmentLabels = {
+        PREPARING: 'being prepared', DISPATCHED: 'dispatched', IN_TRANSIT: 'in transit',
+        DELIVERED: 'marked as delivered', READY_FOR_PICKUP: 'ready for pickup',
+        FAILED_DELIVERY: 'having a delivery issue', RETURNED: 'marked as returned'
+      };
+      await queueFynxNotification(pool, {
+        userId: order.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace order update',
+        message: `Your order for ${orderTitle} is now ${fulfillmentLabels[requested] || requested.toLowerCase()}.`,
+        targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+        notificationId: `marketplace-fulfillment-${order.id}-${requested.toLowerCase()}`
+      });
       return res.json({ order: { id: String(updated.rows[0].id), status: updated.rows[0].status, fulfillmentStatus: updated.rows[0].fulfillment_status, fulfillmentStatusUpdatedAt: updated.rows[0].fulfillment_status_updated_at } });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace fulfillment progress', error); return res.status(500).json({ error: 'fulfillment progress update failed' }); }
     finally { client.release(); }
