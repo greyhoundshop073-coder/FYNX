@@ -5912,7 +5912,19 @@ if CHAT_GROUPS_VISUALS_ONLY:
         # In local-only mode, a dedicated instrumentation fixture seeds one disposable
         # peer and two messages in the account-scoped store. Never accept an empty self-chat
         # as proof of the private-chat journey.
-        private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
+        if CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS:
+            # The focused local fixture has one deliberately named peer. Select that
+            # exact row instead of guessing the first clickable row (which can be a
+            # section/header/menu surface and open a different conversation).
+            private_xml = tap_control(
+                chat_xml,
+                ["Open chat with FYNX Runtime Peer"],
+                "private-chat-entry",
+                ["Message composer", "Edit message composer", "Chat message composer area"],
+                exact_only=True,
+            )
+        else:
+            private_xml = tap_first_real_chat_or_group_if_present(chat_xml, "private-chat-entry")
         if FORCE_LOCAL_VISUALS and local_fixture_state is not None:
             if not local_fixture_state.get("fixture_ready"):
                 before_ready = bool(local_fixture_state_before_theme and local_fixture_state_before_theme.get("fixture_ready"))

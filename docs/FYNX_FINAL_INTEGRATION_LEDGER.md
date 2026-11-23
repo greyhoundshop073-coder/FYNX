@@ -158,3 +158,14 @@ The consolidation PR is not a final APK certification. Its prior description rec
 
 - Run #45067248420: APK build and unit tests passed; Android instrumentation reported 86 tests, 1 failed, 1 skipped. The only failure was two stale fixture assertions expecting 2 messages after the same test now seeds and verifies 1,002 messages. Both stale assertions now expect 1,002.
 - Runtime navigation was not attempted because the instrumentation gate correctly stopped the sequence. The next exact-head run must repeat instrumentation before runtime certification.
+
+
+### 23 November 2026 — Exact-head Chat/Groups runtime failure diagnosis and grouped repair
+
+- Exact-head candidate commit `c02e0dcb120ca46ab729fd6721bc608ce99a9aa8` built successfully; Android instrumentation completed 86 tests with zero failures and one explicitly skipped live-Railway probe. Backend CI, Chat/Groups parity and Chat final-closure checks passed.
+- The installed-app visual stage remained RED. The log showed the focused private-chat verifier opened a conversation but did not prove it was the seeded peer. The harness used a generic "first clickable row" heuristic even though the disposable fixture has a unique, stable peer label. The focused run now selects the exact `Open chat with FYNX Runtime Peer` accessibility row and requires the real message composer.
+- The group-creation runtime selector required `Group name input` and `Description input`, but the actual two Compose OutlinedTextFields exposed only their visible labels. Added stable accessibility content descriptions to those real fields; no group-creation behavior or login flow was changed.
+- Added regression contracts for exact peer selection and both group-field labels.
+- The same run separately reported Home preview bounds as 0.562 for all seeded video shapes and a Home-return navigation failure after Chat/Groups. These remain separate runtime defects to diagnose from their own hierarchy/screenshot evidence; they are not silently reclassified as Chat/Groups passes.
+- Next gate: rerun the exact candidate head through Android build, unit tests, lint, instrumentation and installed-app runtime capture. Chat/Groups remains open until the exact peer history, group dialog, group conversation, offline send/reopen and process-death restoration screenshots are captured successfully.
+- No canonical merge, production database change, Railway deployment change or official APK publication was made.

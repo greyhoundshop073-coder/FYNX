@@ -93,6 +93,15 @@ checks = {
         and 'contentDescription = "Create group"' in CHAT_PANEL
         and 'Text("＋ New group")' in CHAT_PANEL
     ),
+    "focused Chat runtime selects the exact seeded peer instead of a guessed first row": (
+        'if CHAT_GROUPS_VISUALS_ONLY and FORCE_LOCAL_VISUALS:' in RUNTIME_NAV
+        and '["Open chat with FYNX Runtime Peer"]' in RUNTIME_NAV
+        and 'exact_only=True,' in RUNTIME_NAV
+    ),
+    "group creation fields expose stable labels to accessibility and runtime automation": (
+        'contentDescription = "Group name input"' in GROUPS_PANEL
+        and 'contentDescription = "Description input"' in GROUPS_PANEL
+    ),
     "Groups manager and dialog use the actual Create group accessibility label": (
         '["Create group"],\n        "chat-groups-open-groups-manager"' in RUNTIME_NAV
         and '["Create group"],\n        "chat-groups-open-create-dialog"' in RUNTIME_NAV
