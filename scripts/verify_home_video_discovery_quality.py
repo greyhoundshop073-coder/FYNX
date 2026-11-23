@@ -6,6 +6,9 @@ home = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteHomeSocialPanel.kt")
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxDiscoveryClient.kt").read_text(encoding="utf-8")
 backend = (ROOT / "backend/discoveryRoutes.js").read_text(encoding="utf-8")
 navigation = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
+comments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeCommentsPanel.kt").read_text(encoding="utf-8")
+photo_limiter = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeProfilePhotoLimiter.kt").read_text(encoding="utf-8")
+workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 
 checks = [
     (
@@ -219,6 +222,52 @@ checks = [
             home.index("fun openHomeDiscoveryViewer(index: Int)"):
             home.index("fun mergeDiscoveryPosts(")
         ],
+    ),
+    (
+        "Home feed and comment profile-photo lookups deduplicate in-flight usernames and share a four-request limit",
+        "authorPhotoLookupsInFlight" in home
+        and "authorPhotoLookupsInFlight" in comments
+        and "FynxHomeProfilePhotoLimiter.withPermit" in home
+        and "FynxHomeProfilePhotoLimiter.withPermit" in comments
+        and "MAX_CONCURRENT_REQUESTS = 4" in photo_limiter
+        and "key !in authorPhotos && key !in authorPhotoLookupsInFlight" in home
+        and "key !in authorPhotos && key !in authorPhotoLookupsInFlight" in comments
+        and "finally {" in home
+        and "finally {" in comments,
+    ),
+    (
+        "local no-photo identities are held in screen state and failed identity lookups remain retryable",
+        "FynxProfileRemoteClient.cachedProfilePhotoId(context, username)" in home
+        and "FynxProfileRemoteClient.cachedProfilePhotoId(context, username)" in comments
+        and "mapNotNull { it.getOrNull() }" in home
+        and "mapNotNull { it.getOrNull() }" in comments
+        and "if (isLocalPreview) return" in comments,
+    ),
+    (
+        "runtime feed detection does not mistake visible video actions for a modal",
+        '"Close viewer",' in navigation
+        and '"Like video", "Open comments"' not in navigation,
+    ),
+    (
+        "local Home fixture scrolling can use its explicitly labelled accessibility caption without tapping the post",
+        'description = (node.attrib.get("content-desc") or "").strip()' in navigation
+        and "fixture_caption = HOME_FEED_FIXTURES_SEEDED" in navigation
+        and "if clickable_parent and not fixture_caption:" in navigation
+        and "Start inside the fixture caption" in navigation,
+    ),
+    (
+        "local Discovery visual fixtures always persist For You mode before certification",
+        'FixtureET.SubElement(feed_view_prefs, "string", {"name": "mode"}).text = "FOR_YOU"' in navigation
+        and 'shared_prefs/fynx_home_feed_view.xml' in navigation
+        and "Home Feed mode fixture was not verifiably persisted as For You." in navigation,
+    ),
+    (
+        "the Home-only PR runs Android instrumentation, FFmpeg/Pillow preparation and disposable local visual fixtures",
+        "feat/home-feed-discovery-completion-20261123" in workflow
+        and "FYNX_HOME_FEED_VISUALS_ONLY" in workflow
+        and "FYNX_LOCAL_VISUALS_ONLY" in workflow
+        and "Ensure FFmpeg for isolated Home Feed visual fixtures" in workflow
+        and "Install Python image-analysis dependency for runtime certification" in workflow,
     ),
     (
         "Existing Home feed media and threaded conversation integration remains wired",
