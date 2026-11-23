@@ -11,6 +11,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const MAX_MEDIA_OBJECT_BYTES = 12 * 1024 * 1024;
+const DEFAULT_STORAGE_OPERATION_TIMEOUT_MS = 20_000;
 const DEFAULT_DOWNLOAD_URL_TTL_SECONDS = 120;
 const MAX_DOWNLOAD_URL_TTL_SECONDS = 300;
 const MEDIA_OBJECT_KEY_PATTERN = /^media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,6 +26,53 @@ export class MediaStorageConfigurationError extends Error {
     this.statusCode = 503;
     this.publicMessage = "Media storage is not configured. Please contact FYNX support.";
   }
+}
+
+const NETWORK_ERROR_CODES = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN",
+  "EHOSTUNREACH", "ENETUNREACH", "EPIPE", "UND_ERR_CONNECT_TIMEOUT"
+]);
+
+/** Classify storage failures without exposing raw provider messages or signed URLs. */
+export function classifyMediaStorageError(error) {
+  const chain = [];
+  let current = error;
+  for (let depth = 0; current && depth < 6; depth += 1) {
+    chain.push(current);
+    current = current.cause;
+  }
+  const tokens = chain.flatMap((item) => [
+    item?.name, item?.code, item?.Code, item?.message
+  ]).filter((value) => typeof value === "string").join(" ").toLowerCase();
+  const codes = chain.flatMap((item) => [item?.code, item?.Code, item?.name])
+    .filter((value) => typeof value === "string").map((value) => value.toLowerCase());
+  const statuses = chain.flatMap((item) => [
+    item?.statusCode, item?.$metadata?.httpStatusCode, item?.$response?.statusCode
+  ]).filter((value) => Number.isInteger(value));
+  const status = statuses.find((value) => value >= 400 && value <= 599);
+
+  if (error instanceof MediaStorageConfigurationError || codes.includes("media_storage_not_configured")) {
+    return { category: "configuration", code: "MEDIA_STORAGE_NOT_CONFIGURED", statusCode: 503, retryable: false, publicMessage: "Media storage is not configured. Please contact FYNX support." };
+  }
+  if (codes.includes("nosuchbucket") || tokens.includes("no such bucket")) {
+    return { category: "configuration", code: "MEDIA_STORAGE_BUCKET_UNAVAILABLE", statusCode: 503, retryable: false, publicMessage: "FYNX media storage is unavailable. Please contact support." };
+  }
+  if (/(requestexpired|expiredtoken|expiredsignature|presigned.{0,24}expired|request has expired|token.{0,16}expired)/.test(tokens)) {
+    return { category: "signature_expired", code: "MEDIA_STORAGE_SIGNATURE_EXPIRED", statusCode: 410, retryable: false, publicMessage: "This media upload link has expired. Please start the upload again." };
+  }
+  if (status === 404 || codes.some((code) => ["nosuchkey", "notfound", "nosuchobject"].includes(code))) {
+    return { category: "missing_object", code: "MEDIA_STORAGE_OBJECT_NOT_FOUND", statusCode: 404, retryable: false, publicMessage: "The requested media object was not found." };
+  }
+  if (status === 401 || status === 403 || codes.some((code) =>
+    ["accessdenied", "invalidaccesskeyid", "invalidtoken", "signaturedoesnotmatch", "authorizationheadermalformed"].includes(code))) {
+    return { category: "authentication", code: "MEDIA_STORAGE_AUTHENTICATION_FAILED", statusCode: 503, retryable: false, publicMessage: "FYNX could not authenticate with media storage. Please contact support." };
+  }
+  if (chain.some((item) => item?.name === "AbortError" || item?.name === "TimeoutError") ||
+      chain.some((item) => NETWORK_ERROR_CODES.has(String(item?.code || "").toUpperCase())) ||
+      /(timed? ?out|timeout|network|dns|socket hang up|connection reset|connection refused|aborted)/.test(tokens)) {
+    return { category: "network", code: "MEDIA_STORAGE_NETWORK_FAILURE", statusCode: 503, retryable: true, publicMessage: "Media storage could not be reached. Check your connection and retry." };
+  }
+  return { category: "provider", code: "MEDIA_STORAGE_PROVIDER_ERROR", statusCode: 502, retryable: false, publicMessage: "Media storage could not complete the request. Please retry or contact support." };
 }
 
 function toBuffer(value) {
@@ -67,7 +115,7 @@ function readProviderConfig(provider, env) {
     let endpointValid = false;
     try {
       const parsed = new URL(endpoint);
-      endpointValid = parsed.protocol === "https:" && parsed.hostname.endsWith(".neon.tech") &&
+      endpointValid = parsed.protocol === "https:" && /^[a-z0-9][a-z0-9-]{1,62}\.storage\.c-[a-z0-9-]+\.[a-z0-9-]+\.aws\.neon\.tech$/i.test(parsed.hostname) &&
         !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
     } catch {}
     return {
@@ -99,8 +147,12 @@ export function createMediaStorage({
   env = process.env,
   clientFactory = (options) => new S3Client(options),
   signUrlFactory = getSignedUrl,
-  idFactory = randomUUID
+  idFactory = randomUUID,
+  operationTimeoutMs = DEFAULT_STORAGE_OPERATION_TIMEOUT_MS
 } = {}) {
+  if (!Number.isSafeInteger(operationTimeoutMs) || operationTimeoutMs < 1 || operationTimeoutMs > 120_000) {
+    throw new RangeError("Media storage operation timeout must be between 1 and 120000 milliseconds.");
+  }
   const provider = String(env.FYNX_MEDIA_STORAGE_PROVIDER || "postgres").trim().toLowerCase();
   if (provider !== "postgres" && !OBJECT_PROVIDERS.has(provider)) {
     throw new MediaStorageConfigurationError("FYNX_MEDIA_STORAGE_PROVIDER must be postgres, neon or r2.");
@@ -128,6 +180,25 @@ export function createMediaStorage({
       }));
     }
     return clients.get(name);
+  }
+
+  async function sendObjectCommand(name, command) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), operationTimeoutMs);
+    try {
+      return await getClient(name).send(command, { abortSignal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const timeoutError = new Error("FYNX media storage operation timed out.");
+        timeoutError.name = "TimeoutError";
+        timeoutError.code = "ETIMEDOUT";
+        timeoutError.cause = error;
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   function validateObjectKey(objectKey) {
@@ -165,19 +236,27 @@ export function createMediaStorage({
   async function getMediaObjectBytes(objectKey, sourceProvider = provider) {
     const config = configFor(sourceProvider);
     const key = validateObjectKey(objectKey);
-    const result = await getClient(sourceProvider).send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+    const result = await sendObjectCommand(sourceProvider, new GetObjectCommand({ Bucket: config.bucket, Key: key }));
     return bodyToBuffer(result?.Body);
   }
 
   async function deleteMediaObject(objectKey, sourceProvider = provider) {
     const config = configFor(sourceProvider);
-    const key = sourceProvider === "r2" ? validateStoredObjectKey(objectKey) : validateObjectKey(objectKey);
-    await getClient(sourceProvider).send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+    const key = OBJECT_PROVIDERS.has(sourceProvider) ? validateStoredObjectKey(objectKey) : validateObjectKey(objectKey);
+    await sendObjectCommand(sourceProvider, new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
   }
 
   return Object.freeze({
     provider,
     isObjectStorageEnabled: OBJECT_PROVIDERS.has(provider),
+    supportsDirectUpload: OBJECT_PROVIDERS.has(provider),
+    isObjectStorageProvider(name) {
+      return OBJECT_PROVIDERS.has(String(name || "").trim().toLowerCase());
+    },
+    isConfiguredFor(name) {
+      const normalized = String(name || "").trim().toLowerCase();
+      return OBJECT_PROVIDERS.has(normalized) && Boolean(configs.get(normalized)?.configured);
+    },
     isConfigured: provider === "postgres" || Boolean(configs.get(provider)?.configured),
     async putMediaObject({ data, mimeType }) {
       if (provider === "postgres") return { storageProvider: "postgres", objectKey: null };
@@ -187,15 +266,18 @@ export function createMediaStorage({
       const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
       if (!/^(image|video|audio)\//.test(normalizedMimeType)) throw new Error("Unsupported media type.");
       const objectKey = "media/" + idFactory();
-      await getClient(provider).send(new PutObjectCommand({
+      await sendObjectCommand(provider, new PutObjectCommand({
         Bucket: config.bucket, Key: objectKey, Body: bytes, ContentLength: bytes.length,
         ContentType: normalizedMimeType, CacheControl: "private, max-age=60"
       }));
       return { storageProvider: provider, objectKey };
     },
-    async createUploadUrl({ objectKey, mimeType, expiresInSeconds = 300 }) {
-      const config = configFor("r2");
+    async createUploadUrl({ objectKey, mimeType, byteSize, expiresInSeconds = 300, storageProvider = provider }) {
+      const config = configFor(storageProvider);
       const key = validateUploadObjectKey(objectKey);
+      if (!Number.isSafeInteger(byteSize) || byteSize < 1 || byteSize > MAX_MEDIA_OBJECT_BYTES) {
+        throw new RangeError("Media upload must be between 1 byte and 12 MB.");
+      }
       const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
       if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/(mp4|mpeg|aac|x-m4a|wav))$/.test(normalizedMimeType)) {
         throw new Error("Unsupported FYNX media type.");
@@ -207,20 +289,21 @@ export function createMediaStorage({
         Bucket: config.bucket,
         Key: key,
         ContentType: normalizedMimeType,
+        ContentLength: byteSize,
         CacheControl: "private, max-age=60"
       });
-      const url = await signUrlFactory(getClient("r2"), command, { expiresIn: expiresInSeconds });
+      const url = await signUrlFactory(getClient(storageProvider), command, { expiresIn: expiresInSeconds });
       if (typeof url !== "string" || !url.startsWith("https://")) {
         throw new Error("Object storage returned an invalid upload URL.");
       }
       return url;
     },
 
-    async promoteUploadedObject(sourceObjectKey, destinationObjectKey) {
-      const config = configFor("r2");
+    async promoteUploadedObject(sourceObjectKey, destinationObjectKey, sourceProvider = provider) {
+      const config = configFor(sourceProvider);
       const sourceKey = validateUploadObjectKey(sourceObjectKey);
       const destinationKey = validateObjectKey(destinationObjectKey);
-      await getClient("r2").send(new CopyObjectCommand({
+      await sendObjectCommand(sourceProvider, new CopyObjectCommand({
         Bucket: config.bucket,
         Key: destinationKey,
         CopySource: config.bucket + "/" + sourceKey,
@@ -229,10 +312,10 @@ export function createMediaStorage({
       return { objectKey: destinationKey };
     },
 
-    async inspectMediaObject(objectKey) {
-      const config = configFor("r2");
+    async inspectMediaObject(objectKey, sourceProvider = provider) {
+      const config = configFor(sourceProvider);
       const key = validateStoredObjectKey(objectKey);
-      const result = await getClient("r2").send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+      const result = await sendObjectCommand(sourceProvider, new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
       return {
         byteSize: Number(result?.ContentLength || 0),
         mimeType: String(result?.ContentType || "").split(";")[0].trim().toLowerCase()
@@ -251,7 +334,16 @@ export async function redirectStoredMedia(res, media, { cacheControl = "private,
   const sourceProvider = String(media?.storage_provider || "postgres").toLowerCase();
   if (sourceProvider === "postgres") return false;
   if (!OBJECT_PROVIDERS.has(sourceProvider)) throw new MediaStorageConfigurationError("Unsupported stored media provider.");
-  const url = await mediaStorage.createDownloadUrl(media?.object_key, sourceProvider);
+  let url;
+  try {
+    url = await mediaStorage.createDownloadUrl(media?.object_key, sourceProvider);
+  } catch (error) {
+    const diagnostic = classifyMediaStorageError(error);
+    const safeError = new Error(diagnostic.publicMessage);
+    Object.assign(safeError, diagnostic);
+    safeError.cause = error;
+    throw safeError;
+  }
   res.set("Cache-Control", cacheControl);
   res.redirect(302, url);
   return true;
