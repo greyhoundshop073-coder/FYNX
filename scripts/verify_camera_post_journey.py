@@ -213,7 +213,7 @@ checks = [
      and "mean_luminance > 52" in runtime
      and 'verify_camera_system_bar_contrast(f"{prefix}-camera-live-preview.png"' in runtime),
     ("API 35 emulator launches with the documented environment camera source and bounded AVD storage",
-     "-camera-back environment -camera-front none" in workflow
+     "-camera-back environment -camera-front environment" in workflow
      and "pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh" in workflow
      and "disk.dataPartition.size=2G" in storage
      and "hw.ramSize=3072" in storage and "vm.heapSize=512" in storage and "hw.cpu.ncore=4" in storage),
@@ -400,7 +400,7 @@ checks.extend([
      and 'Text("Delete")' in overlay
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
     ("Unified camera routing preserves the supported rear lens and returns Status camera requests to Home",
-     "-camera-front none" in workflow
+     "-camera-front environment" in workflow
      and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app_source
      and "camera-video-destination-options.png" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
