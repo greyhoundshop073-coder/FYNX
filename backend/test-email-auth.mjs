@@ -315,6 +315,19 @@ assert.equal(user.email_verified_at, clock);
 assert.equal(sent.at(-1).to, "person@example.com");
 assert.equal(sent.at(-1).subject, "Your FYNX account email was changed");
 
+ 
+// SMTP failure while changing an already verified address must preserve the old recovery address.
+const previouslyVerifiedEmail = user.email;
+const previousVerificationTimestamp = user.email_verified_at;
+failNextDelivery = true;
+const failedEmailChange = await controller.attachEmail("9", "ReplacementPass456", "smtp-failure@example.com");
+assert.equal(failedEmailChange.status, 503);
+assert.equal(failedEmailChange.retained, true);
+assert.equal(user.email, previouslyVerifiedEmail);
+assert.equal(user.email_verified_at, previousVerificationTimestamp);
+assert.equal(user.pending_email, null);
+assert.equal(user.pending_email_verification_code_hash, null);
+
 // Expired verification codes are rejected and cleared.
 clock = new Date(clock.getTime() + 61_000);
 nextCode = "888111";
