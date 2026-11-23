@@ -188,3 +188,14 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-23 — navigation correction ported to current canonical workstream
+
+- The earlier PR #527 feature branch contains an older 1,152-line Admin panel snapshot and is behind the current canonical 1,257-line implementation. Its navigation correction was therefore re-applied selectively to the newer Workstream 4 branch rather than relying on the stale snapshot.
+- Current branch commits:
+  - `39c19263290ec12a80f78bb8876d2f287509685e`: dedicated Owner-only Music Library tab; campaign manager moved from Overview into Marketplace and labelled as Marketplace banner campaigns.
+  - `c2c590f9b0dcf358872bd46b71728818b8ae6934`: contract verifier requires the dedicated Music Library and Marketplace campaign locations.
+- The existing campaign upload, product destination, schedule and Marketplace display code is reused unchanged. No second ad manager or second music uploader was created.
+- Fresh Android/Backend/Chat CI and screenshots of the new Music Library and Marketplace campaign screens are still required. The separate PR #591 currently captures only Overview for Owner and Admin, so it does not yet prove these dedicated sections.
+- Do not merge the older PR #527 snapshot over the newer canonical workstream. Keep the canonical APK target unchanged.
