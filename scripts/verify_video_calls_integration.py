@@ -47,19 +47,19 @@ checks = {
     # Marketplace: listing identity remains connected from product panel to
     # the outgoing invite, through server validation, and into the recipient UI.
     "Marketplace Live Proof forwards listing ID, title and seller":
-        "onRequestProof = { listingId, sellerUsername" in app["live_proof"]
-        and "onLiveProof(listingId, l.title, sellerUsername)" in app["marketplace"],
+        "onRequestProof(listing.id, listing.title, listing.sellerUsername)" in app["live_proof"]
+        and "onLiveProof(listing.id, listing.title, listing.sellerUsername)" in app["marketplace"],
     "App routes Marketplace proof with all listing context":
-        "liveProofListingId = listingId" in app["shell"]
-        and "liveProofProductTitle = title" in app["shell"]
-        and "initialListingId = pendingIncomingCall?.listingId ?: liveProofListingId" in app["shell"],
+        "callListingId = listingId" in app["shell"]
+        and "callProductTitle = productTitle" in app["shell"]
+        and "initialListingId = pendingIncomingCall?.listingId ?: callListingId" in app["shell"],
     "Calls sends listing ID in authenticated invite":
         "sendCallInvite(id, resolvedId, isVideo, callListingId)" in app["calls"]
         and 'put("listingId", it)' in app["realtime"],
     "Incoming calls parse product ID, title and seller":
         all(token in app["realtime"] for token in ('"listingId"', '"productTitle"', '"sellerUsername"')),
     "Active call displays product inspection context":
-        all(token in app["active_call"] for token in ("MARKETPLACE LIVE PROOF", "Listing #", "productTitle")),
+        all(token in app["calls"] for token in ("MARKETPLACE LIVE PROOF", "Listing #", "callProductTitle")),
     "Server validates active listing ownership before relaying proof calls":
         all(token in backend["marketplace_context"] for token in (
             "marketplace_listings", "active=TRUE", "sellerId", "targetUserId",
@@ -86,7 +86,7 @@ checks = {
         and "FynxGroupCallPanel(" in app["groups"],
     "App routes group invitations into the existing group conversation":
         "pendingIncomingGroupCall" in app["shell"]
-        and "initialIncomingGroupCall = pendingIncomingGroupCall" in app["shell"],
+        and "initialIncomingGroupCall = pendingIncomingGroupCall?.takeIf" in app["shell"],
     "Group call UI exposes participant and call controls":
         all(token in app["group_call"] for token in (
             "Start group video call", "Participants", "Mute", "Camera", "Speaker",
