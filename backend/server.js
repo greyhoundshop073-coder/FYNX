@@ -20,6 +20,7 @@ import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
 import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
+import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -1458,7 +1459,16 @@ if (wss) {
             const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
-            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            let marketplaceContext = null;
+            if (body?.listingId != null) {
+              try {
+                marketplaceContext = await resolveFynxMarketplaceCallContext(pool, userId, targetUserId, body.listingId);
+              } catch (error) {
+                activeCalls.delete(callId);
+                return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "error", error: error?.message || "Marketplace product is unavailable." });
+              }
+            }
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null, ...(marketplaceContext || {}) });
             return;
           }
           const callId = validCallId(body?.callId) ? body.callId : "";
