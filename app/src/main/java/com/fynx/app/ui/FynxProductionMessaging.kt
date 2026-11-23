@@ -204,7 +204,7 @@ object FynxProductionMessaging {
                     voiceDurationMs = voiceDurationMs,
                     createdAt = System.currentTimeMillis()
                 )
-                FynxOfflineOutbox.enqueue(context, item)
+                if (!FynxOfflineOutbox.enqueue(context, item)) return result
                 return Result.success(
                     RemoteMessage(
                         id = localId,
