@@ -318,3 +318,82 @@ export function createFynxGroupCallSignalHandler({ pool, emitToUser, logger = co
     return sendSocket(socket, groupCallEvent(call, "error", { error: "Unsupported group-call signal." }));
   };
 }
+
+
+/**
+ * Release a user's active group-call participation when their last realtime
+ * connection disappears. Explicit UI leave/end signals are not guaranteed
+ * during process death, network loss, or force-stop.
+ */
+export async function disconnectFynxGroupCallsForUser({ pool, userId, emitToUser, logger = console }) {
+  if (!pool || typeof pool.query !== "function" || typeof emitToUser !== "function") {
+    throw new Error("Group-call disconnect cleanup requires storage and realtime delivery.");
+  }
+  const disconnectedUserId = String(userId ?? "").trim();
+  if (!/^\\d+$/.test(disconnectedUserId)) return 0;
+
+  const active = await pool.query(
+    `SELECT c.id, c.group_id, c.creator_id::text AS creator_id, c.media_type
+     FROM fynx_realtime_group_calls c
+     JOIN fynx_realtime_group_call_participants p ON p.call_id=c.id
+     WHERE c.status='ACTIVE' AND p.user_id=$1 AND p.status='JOINED'`,
+    [disconnectedUserId]
+  );
+
+  let cleaned = 0;
+  for (const call of active.rows) {
+    try {
+      if (String(call.creator_id) === disconnectedUserId) {
+        const ended = await pool.query(
+          `UPDATE fynx_realtime_group_calls SET status='ENDED',updated_at=NOW()
+           WHERE id=$1 AND status='ACTIVE' RETURNING id,group_id,creator_id::text AS creator_id,media_type`,
+          [call.id]
+        );
+        if (!ended.rowCount) continue;
+        const recipients = await pool.query(
+          `UPDATE fynx_realtime_group_call_participants SET status='ENDED',updated_at=NOW()
+           WHERE call_id=$1 AND status IN ('JOINED','INVITED')
+           RETURNING user_id::text AS user_id`,
+          [call.id]
+        );
+        const event = groupCallEvent(ended.rows[0], "group_ended", { endedByUserId: disconnectedUserId, reason: "creator_disconnected" });
+        for (const row of recipients.rows) {
+          if (String(row.user_id) !== disconnectedUserId) await emitToUser(String(row.user_id), event);
+        }
+      } else {
+        const left = await pool.query(
+          `UPDATE fynx_realtime_group_call_participants SET status='LEFT',updated_at=NOW()
+           WHERE call_id=$1 AND user_id=$2 AND status='JOINED'
+           RETURNING user_id::text AS user_id`,
+          [call.id, disconnectedUserId]
+        );
+        if (!left.rowCount) continue;
+        const roster = await participantRoster(pool, call.id);
+        const event = groupCallEvent(call, "group_participant_left", {
+          participant: { userId: disconnectedUserId, username: "" }
+        });
+        for (const participant of roster) await emitToUser(participant.userId, event);
+        if (!roster.length) {
+          const ended = await pool.query(
+            `UPDATE fynx_realtime_group_calls SET status='ENDED',updated_at=NOW()
+             WHERE id=$1 AND status='ACTIVE' RETURNING id,group_id,creator_id::text AS creator_id,media_type`,
+            [call.id]
+          );
+          if (ended.rowCount) {
+            const invitees = await pool.query(
+              `UPDATE fynx_realtime_group_call_participants SET status='ENDED',updated_at=NOW()
+               WHERE call_id=$1 AND status='INVITED' RETURNING user_id::text AS user_id`,
+              [call.id]
+            );
+            const endedEvent = groupCallEvent(ended.rows[0], "group_ended", { reason: "no_participants_remaining" });
+            for (const row of invitees.rows) await emitToUser(String(row.user_id), endedEvent);
+          }
+        }
+      }
+      cleaned += 1;
+    } catch (error) {
+      logger.error("[fynx-group-call] disconnect cleanup failed", { callId: call.id, userId: disconnectedUserId, error: error?.message || error });
+    }
+  }
+  return cleaned;
+}
