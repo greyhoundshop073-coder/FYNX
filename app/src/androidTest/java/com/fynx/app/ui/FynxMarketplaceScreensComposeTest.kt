@@ -129,7 +129,7 @@ class FynxMarketplaceScreensComposeTest {
         // feed. Scrolling its heading alone does not compose the off-screen row item.
         // Open the real "See all" route so the same production card is materialized
         // in the product grid before tapping it.
-        compose.onNodeWithText("See all").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("See all Recommended for you").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
@@ -180,7 +180,7 @@ class FynxMarketplaceScreensComposeTest {
         // feed. Scrolling its heading alone does not compose the off-screen row item.
         // Open the real "See all" route so the same production card is materialized
         // in the product grid before tapping it.
-        compose.onNodeWithText("See all").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("See all Recommended for you").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
