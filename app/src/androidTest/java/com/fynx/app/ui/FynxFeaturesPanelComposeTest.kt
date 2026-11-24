@@ -3,12 +3,13 @@ package com.fynx.app.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
@@ -21,6 +22,13 @@ import org.junit.runner.RunWith
 class FynxFeaturesPanelComposeTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private fun scrollToFeature(route: String) {
+        val tag = "fynx-feature-card-$route"
+        compose.onNodeWithTag("fynx-features-grid")
+            .performScrollToNode(hasTestTag(tag))
+        compose.onNodeWithTag(tag).assertIsDisplayed()
+    }
 
     @Test
     fun ordinaryAccountSeesEveryDistinctFeatureButNoOwnerOrDuplicateShortcuts() {
@@ -35,7 +43,7 @@ class FynxFeaturesPanelComposeTest {
             "Extra Tools", "Saved Posts", "Money Tools", "Business Account",
             "Advertising", "Advertising Dashboard", "AI", "Announcements"
         ).forEach { route ->
-            compose.onNodeWithTag("fynx-feature-card-$route").performScrollTo().assertIsDisplayed()
+            scrollToFeature(route)
         }
 
         listOf("Admin", "Marketplace", "Notifications", "Privacy", "Saved Products", "Seller Center")
@@ -52,7 +60,7 @@ class FynxFeaturesPanelComposeTest {
             }
         }
 
-        compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
+        scrollToFeature("Admin")
         compose.onNodeWithTag("fynx-feature-role-owner", useUnmergedTree = true).assertIsDisplayed()
     }
 
@@ -94,7 +102,9 @@ class FynxFeaturesPanelComposeTest {
         assertEquals(calls.top, gifts.top, 1.5f)
         assertTrue("First feature card should occupy the left grid column", calls.center.x < gifts.center.x)
 
-        compose.onNodeWithTag("fynx-feature-card-Wallet").performScrollTo().performClick()
+        compose.onNodeWithTag("fynx-features-grid")
+            .performScrollToNode(hasTestTag("fynx-feature-card-Wallet"))
+        compose.onNodeWithTag("fynx-feature-card-Wallet").performClick()
         assertEquals("Wallet", selectedRoute)
     }
 
