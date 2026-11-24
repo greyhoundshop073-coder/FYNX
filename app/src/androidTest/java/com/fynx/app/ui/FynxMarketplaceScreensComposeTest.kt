@@ -124,15 +124,13 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodesWithText("Recommended for you").fetchSemanticsNodes().isNotEmpty()
+        // The house banner is always present, including when the recommendation feed is
+        // still being composed. Its real action opens the same product grid used by See all.
+        compose.onNodeWithText("Explore Marketplace").performScrollTo().performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
-        // The recommendation card is inside a horizontal LazyRow nested in the vertical
-        // feed. Scrolling its heading alone does not compose the off-screen row item.
-        // Open the real "See all" route so the same production card is materialized
-        // in the product grid before tapping it.
-        compose.onNodeWithContentDescription("See all Recommended for you").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
@@ -178,15 +176,13 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 10_000) {
-            compose.onAllNodesWithText("Recommended for you").fetchSemanticsNodes().isNotEmpty()
+        // The house banner is always present, including when the recommendation feed is
+        // still being composed. Its real action opens the same product grid used by See all.
+        compose.onNodeWithText("Explore Marketplace").performScrollTo().performClick()
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
-        // The recommendation card is inside a horizontal LazyRow nested in the vertical
-        // feed. Scrolling its heading alone does not compose the off-screen row item.
-        // Open the real "See all" route so the same production card is materialized
-        // in the product grid before tapping it.
-        compose.onNodeWithContentDescription("See all Recommended for you").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
