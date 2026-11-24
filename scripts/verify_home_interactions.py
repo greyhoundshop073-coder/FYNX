@@ -265,7 +265,7 @@ budget = read("app/src/main/java/com/fynx/app/ui/BudgetPlannerPanel.kt")
 require(app_source, '"AI Creation" -> { selected = "AI" }', "AI Creation central route")
 require(app_source, '"AI Photo Editor" -> { selected = "AI" }', "AI Photo Editor central route")
 require(app_source, '"Advertising AI" -> { selected = "AI" }', "Advertising AI central route")
-require(app_source, 'add(Triple("AI", "FYNX AI Assistant", Icons.Default.AutoAwesome))', "single FYNX AI feature entry")
+require(read("app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt"), '"AI", "FYNX AI Assistant"', "single FYNX AI feature entry in the extracted More registry")
 if 'add(Triple("AI Creation"' in app_source or 'add(Triple("AI Photo Editor"' in app_source or 'add(Triple("Advertising AI"' in app_source:
     raise SystemExit("HOME INTERACTIONS RED: duplicate AI feature destinations remain outside FYNX AI")
 if 'FynxAiCreationPanel(' in app_source or 'FynxAiPhotoEditorPanel(' in app_source or 'FynxAdvertisingAiPanel(' in app_source:
