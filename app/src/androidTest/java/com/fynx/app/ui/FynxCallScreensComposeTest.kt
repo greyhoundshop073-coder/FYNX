@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -89,7 +90,7 @@ class FynxCallScreensComposeTest {
         }
 
         compose.onNodeWithText("Video call").assertIsDisplayed()
-        compose.onNodeWithText("Waiting for video…").assertIsDisplayed()
+        compose.onAllNodesWithText("Waiting for video…")[0].assertIsDisplayed()
         compose.onNodeWithContentDescription("Mute").performClick()
         compose.onNodeWithContentDescription("Camera").performClick()
         compose.onNodeWithContentDescription("Flip").performClick()
