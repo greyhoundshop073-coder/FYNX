@@ -240,3 +240,12 @@ PR #582 extends the existing Marketplace campaign manager instead of creating a 
 - Existing server campaigns and the backend media route remain supported. The local preview is additive and does not change seller-sponsored ads, weekly seller selection, or the existing promotion API contract.
 
 The Admin visual certification cases remain GET-only and scroll each section's upload controls into view before asserting. A fourth emulator case renders the production Marketplace banner from the bundled local sample campaign, waits for the actual local artwork image to load, and captures that screen. A successful Android runtime run must produce all four real emulator screenshots; a static contract or a green unit-test run is not a substitute for those images.
+
+
+## Offline Admin campaign and screenshot closure
+
+- The Admin Marketplace campaign editor is exercised through its actual Compose fields and local-save button, including a MediaStore-backed image fixture copied into private app storage.
+- The verification checks that the saved campaign appears in the Marketplace promotional banner and remains listed after reopening the editor. The test uses GET-only request fixtures and must not issue a publishing write.
+- Admin Owner Music Library and Owner/Admin campaign screenshots are genuine PixelCopy captures. Instrumentation mirrors them into /sdcard/Download/fynx-admin-test-fixtures before Gradle's test-app cleanup; CI collects that shared directory and still fails closed if any required PNG is absent.
+- Offline role-fixture UI evidence does not certify live API authentication, cross-device campaign delivery, or production publishing. Those require a healthy configured backend and a real authorized Owner/Admin session.
+- Marketplace card interaction instrumentation scrolls the real lazy feed to the Recommended section before tapping the product card, so the card must actually be composed and visible.
