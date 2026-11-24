@@ -139,6 +139,11 @@ jobs:
         run: |
           node --check callSafety.js
           node test-call-safety.mjs
+      - name: Verify group-call disconnect lifecycle in both realtime runtimes
+        run: |
+          node --check groupCallRealtime.js
+          node --check neon-realtime-bridge.js
+          node test-group-call-disconnect.mjs
       - name: Verify backend startup and tester login preservation
         run: |
           node verify-runtime-bootstrap.mjs
