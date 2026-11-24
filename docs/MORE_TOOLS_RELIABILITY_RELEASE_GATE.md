@@ -37,7 +37,7 @@ This work is isolated to More/Features, Extra Tools, Calendar, To-Do, Calls entr
 
 - Replace the More screen's single-column feature rows with a two-column, rounded-card directory inspired by the supplied reference.
 - Every retained feature card has its own coloured icon tile, title and short description.
-- Standard accounts receive the complete 14-card directory. The authenticated OWNER or ADMIN receives one additional Owner / Admin Control Center card.
+- Standard accounts receive the complete 15-card directory. The authenticated OWNER or ADMIN receives one additional Owner / Admin Control Center card.
 - Role visibility continues to come from the existing server-authoritative `FynxAdminClient.dashboard` result. The feature directory does not fetch roles or call backend services during composition; the existing Admin screen and server authorization remain unchanged.
 - Search filters the in-memory feature registry only. The grid uses lazy composition, stable route keys, item content types and a remembered scroll state. Icons are bundled vector assets; no remote icon requests, image decoding or feature-screen initialization occurs while More is displayed.
 
@@ -45,7 +45,7 @@ This work is isolated to More/Features, Extra Tools, Calendar, To-Do, Calls entr
 
 The following More shortcuts are intentionally omitted because their existing entry points remain available:
 - Marketplace — permanent bottom-navigation tab.
-- Notifications and Privacy & Safety — Profile > Settings.
+- Privacy & Safety — Profile > Settings. Notifications remains in More because it opens the notification activity feed; Profile > Settings opens the preferences-only mode.
 - Saved Products and Seller Center / My Shop — Marketplace's existing navigation actions.
 - Events — removed as a duplicate Calendar shortcut from Extra Tools; Calendar remains a single More card.
 
