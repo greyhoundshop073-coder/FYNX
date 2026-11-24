@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Share
@@ -80,7 +81,7 @@ private data class FynxFeatureSection(
  * Entries that duplicate a primary navigation destination or an existing
  * parent-screen shortcut are intentionally not repeated here:
  * - Marketplace is already a permanent bottom-navigation destination.
- * - Notifications and Privacy & Safety are in Profile > Settings.
+ * - Notifications in More opens the activity feed; Profile > Settings opens preferences mode of the same screen, so both entry points are retained. Privacy & Safety is in Profile > Settings.
  * - Saved Products and Seller Center / My Shop are reached from Marketplace.
  * - Calendar is represented once here; Extra Tools no longer repeats it as Events.
  */
@@ -100,6 +101,10 @@ private fun fynxMoreSections(adminRole: String?): List<FynxFeatureSection> {
         FynxFeatureCardSpec(
             "Share", "Share & Invite", "Invite people or share FYNX",
             "invite friends copy share app", Icons.Default.Share, Color(0xFF2878D0), "COMMUNICATION & COMMUNITY"
+        ),
+        FynxFeatureCardSpec(
+            "Notifications", "Notifications", "See your activity, alerts and unread updates",
+            "alerts activity unread messages social likes calls", Icons.Default.Notifications, Color(0xFFE76F00), "COMMUNICATION & COMMUNITY"
         ),
         FynxFeatureCardSpec(
             "Announcements", "Official Announcements", "Read news and updates from FYNX",
