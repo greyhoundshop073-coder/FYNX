@@ -19,6 +19,17 @@ mkdir -p "$fixture_dir"
 fixture_status_file="$fixture_dir/capture-status.txt"
 : > "$fixture_status_file"
 
+shared_admin_fixture_remote="/sdcard/Download/fynx-admin-test-fixtures"
+if adb shell test -d "$shared_admin_fixture_remote" >/dev/null 2>&1; then
+  if adb pull "$shared_admin_fixture_remote/." "$fixture_dir/" >/dev/null 2>&1; then
+    echo "CAPTURED: $shared_admin_fixture_remote (preserved before app teardown)" >> "$fixture_status_file"
+  else
+    echo "NOT_CAPTURED: adb pull failed for $shared_admin_fixture_remote" >> "$fixture_status_file"
+  fi
+else
+  echo "NOT_CAPTURED: shared Admin fixture directory was absent: $shared_admin_fixture_remote" >> "$fixture_status_file"
+fi
+
 for fixture_remote in \
   /sdcard/Android/data/com.fynx.app.test/files/marketplace-test-fixtures \
   /sdcard/Android/data/com.fynx.app/files/marketplace-test-fixtures \
