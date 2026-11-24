@@ -2,6 +2,7 @@ import ast
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 app = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text()
+features_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt").read_text()
 main_activity = (ROOT / "app/src/main/java/com/fynx/app/MainActivity.kt").read_text()
 money = (ROOT / "app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt").read_text()
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").read_text()
@@ -29,7 +30,7 @@ checks = [
  ("FynxApp reruns route handling for repeated identical destinations",
   "deepLinkRequestId: Long = 0L" in app
   and "LaunchedEffect(deepLinkRequestId, deepLinkDestination)" in app),
- ("wallet direct Features entry", '"Wallet" -> key(marketplaceAccountKey) { FynxBuyerWalletPanel() }' in app and 'Triple("Wallet", "FYNX Wallet"' in app),
+ ("wallet direct Features entry", '"Wallet" -> key(marketplaceAccountKey) { FynxBuyerWalletPanel() }' in app and '"Wallet", "FYNX Wallet"' in features_panel),
  ("Marketplace Wallet shortcut", 'onOpenWallet: () -> Unit = {}' in market and 'OutlinedButton(onClick = onOpenWallet' in market and 'onOpenWallet = { selected = "Wallet" }' in app),
  ("wallet Money Center entry", 'MoneySection("Wallet", "FYNX Wallet"' in money and '"Wallet" -> FynxBuyerWalletPanel()' in money),
  ("emulator waits for wallet summary and activity loading to settle before capture", "capture_wallet_from_features" in runtime and "wallet_still_loading" in runtime and "range(60)" in runtime and "wallet_settled=True" in runtime and "after summary and activity loading settled" in runtime),
