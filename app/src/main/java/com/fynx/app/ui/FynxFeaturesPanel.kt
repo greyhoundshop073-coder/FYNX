@@ -209,20 +209,7 @@ fun FynxFeaturesPanel(
     Column(
         Modifier.fillMaxSize().padding(horizontal = 12.dp)
     ) {
-        Text(
-            "FYNX Features",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Access your tools in one place. Choose a feature to get started.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         FynxFeatureSearchField(
             value = query,
             onValueChange = { query = it },
@@ -244,12 +231,14 @@ fun FynxFeaturesPanel(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 state = gridState,
-                modifier = Modifier.weight(1f).fillMaxWidth().testTag("fynx-features-grid"),
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .padding(bottom = LocalFynxBottomBarSpace.current)
+                    .testTag("fynx-features-grid"),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(
                     top = 2.dp,
-                    bottom = LocalFynxBottomBarSpace.current + 12.dp
+                    bottom = 12.dp
                 )
             ) {
                 visibleSections.forEach { section ->
