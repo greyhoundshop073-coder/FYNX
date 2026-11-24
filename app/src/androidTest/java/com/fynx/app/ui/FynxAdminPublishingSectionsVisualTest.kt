@@ -4,7 +4,6 @@ import android.content.ContentValues
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Environment
-import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.os.Handler
 import android.os.HandlerThread
@@ -12,6 +11,7 @@ import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,14 +26,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.time.ZoneId
@@ -75,14 +73,39 @@ class FynxAdminPublishingSectionsVisualTest {
         }
 
         try {
+            val screenState = mutableStateOf(0)
             compose.setContent {
                 MaterialTheme {
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        FynxMarketplaceSeasonalPromotionAdminPanel(
-                            testOnlyPhotoPicker = { artworkUri },
-                            testOnlyStartsAt = startsAt,
-                            testOnlyEndsAt = endsAt
-                        )
+                    when (screenState.value) {
+                        0 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                            FynxMarketplaceSeasonalPromotionAdminPanel(
+                                testOnlyPhotoPicker = { artworkUri },
+                                testOnlyStartsAt = startsAt,
+                                testOnlyEndsAt = endsAt
+                            )
+                        }
+                        1 -> {
+                            val campaigns = FynxMarketplaceLocalCampaignStore.observe(compose.activity).collectAsState()
+                            MarketplacePromotionalBanner(
+                                listings = emptyList(),
+                                sellerReputations = emptyMap(),
+                                weeklySeller = null,
+                                weeklySellerListing = null,
+                                sponsoredPromotions = emptyList(),
+                                seasonalPromotions = campaigns.value,
+                                onOpenListing = {},
+                                onOpenSeller = {},
+                                onOpenProduct = {},
+                                onOpenCategory = {},
+                                onShopNow = {},
+                                onOpenOrders = {},
+                                onRefresh = {},
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                            FynxMarketplaceSeasonalPromotionAdminPanel()
+                        }
                     }
                 }
             }
@@ -112,27 +135,7 @@ class FynxAdminPublishingSectionsVisualTest {
             assertTrue("Local save may make GET refreshes only", methods.all { it.startsWith("GET ") })
 
             // Verify the saved campaign is actually consumed by the Marketplace banner.
-            compose.setContent {
-                val campaigns = FynxMarketplaceLocalCampaignStore.observe(compose.activity).collectAsState()
-                MaterialTheme {
-                    MarketplacePromotionalBanner(
-                        listings = emptyList(),
-                        sellerReputations = emptyMap(),
-                        weeklySeller = null,
-                        weeklySellerListing = null,
-                        sponsoredPromotions = emptyList(),
-                        seasonalPromotions = campaigns.value,
-                        onOpenListing = {},
-                        onOpenSeller = {},
-                        onOpenProduct = {},
-                        onOpenCategory = {},
-                        onShopNow = {},
-                        onOpenOrders = {},
-                        onRefresh = {},
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            compose.runOnIdle { screenState.value = 1 }
             compose.waitUntil(timeoutMillis = 10_000) {
                 runCatching {
                     compose.onNodeWithText(headline).assertIsDisplayed()
@@ -142,13 +145,7 @@ class FynxAdminPublishingSectionsVisualTest {
             capture("FYNX-marketplace-offline-banner.png")
 
             // Reopening the real campaign editor must reload the saved campaign from storage.
-            compose.setContent {
-                MaterialTheme {
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        FynxMarketplaceSeasonalPromotionAdminPanel()
-                    }
-                }
-            }
+            compose.runOnIdle { screenState.value = 2 }
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodesWithText(headline).fetchSemanticsNodes().isNotEmpty()
             }
@@ -277,34 +274,46 @@ class FynxAdminPublishingSectionsVisualTest {
             }, Handler(thread.looper))
             check(latch.await(15, TimeUnit.SECONDS)) { "Timed out capturing $fileName" }
             check(result == PixelCopy.SUCCESS) { "PixelCopy failed for $fileName: $result" }
-            val appExternalFiles = compose.activity.applicationContext.getExternalFilesDir(null)
-            val packageExternalFiles = File("/sdcard/Android/data/${compose.activity.packageName}/files")
-            val roots = listOfNotNull(appExternalFiles, packageExternalFiles).distinctBy { it.absolutePath }
-            val directory = roots.asSequence()
-                .map { File(it, "admin-test-fixtures") }
-                .firstOrNull { it.mkdirs() || it.isDirectory }
-                ?: error("Cannot create Admin screenshot directory in app-specific external storage.")
-            val screenshot = File(directory, fileName)
-            FileOutputStream(screenshot).use { output ->
-                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "PNG encode failed" }
-            }
-            android.util.Log.i("FYNXAdminVisualTest", "Captured " + screenshot.absolutePath)
-
-            // Gradle may uninstall the target package after connectedDebugAndroidTest.
-            // Mirror the authentic PixelCopy PNG into shared Downloads before that cleanup.
             require(fileName.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]*\\.png"))) {
                 "Unexpected Admin screenshot filename: " + fileName
             }
-            val sharedDirectory = "/sdcard/Download/fynx-admin-test-fixtures"
-            val shell = "mkdir -p '$sharedDirectory' && cp '" + screenshot.absolutePath + "' '$sharedDirectory/$fileName' && chmod 644 '$sharedDirectory/$fileName' && echo FYNX_SCREENSHOT_PRESERVED"
-            val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(shell)
-            val shellOutput = ParcelFileDescriptor.AutoCloseInputStream(descriptor).use {
-                it.readBytes().toString(Charsets.UTF_8)
+            // Store the authentic PixelCopy image in public MediaStore Pictures. This survives
+            // Gradle uninstalling the target APK after connectedDebugAndroidTest, and adb can
+            // pull the directory without relying on a shell copy from an app-scoped folder.
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/FYNXAdminEvidence")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
-            check(shellOutput.contains("FYNX_SCREENSHOT_PRESERVED")) {
-                "Could not preserve " + fileName + " for CI collection: " + shellOutput.trim()
+            val resolver = compose.activity.contentResolver
+            val screenshotUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("Could not create MediaStore evidence entry for " + fileName)
+            try {
+                val output = resolver.openOutputStream(screenshotUri, "w")
+                    ?: error("Could not open MediaStore evidence output for " + fileName)
+                output.use {
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) { "PNG encode failed for " + fileName }
+                }
+                val publish = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                check(resolver.update(screenshotUri, publish, null, null) == 1) {
+                    "Could not publish screenshot into shared Pictures for " + fileName
+                }
+                val size = resolver.query(
+                    screenshotUri,
+                    arrayOf(MediaStore.MediaColumns.SIZE),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getLong(0) else 0L
+                } ?: 0L
+                check(size > 0L) { "MediaStore screenshot is empty: " + fileName }
+            } catch (failure: Throwable) {
+                resolver.delete(screenshotUri, null, null)
+                throw failure
             }
-            android.util.Log.i("FYNXAdminVisualTest", "Preserved shared screenshot " + sharedDirectory + "/" + fileName)
+            android.util.Log.i("FYNXAdminVisualTest", "Captured PixelCopy screenshot in shared Pictures: " + fileName)
         } finally {
             bitmap.recycle()
             thread.quitSafely()
