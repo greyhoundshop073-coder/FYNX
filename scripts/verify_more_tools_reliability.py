@@ -95,7 +95,7 @@ if "FynxBackendClient" in features or "FynxAdminClient" in features:
 
 routes = re.findall(r'FynxFeatureCardSpec\(\s*"([^"]+)"', features)
 expected_routes = [
-    "Calls", "Gifts", "Share", "Announcements",
+    "Calls", "Gifts", "Share", "Notifications", "Announcements",
     "To-Do", "Calendar", "Extra Tools", "Saved Posts",
     "Wallet", "Money Tools",
     "Business Account", "Advertising", "Advertising Dashboard",
@@ -106,15 +106,15 @@ if routes != expected_routes:
 if len(routes) != len(set(routes)):
     raise SystemExit("MORE TOOLS RED: duplicate feature routes in More directory")
 
-# The shortcuts below duplicate a permanent tab, Profile > Settings, or Marketplace.
+# These shortcuts duplicate a permanent tab, Profile > Settings, or Marketplace. Notifications remains because More opens the activity feed while Settings opens preference mode.
 # Keep their real destinations; do not offer another copy in More.
-for duplicate_route in ("Marketplace", "Notifications", "Privacy", "Saved Products", "Seller Center"):
+for duplicate_route in ("Marketplace", "Privacy", "Saved Products", "Seller Center"):
     if re.search(r'FynxFeatureCardSpec\(\s*"' + re.escape(duplicate_route) + r'"', features):
         raise SystemExit(f"MORE TOOLS RED: redundant {duplicate_route} shortcut reintroduced")
 
 icon_colors = set(re.findall(r'Color\(0xFF[0-9A-Fa-f]{6}\)', features))
-if len(icon_colors) < 15:
-    raise SystemExit(f"MORE TOOLS RED: expected distinct icon colors for all 14 user cards and Owner/Admin; found {len(icon_colors)}")
+if len(icon_colors) < 16:
+    raise SystemExit(f"MORE TOOLS RED: expected distinct icon colors for all 15 user cards and Owner/Admin; found {len(icon_colors)}")
 
 require(app, 'FynxFeaturesPanel(adminRole = adminRole', "More screen receives server-authoritative Owner/Admin role")
 require(app, 'dashboard.role.takeIf { it == "OWNER" || it == "ADMIN" }', "server role continues to gate Owner/Admin visibility")
