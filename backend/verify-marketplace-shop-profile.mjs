@@ -16,6 +16,7 @@ const savedProductsUi = read('../app/src/main/java/com/fynx/app/ui/FynxSavedMark
 const marketplacePanel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt');
 const remoteSocial = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const appNavigation = read('../app/src/main/java/com/fynx/app/ui/FynxApp.kt');
+const featuresPanel = read('../app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt');
 
 const checks = [
   ['shop profile table is idempotent and keyed to the seller account', shop.includes('CREATE TABLE IF NOT EXISTS marketplace_shop_profiles') && shop.includes('seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE')],
@@ -45,7 +46,7 @@ const checks = [
   ['Saved Products has its own persistent table and authenticated read/save/remove endpoints', social.includes('CREATE TABLE IF NOT EXISTS marketplace_saved_products') && social.includes('app.get("/api/marketplace/saved-products", auth') && social.includes('app.post("/api/marketplace/listings/:id/saved", auth') && social.includes('app.delete("/api/marketplace/listings/:id/saved", auth')],
   ['Marketplace product cards and details expose save/remove actions through the authoritative remote toggle', (marketplacePanel.split('FynxRemoteSocialClient.toggleMarketplaceProductSaved').length - 1) >= 2 && marketplacePanel.includes('Remove from Saved Products') && remoteSocial.includes('suspend fun toggleMarketplaceProductSaved') && remoteSocial.includes('val current = knownSaved?.let { Result.success(it) } ?: marketplaceProductSaved(context, listingId)') && remoteSocial.includes('suspend fun saveMarketplaceProduct') && remoteSocial.includes('suspend fun unsaveMarketplaceProduct')],
   ['Saved Products screen loads saved products and supports removal', savedProductsUi.includes('FynxRemoteSocialClient.savedMarketplaceProducts(context)') && savedProductsUi.includes('FynxRemoteSocialClient.unsaveMarketplaceProduct(context, product.id)')],
-  ['Saved Products is navigable separately from Saved Posts and opens the canonical listing', (appNavigation.includes('"Saved Products" -> FynxSavedMarketplaceProductsPanel(onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" })') || appNavigation.includes('"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(')) && appNavigation.includes('Triple("Saved Products", "Saved Marketplace Products", Icons.Default.BookmarkBorder)') && savedProductsUi.includes('Text("View product")') && savedProductsUi.includes('onOpenListing(product.id)')]
+  ['Saved Products stays inside Marketplace instead of duplicating its entry in More, and opens the canonical listing', (appNavigation.includes('"Saved Products" -> key(marketplaceAccountKey) { FynxSavedMarketplaceProductsPanel(') && appNavigation.includes('onOpenSavedProducts = { selected = "Saved Products" }') && marketplacePanel.includes('OutlinedButton(onClick = onOpenSavedProducts') && !featuresPanel.includes('"Saved Products", "Saved Marketplace Products"') && savedProductsUi.includes('Text("View product")') && savedProductsUi.includes('onOpenListing(product.id)'))],
 ];
 
 checks.push(
