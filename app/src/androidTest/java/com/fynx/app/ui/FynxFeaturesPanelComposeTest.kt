@@ -72,7 +72,7 @@ class FynxFeaturesPanelComposeTest {
             }
         }
 
-        compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
+        scrollToFeature("Admin")
         compose.onNodeWithTag("fynx-feature-role-admin", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag("fynx-feature-role-owner", useUnmergedTree = true).assertDoesNotExist()
     }
