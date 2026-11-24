@@ -259,7 +259,7 @@ fun FynxFeaturesPanel(
                             section.title,
                             modifier = Modifier.fillMaxWidth()
                                 .padding(top = 10.dp, bottom = 1.dp)
-                                .testTag("fynx-features-section-${section.title.lowercase().replace(' ', '-').replace('&', 'and')}"),
+                                .testTag("fynx-features-section-${section.title.lowercase().replace(' ', '-').replace("&", "and")}"),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
