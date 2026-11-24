@@ -348,11 +348,11 @@ require("localArtworkUri" in local_client_source and "FynxMarketplaceLocalCampai
 require("MarketplaceLocalCampaignArtwork" in banner_source and "localArtworkUri" in banner_source,
         "Marketplace banner must render local artwork without the media API")
 require("FynxMarketplaceLocalCampaignStore.active(context)" in marketplace_source,
+        "Marketplace must load local banner campaigns before waiting for backend")
 require("FynxMarketplaceLocalCampaignStore.observe(context).collectAsState()" in marketplace_source,
         "Marketplace must react immediately when Admin changes a local campaign")
 require("activeCampaigns = MutableStateFlow" in local_store_source and "publishActive(context.applicationContext)" in local_store_source,
         "local campaign storage must publish state changes to the Marketplace screen")
-        "Marketplace must load local banner campaigns before waiting for backend")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
