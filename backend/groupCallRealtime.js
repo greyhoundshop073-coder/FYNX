@@ -3,9 +3,13 @@ import { randomUUID } from "node:crypto";
 const MAX_GROUP_CALL_PARTICIPANTS = 4;
 const CALL_ID_PATTERN = /^call[-_][a-z0-9_-]{1,70}$/i;
 
-export async function ensureFynxGroupCallSchema(pool) {
+const groupCallSchemaPromises = new WeakMap();
+
+export function ensureFynxGroupCallSchema(pool) {
   if (!pool || typeof pool.query !== "function") throw new Error("Group-call storage is unavailable.");
-  await pool.query(`
+  let pending = groupCallSchemaPromises.get(pool);
+  if (!pending) {
+    pending = pool.query(`
     CREATE TABLE IF NOT EXISTS fynx_realtime_group_calls (
       id TEXT PRIMARY KEY,
       group_id TEXT NOT NULL REFERENCES fynx_groups(id) ON DELETE CASCADE,
@@ -28,6 +32,12 @@ export async function ensureFynxGroupCallSchema(pool) {
     CREATE INDEX IF NOT EXISTS fynx_realtime_group_call_participants_user_idx
       ON fynx_realtime_group_call_participants(user_id,status,call_id);
   `);
+    groupCallSchemaPromises.set(pool, pending);
+    pending.catch(() => {
+      if (groupCallSchemaPromises.get(pool) === pending) groupCallSchemaPromises.delete(pool);
+    });
+  }
+  return pending;
 }
 
 function sendSocket(socket, payload) {
@@ -331,6 +341,7 @@ export async function disconnectFynxGroupCallsForUser({ pool, userId, emitToUser
   }
   const disconnectedUserId = String(userId ?? "").trim();
   if (!/^\d+$/.test(disconnectedUserId)) return 0;
+  await ensureFynxGroupCallSchema(pool);
 
   const active = await pool.query(
     `SELECT c.id, c.group_id, c.creator_id::text AS creator_id, c.media_type
