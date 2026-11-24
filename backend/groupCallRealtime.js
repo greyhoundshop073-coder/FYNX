@@ -330,7 +330,7 @@ export async function disconnectFynxGroupCallsForUser({ pool, userId, emitToUser
     throw new Error("Group-call disconnect cleanup requires storage and realtime delivery.");
   }
   const disconnectedUserId = String(userId ?? "").trim();
-  if (!/^\\d+$/.test(disconnectedUserId)) return 0;
+  if (!/^\d+$/.test(disconnectedUserId)) return 0;
 
   const active = await pool.query(
     `SELECT c.id, c.group_id, c.creator_id::text AS creator_id, c.media_type
