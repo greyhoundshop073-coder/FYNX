@@ -173,6 +173,10 @@ checks["Disconnect recovery initializes group-call schema once per database pool
     "const groupCallSchemaPromises = new WeakMap()" in backend["group_calls"]
     and "await ensureFynxGroupCallSchema(pool)" in backend["group_calls"]
 )
+checks["Marketplace Live Proof authorization has direct backend tests"] = (
+    "test-marketplace-call-context.mjs" in read(".github/workflows/fynx-backend-ci.yml")
+    and "resolveFynxMarketplaceCallContext" in backend["marketplace_context"]
+)
 
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
