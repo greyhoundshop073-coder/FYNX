@@ -136,7 +136,7 @@ fun MarketplacePromotionalBanner(
                     )
                 )
             }
-            seasonalPromotions.take(4).forEach { promotion ->
+            seasonalPromotions.take(20).forEach { promotion ->
                 add(
                     MarketplacePromoSlide(
                         key = "scheduled-campaign-${promotion.id}",
