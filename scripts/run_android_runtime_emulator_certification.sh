@@ -49,8 +49,18 @@ done
 
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ] && [ "$runtime_status" -eq 0 ]; then
   expected_admin_screenshots=(
-    "FYNX-admin-owner-music-library.png"
+    "FYNX-admin-owner-overview.png"
+    "FYNX-admin-owner-overview-revenue.png"
+    "FYNX-admin-owner-safety-account-reports.png"
+    "FYNX-admin-owner-safety-content-reports.png"
     "FYNX-admin-owner-marketplace-campaigns.png"
+    "FYNX-admin-owner-marketplace-protection.png"
+    "FYNX-admin-owner-people-admins.png"
+    "FYNX-admin-owner-people-account-management.png"
+    "FYNX-admin-owner-announcement-editor.png"
+    "FYNX-admin-owner-announcement-management.png"
+    "FYNX-admin-owner-activity.png"
+    "FYNX-admin-owner-music-library.png"
     "FYNX-admin-admin-marketplace-campaigns.png"
     "FYNX-marketplace-offline-banner.png"
   )
