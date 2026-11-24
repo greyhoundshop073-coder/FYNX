@@ -76,6 +76,14 @@ checks = {
     "Private Chat call actions enter the shared Calls route":
         'onVoiceCall = { callTarget = chat.username' in app["shell"]
         and 'onVideoCall = { callTarget = chat.username' in app["shell"],
+    "Direct-call invites and accepts wait for a connected realtime socket":
+        "pendingOutgoingInvite" in app["calls"]
+        and "pendingIncomingAcceptSignal" in app["calls"]
+        and "realtimeState != FynxRealtimeClient.State.CONNECTED" in app["calls"]
+        and "sendCallInvite(current.id, peerId, video, callListingId)" in app["calls"],
+    "Backend direct-call signaling errors are surfaced to the caller":
+        '"error" -> if (session?.id == event.callId)' in app["calls"]
+        and 'event.error ?: "The call could not be started."' in app["calls"],
     "Shared one-to-one call uses authenticated direct signaling":
         "sendCallInvite" in app["calls"] and "sendCallOffer" in app["calls"]
         and "sendCallAnswer" in app["calls"] and "sendCallIce" in app["calls"],
@@ -124,6 +132,11 @@ checks = {
         and "handleNodeGroupCallSignal" in backend["node_server"]
         and "createFynxGroupCallSignalHandler" in backend["neon_bridge"]
         and "handleGroupCallSignal" in backend["neon_bridge"],
+    "Group create and join actions survive socket reconnection after permission prompts":
+        "LaunchedEffect(realtimeState, startAction, waitingForPermission)" in app["group_call"]
+        and "if (realtimeState != FynxRealtimeClient.State.CONNECTED || waitingForPermission)" in app["group_call"]
+        and "sendGroupCallCreate" in app["group_call"]
+        and "sendGroupCallJoin" in app["group_call"],
     "Call transport accepts only the bounded group-call signal vocabulary":
         all(f'"{signal}"' in app["transport"] for signal in (
             "group_create", "group_join", "group_leave", "group_reject",

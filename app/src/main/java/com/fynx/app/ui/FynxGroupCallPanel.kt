@@ -277,8 +277,14 @@ fun FynxGroupCallPanel(
         }
         if (realtimeState != FynxRealtimeClient.State.CONNECTED) {
             statusText = "Waiting for the secure call connection…"
-            return@rememberLauncherForActivityResult
+        } else {
+            statusText = "Preparing the group call…"
         }
+    }
+
+    LaunchedEffect(realtimeState, startAction, waitingForPermission) {
+        if (realtimeState != FynxRealtimeClient.State.CONNECTED || waitingForPermission) return@LaunchedEffect
+        if (!engine.isReadyForCall()) return@LaunchedEffect
         when (startAction) {
             "create" -> {
                 val id = "call-${System.currentTimeMillis().toString(36)}-${UUID.randomUUID().toString().take(8)}"
@@ -287,21 +293,23 @@ fun FynxGroupCallPanel(
                 if (realtimeClient.sendGroupCallCreate(groupId, id, callType == "video")) {
                     statusText = "Starting group call…"
                 } else {
-                    errorMessage = "The group call request could not reach the call service."
+                    errorMessage = "The group call request could not reach the call service. Reconnecting…"
                     engine.disconnect()
                 }
+                startAction = null
             }
             "join" -> {
                 val id = callId
                 if (id != null && realtimeClient.sendGroupCallJoin(groupId, id)) {
                     statusText = "Joining group call…"
                 } else {
-                    errorMessage = "The group call invitation could not be accepted. Please retry."
+                    errorMessage = "The group call invitation could not be accepted. Please reconnect and retry."
                     engine.disconnect()
                 }
+                startAction = null
             }
+            else -> Unit
         }
-        startAction = null
     }
 
     fun requestMedia(action: String) {
