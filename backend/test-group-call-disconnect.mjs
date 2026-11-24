@@ -7,6 +7,7 @@ function makePool({ creatorId = "101", userId = "101", roster = [], invitees = [
     calls,
     async query(sql, params = []) {
       calls.push({ sql, params });
+      if (sql.includes("CREATE TABLE IF NOT EXISTS fynx_realtime_group_calls")) return { rows: [] };
       if (sql.includes("SELECT c.id, c.group_id")) {
         return { rows: [{ id: "call_test_01", group_id: "group_test", creator_id: creatorId, media_type: "video" }] };
       }
@@ -38,6 +39,8 @@ function makePool({ creatorId = "101", userId = "101", roster = [], invitees = [
     logger: { error: (...args) => { throw new Error(args.join(" ")); } }
   });
   assert.equal(count, 1);
+  assert.equal(pool.calls.filter(x => x.sql.includes("CREATE TABLE IF NOT EXISTS fynx_realtime_group_calls")).length, 1,
+    "disconnect recovery must initialize its schema once before reading active calls");
   assert.equal(pool.calls.some(x => x.sql.includes("SET status='ENDED'") && x.sql.includes("fynx_realtime_group_calls")), true);
   assert.deepEqual(delivered.map(x => x.id).sort(), ["202", "303"]);
   assert.ok(delivered.every(x => x.event.signalType === "group_ended"));
