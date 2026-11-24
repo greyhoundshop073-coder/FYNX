@@ -124,13 +124,13 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        // The house banner is always present, including when the recommendation feed is
-        // still being composed. Its real action opens the same product grid used by See all.
-        compose.onNodeWithText("Explore Marketplace").performScrollTo().performClick()
+        // Use the production featured-product action in the always-present Marketplace
+        // banner. It opens the same real product-details screen without depending on a
+        // recommendation LazyRow being composed in the current viewport.
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-                .fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText("Shop this product").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
@@ -176,13 +176,13 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        // The house banner is always present, including when the recommendation feed is
-        // still being composed. Its real action opens the same product grid used by See all.
-        compose.onNodeWithText("Explore Marketplace").performScrollTo().performClick()
+        // Use the production featured-product action in the always-present Marketplace
+        // banner. It opens the same real product-details screen without depending on a
+        // recommendation LazyRow being composed in the current viewport.
         compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-                .fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText("Shop this product").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
