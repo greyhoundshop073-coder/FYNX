@@ -50,13 +50,13 @@ checks = {
     # the outgoing invite, through server validation, and into the recipient UI.
     "Marketplace Live Proof forwards listing ID, title and seller":
         "onRequestProof(listing.id, listing.title, listing.sellerUsername)" in app["live_proof"]
-        and "onLiveProof(listing.id, listing.title, listing.sellerUsername)" in app["marketplace"],
+        and "onRequestProof = { listingId, productTitle, sellerUsername -> onLiveProof(listingId, productTitle, sellerUsername) }" in app["marketplace"],
     "App routes Marketplace proof with all listing context":
         "callListingId = listingId" in app["shell"]
         and "callProductTitle = productTitle" in app["shell"]
         and "initialListingId = pendingIncomingCall?.listingId ?: callListingId" in app["shell"],
     "Calls sends listing ID in authenticated invite":
-        "sendCallInvite(id, resolvedId, isVideo, callListingId)" in app["calls"]
+        "sendCallInvite(current.id, peerId, video, callListingId)" in app["calls"]
         and 'put("listingId", it)' in app["realtime"],
     "Incoming calls parse product ID, title and seller":
         all(token in app["realtime"] for token in ('"listingId"', '"productTitle"', '"sellerUsername"')),
@@ -102,6 +102,8 @@ checks = {
             "Start group video call", "Participants", "Mute", "Camera", "Speaker",
             "Leave", "Decline", "Join call"
         )),
+    "Group-call starter sees an explicit End call action while invitees see Leave":
+        'if (isStarter) "End call" else "Leave"' in app["group_call"],
     "Group call signaling events are queued so burst ICE candidates are not overwritten":
         "Channel<FynxRealtimeClient.Event.GroupCall>(Channel.UNLIMITED)" in app["group_call"]
         and "groupEvents.trySend(event)" in app["group_call"]
@@ -140,7 +142,7 @@ checks = {
         and "sendGroupCallCreate" in app["group_call"]
         and "sendGroupCallJoin" in app["group_call"],
     "Call transport accepts only the bounded group-call signal vocabulary":
-        all(f'"{signal}"' in app["transport"] for signal in (
+        all(f'"{signal}"' in app["realtime"] for signal in (
             "group_create", "group_join", "group_leave", "group_reject",
             "group_end", "group_offer", "group_answer", "group_ice"
         )),

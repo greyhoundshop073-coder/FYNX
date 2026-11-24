@@ -443,7 +443,7 @@ fun FynxGroupCallPanel(
                             icon = if (speakerEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
                             onClick = { speakerEnabled = !speakerEnabled; engine.setSpeakerEnabled(speakerEnabled) }
                         )
-                        FynxGroupCallControl("Leave", Icons.Default.CallEnd, destructive = true, onClick = ::endOrLeave)
+                        FynxGroupCallControl(if (isStarter) "End call" else "Leave", Icons.Default.CallEnd, destructive = true, onClick = ::endOrLeave)
                     }
                 }
             }
