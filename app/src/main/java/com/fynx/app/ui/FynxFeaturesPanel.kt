@@ -328,7 +328,8 @@ private fun FynxFeatureCard(
                     ) {
                         Text(
                             feature.roleLabel,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                                .testTag("fynx-feature-role-${feature.roleLabel.lowercase()}"),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1
