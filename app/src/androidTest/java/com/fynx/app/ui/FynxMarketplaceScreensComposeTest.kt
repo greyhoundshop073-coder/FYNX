@@ -124,6 +124,9 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("Recommended for you").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
         // The recommendation card is inside a horizontal LazyRow nested in the vertical
         // feed. Scrolling its heading alone does not compose the off-screen row item.
@@ -174,6 +177,9 @@ class FynxMarketplaceScreensComposeTest {
                     testOnlyListings = listOf(marketplaceListings.first())
                 )
             }
+        }
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("Recommended for you").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
         // The recommendation card is inside a horizontal LazyRow nested in the vertical
