@@ -6331,7 +6331,7 @@ def capture_wallet_from_features(prefix:str):
     # that navigation surface is unavailable in this runtime state, use the
     # already-visible authenticated Marketplace -> Wallet shortcut instead.
     feature_xml=tap_control(
-        home_xml, ["More","Features"], prefix+"-features", ["FYNX Features"]
+        home_xml, ["More","Features"], prefix+"-features", ["Search FYNX tools"]
     )
     wallet_entry_opened=False
     if feature_xml:
@@ -6478,7 +6478,7 @@ def capture_wallet_from_features(prefix:str):
     # this function. Restore Home on both pass and fail so Wallet/keyboard state
     # cannot contaminate the next journey.
     home_after=restore_home_after_restart(prefix+"-return-home")
-    if not home_after or find_control(home_after, ["FYNX Features"]):
+    if not home_after or find_control(home_after, ["Search FYNX tools"]):
         return False, result_message+" Home could not be restored after Wallet capture."
     if not wallet_opened:
         return False, result_message
@@ -6534,7 +6534,7 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
     home = restore_home_after_restart(prefix + "-home") or dump_ui(prefix + "-home-current.xml")
     if not home or not find_control(home, ["Chat"]) or not find_control(home, ["Friends"]):
         return False, "Home could not be restored before opening FYNX Assistant."
-    features = tap_control(home, ["More", "Features"], prefix + "-features", ["FYNX Features"])
+    features = tap_control(home, ["More", "Features"], prefix + "-features", ["Search FYNX tools"])
     if not features:
         return False, "Home -> Features did not open for the AI screen capture."
     search = find_control(features, ["Search FYNX tools"])
@@ -6622,7 +6622,7 @@ def capture_ai_assistant_surface(prefix: str) -> tuple[bool, str]:
         run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(0.4)
     home_after = restore_home_after_restart(prefix + "-return-home")
-    if not home_after or find_control(home_after, ["FYNX Features"]):
+    if not home_after or find_control(home_after, ["Search FYNX tools"]):
         return False, "FYNX Assistant rendered, but the runtime navigator could not return to Home."
     if not menu_captured:
         return False, "FYNX Assistant rendered, but its real image-attachment menu did not expose Add an image."
@@ -7477,7 +7477,7 @@ def find_feature_entry(xml_text:str, labels:list[str]):
 
 def open_features(target_labels:list[str]|None=None):
     home_xml=restore_home_after_restart("authenticated-home-features") or xml
-    feature_xml=tap_control(home_xml,["More","Features"],"features",["FYNX Features"])
+    feature_xml=tap_control(home_xml,["More","Features"],"features",["Search FYNX tools"])
     if not feature_xml: return ""
     if target_labels is None: return feature_xml
 
@@ -7565,7 +7565,7 @@ if features:
             else:
                 FAILURES.append("FYNX Assistant attachment menu did not expose Add an image")
             home_after_ai = restore_home_after_restart("authenticated-ai-return-home")
-            if not home_after_ai or find_control(home_after_ai, ["FYNX Features"]):
+            if not home_after_ai or find_control(home_after_ai, ["Search FYNX tools"]):
                 FAILURES.append("FYNX Assistant runtime capture could not return to Home")
         else:
             time.sleep(1.2)
