@@ -43,6 +43,8 @@ backend = {
     }.items()
 }
 
+workflow = read('.github/workflows/android-build.yml')
+
 checks = {
     # Marketplace: listing identity remains connected from product panel to
     # the outgoing invite, through server validation, and into the recipient UI.
@@ -143,6 +145,9 @@ checks = {
             "group_end", "group_offer", "group_answer", "group_ice"
         )),
 }
+
+checks["Android CI runs the dedicated unified voice/video call contract verifier"] = "python3 scripts/verify_video_calls_integration.py" in workflow
+checks["The [full-runtime] PR title marker enables build, emulator and screenshot certification"] = workflow.count("contains(github.event.pull_request.title, '[full-runtime]')") >= 6
 
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
