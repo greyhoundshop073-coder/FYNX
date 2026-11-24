@@ -353,6 +353,8 @@ require("FynxMarketplaceLocalCampaignStore.observe(context).collectAsState()" in
         "Marketplace must react immediately when Admin changes a local campaign")
 require("activeCampaigns = MutableStateFlow" in local_store_source and "publishActive(context.applicationContext)" in local_store_source,
         "local campaign storage must publish state changes to the Marketplace screen")
+require("MAX_CAMPAIGNS = 20" in local_store_source and "seasonalPromotions.take(20).forEach" in banner_source,
+        "the Marketplace banner must support the full twenty-campaign local testing allowance, not a two- or four-slide hard cap")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
