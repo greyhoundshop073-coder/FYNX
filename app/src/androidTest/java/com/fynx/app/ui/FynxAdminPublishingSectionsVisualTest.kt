@@ -6,6 +6,7 @@ import android.os.HandlerThread
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.test.assertIsDisplayed
@@ -36,12 +37,12 @@ class FynxAdminPublishingSectionsVisualTest {
 
 
     @Test
-    fun marketplaceBannerShowsBundledOfflineCampaignArtworkAndCapturesIt() {
-        val campaigns = FynxMarketplaceLocalCampaignStore.active(compose.activity)
-        check(campaigns.any { it.id == "local-sample-fynx-marketplace" }) {
-            "The replaceable local FYNX sample campaign must be seeded without a backend."
-        }
+    fun adminLocalCampaignChangesFlowIntoMarketplaceBannerWithoutBackend() {
+        val originalCampaign = FynxMarketplaceLocalCampaignStore.active(compose.activity)
+            .firstOrNull { it.id == "local-sample-fynx-marketplace" }
+            ?: error("The replaceable local FYNX sample campaign must be seeded without a backend.")
         compose.setContent {
+            val campaigns = FynxMarketplaceLocalCampaignStore.observe(compose.activity).collectAsState()
             MaterialTheme {
                 MarketplacePromotionalBanner(
                     listings = emptyList(),
@@ -49,7 +50,7 @@ class FynxAdminPublishingSectionsVisualTest {
                     weeklySeller = null,
                     weeklySellerListing = null,
                     sponsoredPromotions = emptyList(),
-                    seasonalPromotions = campaigns,
+                    seasonalPromotions = campaigns.value,
                     onOpenListing = {},
                     onOpenSeller = {},
                     onOpenProduct = {},
@@ -61,13 +62,24 @@ class FynxAdminPublishingSectionsVisualTest {
                 )
             }
         }
-        compose.onNodeWithText("Discover more on FYNX").assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                compose.onNodeWithContentDescription("FYNX Marketplace campaign artwork").assertIsDisplayed()
-            }.isSuccess
+        try {
+            FynxMarketplaceLocalCampaignStore.upsert(
+                compose.activity,
+                originalCampaign.copy(
+                    headline = "Admin offline campaign preview",
+                    body = "A locally published Admin campaign appears in Marketplace without a backend."
+                )
+            ).getOrThrow()
+            compose.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    compose.onNodeWithText("Admin offline campaign preview").assertIsDisplayed()
+                    compose.onNodeWithContentDescription("FYNX Marketplace campaign artwork").assertIsDisplayed()
+                }.isSuccess
+            }
+            capture("FYNX-marketplace-offline-banner.png")
+        } finally {
+            FynxMarketplaceLocalCampaignStore.upsert(compose.activity, originalCampaign).getOrThrow()
         }
-        capture("FYNX-marketplace-offline-banner.png")
     }
 
     @Test
@@ -155,11 +167,18 @@ class FynxAdminPublishingSectionsVisualTest {
             }, Handler(thread.looper))
             check(latch.await(15, TimeUnit.SECONDS)) { "Timed out capturing $fileName" }
             check(result == PixelCopy.SUCCESS) { "PixelCopy failed for $fileName: $result" }
-            val directory = File(compose.activity.getExternalFilesDir(null), "admin-test-fixtures")
-            check(directory.mkdirs() || directory.isDirectory) { "Cannot create Admin screenshot directory" }
-            FileOutputStream(File(directory, fileName)).use { output ->
+            val appExternalFiles = compose.activity.applicationContext.getExternalFilesDir(null)
+            val packageExternalFiles = File("/sdcard/Android/data/${compose.activity.packageName}/files")
+            val roots = listOfNotNull(appExternalFiles, packageExternalFiles).distinctBy { it.absolutePath }
+            val directory = roots.asSequence()
+                .map { File(it, "admin-test-fixtures") }
+                .firstOrNull { it.mkdirs() || it.isDirectory }
+                ?: error("Cannot create Admin screenshot directory in app-specific external storage.")
+            val screenshot = File(directory, fileName)
+            FileOutputStream(screenshot).use { output ->
                 check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "PNG encode failed" }
             }
+            android.util.Log.i("FYNXAdminVisualTest", "Captured ${screenshot.absolutePath}")
         } finally {
             bitmap.recycle()
             thread.quitSafely()
