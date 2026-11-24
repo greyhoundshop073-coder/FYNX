@@ -79,13 +79,15 @@ class FynxAdminPublishingSectionsVisualTest {
                 MaterialTheme {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         FynxMarketplaceSeasonalPromotionAdminPanel(
-                            testOnlyArtworkUri = artworkUri,
+                            testOnlyPhotoPicker = { artworkUri },
                             testOnlyStartsAt = startsAt,
                             testOnlyEndsAt = endsAt
                         )
                     }
                 }
             }
+            compose.onNodeWithText("Choose photo").performScrollTo().performClick()
+            compose.onNodeWithText("Selected photo:", substring = true).assertIsDisplayed()
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")

@@ -112,6 +112,7 @@ private fun showMarketplaceSeasonalDateTimePicker(
 @Composable
 fun FynxMarketplaceSeasonalPromotionAdminPanel(
     testOnlyArtworkUri: Uri? = null,
+    testOnlyPhotoPicker: (() -> Uri?)? = null,
     testOnlyStartsAt: String = "",
     testOnlyEndsAt: String = ""
 ) {
@@ -312,7 +313,20 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
-                    onClick = { artworkPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onClick = {
+                        val testPickedUri = testOnlyPhotoPicker?.invoke()
+                        if (testOnlyPhotoPicker != null) {
+                            if (testPickedUri != null) {
+                                artworkUri = testPickedUri
+                                artworkMediaId = ""
+                                localArtworkUri = ""
+                                message = null
+                                error = null
+                            }
+                        } else {
+                            artworkPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }
+                    },
                     enabled = !saving
                 ) { Text(if (artworkUri == null && localArtworkUri.isBlank() && artworkMediaId.isBlank()) "Choose photo" else "Change photo") }
                 if (artworkUri != null || localArtworkUri.isNotBlank() || artworkMediaId.isNotBlank()) {
