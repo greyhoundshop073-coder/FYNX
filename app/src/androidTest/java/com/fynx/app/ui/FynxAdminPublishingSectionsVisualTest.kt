@@ -229,6 +229,44 @@ class FynxAdminPublishingSectionsVisualTest {
         capture("FYNX-admin-admin-marketplace-campaigns.png")
     }
 
+    @Test
+    fun ownerCanCaptureEveryAdminControlCenterSection() {
+        launchAs("OWNER")
+
+        // Overview is captured once at the top for the account role and platform totals,
+        // then again at the revenue ledger so the whole dashboard is represented.
+        compose.onNodeWithText("FYNX CONTROL CENTER").assertIsDisplayed()
+        capture("FYNX-admin-owner-overview.png")
+        compose.onNodeWithText("FYNX Business Revenue").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-overview-revenue.png")
+
+        compose.onNodeWithText("Safety").performScrollTo().performClick()
+        compose.onNodeWithText("Reported accounts").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-safety-account-reports.png")
+        compose.onNodeWithText("Content reports").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-safety-content-reports.png")
+
+        compose.onNodeWithText("Marketplace").performScrollTo().performClick()
+        compose.onNodeWithText("Marketplace protection cases").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-marketplace-protection.png")
+
+        compose.onNodeWithText("People").performScrollTo().performClick()
+        compose.onNodeWithText("Current Admins").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-people-admins.png")
+        compose.onNodeWithText("Manage an account").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-people-account-management.png")
+
+        compose.onNodeWithText("Announcements").performScrollTo().performClick()
+        compose.onNodeWithText("Create an official update").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-announcement-editor.png")
+        compose.onNodeWithText("Manage announcements").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-announcement-management.png")
+
+        compose.onNodeWithText("Activity").performScrollTo().performClick()
+        compose.onNodeWithText("Administrative activity").performScrollTo().assertIsDisplayed()
+        capture("FYNX-admin-owner-activity.png")
+    }
+
     private fun launchAs(role: String) {
         val requested = mutableSetOf<String>()
         FynxBackendClient.requestExecutorForTests = { _, method, path, _, _ ->
