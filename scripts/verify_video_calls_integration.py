@@ -157,6 +157,20 @@ checks = {
 checks["Android CI runs the dedicated unified voice/video call contract verifier"] = "python3 scripts/verify_video_calls_integration.py" in workflow
 checks["The [full-runtime] PR title marker enables build, emulator and screenshot certification"] = workflow.count("contains(github.event.pull_request.title, '[full-runtime]')") >= 6
 
+# Disconnect cleanup must run only after the final socket for a user closes,
+# and the same durable group-call state machine must serve Node and Neon.
+checks["Group-call disconnect cleanup is implemented and directly tested"] = (
+    "disconnectFynxGroupCallsForUser" in backend["group_calls"]
+    and "creator_disconnected" in backend["group_calls"]
+    and "no_participants_remaining" in backend["group_calls"]
+    and "disconnectFynxGroupCallsForUser" in backend["node_server"]
+    and "disconnectFynxGroupCallsForUser" in backend["neon_bridge"]
+)
+checks["Backend CI executes group-call disconnect lifecycle tests"] = (
+    "node test-group-call-disconnect.mjs" in read("backend/.github-does-not-exist")
+    or "node test-group-call-disconnect.mjs" in read(".github/workflows/fynx-backend-ci.yml")
+)
+
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(f"{'PASS' if ok else 'FAIL'}  {name}")
