@@ -2,7 +2,7 @@
 export async function isFynxCallBlocked(pool, callerId, targetUserId) {
   const caller = String(callerId ?? "").trim();
   const target = String(targetUserId ?? "").trim();
-  if (!/^\\d+$/.test(caller) || !/^\\d+$/.test(target) || caller === target) {
+  if (!/^\d+$/.test(caller) || !/^\d+$/.test(target) || caller === target) {
     throw new Error("Invalid direct-call participants.");
   }
   if (!pool || typeof pool.query !== "function") {
