@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
+import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
 import { isFynxCallBlocked } from "./callSafety.js";
 
@@ -136,6 +136,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
     if (!remaining.rowCount) {
       await emitGlobal({ type: "presence", userId: String(userId), online: false });
       await endCallsForUser(userId);
+      await disconnectFynxGroupCallsForUser({ pool, userId, emitToUser, logger });
     }
   };
 
