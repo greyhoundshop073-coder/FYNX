@@ -106,6 +106,10 @@ if routes != expected_routes:
 if len(routes) != len(set(routes)):
     raise SystemExit("MORE TOOLS RED: duplicate feature routes in More directory")
 
+missing_routes = [route for route in routes if f'"{route}" ->' not in app]
+if missing_routes:
+    raise SystemExit(f"MORE TOOLS RED: feature cards without an existing app destination: {missing_routes}")
+
 # These shortcuts duplicate a permanent tab, Profile > Settings, or Marketplace. Notifications is not repeated because Home already opens the activity feed and Profile settings provides notification preferences.
 # Keep their real destinations; do not offer another copy in More.
 for duplicate_route in ("Marketplace", "Notifications", "Privacy", "Saved Products", "Seller Center"):
