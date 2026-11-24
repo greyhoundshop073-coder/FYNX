@@ -6,7 +6,10 @@ import android.os.HandlerThread
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -21,7 +24,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Read-only emulator screenshots of the production Admin publishing sections. */
+/** Read-only emulator screenshots of the Admin publishing sections and local Marketplace banner. */
 class FynxAdminPublishingSectionsVisualTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
@@ -29,6 +32,42 @@ class FynxAdminPublishingSectionsVisualTest {
     @After
     fun clearTransportFixture() {
         FynxBackendClient.requestExecutorForTests = null
+    }
+
+
+    @Test
+    fun marketplaceBannerShowsBundledOfflineCampaignArtworkAndCapturesIt() {
+        val campaigns = FynxMarketplaceLocalCampaignStore.active(compose.activity)
+        check(campaigns.any { it.id == "local-sample-fynx-marketplace" }) {
+            "The replaceable local FYNX sample campaign must be seeded without a backend."
+        }
+        compose.setContent {
+            MaterialTheme {
+                MarketplacePromotionalBanner(
+                    listings = emptyList(),
+                    sellerReputations = emptyMap(),
+                    weeklySeller = null,
+                    weeklySellerListing = null,
+                    sponsoredPromotions = emptyList(),
+                    seasonalPromotions = campaigns,
+                    onOpenListing = {},
+                    onOpenSeller = {},
+                    onOpenProduct = {},
+                    onOpenCategory = {},
+                    onShopNow = {},
+                    onOpenOrders = {},
+                    onRefresh = {},
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+        compose.onNodeWithText("Discover more on FYNX").assertIsDisplayed()
+        compose.waitUntil(timeoutMillis = 10_000) {
+            runCatching {
+                compose.onNodeWithContentDescription("FYNX Marketplace campaign artwork").assertIsDisplayed()
+            }.isSuccess
+        }
+        capture("FYNX-marketplace-offline-banner.png")
     }
 
     @Test
@@ -104,7 +143,7 @@ class FynxAdminPublishingSectionsVisualTest {
     private fun capture(fileName: String) {
         val window = compose.activity.window
         val decor = window.decorView
-        check(decor.width > 0 && decor.height > 0) { "Admin screen has no laid-out content" }
+        check(decor.width > 0 && decor.height > 0) { "FYNX screen has no laid-out content" }
         val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
         val thread = HandlerThread("FYNX-admin-section-capture").apply { start() }
         val latch = CountDownLatch(1)

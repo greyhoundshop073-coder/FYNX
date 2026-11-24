@@ -43,7 +43,7 @@ require('if (activeSection == "Marketplace")' in source and
 visual_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt"
 require(visual_test.is_file(), "Admin publishing section emulator screenshot tests are missing")
 visual = visual_test.read_text(encoding="utf-8")
-for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png"):
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-banner.png"):
     require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
 require('"GET"' in visual and "requestExecutorForTests" in visual,
         "Admin screenshot fixtures must remain GET-only and must not perform publishing mutations")
@@ -315,7 +315,7 @@ kvm_step_end = emulator_workflow.index("run: |", kvm_step_start)
 kvm_step = emulator_workflow[kvm_step_start:kvm_step_end]
 require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in kvm_step,
         "Admin PR must select the KVM permission setup before starting the hardware-accelerated emulator")
-for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png"):
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-banner.png"):
     require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
 require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
         "Admin emulator certification must fail when any required screenshot is absent")

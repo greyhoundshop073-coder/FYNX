@@ -569,7 +569,7 @@ private fun MarketplaceLocalCampaignArtwork(uriValue: String, modifier: Modifier
     bitmap?.let { image ->
         Image(
             bitmap = image.asImageBitmap(),
-            contentDescription = null,
+            contentDescription = "FYNX Marketplace campaign artwork",
             modifier = modifier,
             contentScale = ContentScale.Crop
         )
