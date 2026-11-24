@@ -169,6 +169,10 @@ checks["Group-call disconnect cleanup is implemented and directly tested"] = (
 checks["Backend CI executes group-call disconnect lifecycle tests"] = (
     "node test-group-call-disconnect.mjs" in read(".github/workflows/fynx-backend-ci.yml")
 )
+checks["Disconnect recovery initializes group-call schema once per database pool"] = (
+    "const groupCallSchemaPromises = new WeakMap()" in backend["group_calls"]
+    and "await ensureFynxGroupCallSchema(pool)" in backend["group_calls"]
+)
 
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
