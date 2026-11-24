@@ -1,0 +1,51 @@
+# FYNX Multi-Chat Workstream Register
+
+**Purpose:** shared coordination ledger for all parallel ChatGPT conversations, coding agents, and human contributors.
+**Canonical delivery branch:** `integration/fynx-single-apk-20261013`
+**Register rule:** update this file when claiming, changing scope, making a meaningful delivery, handing off, opening/merging a PR, or discovering a blocker.
+
+> This is a coordination snapshot, not live GitHub state. Every session must re-check branches, PRs, commits, and CI before acting. Blank/unknown fields mean **not verified**, not complete. Do not infer active ownership from an old entry.
+
+## How to use this register
+
+1. Before editing, claim an available workstream by adding the chat/session label, date, bounded scope, branch, and current canonical base SHA.
+2. Check for file/API/schema overlap with other active rows. Coordinate before overlapping edits.
+3. Use one feature branch per workstream and a PR targeting the canonical branch.
+4. Update the row after meaningful progress and before handing work to another chat.
+5. When ownership changes, record the handoff and new owner. Do not delete history of prior work.
+6. Only use the protocol's status vocabulary. Link evidence; do not report an old CI run as current.
+7. A workstream may be split into smaller rows if independent contributors can work without overlapping files/contracts.
+
+## Active workstreams
+
+| Workstream | Session/owner label | Scope / acceptance outcome | Feature branch | PR (base must be canonical) | Base SHA / latest head SHA | Files or shared contracts touched | Status | Current CI / runtime evidence | Blocker / next action | Last updated |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Home & Feed | Unclaimed — verify current owner | Feed, posts, comments, media and interactions; verify real user journeys and preserve existing work | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Avatar & Profile | Unclaimed — verify current owner | Profile/avatar behavior and integration; preserve existing implementation | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Chat & Groups | Unclaimed — verify current owner | Messaging, group workflows, parity, permissions and regressions | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Private Voice/Video Calls | Unclaimed — verify current owner | One-to-one call flows, signaling, media permissions, reconnect/end-call behavior | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Marketplace Buyer/Seller | Unclaimed — verify current owner | Discovery, listings, details, cart/orders, delivery/refunds and buyer/seller journeys | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| My Shop | Unclaimed — verify current owner | Private seller management and public storefront separation; verify shop workflows | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Marketplace Proof Video Calls | Unclaimed — verify current owner | Buyer-to-seller product inspection call flow; verify invitation, permissions, signaling and completion | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Status / Stories | Unclaimed — verify current owner | Create/view/reply/share flows, media and expiry behavior | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Wallet & Payments | Unclaimed — verify current owner | App-side ledger/UI and sandbox/provider flows; no real-money activation without approvals | Not verified | Not verified | Not verified | Must inspect before claiming | Not verified | Not verified | Check current canonical state and open PRs before assignment | 2026-11-24 |
+| Owner/Admin Control Center | Existing handoff says PR #527; re-verify | Continue existing PR #527 work; do not restart or create parallel implementation | `admin/control-center-complete-20261112` (historical handoff; verify current) | [PR #527](https://github.com/greyhoundshop073-coder/FYNX/pull/527) (verify current) | Historical handoff SHA: `40a83bcf72a5df742d1804fab5c68229999dc5a3`; re-fetch current head | Admin routes/client/panels/contracts; inspect current diff | Not verified — historical handoff only | Historical CI snapshot is stale; fetch current checks | Resume `docs/ADMIN_CONTROL_CENTER_CONTINUATION.md` after verifying current PR state | 2026-11-24 |
+| Backend / API / Auth | Unclaimed — verify current owner | Shared APIs, auth integration, authorization and health; preserve working login | Not verified | Not verified | Not verified | Shared API contracts require coordination | Not verified | Not verified | Check current canonical state and deployed Railway commit/health; do not assume live | 2026-11-24 |
+| Storage / Media / Realtime | Unclaimed — verify current owner | Upload/finalize/fetch/delete, protected media, reconnect and durable fallback | Not verified | Not verified | Not verified | Shared storage abstractions/contracts require coordination | Not verified | Not verified | Check current canonical state and provider configuration; identify live-only blockers | 2026-11-24 |
+| Performance / App Isolation | Unclaimed — verify current owner | Measure startup, memory, scrolling, network/media contention and cross-feature isolation | Not verified | Not verified | Not verified | Shared profiling/build config may overlap; coordinate | Not verified | Not verified | Establish reproducible baseline before recommending changes | 2026-11-24 |
+| Integration / APK / Release | Unclaimed — verify current owner | Canonical integration, cross-feature regression, artifact provenance and release verification | Not verified | Not verified | Not verified | Build/release workflows and canonical branch | Not verified | Not verified | Fetch current canonical head, open PRs, workflows and artifact provenance | 2026-11-24 |
+
+## Handoff log
+
+Append newest entries at the top. Include date, workstream, outgoing/incoming owner labels, branch/PR, exact head SHA, completed tests, remaining work, and any files/contracts requiring coordination.
+
+| Date | Workstream | From → To | Branch / PR / head SHA | Verified work and tests | Remaining work / coordination notes |
+|---|---|---|---|---|---|
+| 2026-11-24 | Protocol setup | Repository documentation | `docs/multi-chat-engineering-protocol-20261124` — PR pending | Added protocol and register on an isolated branch; not yet merged or CI-verified | Open PR, review diff and merge only after checks pass |
+
+## Decision log
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-11-24 | Multiple ChatGPT chats are supported; each must use bounded ownership, isolated feature branches, a shared register and the same canonical PR destination. | The owner uses multiple sessions due to Free-plan limits, latency and parallel workload. Restricting the project to one conversation would reduce throughput without solving coordination. |
+| 2026-11-24 | The canonical APK remains tied to `integration/fynx-single-apk-20261013`. | Prevent competing APK snapshots and preserve a single source of truth. |

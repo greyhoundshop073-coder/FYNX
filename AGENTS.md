@@ -26,3 +26,14 @@ Inspect the latest canonical branch head and open pull requests before starting.
 - Before handoff, report PR/commit, Android build, Backend CI, Chat/Group parity, APK artifact and SHA-256 when available, policy/security checks, and any runtime failures. Never claim an unverified APK, backend, or compliance state is green.
 
 This rule applies equally to every parallel chat, AI agent, and human contributor.
+
+## Multi-chat engineering protocol — mandatory for every session
+
+Every ChatGPT conversation, coding agent, and human contributor MUST follow [docs/MULTI_CHAT_ENGINEERING_PROTOCOL.md](docs/MULTI_CHAT_ENGINEERING_PROTOCOL.md) and check [docs/MULTI_CHAT_WORKSTREAM_REGISTER.md](docs/MULTI_CHAT_WORKSTREAM_REGISTER.md) before starting or resuming work.
+
+- Multiple parallel chats are explicitly supported. Do not ask the owner to use only one chat. Each chat must have a clearly bounded workstream and a named/recorded owner label (for example, “Chat — Video Calls”); ownership is coordination metadata, not a claim about a person's identity.
+- Before editing, check the shared register, current canonical head, open PRs, and overlapping files. Claim/update a workstream in the register before making changes. If another active workstream owns overlapping files or shared contracts, coordinate first; do not silently race or overwrite.
+- Use one dedicated feature branch per workstream, created from the latest canonical branch. Feature branches and PRs are separate; all approved work converges through PRs into the single canonical integration branch.
+- Keep the register and feature handoff current at each meaningful checkpoint and before a chat is abandoned, becomes slow, or hands work to another chat. A replacement chat must resume from recorded branch/PR/commit and verify current state rather than restart.
+- The register is a coordination aid, not proof of completion. Only recorded test evidence and current GitHub/CI/runtime results establish status. Never infer that a workstream is active, merged, green, or complete from an old entry.
+- Do not edit the canonical branch directly for feature work. Documentation coordination changes also use a branch and PR unless the repository owner explicitly directs otherwise.
