@@ -89,6 +89,8 @@ require(features, 'adminRole?.trim()?.uppercase()', "normalized server-provided 
 require(features, '?.takeIf { it == "OWNER" || it == "ADMIN" }', "Owner/Admin-only card eligibility")
 require(features, 'authorizedRole', "role label on protected feature card")
 require(features, 'remember(sections, normalizedQuery)', "local memoized feature search")
+search_field = read("app/src/main/java/com/fynx/app/ui/FynxFeatureSearch.kt")
+require(search_field, "heightIn(min = 56.dp)", "compact accessible More search field")
 require(features, 'GridCells.Fixed(2)', "two-column layout")
 if "FynxBackendClient" in features or "FynxAdminClient" in features:
     raise SystemExit("MORE TOOLS RED: the feature directory must not perform network or role lookups during composition")
