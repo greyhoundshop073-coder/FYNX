@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Announcement
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Build
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -103,7 +105,7 @@ private fun fynxMoreSections(adminRole: String?): List<FynxFeatureSection> {
         ),
         FynxFeatureCardSpec(
             "Announcements", "Official Announcements", "Read news and updates from FYNX",
-            "official news updates notices", Icons.Default.Campaign, Color(0xFFD52B65), "COMMUNICATION & COMMUNITY"
+            "official news updates notices", Icons.Default.Announcement, Color(0xFFD52B65), "COMMUNICATION & COMMUNITY"
         )
     )
 
@@ -133,7 +135,7 @@ private fun fynxMoreSections(adminRole: String?): List<FynxFeatureSection> {
         ),
         FynxFeatureCardSpec(
             "Money Tools", "Money Center", "Budgets, savings and personal money records",
-            "budget savings bills subscriptions receipts expenses", Icons.Default.AccountBalanceWallet, Color(0xFF2D83B8), "WALLET & MONEY"
+            "budget savings bills subscriptions receipts expenses", Icons.Default.Savings, Color(0xFF2D83B8), "WALLET & MONEY"
         )
     )
 
