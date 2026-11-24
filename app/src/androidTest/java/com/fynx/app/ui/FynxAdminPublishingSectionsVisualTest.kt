@@ -87,7 +87,7 @@ class FynxAdminPublishingSectionsVisualTest {
                 }
             }
             compose.onNodeWithText("Choose photo").performScrollTo().performClick()
-            compose.onNodeWithText("Selected photo:", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("Selected photo:", substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
@@ -296,12 +296,12 @@ class FynxAdminPublishingSectionsVisualTest {
                 "Unexpected Admin screenshot filename: " + fileName
             }
             val sharedDirectory = "/sdcard/Download/fynx-admin-test-fixtures"
-            val shell = "mkdir -p '$sharedDirectory' && cp '" + screenshot.absolutePath + "' '$sharedDirectory/$fileName' && chmod 644 '$sharedDirectory/$fileName'; echo EXIT:\$?"
+            val shell = "mkdir -p '$sharedDirectory' && cp '" + screenshot.absolutePath + "' '$sharedDirectory/$fileName' && chmod 644 '$sharedDirectory/$fileName' && echo FYNX_SCREENSHOT_PRESERVED"
             val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(shell)
             val shellOutput = ParcelFileDescriptor.AutoCloseInputStream(descriptor).use {
                 it.readBytes().toString(Charsets.UTF_8)
             }
-            check(Regex("EXIT:0\\s*$").containsMatchIn(shellOutput)) {
+            check(shellOutput.contains("FYNX_SCREENSHOT_PRESERVED")) {
                 "Could not preserve " + fileName + " for CI collection: " + shellOutput.trim()
             }
             android.util.Log.i("FYNXAdminVisualTest", "Preserved shared screenshot " + sharedDirectory + "/" + fileName)
