@@ -144,6 +144,10 @@ jobs:
           node --check groupCallRealtime.js
           node --check neon-realtime-bridge.js
           node test-group-call-disconnect.mjs
+      - name: Verify Marketplace Live Proof listing authorization
+        run: |
+          node --check marketplaceCallContext.js
+          node test-marketplace-call-context.mjs
       - name: Verify backend startup and tester login preservation
         run: |
           node verify-runtime-bootstrap.mjs
