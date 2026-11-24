@@ -44,7 +44,7 @@ const checks = [
   ["permanent FYNX house message remains in every banner rotation", banner.includes('key = "fynx-evergreen"') && banner.includes("FYNX MARKETPLACE") && banner.includes("special offers on FYNX")],
   ["sponsored impressions only count after a minimum visible dwell period", banner.includes("MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS") && banner.includes("delay(MARKETPLACE_SPONSORED_IMPRESSION_MIN_DWELL_MS)")],
   ["Marketplace home loads seasonal campaigns and passes them to the banner", panel.includes("FynxMarketplaceSeasonalPromotionClient.load(context)") && panel.includes("seasonalPromotions = seasonalPromotions")],
-  ["banner rotates server-scheduled variable-date celebrations", banner.includes("seasonalPromotions.take(4)") && banner.includes("scheduled-campaign-") && banner.includes("promotion.promotionType") && banner.includes("it.occasionKey.equals(celebration.first")],
+  ["banner rotates up to twenty server-scheduled variable-date campaigns", banner.includes("seasonalPromotions.take(20)") && banner.includes("scheduled-campaign-") && banner.includes("promotion.promotionType") && banner.includes("it.occasionKey.equals(celebration.first")],
   ["scheduled celebration artwork is displayed from authenticated FYNX media with crop fit", banner.includes("slide.artworkMediaId") && banner.includes('mediaUrl = "/api/media/\u0024{slide.artworkMediaId}"') && banner.includes("contentScale = ContentScale.Crop")],
   ["fixed-date fallback is suppressed when a matching admin schedule is active", banner.includes("seasonalPromotions.none { it.occasionKey.equals(celebration.first")],
   ["Owner/Admin center exposes the seasonal scheduler", adminCenter.includes("FynxMarketplaceSeasonalPromotionAdminPanel()")],
