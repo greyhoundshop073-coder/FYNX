@@ -5,14 +5,16 @@ const queries = [];
 const blockedPool = {
   async query(sql, params) {
     queries.push({ sql, params });
-    return { rowCount: params[0] === "101" && params[1] === "202" ? 1 : 0 };
+    return { rowCount: new Set(params).has("101") && new Set(params).has("202") ? 1 : 0 };
   }
 };
 
 assert.equal(await isFynxCallBlocked(blockedPool, "101", "202"), true,
   "a caller blocked by the recipient must not be allowed to call");
-assert.equal(await isFynxCallBlocked(blockedPool, "202", "101"), false,
-  "an unblocked pair must remain callable");
+assert.equal(await isFynxCallBlocked(blockedPool, "202", "101"), true,
+  "a block must be enforced in the reverse direction too");
+assert.equal(await isFynxCallBlocked(blockedPool, "101", "303"), false,
+  "an unrelated pair must remain callable");
 assert.match(queries[0].sql, /blocker_id=\\$1 AND blocked_id=\\$2/);
 assert.match(queries[0].sql, /blocker_id=\\$2 AND blocked_id=\\$1/);
 assert.deepEqual(queries[0].params, ["101", "202"]);
