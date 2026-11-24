@@ -55,7 +55,7 @@ class FynxFeaturesPanelComposeTest {
         }
 
         compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("fynx-feature-role-owner").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-feature-role-owner", useUnmergedTree = true).assertIsDisplayed()
     }
 
     @Test
@@ -67,7 +67,7 @@ class FynxFeaturesPanelComposeTest {
         }
 
         compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("fynx-feature-role-admin").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-feature-role-admin", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithTag("fynx-feature-role-owner").assertDoesNotExist()
     }
 
