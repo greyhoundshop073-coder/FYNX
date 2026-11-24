@@ -244,7 +244,7 @@ fun FynxFeaturesPanel(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 state = gridState,
-                modifier = Modifier.fillMaxSize().testTag("fynx-features-grid"),
+                modifier = Modifier.weight(1f).fillMaxWidth().testTag("fynx-features-grid"),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(
