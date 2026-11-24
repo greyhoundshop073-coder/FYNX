@@ -92,6 +92,20 @@ checks = {
             "Start group video call", "Participants", "Mute", "Camera", "Speaker",
             "Leave", "Decline", "Join call"
         )),
+    "Group call signaling events are queued so burst ICE candidates are not overwritten":
+        "Channel<FynxRealtimeClient.Event.GroupCall>(Channel.UNLIMITED)" in app["group_call"]
+        and "groupEvents.trySend(event)" in app["group_call"]
+        and "for (event in groupEvents)" in app["group_call"],
+    "Realtime durable read and acknowledgement queue remains account-scoped and bounded":
+        'type != "read" && type != "message_ack"' in app["realtime"]
+        and "pendingAccountKey = accountKey" in app["realtime"]
+        and "pendingPayloads.addLast(value)" in app["realtime"],
+    "Group schema setup is cached rather than run on every signaling frame":
+        "let schemaReady = null" in backend["group_calls"]
+        and "await ensureSchema()" in backend["group_calls"],
+    "Group invitations use the runtime delivery adapter without Neon-only connection-table assumptions":
+        "for (const row of members.rows)" in backend["group_calls"]
+        and "fynx_realtime_connections" not in backend["group_calls"],
     "Group engine uses independent peer connections":
         "linkedMapOf<String, PeerState>()" in app["group_engine"]
         and "createPeerConnection" in app["group_engine"]

@@ -70,8 +70,19 @@ export function createFynxGroupCallSignalHandler({ pool, emitToUser, logger = co
     throw new Error("Group-call signaling requires the shared database pool and authenticated realtime publisher.");
   }
 
+  let schemaReady = null;
+  const ensureSchema = () => {
+    if (!schemaReady) {
+      schemaReady = ensureFynxGroupCallSchema(pool).catch((error) => {
+        schemaReady = null;
+        throw error;
+      });
+    }
+    return schemaReady;
+  };
+
   return async function handleFynxGroupCallSignal(userId, user, socket, body) {
-    await ensureFynxGroupCallSchema(pool);
+    await ensureSchema();
     const senderId = String(userId);
     const signalType = String(body?.signalType || "").trim().toLowerCase();
     const groupId = String(body?.groupId || "").trim();
@@ -125,16 +136,14 @@ export function createFynxGroupCallSignalHandler({ pool, emitToUser, logger = co
           );
         }
         await client.query("COMMIT");
-        const online = await pool.query(
-          `SELECT DISTINCT c.user_id::text AS user_id
-           FROM fynx_realtime_connections c
-           JOIN fynx_realtime_group_call_participants p ON p.user_id=c.user_id AND p.call_id=$1
-           WHERE p.status='INVITED' AND c.last_seen_at > NOW() - INTERVAL '60 seconds'`,
-          [id]
-        );
         const inviter = { fromUserId: senderId, fromUsername: user?.username || null };
-        for (const row of online.rows) {
-          await emitToUser(row.user_id, groupCallEvent(inserted.rows[0], "group_invite", inviter));
+        // Publish to every invited member through the runtime's shared delivery adapter.
+        // Railway fan-outs to connected sockets; the Neon bridge persists the event for
+        // cross-isolate delivery. Do not depend on Neon-only connection rows here.
+        for (const row of members.rows) {
+          if (String(row.user_id) !== senderId) {
+            await emitToUser(String(row.user_id), groupCallEvent(inserted.rows[0], "group_invite", inviter));
+          }
         }
         const roster = await participantRoster(pool, id);
         return sendSocket(socket, groupCallEvent(inserted.rows[0], "group_created", { participants: roster, invitedCount: members.rowCount - 1 }));

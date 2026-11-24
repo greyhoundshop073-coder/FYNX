@@ -1969,7 +1969,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onAddToCart = { addMarketplaceListingToCart(listing); selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title), onShareToStatus = onShareListingToStatus) },
             onShareToStatus = onShareListingToStatus,
-            onLiveProof = { onLiveProof(listing.id, listing.title, listing.sellerUsername) },
+            onLiveProof = onLiveProof,
             watchedPrice = priceWatchListingId == listing.id,
             priceWatchBusy = priceWatchBusy,
             productSaved = listing.id in savedProductIds,

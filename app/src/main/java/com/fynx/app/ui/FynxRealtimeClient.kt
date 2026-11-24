@@ -381,11 +381,21 @@ class FynxRealtimeClient(
     private fun sendJson(payload: JSONObject): Boolean {
         val accountKey = currentAccountKey() ?: return false
         val value = payload.toString()
-        return synchronized(socketCreationLock) {
+        val type = payload.optString("type")
+        val sent = synchronized(socketCreationLock) {
             val activeSocket = socket
             if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) false
             else activeSocket.send(value)
         }
+        if (sent) return true
+        if (type != "read" && type != "message_ack") return false
+        synchronized(pendingLock) {
+            if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
+            pendingAccountKey = accountKey
+            if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
+            pendingPayloads.addLast(value)
+        }
+        return false
     }
     private fun flushPending(webSocket: WebSocket) {
         val accountKey = currentAccountKey() ?: return

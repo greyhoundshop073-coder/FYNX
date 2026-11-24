@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
 import org.webrtc.AudioTrack
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
@@ -51,7 +52,7 @@ fun FynxGroupCallPanel(
     val scope = rememberCoroutineScope()
     val normalizedUsername = currentUsername.trim().removePrefix("@").lowercase()
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
-    var latestEvent by remember { mutableStateOf<FynxRealtimeClient.Event.GroupCall?>(null) }
+    val groupEvents = remember(groupId) { Channel<FynxRealtimeClient.Event.GroupCall>(Channel.UNLIMITED) }
     var callId by remember(groupId, initialInvite?.callId) { mutableStateOf(initialInvite?.callId) }
     var creatorId by remember { mutableStateOf(initialInvite?.creatorId.orEmpty()) }
     var callType by remember { mutableStateOf(initialInvite?.callType ?: "video") }
@@ -81,7 +82,7 @@ fun FynxGroupCallPanel(
             onStateChanged = { realtimeState = it },
             onEvent = { event ->
                 if (event is FynxRealtimeClient.Event.GroupCall && event.groupId == groupId) {
-                    latestEvent = event
+                    groupEvents.trySend(event)
                 } else if (event is FynxRealtimeClient.Event.Call && event.signalType == "error") {
                     errorMessage = event.error ?: "The group-call service reported an error."
                 }
@@ -234,10 +235,10 @@ fun FynxGroupCallPanel(
         }
     }
 
-    LaunchedEffect(latestEvent) {
-        val event = latestEvent ?: return@LaunchedEffect
-        latestEvent = null
-        applyGroupEvent(event)
+    LaunchedEffect(groupEvents) {
+        for (event in groupEvents) {
+            applyGroupEvent(event)
+        }
     }
 
     DisposableEffect(realtimeClient, engine) {
@@ -252,6 +253,7 @@ fun FynxGroupCallPanel(
             }
             engine.disconnect()
             realtimeClient.close()
+            groupEvents.close()
         }
     }
 
@@ -361,6 +363,7 @@ fun FynxGroupCallPanel(
                         onClick = {
                             callId?.let { realtimeClient.sendGroupCallReject(groupId, it) }
                             callEnded = true
+                            isIncoming = false
                             onDismiss()
                         }
                     ) { Icon(Icons.Default.CallEnd, null); Spacer(Modifier.width(6.dp)); Text("Decline") }
