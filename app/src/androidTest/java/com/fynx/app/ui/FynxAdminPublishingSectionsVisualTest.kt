@@ -281,8 +281,15 @@ class FynxAdminPublishingSectionsVisualTest {
                 "/api/admin/marketplace/drivers" -> """{"drivers":[]}"""
                 "/api/admin/social/music/catalogue" -> """{"tracks":[]}"""
                 "/api/admin/marketplace/seasonal-promotions" -> """{"promotions":[]}"""
+                "/api/admin/announcements" -> """{"announcements":[]}"""
                 "/api/support/access" -> """{"role":"$role","supportAccess":true}"""
-                else -> """{}"""
+                else -> when {
+                    path.startsWith("/api/admin/reports?") -> """{"reports":[],"offset":0,"limit":50,"hasMore":false}"""
+                    path.startsWith("/api/admin/content-reports?") -> """{"reports":[]}"""
+                    path.startsWith("/api/admin/appeals?") -> """{"appeals":[],"offset":0,"limit":50,"hasMore":false}"""
+                    path.startsWith("/api/admin/activity?") -> """{"activities":[],"offset":0,"limit":50,"hasMore":false}"""
+                    else -> """{}"""
+                }
             }
         }
         compose.setContent {
