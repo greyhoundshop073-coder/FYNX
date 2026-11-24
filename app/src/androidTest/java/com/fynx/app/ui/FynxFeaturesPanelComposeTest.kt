@@ -55,7 +55,7 @@ class FynxFeaturesPanelComposeTest {
         }
 
         compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("OWNER").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-feature-role-owner").assertIsDisplayed()
     }
 
     @Test
@@ -67,8 +67,8 @@ class FynxFeaturesPanelComposeTest {
         }
 
         compose.onNodeWithTag("fynx-feature-card-Admin").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("ADMIN").assertIsDisplayed()
-        compose.onNodeWithText("OWNER").assertDoesNotExist()
+        compose.onNodeWithTag("fynx-feature-role-admin").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-feature-role-owner").assertDoesNotExist()
     }
 
     @Test
@@ -109,7 +109,7 @@ class FynxFeaturesPanelComposeTest {
         }
 
         compose.onNodeWithContentDescription("Search FYNX tools").performTextInput("Savings")
-        compose.onNodeWithText("Money Center").assertIsDisplayed()
+        compose.onNodeWithTag("fynx-feature-card-Money Tools").assertIsDisplayed()
         compose.onNodeWithTag("fynx-feature-card-Calls").assertDoesNotExist()
         compose.onNodeWithTag("fynx-features-grid").assertIsDisplayed()
     }
