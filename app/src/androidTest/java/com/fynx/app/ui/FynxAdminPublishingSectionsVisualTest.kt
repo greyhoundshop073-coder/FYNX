@@ -294,7 +294,7 @@ class FynxAdminPublishingSectionsVisualTest {
                 "Unexpected Admin screenshot filename: " + fileName
             }
             val sharedDirectory = "/sdcard/Download/fynx-admin-test-fixtures"
-            val shell = "mkdir -p '$sharedDirectory' && cp '" + screenshot.absolutePath + "' '$sharedDirectory/$fileName' && chmod 644 '$sharedDirectory/$fileName'; echo EXIT:$?"
+            val shell = "mkdir -p '$sharedDirectory' && cp '" + screenshot.absolutePath + "' '$sharedDirectory/$fileName' && chmod 644 '$sharedDirectory/$fileName'; echo EXIT:\$?"
             val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(shell)
             val shellOutput = ParcelFileDescriptor.AutoCloseInputStream(descriptor).use {
                 it.readBytes().toString(Charsets.UTF_8)
