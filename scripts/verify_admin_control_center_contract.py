@@ -296,8 +296,8 @@ require("MAX_POSTGRES_BIGINT" in postgres_ids and "export function isPositivePos
         "announcement image IDs must use the shared positive PostgreSQL BIGINT validator before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
-# OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
-# Admin runtime limitation must be explicit rather than reported as certified.
+# Offline role-fixture UI remains testable without the backend; live publishing
+# must stay clearly unverified when no healthy authenticated backend is present.
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete-20261112" in workflow,
@@ -325,9 +325,9 @@ require(admin_branch not in chat_final_workflow and admin_branch not in chat_par
         "Admin branch must not create unrelated Chat workflow push triggers")
 require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
         "FYNX-admin-runtime-certification.md" in runtime_runner and
-        "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
+        "LIVE_BACKEND_PUBLISHING_NOT_TESTED" in runtime_runner and
         'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
-        "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+        "Admin runtime must separate offline role-fixture UI from untested live publishing while keeping Android instrumentation failures blocking")
 
 
 require(LOCAL_CAMPAIGN_STORE.is_file(), "device-local Marketplace campaign storage is present")
