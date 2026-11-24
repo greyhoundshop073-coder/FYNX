@@ -124,7 +124,10 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
+        compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+            .assertIsDisplayed()
+            .performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 2_000) {
@@ -166,7 +169,10 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
+        compose.onNodeWithText("Recommended for you").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+            .assertIsDisplayed()
+            .performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
         compose.onNodeWithText("Full name").performTextInput("FYNX Test Buyer")
