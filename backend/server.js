@@ -19,7 +19,7 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
-import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
+import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
 import { isFynxCallBlocked } from "./callSafety.js";
 
@@ -1510,6 +1510,11 @@ if (wss) {
       } else if (!sockets || !sockets.size) {
         broadcastPresence(userId, false);
         for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
+        disconnectFynxGroupCallsForUser({
+          pool,
+          userId,
+          emitToUser: async (targetUserId, payload) => broadcastToUser(targetUserId, payload)
+        }).catch((error) => console.error("[fynx-group-call] disconnect cleanup failed", error?.message || error));
       }
     });
   } catch { socket.close(1008, "invalid token"); }
