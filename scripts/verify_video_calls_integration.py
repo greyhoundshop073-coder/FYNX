@@ -76,8 +76,8 @@ checks = {
     "Private Chat retains voice and video call entry points":
         "onVoiceCall" in app["private_chat"] and "onVideoCall" in app["private_chat"],
     "Private Chat call actions enter the shared Calls route":
-        'onVoiceCall = { callTarget = openChat!!.username' in app["shell"]
-        and 'onVideoCall = { callTarget = openChat!!.username' in app["shell"],
+        'onVoiceCall = { callTarget = openChat!!.username; callVideo = false' in app["shell"]
+        and 'onVideoCall = { callTarget = openChat!!.username; callVideo = true' in app["shell"],
     "Direct-call invites and accepts wait for a connected realtime socket":
         "pendingOutgoingInvite" in app["calls"]
         and "pendingIncomingAcceptSignal" in app["calls"]
