@@ -37,6 +37,7 @@ backend = {
     name: read(BACKEND / file)
     for name, file in {
         "marketplace_context": "marketplaceCallContext.js",
+        "call_safety": "callSafety.js",
         "group_calls": "groupCallRealtime.js",
         "node_server": "server.js",
         "neon_bridge": "neon-realtime-bridge.js",
@@ -71,6 +72,11 @@ checks = {
         "resolveFynxMarketplaceCallContext" in backend["node_server"]
         and "resolveFynxMarketplaceCallContext" in backend["neon_bridge"]
         and "listingId" in backend["neon_bridge"],
+    "Private voice/video calls enforce bilateral blocks in both backend runtimes":
+        "isFynxCallBlocked" in backend["node_server"]
+        and "isFynxCallBlocked" in backend["neon_bridge"]
+        and "blocker_id=$1 AND blocked_id=$2" in backend["call_safety"]
+        and "blocker_id=$2 AND blocked_id=$1" in backend["call_safety"],
 
     # Private Chat remains connected to the shared direct-call engine.
     "Private Chat retains voice and video call entry points":

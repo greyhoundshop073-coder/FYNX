@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
+import { isFynxCallBlocked } from "./callSafety.js";
 
 function callIdIsValid(value) {
   return typeof value === "string" && /^call_[a-z0-9_]+$/i.test(value) && value.length <= 80;
@@ -212,6 +213,9 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
       }
       const mediaType = body?.callType === "video" ? "video" : "voice";
       const callId = callIdIsValid(body?.callId) ? body.callId : `call_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
+      if (await isFynxCallBlocked(pool, userId, targetUserId)) {
+        return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: String(userId), toUserId: targetUserId, signalType: "unavailable" });
+      }
       const created = await createCall({ callerId: userId, calleeId: targetUserId, callId, mediaType });
       if (created.busy) {
         return sendSocket(socket, {

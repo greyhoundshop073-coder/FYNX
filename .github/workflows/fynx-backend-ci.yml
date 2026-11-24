@@ -135,6 +135,10 @@ jobs:
           node --check verify-stage15h-admin.mjs
           node --check verify-stage15d-advanced.mjs
           node --check verify-stage15d-jobs.mjs
+      - name: Verify direct-call bilateral block safety
+        run: |
+          node --check callSafety.js
+          node test-call-safety.mjs
       - name: Verify backend startup and tester login preservation
         run: |
           node verify-runtime-bootstrap.mjs

@@ -21,6 +21,7 @@ import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
 import { createFynxGroupCallSignalHandler } from "./groupCallRealtime.js";
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
+import { isFynxCallBlocked } from "./callSafety.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -1451,8 +1452,12 @@ if (wss) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
           if (signalType === "invite") {
-            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const mediaType = body?.callType === "video" ? "video" : "voice";
+            const blockedCallId = validCallId(body?.callId) ? body.callId : newCallId();
+            if (await isFynxCallBlocked(pool, userId, targetUserId)) {
+              return sendSocket(socket, { type: "call", callId: blockedCallId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" });
+            }
+            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
