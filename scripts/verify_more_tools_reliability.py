@@ -99,7 +99,7 @@ expected_routes = [
     "To-Do", "Calendar", "Extra Tools", "Saved Posts",
     "Wallet", "Money Tools",
     "Business Account", "Advertising", "Advertising Dashboard",
-    "AI",
+    "AI", "Admin",
 ]
 if routes != expected_routes:
     raise SystemExit(f"MORE TOOLS RED: unexpected feature registry/order: {routes}")
