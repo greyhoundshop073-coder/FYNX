@@ -859,9 +859,9 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if not camera_xml:
         return home_xml
 
-    # Record the emulator's actual camera inventory. The legacy "emulated" front source
-    # may not enumerate a CameraX device, so do not claim a front-lens pass unless the
-    # camera service exposes a front-facing device.
+    # Record the emulator's actual camera inventory. A virtual front source may not
+    # enumerate a CameraX device on every AVD, so do not claim a front-lens pass unless
+    # the camera service exposes a front-facing device.
     time.sleep(2.5)
     camera_xml = dump_ui(f"{prefix}-camera-live-preview-front.xml") or camera_xml
     screenshot(f"{prefix}-camera-live-preview-front.png")

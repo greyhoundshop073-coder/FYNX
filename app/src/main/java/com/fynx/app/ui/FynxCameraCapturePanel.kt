@@ -191,7 +191,7 @@ private fun CameraEditorRailAction(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.width(58.dp),
+        modifier = Modifier.width(58.dp).semantics(mergeDescendants = true) { contentDescription = label },
         shape = RoundedCornerShape(14.dp),
         color = if (selected) Color(0xFF007FFF).copy(alpha = 0.82f) else Color(0xFF25364A).copy(alpha = 0.38f),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.24f))
@@ -674,8 +674,6 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         hasAudio = granted || ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
-    LaunchedEffect(initialMediaUri) { if (!hasCamera && initialMediaUri == null) permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) }
-
     var lens by remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
     var mode by remember(initialMode, videoNoteMode) { mutableStateOf(if (videoNoteMode) CameraMode.VIDEO else initialMode) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
@@ -1359,9 +1357,7 @@ private fun FynxCameraCapturePanelContent(config: FynxCameraCapturePanelConfig) 
             ) {
                 Text("FYNX needs camera access to capture photos and videos.")
                 Button(onClick = {
-                    permissionLauncher.launch(
-                        arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-                    )
+                    permissionLauncher.launch(FynxCameraPermissionPolicy.entryPermissions())
                 }) { Text("Allow camera") }
                 TextButton(onClick = {
                     val settingsIntent = Intent(
@@ -2339,7 +2335,7 @@ if (showCaptureControls || recording != null) Column(
                     } else {
                         val active = recording
                         if (active != null) active.stop() else {
-                            if (!hasAudio) {
+                            if (FynxCameraPermissionPolicy.shouldRequestMicrophoneForVideo(hasAudio)) {
                                 audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 return@FilledIconButton
                             }
@@ -2468,7 +2464,7 @@ private fun CameraEffectTile(
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.heightIn(min = 112.dp),
+        modifier = modifier.heightIn(min = 112.dp).semantics(mergeDescendants = true) { contentDescription = label },
         shape = RoundedCornerShape(14.dp),
         color = Color.Transparent
     ) {

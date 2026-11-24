@@ -71,6 +71,7 @@ class FynxRealtimeClient(
     private var manuallyClosed = false
     private var reconnectAttempt = 0
     @Volatile private var socketAccountKey: String? = null
+    @Volatile private var socketIsOpen = false
     private val socketCreationLock = Any()
     @Volatile private var socketCreationInProgress = false
     @Volatile private var socketBeingCreated: WebSocket? = null
@@ -108,6 +109,7 @@ class FynxRealtimeClient(
                 socketBeingCreated = null
                 socket = null
                 socketAccountKey = null
+                socketIsOpen = false
             }
             emitState(State.FAILED)
             if (isSocketStillAuthorized()) scheduleReconnect()
@@ -130,6 +132,7 @@ class FynxRealtimeClient(
                         socket?.cancel()
                         socket = null
                         socketAccountKey = null
+                        socketIsOpen = false
                         socketBeingCreated?.cancel()
                         socketBeingCreated = null
                         socketCreationInProgress = false
@@ -164,6 +167,7 @@ class FynxRealtimeClient(
                 if (socketAccountKey == accountKey && accountKey != null) return
                 socket = null
                 socketAccountKey = null
+                socketIsOpen = false
                 existingSocket.cancel()
             }
             if (socketCreationInProgress) return
@@ -189,6 +193,7 @@ class FynxRealtimeClient(
         val wsUrl = "wss://${httpBase.removePrefix("https://")}/realtime?token=$encodedToken"
         emitState(State.CONNECTING)
         socketAccountKey = accountKey
+        socketIsOpen = false
         val newSocket: WebSocket = try {
             client.newWebSocket(Request.Builder().url(wsUrl).build(), object : WebSocketListener() {
                 private fun belongsToCurrentAccount(webSocket: WebSocket? = null): Boolean = (webSocket == null || socket === webSocket) && socketAccountKey == accountKey && currentAccountKey() == accountKey && FynxBackendClient.hasAccessToken(context)
@@ -198,6 +203,7 @@ class FynxRealtimeClient(
                         if (socketBeingCreated === webSocket) socketBeingCreated = null
                     }
                     if (manuallyClosed || !belongsToCurrentAccount(webSocket)) { webSocket.close(1000, "FYNX socket replaced"); return }
+                    socketIsOpen = true
                     reconnectAttempt = 0; emitState(State.CONNECTED); flushPending(webSocket)
                 }
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -228,7 +234,7 @@ class FynxRealtimeClient(
                         if (socketBeingCreated === webSocket) socketBeingCreated = null
                     }
                     val current = socket === webSocket
-                    if (current) { socket = null; socketAccountKey = null }
+                    if (current) { socket = null; socketAccountKey = null; socketIsOpen = false }
                     if (!current || manuallyClosed) return
                     emitState(State.DISCONNECTED)
                     if (FynxCallTransportHardening.shouldRetrySocket(code)) scheduleReconnect(accountKey)
@@ -239,7 +245,7 @@ class FynxRealtimeClient(
                         if (socketBeingCreated === webSocket) socketBeingCreated = null
                     }
                     val current = socket === webSocket
-                    if (current) { socket = null; socketAccountKey = null }
+                    if (current) { socket = null; socketAccountKey = null; socketIsOpen = false }
                     if (!current || manuallyClosed) return
                     if (FynxCallTransportHardening.isAuthFailure(response?.code)) { FynxAuthStore.clear(context); emitState(State.FAILED); return }
                     if (!isSocketStillAuthorized(accountKey)) { emitState(State.FAILED); return }
@@ -282,7 +288,12 @@ class FynxRealtimeClient(
         val callType = root.optString("callType", "voice").trim().lowercase()
         val signalType = root.optString("signalType").trim().lowercase()
         val fromUserId = root.optString("fromUserId").trim(); val toUserId = root.optString("toUserId").trim()
-        if (!FynxCallTransportHardening.isValidCallId(callId) || !FynxCallTransportHardening.isValidCallSignal(signalType) || !FynxCallTransportHardening.isValidCallType(callType) || fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId) return null
+        val isErrorSignal = signalType == "error"
+        if (!FynxCallTransportHardening.isValidCallSignal(signalType) ||
+            !FynxCallTransportHardening.isValidCallType(callType) ||
+            (!isErrorSignal && (!FynxCallTransportHardening.isValidCallId(callId) || fromUserId.isBlank() || toUserId.isBlank() || fromUserId == toUserId)) ||
+            (isErrorSignal && callId.isNotBlank() && !FynxCallTransportHardening.isValidCallId(callId))
+        ) return null
         val c = root.optJSONObject("candidate")?.let {
             val candidate = it.optString("candidate").trim()
             if (candidate.isBlank() || candidate.length > 20_000) return@let null
@@ -301,27 +312,51 @@ class FynxRealtimeClient(
     fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
     fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
     fun sendCallIce(callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "ice", JSONObject().put("candidate", JSONObject().apply { put("candidate", candidate.sdp); put("sdpMid", candidate.sdpMid); put("sdpMLineIndex", candidate.sdpMLineIndex) }))
-    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null) { sendJson(JSONObject().apply { put("type", "call"); put("callId", callId.replaceFirst("call-", "call_").take(80)); put("toUserId", targetUserId); put("callType", callType); put("signalType", signalType); extra?.keys()?.forEach { put(it, extra.get(it)) } }) }
-    fun sendTyping(recipientId: String, isTyping: Boolean) = sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
+    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null): Boolean {
+        if (!FynxCallTransportHardening.isValidCallId(callId) ||
+            targetUserId.isBlank() ||
+            !FynxCallTransportHardening.isValidCallType(callType) ||
+            !FynxCallTransportHardening.isValidCallSignal(signalType)
+        ) return false
+        return sendJson(JSONObject().apply {
+            put("type", "call")
+            put("callId", callId.replaceFirst("call-", "call_").take(80))
+            put("toUserId", targetUserId)
+            put("callType", callType)
+            put("signalType", signalType)
+            extra?.keys()?.forEach { put(it, extra.get(it)) }
+        })
+    }
+    fun sendTyping(recipientId: String, isTyping: Boolean) {
+        sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
+    }
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().put("type", "message_ack").put("messageId", it)) } }
-    private fun sendJson(payload: JSONObject) {
-        val accountKey = currentAccountKey()
-        if (accountKey.isNullOrBlank()) return
+    private fun sendJson(payload: JSONObject): Boolean {
+        val accountKey = currentAccountKey() ?: return false
         val value = payload.toString()
         val type = payload.optString("type")
         val sent = synchronized(socketCreationLock) {
             val activeSocket = socket
-            if (activeSocket == null || socketAccountKey != accountKey || !FynxBackendClient.hasAccessToken(context)) false else activeSocket.send(value)
+            val socketBelongsToAnotherAccount = socketAccountKey != accountKey
+            val socketMatchesAccount = activeSocket != null && !socketBelongsToAnotherAccount && socketIsOpen
+            val accountAuthorized = FynxBackendClient.hasAccessToken(context)
+            val socketAccepted = socketMatchesAccount && accountAuthorized && activeSocket?.send(value) == true
+            FynxCallTransportHardening.wasRealtimeFrameAccepted(
+                socketMatchesAccount = socketMatchesAccount,
+                accountAuthorized = accountAuthorized,
+                socketAccepted = socketAccepted
+            )
         }
-        if (sent) return
-        if (type != "read" && type != "message_ack") return
+        if (sent) return true
+        if (type != "read" && type != "message_ack") return false
         synchronized(pendingLock) {
             if (pendingAccountKey != null && pendingAccountKey != accountKey) pendingPayloads.clear()
             pendingAccountKey = accountKey
             if (pendingPayloads.size >= 100) pendingPayloads.removeFirst()
             pendingPayloads.addLast(value)
         }
+        return true
     }
     private fun flushPending(webSocket: WebSocket) {
         val accountKey = currentAccountKey() ?: return
@@ -353,6 +388,7 @@ class FynxRealtimeClient(
             socket?.close(1000, "FYNX conversation closed")
             socket = null
             socketAccountKey = null
+            socketIsOpen = false
         }
         onStateChanged(State.DISCONNECTED); client.connectionPool.evictAll()
     }
