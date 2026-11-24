@@ -33,14 +33,14 @@ class FynxFeaturesPanelComposeTest {
         }
 
         listOf(
-            "Wallet", "Calls", "Gifts", "Share", "Notifications", "To-Do", "Calendar",
+            "Wallet", "Calls", "Gifts", "Share", "To-Do", "Calendar",
             "Extra Tools", "Saved Posts", "Money Tools", "Business Account",
             "Advertising", "Advertising Dashboard", "AI", "Announcements"
         ).forEach { route ->
             compose.onNodeWithTag("fynx-feature-card-$route").performScrollTo().assertIsDisplayed()
         }
 
-        listOf("Admin", "Marketplace", "Privacy", "Saved Products", "Seller Center")
+        listOf("Admin", "Marketplace", "Notifications", "Privacy", "Saved Products", "Seller Center")
             .forEach { route ->
                 compose.onNodeWithTag("fynx-feature-card-$route").assertDoesNotExist()
             }
