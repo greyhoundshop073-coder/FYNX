@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -196,12 +197,14 @@ fun FynxFeaturesPanel(
             val matchingCards = section.cards.filter { card ->
                 card.title.contains(normalizedQuery, ignoreCase = true) ||
                     card.description.contains(normalizedQuery, ignoreCase = true) ||
-                    card.keywords.contains(normalizedQuery, ignoreCase = true)
+                    card.keywords.contains(normalizedQuery, ignoreCase = true) ||
+                    card.section.contains(normalizedQuery, ignoreCase = true)
             }
             matchingCards.takeIf { it.isNotEmpty() }?.let { section.copy(cards = it) }
         }
     }
     val gridState = rememberLazyGridState()
+    LaunchedEffect(normalizedQuery) { gridState.scrollToItem(0) }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 12.dp)
