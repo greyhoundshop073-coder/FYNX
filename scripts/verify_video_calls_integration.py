@@ -167,8 +167,7 @@ checks["Group-call disconnect cleanup is implemented and directly tested"] = (
     and "disconnectFynxGroupCallsForUser" in backend["neon_bridge"]
 )
 checks["Backend CI executes group-call disconnect lifecycle tests"] = (
-    "node test-group-call-disconnect.mjs" in read("backend/.github-does-not-exist")
-    or "node test-group-call-disconnect.mjs" in read(".github/workflows/fynx-backend-ci.yml")
+    "node test-group-call-disconnect.mjs" in read(".github/workflows/fynx-backend-ci.yml")
 )
 
 failed = [name for name, ok in checks.items() if not ok]
