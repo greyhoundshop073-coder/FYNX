@@ -282,7 +282,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Offline test mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (localTestMode) "On: saves this campaign and its photo only on this phone. It appears in Marketplace immediately and does not contact the backend."
+                    if (localTestMode) "On: saves the campaign and photo only on this phone. Publishing stays local and does not require a backend upload or publish request."
                     else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -10,6 +10,9 @@ import java.io.FileOutputStream
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Device-local Marketplace banner campaigns for offline preview and testing.
@@ -25,6 +28,18 @@ internal object FynxMarketplaceLocalCampaignStore {
     private const val MAX_CAMPAIGNS = 20
     private const val MAX_ARTWORK_BYTES = 12L * 1024L * 1024L
     private const val MAX_TOTAL_ARTWORK_BYTES = 48L * 1024L * 1024L
+    private val activeCampaigns = MutableStateFlow<List<FynxMarketplaceSeasonalPromotion>>(emptyList())
+
+    fun observe(context: Context): StateFlow<List<FynxMarketplaceSeasonalPromotion>> {
+        if (activeCampaigns.value.isEmpty()) {
+            activeCampaigns.value = active(context)
+        }
+        return activeCampaigns.asStateFlow()
+    }
+
+    private fun publishActive(context: Context) {
+        activeCampaigns.value = active(context)
+    }
 
     fun all(context: Context): List<FynxMarketplaceSeasonalPromotion> {
         val appContext = context.applicationContext
@@ -98,6 +113,8 @@ internal object FynxMarketplaceLocalCampaignStore {
                 deleteOwnedArtwork(context.applicationContext, previous.localArtworkUri)
             }
         }
+        publishActive(context.applicationContext)
+        Unit
     }
 
     fun setActive(context: Context, id: String, active: Boolean): Result<Unit> = runCatching {
@@ -111,6 +128,8 @@ internal object FynxMarketplaceLocalCampaignStore {
         val removed = current.firstOrNull { it.id == id }
         writeStored(context.applicationContext, current.filterNot { it.id == id })
         removed?.let { deleteOwnedArtwork(context.applicationContext, it.localArtworkUri) }
+        publishActive(context.applicationContext)
+        Unit
     }
 
     private fun ensureSampleCampaign(context: Context) {

@@ -234,7 +234,7 @@ PR #582 extends the existing Marketplace campaign manager instead of creating a 
 
 - The Admin campaign form defaults to **Offline test mode**. Publishing in this mode copies the selected gallery image into app-private storage, saves the campaign metadata locally, and makes it available to the Marketplace banner on that same device without a backend request.
 - The bundled FYNX sample campaign artwork is a replaceable starting example. Admins can add, edit, pause, activate, replace, and remove local campaigns from the existing campaign manager.
-- The Marketplace screen loads eligible local campaigns before requesting the remote seasonal feed, so the banner is visible even when the backend is unavailable.
+- The Marketplace screen loads eligible local campaigns before requesting the remote seasonal feed, and an observable local-campaign state flow refreshes the banner as soon as an Admin saves, pauses, activates, or deletes a device-only campaign—even when the Marketplace tab remains in the back stack.
 - The local store is deliberately device-scoped. It does not publish to other phones. Turning Offline test mode off keeps the existing authenticated server publishing flow for campaigns intended for all users.
 - Local uploads are copied out of the temporary Photo Picker URI. Each photo is capped at 12 MB, the store allows up to 20 campaigns and 48 MB of copied artwork, and deletion/replacement removes FYNX-owned local artwork.
 - Existing server campaigns and the backend media route remain supported. The local preview is additive and does not change seller-sponsored ads, weekly seller selection, or the existing promotion API contract.
