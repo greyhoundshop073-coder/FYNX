@@ -226,3 +226,17 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - Replaced that unsupported extension with the supported semantics-collection query `onAllNodesWithText(...).fetchSemanticsNodes().isEmpty()`, preserving the runtime assertion that ADMIN cannot see the Owner-only Music Library tab.
 - The Admin contract verifier now requires this negative-visibility assertion so it cannot silently disappear from the instrumentation test.
 - No production Kotlin UI, backend route, or Chat implementation changed in this correction. Re-run the emulator suite before treating screenshot evidence as complete.
+
+
+## Offline Marketplace banner preview — 24 November 2026
+
+PR #582 extends the existing Marketplace campaign manager instead of creating a second advertising system.
+
+- The Admin campaign form defaults to **Offline test mode**. Publishing in this mode copies the selected gallery image into app-private storage, saves the campaign metadata locally, and makes it available to the Marketplace banner on that same device without a backend request.
+- The bundled FYNX sample campaign artwork is a replaceable starting example. Admins can add, edit, pause, activate, replace, and remove local campaigns from the existing campaign manager.
+- The Marketplace screen loads eligible local campaigns before requesting the remote seasonal feed, so the banner is visible even when the backend is unavailable.
+- The local store is deliberately device-scoped. It does not publish to other phones. Turning Offline test mode off keeps the existing authenticated server publishing flow for campaigns intended for all users.
+- Local uploads are copied out of the temporary Photo Picker URI. Each photo is capped at 12 MB, the store allows up to 20 campaigns and 48 MB of copied artwork, and deletion/replacement removes FYNX-owned local artwork.
+- Existing server campaigns and the backend media route remain supported. The local preview is additive and does not change seller-sponsored ads, weekly seller selection, or the existing promotion API contract.
+
+The visual certification cases remain GET-only. They now scroll each section's upload controls into view before asserting and return to the section heading before capturing the screenshot. A successful Android runtime run must still produce all three real emulator screenshots; a static contract or a green unit-test run is not a substitute for those images.

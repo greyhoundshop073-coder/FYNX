@@ -39,13 +39,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.time.OffsetDateTime
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 private fun marketplaceSeasonalTimeZone(): TimeZone = TimeZone.getTimeZone("Africa/Lagos")
 
@@ -121,12 +124,15 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var categoryMenuExpanded by remember { mutableStateOf(false) }
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var artworkMediaId by remember { mutableStateOf("") }
+    var localArtworkUri by remember { mutableStateOf("") }
+    var localTestMode by remember { mutableStateOf(true) }
     var message by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             artworkUri = uri
             artworkMediaId = ""
+            localArtworkUri = ""
             message = null
             error = null
         }
@@ -137,12 +143,35 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
     var editingCampaignId by remember { mutableStateOf<String?>(null) }
+    var editingCampaignLocal by remember { mutableStateOf(false) }
     var editingCampaignActive by remember { mutableStateOf(true) }
+
+    fun resetEditor() {
+        editingCampaignId = null
+        editingCampaignLocal = false
+        editingCampaignActive = true
+        promotionType = "SEASONAL"
+        occasionKey = ""
+        headline = ""
+        body = ""
+        actionLabel = "Explore Marketplace"
+        destinationType = "MARKETPLACE"
+        destinationLinkEnabled = true
+        destinationValue = ""
+        artworkUri = null
+        artworkMediaId = ""
+        localArtworkUri = ""
+        localTestMode = true
+        startsAt = ""
+        endsAt = ""
+    }
 
     fun refresh() {
         scope.launch {
             loading = true
             error = null
+            // Keep the on-device test campaigns visible while the remote list is loading or offline.
+            campaigns = FynxMarketplaceLocalCampaignStore.all(context)
             FynxMarketplaceSeasonalPromotionClient.listForAdmin(context)
                 .onSuccess { campaigns = it }
                 .onFailure { error = marketplaceSafeError(it, "Seasonal campaigns could not load.") }
@@ -245,10 +274,35 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 "PRODUCT", "SHOP" -> OutlinedTextField(value = destinationValue, onValueChange = { input -> destinationValue = if (destinationType == "PRODUCT") input.filter(Char::isDigit).take(20) else input.trim().removePrefix("@").lowercase().take(32); message = null; error = null }, modifier = Modifier.fillMaxWidth(), label = { Text(if (destinationType == "PRODUCT") "Product listing ID" else "Seller username") }, supportingText = { Text(if (destinationType == "PRODUCT") "Use an active, in-stock Marketplace listing ID." else "Enter the seller FYNX username, without @.") }, singleLine = true, enabled = !saving)
             }
         }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Offline test mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (localTestMode) "On: saves this campaign and its photo only on this phone. It appears in Marketplace immediately and does not contact the backend."
+                    else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = localTestMode,
+                onCheckedChange = {
+                    localTestMode = it
+                    message = null
+                    error = null
+                },
+                enabled = !saving
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
-                "Choose a photo from the device. FYNX uploads it through its authenticated media service and displays it only while this scheduled campaign is active.",
+                if (localTestMode) "Choose a photo from your gallery. FYNX copies it into private app storage so it stays available offline and can be replaced or removed later."
+                else "Choose a photo from your gallery. FYNX uploads it through the authenticated media service for this scheduled campaign.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -256,14 +310,22 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 OutlinedButton(
                     onClick = { artworkPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                     enabled = !saving
-                ) { Text(if (artworkUri == null && artworkMediaId.isBlank()) "Choose photo" else "Change photo") }
-                if (artworkUri != null || artworkMediaId.isNotBlank()) {
-                    TextButton(onClick = { artworkUri = null; artworkMediaId = "" }, enabled = !saving) { Text("Remove photo") }
+                ) { Text(if (artworkUri == null && localArtworkUri.isBlank() && artworkMediaId.isBlank()) "Choose photo" else "Change photo") }
+                if (artworkUri != null || localArtworkUri.isNotBlank() || artworkMediaId.isNotBlank()) {
+                    TextButton(
+                        onClick = { artworkUri = null; artworkMediaId = ""; localArtworkUri = "" },
+                        enabled = !saving
+                    ) { Text("Remove photo") }
                 }
             }
             when {
                 artworkUri != null -> Text(
                     "Selected photo: ${artworkUri?.lastPathSegment ?: "image"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                localArtworkUri.isNotBlank() -> Text(
+                    "Photo is saved locally on this phone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -326,44 +388,92 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 message = null
                 error = null
                 scope.launch {
-                    var savedArtworkId = artworkMediaId
-                    if (artworkUri != null && savedArtworkId.isBlank()) {
-                        val uploaded = FynxMarketplaceSeasonalPromotionClient.uploadArtwork(context, artworkUri!!)
-                        val mediaId = uploaded.getOrElse {
-                            error = marketplaceSafeError(it, "Seasonal artwork upload failed.")
-                            saving = false
-                            return@launch
+                    val selectedDestinationType = if (destinationLinkEnabled) destinationType else "NONE"
+                    val selectedDestinationValue = if (destinationLinkEnabled) destinationValue else ""
+                    if (localTestMode) {
+                        var savedArtworkUri = localArtworkUri
+                        if (artworkUri != null) {
+                            val imported = withContext(Dispatchers.IO) {
+                                FynxMarketplaceLocalCampaignStore.importArtwork(context, artworkUri!!)
+                            }
+                            savedArtworkUri = imported.getOrElse {
+                                error = marketplaceSafeError(it, "The selected photo could not be saved on this phone.")
+                                saving = false
+                                return@launch
+                            }
                         }
-                        savedArtworkId = mediaId
-                        artworkMediaId = mediaId
-                    }
-                    val saved = editingCampaignId?.let { campaignId ->
-                        FynxMarketplaceSeasonalPromotionClient.update(
-                            context, campaignId, promotionType, occasionKey, headline, body, actionLabel,
-                            if (destinationLinkEnabled) destinationType else "NONE", if (destinationLinkEnabled) destinationValue else "", savedArtworkId, startsAt, endsAt, editingCampaignActive
+                        val campaignId = if (editingCampaignLocal) {
+                            editingCampaignId ?: ("local-" + UUID.randomUUID().toString())
+                        } else {
+                            "local-" + UUID.randomUUID().toString()
+                        }
+                        val localCampaign = FynxMarketplaceSeasonalPromotion(
+                            id = campaignId,
+                            promotionType = promotionType,
+                            occasionKey = occasionKey,
+                            headline = headline.trim(),
+                            body = body.trim(),
+                            actionLabel = actionLabel.trim().ifBlank { "Explore Marketplace" },
+                            artworkMediaId = "",
+                            startsAt = startsAt.trim(),
+                            endsAt = endsAt.trim(),
+                            active = editingCampaignActive,
+                            destinationType = selectedDestinationType,
+                            destinationValue = selectedDestinationValue,
+                            localArtworkUri = savedArtworkUri,
+                            localOnly = true
                         )
-                    } ?: FynxMarketplaceSeasonalPromotionClient.create(
-                        context, promotionType, occasionKey, headline, body, actionLabel,
-                        if (destinationLinkEnabled) destinationType else "NONE", if (destinationLinkEnabled) destinationValue else "", savedArtworkId, startsAt, endsAt
-                    )
-                    saved.onSuccess {
-                        message = if (editingCampaignId == null) "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled. It will appear automatically inside its start/end window." else "Campaign changes saved."
-                        occasionKey = ""
-                        headline = ""
-                        body = ""
-                        actionLabel = "Explore Marketplace"
-                        destinationType = "MARKETPLACE"
-                        destinationLinkEnabled = true
-                        destinationValue = ""
-                        artworkUri = null
-                        artworkMediaId = ""
-                        editingCampaignId = null
-                        editingCampaignActive = true
-                        startsAt = ""
-                        endsAt = ""
-                        refresh()
-                    }.onFailure {
-                        error = marketplaceSafeError(it, "Marketplace campaign could not be saved.")
+                        FynxMarketplaceLocalCampaignStore.upsert(context, localCampaign)
+                            .onSuccess {
+                                message = "Saved on this phone. The campaign is now available in the Marketplace banner without a backend connection."
+                                resetEditor()
+                                campaigns = FynxMarketplaceLocalCampaignStore.all(context)
+                            }
+                            .onFailure {
+                                error = marketplaceSafeError(it, "The local Marketplace campaign could not be saved.")
+                            }
+                    } else {
+                        var savedArtworkId = artworkMediaId
+                        val uploadUri = artworkUri ?: localArtworkUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+                        if (uploadUri != null && savedArtworkId.isBlank()) {
+                            val uploaded = FynxMarketplaceSeasonalPromotionClient.uploadArtwork(context, uploadUri)
+                            val mediaId = uploaded.getOrElse {
+                                error = marketplaceSafeError(it, "Seasonal artwork upload failed.")
+                                saving = false
+                                return@launch
+                            }
+                            savedArtworkId = mediaId
+                            artworkMediaId = mediaId
+                        }
+                        val wasEditingLocal = editingCampaignLocal
+                        val oldLocalId = editingCampaignId
+                        val saved = if (editingCampaignId != null && !wasEditingLocal) {
+                            FynxMarketplaceSeasonalPromotionClient.update(
+                                context, editingCampaignId!!, promotionType, occasionKey, headline, body, actionLabel,
+                                selectedDestinationType, selectedDestinationValue, savedArtworkId, startsAt, endsAt, editingCampaignActive
+                            )
+                        } else {
+                            FynxMarketplaceSeasonalPromotionClient.create(
+                                context, promotionType, occasionKey, headline, body, actionLabel,
+                                selectedDestinationType, selectedDestinationValue, savedArtworkId, startsAt, endsAt
+                            )
+                        }
+                        saved.onSuccess {
+                            if (wasEditingLocal && oldLocalId != null) {
+                                FynxMarketplaceLocalCampaignStore.delete(context, oldLocalId)
+                            }
+                            message = if (wasEditingLocal) {
+                                "Published through FYNX. The device-only preview has been replaced by the server campaign."
+                            } else if (oldLocalId == null) {
+                                "${promotionType.lowercase().replaceFirstChar { it.uppercase() }} campaign scheduled for all users."
+                            } else {
+                                "Campaign changes saved."
+                            }
+                            resetEditor()
+                            refresh()
+                        }.onFailure {
+                            error = marketplaceSafeError(it, "Marketplace campaign could not be saved.")
+                        }
                     }
                     saving = false
                 }
@@ -373,25 +483,18 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (saving) CircularProgressIndicator() else Text(if (editingCampaignId == null) "Schedule campaign" else "Save campaign changes")
+            if (saving) CircularProgressIndicator() else Text(
+                when {
+                    editingCampaignId != null -> "Save campaign changes"
+                    localTestMode -> "Publish on this phone"
+                    else -> "Schedule campaign for everyone"
+                }
+            )
         }
         if (editingCampaignId != null) {
             TextButton(
                 onClick = {
-                    editingCampaignId = null
-                    editingCampaignActive = true
-                    promotionType = "SEASONAL"
-                    occasionKey = ""
-                    headline = ""
-                    body = ""
-                    actionLabel = "Explore Marketplace"
-                    destinationType = "MARKETPLACE"
-                    destinationLinkEnabled = true
-                    destinationValue = ""
-                    artworkUri = null
-                    artworkMediaId = ""
-                    startsAt = ""
-                    endsAt = ""
+                    resetEditor()
                     message = "Campaign editing cancelled."
                     error = null
                 },
@@ -449,6 +552,14 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                                 )
                             }
                         }
+                        if (campaign.localOnly) {
+                            Text(
+                                "LOCAL · THIS DEVICE",
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Text("${campaign.promotionType}  •  ${campaign.occasionKey}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         Text(
                             "Destination: ${if (campaign.destinationType == "NONE") "No link" else campaign.destinationType}" +
@@ -462,7 +573,10 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                             OutlinedButton(
                                 onClick = {
                                     editingCampaignId = campaign.id
+                                    editingCampaignLocal = campaign.localOnly
                                     editingCampaignActive = campaign.active
+                                    localTestMode = campaign.localOnly
+                                    localArtworkUri = campaign.localArtworkUri
                                     promotionType = campaign.promotionType
                                     occasionKey = campaign.occasionKey
                                     headline = campaign.headline
@@ -484,7 +598,10 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                                 onClick = {
                                     scope.launch {
                                         FynxMarketplaceSeasonalPromotionClient.setActive(context, campaign.id, !campaign.active)
-                                            .onSuccess { refresh() }
+                                            .onSuccess {
+                                                if (campaign.localOnly) campaigns = FynxMarketplaceLocalCampaignStore.all(context)
+                                                else refresh()
+                                            }
                                             .onFailure { error = marketplaceSafeError(it, "Campaign status could not be changed.") }
                                     }
                                 },
@@ -494,7 +611,10 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                                 onClick = {
                                     scope.launch {
                                         FynxMarketplaceSeasonalPromotionClient.delete(context, campaign.id)
-                                            .onSuccess { refresh() }
+                                            .onSuccess {
+                                                if (campaign.localOnly) campaigns = FynxMarketplaceLocalCampaignStore.all(context)
+                                                else refresh()
+                                            }
                                             .onFailure { error = marketplaceSafeError(it, "Campaign could not be deleted.") }
                                     }
                                 },

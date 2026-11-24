@@ -973,9 +973,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reloadSeasonalPromotions() {
         scope.launch {
+            // Make device-local preview campaigns visible immediately, before a backend request can time out.
+            seasonalPromotions = FynxMarketplaceLocalCampaignStore.active(context)
             FynxMarketplaceSeasonalPromotionClient.load(context)
                 .onSuccess { seasonalPromotions = it }
-            // Retain the current schedule on transient failures; fixed-date fallbacks remain available.
+            // The local schedule remains available when the seasonal feed is offline.
         }
     }
 

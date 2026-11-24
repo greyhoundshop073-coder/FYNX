@@ -36,25 +36,25 @@ class FynxAdminPublishingSectionsVisualTest {
         launchAs("OWNER")
         compose.onNodeWithText("Music Library").performScrollTo()
         compose.onNodeWithText("Music Library").performClick()
-        compose.onNodeWithText("Official FYNX Music Catalogue").assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 20_000) {
-            runCatching { compose.onNodeWithText("Publish to FYNX").assertIsDisplayed() }.isSuccess
-        }
+        compose.onNodeWithText("Official FYNX Music Catalogue").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Select audio").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Song title").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Publish to FYNX").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Official FYNX Music Catalogue").performScrollTo()
         capture("FYNX-admin-owner-music-library.png")
     }
 
     @Test
     fun ownerCanReachMarketplaceCampaignManagerAndCaptureIt() {
         launchAs("OWNER")
-        compose.onNodeWithText("Marketplace").performClick()
-        compose.onNodeWithText("Marketplace banner campaigns").assertIsDisplayed()
-        compose.onNodeWithText("Campaign type").assertIsDisplayed()
-        compose.onNodeWithText("Banner headline").assertIsDisplayed()
+        compose.onNodeWithText("Marketplace").performScrollTo().performClick()
+        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Campaign type").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Banner headline").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Publish on this phone").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
         capture("FYNX-admin-owner-marketplace-campaigns.png")
     }
 
@@ -62,10 +62,12 @@ class FynxAdminPublishingSectionsVisualTest {
     fun adminCanReachMarketplaceCampaignManagerAndCaptureIt() {
         launchAs("ADMIN")
         check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty()) { "ADMIN must not see Owner-only Music Library navigation" }
-        compose.onNodeWithText("Marketplace").performClick()
-        compose.onNodeWithText("Marketplace banner campaigns").assertIsDisplayed()
+        compose.onNodeWithText("Marketplace").performScrollTo().performClick()
+        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Publish on this phone").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
         capture("FYNX-admin-admin-marketplace-campaigns.png")
     }
 

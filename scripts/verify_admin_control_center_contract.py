@@ -13,6 +13,12 @@ ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
 SOCIAL = ROOT / "backend/socialRoutes.js"
 GROUPS = ROOT / "backend/groupRoutes.js"
 MARKETPLACE_CHECKOUT = ROOT / "backend/marketplaceCheckout.js"
+LOCAL_CAMPAIGN_STORE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt"
+LOCAL_CAMPAIGN_CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt"
+LOCAL_CAMPAIGN_ADMIN = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt"
+MARKETPLACE_BANNER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt"
+MARKETPLACE_PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt"
+SAMPLE_BANNER_ARTWORK = ROOT / "app/src/main/res/drawable-nodpi/fynx_marketplace_showcase.webp"
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
@@ -322,6 +328,27 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
         'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
         "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+
+
+require(LOCAL_CAMPAIGN_STORE.is_file(), "device-local Marketplace campaign storage is present")
+require(SAMPLE_BANNER_ARTWORK.is_file(), "bundled FYNX sample Marketplace banner artwork is present")
+local_store_source = LOCAL_CAMPAIGN_STORE.read_text(encoding="utf-8")
+local_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8")
+local_client_source = LOCAL_CAMPAIGN_CLIENT.read_text(encoding="utf-8")
+banner_source = MARKETPLACE_BANNER.read_text(encoding="utf-8")
+marketplace_source = MARKETPLACE_PANEL.read_text(encoding="utf-8")
+require("marketplace-campaign-artwork" in local_store_source and "filesDir" in local_store_source,
+        "local campaign photos must be copied into app-private storage")
+require("MAX_ARTWORK_BYTES" in local_store_source and "MAX_CAMPAIGNS" in local_store_source,
+        "local campaign uploads and count must have explicit limits")
+require("Publish on this phone" in local_admin_source and "localTestMode" in local_admin_source,
+        "Admin campaign manager must expose explicit device-only offline publishing")
+require("localArtworkUri" in local_client_source and "FynxMarketplaceLocalCampaignStore" in local_client_source,
+        "campaign client must merge device-local previews with the remote campaign feed")
+require("MarketplaceLocalCampaignArtwork" in banner_source and "localArtworkUri" in banner_source,
+        "Marketplace banner must render local artwork without the media API")
+require("FynxMarketplaceLocalCampaignStore.active(context)" in marketplace_source,
+        "Marketplace must load local banner campaigns before waiting for backend")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
