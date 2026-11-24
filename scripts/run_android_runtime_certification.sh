@@ -110,9 +110,9 @@ EOF
 fi
 
 if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
-  # Admin permissions and account queues require the live OWNER/ADMIN backend.
-  # Do not let an unrelated Marketplace/Wallet capture turn this Admin PR red,
-  # and never claim the Admin screen was runtime-certified without real role auth.
+  # Offline Admin UI has dedicated OWNER/ADMIN Compose tests using explicit,
+  # read-only role fixtures. Live server authorization and publishing remain a
+  # separate gate and are never inferred from those fixture-backed screenshots.
   BACKEND_STATUS=$(node --input-type=module -e 'const base=(process.env.FYNX_PRODUCTION_BASE_URL||"").replace(/\/+$/,""); if(!base){console.log("not-configured");process.exit(0)} try { const r=await fetch(base+"/health",{signal:AbortSignal.timeout(8000)}); console.log(String(r.status)); } catch { console.log("unreachable"); }')
   mkdir -p fynx-runtime-screenshots
   {
@@ -121,13 +121,13 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
     echo "- Scope: PR #582 Admin Control Center publishing sections."
     echo "- Android instrumentation exit code: ${TEST_EXIT}"
     echo "- Backend health HTTP status: ${BACKEND_STATUS}"
-    echo "- Admin UI runtime: BLOCKED until the backend is healthy and a real OWNER/ADMIN test session is available."
-    echo "- This focused run does not certify live publishing against the production backend; live Owner/Admin authorization remains a separate gate."
-    echo "- Owner Music Library and Owner/Admin Marketplace campaign screenshots use GET-only synthetic fixtures; no publishing action is executed."
+    echo "- Offline Admin UI: exercised through the real Compose screens with explicit OWNER and ADMIN role fixtures; all fixture requests are GET-only."
+    echo "- Live backend authorization/publishing: NOT CERTIFIED in this run (backend health: ${BACKEND_STATUS}); this remains a separate release gate."
+    echo "- Owner Music Library and Owner/Admin Marketplace campaign screenshots use real PixelCopy captures from the emulator; no publishing action is executed."
     echo "- No role, account, moderation, announcement or publishing mutation was performed."
     echo
     if [ "${TEST_EXIT}" -eq 0 ]; then
-      echo "## Result: BUILD_AND_INSTRUMENTATION_GREEN; ADMIN_RUNTIME_BLOCKED"
+      echo "## Result: OFFLINE_ROLE_FIXTURE_UI_AND_INSTRUMENTATION_GREEN; LIVE_BACKEND_PUBLISHING_NOT_TESTED"
     else
       echo "## Result: RED (Android instrumentation failed)"
     fi
@@ -135,7 +135,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then
   if [ "${TEST_EXIT}" -ne 0 ]; then
     echo "::error::Admin PR Android instrumentation failed; see instrumentation logs."
   else
-    echo "::notice::Admin UI runtime remains explicitly blocked by backend/auth availability; Android instrumentation passed."
+    echo "::notice::Offline Owner/Admin UI instrumentation passed; live backend publishing remains a separate untested release gate."
   fi
   exit "${TEST_EXIT}"
 fi
