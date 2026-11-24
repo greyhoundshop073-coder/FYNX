@@ -23,6 +23,7 @@ def check(name, ok):
 check("all production-critical files exist", all((ROOT / p).is_file() for p in REQUIRED))
 
 app = (ROOT / REQUIRED[0]).read_text(encoding="utf-8")
+features_panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt").read_text(encoding="utf-8")
 deep_link = (ROOT / REQUIRED[1]).read_text(encoding="utf-8")
 share = (ROOT / REQUIRED[2]).read_text(encoding="utf-8")
 marketplace = (ROOT / REQUIRED[3]).read_text(encoding="utf-8")
@@ -32,7 +33,7 @@ workflow = (ROOT / REQUIRED[-1]).read_text(encoding="utf-8")
 
 check("production app is not left in preview mode", "FYNX_PREVIEW_MODE = false" in app)
 check("bottom navigation uses the intended primary navigation", 'FynxNavItem("Home", "Home", Icons.Default.Home)' in app and 'FynxNavItem("Chats", "Chat", Icons.Default.ChatBubbleOutline)' in app and 'FynxNavItem("Friends", "Friends", Icons.Default.Person)' in app and 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and 'FynxNavItem("Features", "More", Icons.Default.MoreHoriz)' in app)
-check("Marketplace remains a primary destination while business and money tools remain reachable", 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and 'Triple("Money Tools", "Money Center"' in app)
+check("Marketplace remains a primary destination while business and money tools remain reachable", 'FynxNavItem("Marketplace", "Marketplace", Icons.Default.ShoppingBag)' in app and '"Business Account" -> FynxBusinessAccountPanel' in app and '"Money Tools" -> MoneyCenterPanel()' in app and '"Money Tools", "Money Center"' in features_panel)
 check("deep-link routing remains connected", all(x in deep_link for x in ["homeWebLink", "profileWebLink", "chatWebLink", "groupWebLink", "marketplaceWebLink", "storiesWebLink", "moneyWebLink"]))
 check("share layer uses FYNX deep links", "FynxDeepLinkParser.homeWebLink()" in share and "FynxDeepLinkParser.inviteWebLink(code)" in share)
 # Marketplace is intentionally not re-certified here. Its dedicated seller-flow,
