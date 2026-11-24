@@ -110,7 +110,11 @@ private fun showMarketplaceSeasonalDateTimePicker(
 
 /** Owner/Admin controls for variable-date holiday and seasonal Marketplace slides. */
 @Composable
-fun FynxMarketplaceSeasonalPromotionAdminPanel() {
+fun FynxMarketplaceSeasonalPromotionAdminPanel(
+    testOnlyArtworkUri: Uri? = null,
+    testOnlyStartsAt: String = "",
+    testOnlyEndsAt: String = ""
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var promotionType by remember { mutableStateOf("SEASONAL") }
@@ -122,7 +126,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
     var destinationLinkEnabled by remember { mutableStateOf(true) }
     var destinationValue by remember { mutableStateOf("") }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
-    var artworkUri by remember { mutableStateOf<Uri?>(null) }
+    var artworkUri by remember(testOnlyArtworkUri) { mutableStateOf(testOnlyArtworkUri) }
     var artworkMediaId by remember { mutableStateOf("") }
     var localArtworkUri by remember { mutableStateOf("") }
     var localTestMode by remember { mutableStateOf(true) }
@@ -137,8 +141,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
             error = null
         }
     }
-    var startsAt by remember { mutableStateOf("") }
-    var endsAt by remember { mutableStateOf("") }
+    var startsAt by remember(testOnlyStartsAt) { mutableStateOf(testOnlyStartsAt) }
+    var endsAt by remember(testOnlyEndsAt) { mutableStateOf(testOnlyEndsAt) }
     var campaigns by remember { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
