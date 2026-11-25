@@ -124,17 +124,10 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        // Use the production featured-product action in the always-present Marketplace
-        // banner. It opens the same real product-details screen without depending on a
-        // recommendation LazyRow being composed in the current viewport.
-        compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
-        }
-        // The featured action is already in the first viewport. Click its unique
-        // accessibility target directly; scrolling a stale text node can invalidate it
-        // when the promotional LazyRow advances or recomposes.
+        // Find the featured product by its unique listing identity; campaign and
+        // calendar slides can legitimately appear before it in the carousel.
+        scrollToPromoAction("Shop this product: ${marketplaceListings.first().title}")
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-            .assertIsDisplayed()
             .performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
@@ -468,6 +461,25 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
+    }
+
+    private fun scrollToPromoAction(description: String) {
+        val carousel = compose.onNodeWithTag("fynx-marketplace-promo-carousel")
+        carousel.performScrollTo()
+        var found = false
+        for (index in 0 until 32) {
+            val scrolled = runCatching {
+                carousel.performScrollToIndex(index)
+                compose.waitForIdle()
+            }.isSuccess
+            if (!scrolled) break
+            if (compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty()) {
+                found = true
+                break
+            }
+        }
+        assertTrue("Marketplace carousel did not expose '$description' in any slide", found)
+        compose.onNodeWithContentDescription(description).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {
