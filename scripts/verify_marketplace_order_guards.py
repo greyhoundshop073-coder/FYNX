@@ -35,7 +35,7 @@ checks = [
      'Text("Private shop contact (optional)")' in SELLER_UI
      and "It is not shown on your public storefront." in SELLER_UI),
     ("order lifecycle screen restricts disputes to paid and protected in-progress states",
-     'status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION")' in LIFECYCLE
+     'status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED")' in LIFECYCLE
      and "else if (marketplaceOrderAllowsProblemReport(order.status))" in LIFECYCLE),
     ("order detail dialog uses the same protected-state dispute gate",
      "val canReportProblem = marketplaceOrderAllowsProblemReport(order.status)" in PANEL
