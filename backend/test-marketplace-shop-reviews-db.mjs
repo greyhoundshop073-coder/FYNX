@@ -237,7 +237,7 @@ try {
   response = await request("/api/marketplace/sellers/sellerone/reputation", 3);
   assert.equal(response.status, 200);
   const beforeRefundReputation = (await response.json()).reputation;
-  assert.equal(beforeRefundReputation.totalOrders, 2, "seller reputation denominator excludes self-purchases");
+  assert.equal(beforeRefundReputation.totalOrders, 3, "all three third-party orders remain in the denominator while the seller self-purchase is excluded");
   assert.equal(beforeRefundReputation.successfulSales, 1, "completed third-party orders count as sales");
   assert.equal(beforeRefundReputation.reviewCount, 1, "only completed third-party reviews affect reputation");
 
