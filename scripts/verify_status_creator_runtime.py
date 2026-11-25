@@ -134,7 +134,7 @@ def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 25.0
         )
         permission = rationale or system_permission
         if permission:
-            _, px, py = permission
+            px, py = permission
             adb("shell", "input", "tap", str(px), str(py))
             permission_handled = True
             screenshot(f"status-{stage}-permission-consent.png")

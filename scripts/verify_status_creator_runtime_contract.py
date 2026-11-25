@@ -37,6 +37,7 @@ checks = [
     (
         "Status camera runtime verification honors the app rationale and Android runtime permission before expecting CameraX controls",
         'Allow camera' in runtime and 'While using the app' in runtime
+        and 'px, py = permission' in runtime and '_, px, py = permission' not in runtime
         and 'permission_handled = True' in runtime
         and 'after permission handling' in runtime,
     ),
