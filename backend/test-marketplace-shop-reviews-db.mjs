@@ -154,10 +154,29 @@ try {
 
   const completedOrder = "00000000-0000-4000-8000-000000000001";
   const pendingOrder = "00000000-0000-4000-8000-000000000002";
+  const selfOrder = "00000000-0000-4000-8000-000000000003";
+  const unverifiedCompletedOrder = "00000000-0000-4000-8000-000000000004";
   await pool.query(
-    "INSERT INTO marketplace_orders(id,buyer_id,seller_id,listing_id,status,completed_at) VALUES ($1,2,1,501,'COMPLETED',NOW()),($2,2,1,501,'PROCESSING',NULL)",
-    [completedOrder, pendingOrder]
+    "INSERT INTO marketplace_orders(id,buyer_id,seller_id,listing_id,status,completed_at) VALUES ($1,2,1,501,'COMPLETED',NOW()),($2,2,1,501,'PROCESSING',NULL),($3,1,1,501,'COMPLETED',NOW()),($4,2,1,501,'COMPLETED',NULL)",
+    [completedOrder, pendingOrder, selfOrder, unverifiedCompletedOrder]
   );
+
+  response = await request("/api/marketplace/orders/" + selfOrder + "/review", 1, {
+    method: "POST", body: json({ rating: 5, comment: "Self purchase" })
+  });
+  assert.equal(response.status, 409, "a seller cannot review their own purchase");
+  response = await request("/api/marketplace/orders/" + selfOrder + "/product-review", 1, {
+    method: "POST", body: json({ rating: 5, comment: "Self product review" })
+  });
+  assert.equal(response.status, 409, "a seller cannot review their own product purchase");
+  response = await request("/api/marketplace/orders/" + unverifiedCompletedOrder + "/review", 2, {
+    method: "POST", body: json({ rating: 5, comment: "Missing completion evidence" })
+  });
+  assert.equal(response.status, 409, "a COMPLETED flag without completed_at is not reviewable");
+  response = await request("/api/marketplace/orders/" + unverifiedCompletedOrder + "/product-review", 2, {
+    method: "POST", body: json({ rating: 5, comment: "Missing completion evidence" })
+  });
+  assert.equal(response.status, 409, "a product review requires a recorded completion timestamp");
 
   response = await request("/api/marketplace/orders/" + completedOrder + "/review", 3, {
     method: "POST", body: json({ rating: 5, comment: "Not the buyer" })
@@ -215,6 +234,13 @@ try {
   assert.equal(reviewPage.limit, 1);
   assert.equal(reviewPage.offset, 0);
 
+  response = await request("/api/marketplace/sellers/sellerone/reputation", 3);
+  assert.equal(response.status, 200);
+  const beforeRefundReputation = (await response.json()).reputation;
+  assert.equal(beforeRefundReputation.totalOrders, 2, "seller reputation denominator excludes self-purchases");
+  assert.equal(beforeRefundReputation.successfulSales, 1, "completed third-party orders count as sales");
+  assert.equal(beforeRefundReputation.reviewCount, 1, "only completed third-party reviews affect reputation");
+
   await pool.query("UPDATE marketplace_orders SET status='REFUNDED' WHERE id=$1", [completedOrder]);
   response = await request("/api/marketplace/sellers/sellerone/reviews?limit=1&offset=0", 3);
   assert.equal(response.status, 200);
@@ -231,7 +257,7 @@ try {
   assert.equal(refundedReputation.successfulSales, 0, "refunded orders must not count as successful seller sales");
   assert.equal(refundedReputation.reviewCount, 0, "reviews tied to refunded orders must not count toward seller reputation");
 
-  console.log("PostgreSQL shop profile and seller review integration tests GREEN (save/reload, media ownership, avatar isolation, public block privacy, completed-order buyer ownership and duplicate review rejection).");
+  console.log("PostgreSQL shop profile and seller review integration tests GREEN (private contact, partial edits, media ownership, block privacy, self-review rejection, completed-order reputation, refund exclusion and duplicate review rejection).");
 } finally {
   if (server) await new Promise((resolve) => server.close(resolve));
   await pool.end();

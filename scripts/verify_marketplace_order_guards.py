@@ -6,6 +6,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / "app/src/main/java/com/fynx/app/ui"
 SHOP = (ROOT / "backend/marketplaceShopProfiles.js").read_text(encoding="utf-8")
+REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf-8")
 SELLER_UI = (UI / "FynxMarketplaceSellerCenterPanel.kt").read_text(encoding="utf-8")
 LIFECYCLE = (UI / "FynxMarketplaceOrderLifecycle.kt").read_text(encoding="utf-8")
 PANEL = (UI / "FynxMarketplacePanel.kt").read_text(encoding="utf-8")
@@ -61,6 +62,14 @@ checks = [
      "val persistedShopName = if (storeName.trim().isNotEmpty())" in REMOTE
      and 'put("storeName", persistedShopName)' in REMOTE
      and '"/api/marketplace/my-shop"' in REMOTE),
+    ("both seller and product review writes reject a self-purchase",
+     REPUTATION.count("if (String(order.buyer_id) === String(order.seller_id)) return res.status(409)") == 2),
+    ("both review writes require a recorded completion timestamp",
+     REPUTATION.count("order.status !== 'COMPLETED' || !order.completed_at") == 2),
+    ("seller reputation denominator and weekly awards exclude self-purchases",
+     "COUNT(o.id) FILTER (WHERE o.buyer_id <> o.seller_id)::INTEGER AS total_orders" in REPUTATION
+     and "COUNT(o.id) FILTER (WHERE o.buyer_id <> o.seller_id AND o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d" in REPUTATION
+     and REPUTATION.count("AND o.buyer_id <> o.seller_id") >= 6),
     ("seller editor enforces title and stock limits matching the backend",
      "editTitle = it.take(FynxMarketplaceSellerFlowSupport.MAX_TITLE_LENGTH)" in SELLER_UI
      and "it in 0..FynxMarketplaceSellerFlowSupport.MAX_QUANTITY" in SELLER_UI),
