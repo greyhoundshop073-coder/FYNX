@@ -159,6 +159,15 @@ checks["The [full-runtime] PR title marker enables build, emulator and screensho
 
 # Disconnect cleanup must run only after the final socket for a user closes,
 # and the same durable group-call state machine must serve Node and Neon.
+checks["Private-call disposal uses the latest session and peer for end or reject"] = (
+    "val latestSession by rememberUpdatedState(session)" in app["calls"]
+    and "val latestTargetUserId by rememberUpdatedState(targetUserId)" in app["calls"]
+    and "val active = latestSession" in app["calls"]
+    and "val peerId = latestTargetUserId" in app["calls"]
+    and "realtimeClient.sendCallReject(active.id, peerId, isVideo)" in app["calls"]
+    and "realtimeClient.sendCallEnd(active.id, peerId, isVideo)" in app["calls"]
+)
+
 checks["Group-call disposal uses the latest call state for end, leave and reject signals"] = (
     "val latestIsStarter by rememberUpdatedState(isStarter)" in app["group_call"]
     and "val latestIsIncoming by rememberUpdatedState(isIncoming)" in app["group_call"]
