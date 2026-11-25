@@ -119,6 +119,14 @@ require("activityHasMore" in source and "Text(\"Previous\")" in source and "Text
         "activity history is missing bounded previous/next pagination")
 require("OFFSET $4" in backend and "limit+1" in backend and "Math.min(10000" in backend,
         "activity history API must use bounded database pagination")
+activity_route = backend[backend.index("app.get('/api/admin/activity'"):backend.index("app.get('/api/admin/revenue'")]
+require("POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0" in activity_route,
+        "activity search must include actor display names as promised by the UI")
+require("res.set('Cache-Control','private, no-store')" in activity_route and "a.metadata" not in activity_route and "metadata:a.metadata" not in activity_route,
+        "activity audit responses must be private/non-cacheable and must not expose unused raw metadata")
+activity_db_test = (ROOT / "backend/test-admin-announcements-db.mjs").read_text(encoding="utf-8")
+require('q: "Admin Two"' in activity_db_test and 'Object.hasOwn(activityByDisplayName.body.activities[0], "metadata")' in activity_db_test and 'activitySecondPage' in activity_db_test,
+        "activity history needs PostgreSQL coverage for display-name search, metadata minimization and stable paging")
 require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
 require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynxAdminRole=actorRole" in backend,
         "admin roster and role changes must verify and record the true OWNER actor")
