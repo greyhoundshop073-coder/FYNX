@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -52,7 +53,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onUsernameUpdated: (String) -> Unit = {}) {
+fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Boolean = false, onSettingsClosed: () -> Unit = {}, onSettingsOpened: () -> Unit = {}, onSignOut: (() -> Unit)? = null, onAppearanceChanged: (String) -> Unit = {}, onAccentChanged: (FynxAccent) -> Unit = {}, onOpenPrivacy: () -> Unit = {}, onOpenNotifications: () -> Unit = {}, onOpenMarketplaceListing: (String) -> Unit = {}, onUsernameUpdated: (String) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editing by remember { mutableStateOf(false) }
@@ -175,6 +176,11 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
         return
     }
 
+    BackHandler(enabled = settingsOpen) {
+        settingsOpen = false
+        onSettingsClosed()
+    }
+
     if (settingsOpen) {
         SettingsPanel(profile = profile, settings = settings, onSettingsChange = { settings = it; FynxPreferencesStore.saveSettings(context, it) }, onBack = { settingsOpen = false; onSettingsClosed() }, onAppearanceChanged = onAppearanceChanged, onAccentChanged = onAccentChanged, onOpenPrivacy = onOpenPrivacy, onOpenNotifications = onOpenNotifications, onSignOut = { if (onSignOut != null) onSignOut() else { FynxAuthStore.clear(context); (context as? Activity)?.recreate() } }, onOpenAccountProfile = { settingsOpen = false; syncError = null; photoRemoved = false; editing = true }, remotePhotoId = remotePhotoId)
         return
@@ -269,7 +275,7 @@ fun ProfilePanel(session: AuthSession = AuthSession(), openSettingsInitially: Bo
                             Text("Edit profile")
                         }
                         OutlinedButton(
-                            onClick = { settingsOpen = true },
+                            onClick = { settingsOpen = true; onSettingsOpened() },
                             modifier = Modifier.weight(1f).heightIn(min = 44.dp),
                             shape = RoundedCornerShape(14.dp)
                         ) {
