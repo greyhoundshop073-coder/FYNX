@@ -109,6 +109,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           ON o.completed_at >= w.week_start
          AND o.completed_at < w.week_end
          AND o.status = 'COMPLETED'
+         AND o.buyer_id <> o.seller_id
         GROUP BY w.week_start, w.week_end, o.seller_id, o.listing_id
       ),
       ranked_sellers AS (
