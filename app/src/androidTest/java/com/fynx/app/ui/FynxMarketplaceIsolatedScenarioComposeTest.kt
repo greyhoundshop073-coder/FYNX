@@ -139,7 +139,13 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
+        // The headline is inside a horizontal LazyRow; vertical performScrollTo()
+        // cannot compose an off-screen carousel item. Select the first slide explicitly.
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(0)
+        compose.waitUntil(timeoutMillis = 3_000) {
+            runCatching { compose.onNodeWithText(firstDeal.title).assertIsDisplayed() }.isSuccess
+        }
+        compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
         // Select the second real slide through the production LazyRow state. This keeps
@@ -198,7 +204,11 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
+        // Explicitly compose the first horizontal LazyRow item before asserting it.
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(0)
+        compose.waitUntil(timeoutMillis = 3_000) {
+            runCatching { compose.onNodeWithText(candidates.first().title).assertIsDisplayed() }.isSuccess
+        }
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
         compose.waitUntil(timeoutMillis = 9_000) {
