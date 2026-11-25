@@ -150,7 +150,7 @@ class FynxAdminPublishingSectionsVisualTest {
                 compose.onAllNodesWithText(headline).fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText(headline).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText("LOCAL · THIS DEVICE").performScrollTo().assertIsDisplayed()
+            compose.onAllNodesWithText("LOCAL · THIS DEVICE").onFirst().performScrollTo().assertIsDisplayed()
         } finally {
             FynxMarketplaceLocalCampaignStore.all(compose.activity)
                 .filter { it.occasionKey == occasionKey }
