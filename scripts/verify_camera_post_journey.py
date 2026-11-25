@@ -185,7 +185,8 @@ checks = [
      and "FynxCameraCapturePanel(" not in status_hub
       and "cameraInitialMode = homeCameraInitialMode" in app_source
       and "initialMode = activeCameraInitialMode" in home
-     and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 }' in app_source),
+     and "pendingStatusCameraMode = mode" in app_source
+     and "withFrameNanos { }" in app_source),
     ("Home post details remain a feed flow while the camera Status action uses the existing Status publisher",
      'Text("Publish to")' not in home
      and 'FilterChip(selected = publishDestination' not in home
@@ -411,7 +412,8 @@ checks.extend([
      and "Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())" in overlay),
     ("Reference camera routing preserves the rear lens and returns from the existing Status composer to Home",
      "-camera-front none" in workflow
-     and 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 }' in app_source
+     and "pendingStatusCameraMode = mode" in app_source
+     and "withFrameNanos { }" in app_source
      and "camera-status-composer.png" in runtime
      and "camera-video-post-details.png" in runtime
      and 'lens_switch = find_control(fresh_camera_xml, ["Switch front/back camera"])' not in runtime),
