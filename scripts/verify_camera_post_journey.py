@@ -402,8 +402,9 @@ checks.extend([
      and "FYNX_CAMERA_VISUALS_ONLY=1" in runtime_runner
      and "FYNX_LOCAL_VISUALS_ONLY=1" in runtime_runner
      and "camera-photo-editor-initial.png" in runtime
-     and "camera-photo-editor-face-fx-category.png" in runtime
-     and "camera-photo-editor-background-category.png" in runtime
+     and 'f"{prefix}-camera-photo-editor-{slug}-category.png"' in runtime
+     and '"face-fx"' in runtime
+     and '"background"' in runtime
      and "camera-video-editor-before-effects.png" in runtime
      and "camera-video-style-" in runtime
      and "camera-status-composer.png" in runtime
