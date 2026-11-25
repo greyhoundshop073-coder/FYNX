@@ -220,6 +220,41 @@ if [ "${FYNX_CHAT_GROUPS_VISUALS_ONLY:-0}" = "1" ]; then
   exit "${TEST_EXIT}"
 fi
 
+
+if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ]; then
+  echo "::notice::Running the complete backend-independent Camera → Photo/Video Editor → Status/New Post runtime journey."
+  # The journey uses media captured into the disposable emulator's app cache.
+  # It never taps Send/Post and never uploads or publishes content.
+  FYNX_AI_VISUALS_ONLY=0 \
+    FYNX_HOME_FEED_VISUALS_ONLY=0 \
+    FYNX_MUSIC_VISUALS_ONLY=0 \
+    FYNX_MARKETPLACE_VISUALS_ONLY=0 \
+    FYNX_CHAT_GROUPS_VISUALS_ONLY=0 \
+    FYNX_CAMERA_VISUALS_ONLY=1 \
+    FYNX_LOCAL_VISUALS_ONLY=1 \
+    python3 scripts/verify_authenticated_runtime_navigation.py
+  CAMERA_VISUAL_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+
+  if [ "${CAMERA_VISUAL_EXIT}" -ne 0 ]; then
+    echo "::error::Full Camera → Editor → Status/New Post runtime certification failed (exit ${CAMERA_VISUAL_EXIT}). See FYNX-camera-runtime-visual-capture.md and the captured UI hierarchies."
+    if [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${CAMERA_VISUAL_EXIT}"; fi
+  else
+    echo "::notice::Full Camera → Editor → Status/New Post runtime certification passed."
+  fi
+
+  # Keep the standalone Status creator entry/Voice/Text checks as a separate
+  # assertion after the media journey has returned to Home.
+  python3 scripts/verify_status_creator_runtime.py
+  STATUS_EXIT=$?
+  adb logcat -d -v threadtime >> fynx-runtime-screenshots/instrumentation-logcat.txt 2>&1
+  if [ "${STATUS_EXIT}" -ne 0 ]; then
+    echo "::error::Standalone Status creator runtime verification failed (exit ${STATUS_EXIT})."
+    if [ "${TEST_EXIT}" -eq 0 ]; then TEST_EXIT="${STATUS_EXIT}"; fi
+  fi
+  exit "${TEST_EXIT}"
+fi
+
 if [ "${FYNX_MUSIC_VISUALS_ONLY:-0}" = "1" ]; then
   echo "::notice::Capturing the Home composer and Music picker through the debug-only UI entry; no backend account or publishing action is used."
   FYNX_MUSIC_VISUALS_ONLY=1 FYNX_LOCAL_VISUALS_ONLY=1 python3 scripts/verify_authenticated_runtime_navigation.py

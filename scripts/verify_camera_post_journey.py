@@ -11,6 +11,7 @@ refresh = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxHomeLifecycle.kt").read
 backend = (ROOT / "backend/socialMultiMediaBootstrap.js").read_text(encoding="utf-8")
 runtime = (ROOT / "scripts/verify_authenticated_runtime_navigation.py").read_text(encoding="utf-8")
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 storage = (ROOT / "scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 status_hub = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusHubPanel.kt").read_text(encoding="utf-8")
 status_client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxStatusClient.kt").read_text(encoding="utf-8")
@@ -393,6 +394,26 @@ checks = [
      and "camera-video-post-details.png" in runtime),
 ]
 
+checks.extend([
+    ("PR #603 invokes the full backend-independent Camera, Photo Editor, Video Editor and publishing runtime journey",
+     "FYNX_CAMERA_VISUALS_ONLY:" in workflow
+     and "restore/reference-camera-publish-journey-20261124" in workflow
+     and 'if [ "${FYNX_CAMERA_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner
+     and "FYNX_CAMERA_VISUALS_ONLY=1" in runtime_runner
+     and "FYNX_LOCAL_VISUALS_ONLY=1" in runtime_runner
+     and "camera-photo-editor-initial.png" in runtime
+     and "camera-photo-editor-face-fx-category.png" in runtime
+     and "camera-photo-editor-background-category.png" in runtime
+     and "camera-video-editor-before-effects.png" in runtime
+     and "camera-video-style-" in runtime
+     and "camera-status-composer.png" in runtime
+     and "camera-video-post-details.png" in runtime
+     and "no Send/Post action is tapped" in runtime),
+    ("Camera video runtime installs FFmpeg/ffprobe for inspecting real recorded and edited MP4 streams",
+     "Ensure FFmpeg for isolated Home Feed visual fixtures" in workflow
+     and "restore/reference-camera-publish-journey-20261124" in workflow
+     and "ffmpeg -version" in workflow
+     and "ffprobe" in runtime),
 checks.extend([
     ("While typing, the large media sheet collapses and a two-row glass toolbar stays above the keyboard",
      "compact = true" in camera
