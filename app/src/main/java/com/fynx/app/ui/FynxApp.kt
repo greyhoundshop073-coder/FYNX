@@ -101,6 +101,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var profileUser by remember { mutableStateOf<String?>(null) }
     var statusOpenOwner by remember { mutableStateOf<String?>(null) }
     var statusCreatorRequested by remember { mutableStateOf(false) }
+    var statusInitialMediaUri by remember { mutableStateOf<Uri?>(null) }
+    var statusInitialMediaType by remember { mutableStateOf<FynxStatusType?>(null) }
     var statusComposerImmersive by remember { mutableStateOf(false) }
     var statusOpenId by remember { mutableStateOf<String?>(null) }
     var postOpenId by remember { mutableStateOf<String?>(null) }
@@ -133,6 +135,21 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var aiCaptionDraft by remember { mutableStateOf<String?>(null) }
     var homeCameraRequest by remember { mutableIntStateOf(0) }
     var homeCameraInitialMode by remember { mutableStateOf(CameraMode.PHOTO) }
+    // Close the Status creator dialog before opening the shared camera dialog.
+    // Opening two Compose Dialog windows in one frame can leave the outgoing
+    // Status window above the camera and swallow camera controls/back navigation.
+    var pendingStatusCameraMode by remember { mutableStateOf<CameraMode?>(null) }
+
+    LaunchedEffect(pendingStatusCameraMode) {
+        val requestedMode = pendingStatusCameraMode ?: return@LaunchedEffect
+        // The Status dialog is removed in the current composition. Wait for the
+        // next frame so its window is disposed before the Home camera is created.
+        withFrameNanos { }
+        homeCameraInitialMode = requestedMode
+        selected = "Home"
+        homeCameraRequest += 1
+        pendingStatusCameraMode = null
+    }
 
     // Clear transient UI state owned by the previous signed-in identity.
     // Durable chat/outbox data remains partitioned by FynxAuthStore's account key.
@@ -166,6 +183,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         notificationPreferencesOnly = false
         backNavigationRequested = false
         homeCameraRequest = 0
+        pendingStatusCameraMode = null
     }
 
     var navigationDirection by remember { mutableIntStateOf(1) }
@@ -724,7 +742,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     label = "FYNX page swipe"
                 ) { page ->
                     when (page) {
-            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, cameraInitialMode = homeCameraInitialMode, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
+            "Home" -> FynxHomeSocialHubPanel(currentUsername = authSession.username ?: "preview", networkReady = appConnectionState == FynxAppConnectionManager.State.CONNECTED, initialCaption = aiCaptionDraft, onCaptionConsumed = { aiCaptionDraft = null }, cameraRequest = homeCameraRequest, cameraInitialMode = homeCameraInitialMode, onCameraRequestConsumed = { homeCameraRequest = 0 }, onOpenChats = { selected = "Chats" }, onOpenStories = { statusCreatorRequested = false; statusOpenOwner = null; statusOpenId = null; selected = "Stories" }, onOpenStatusOwner = { statusCreatorRequested = false; statusOpenOwner = it; statusOpenId = null; selected = "Stories" }, onCreateStatus = { statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenStatusWithMedia = { uri, type -> statusInitialMediaUri = uri; statusInitialMediaType = if (type == "video") FynxStatusType.VIDEO else FynxStatusType.PHOTO; statusCreatorRequested = true; statusOpenOwner = null; statusOpenId = null }, onOpenProfile = { selected = "Profile" }, onOpenMarketplace = { selected = "Marketplace" }, onOpenNotifications = { selected = "Notifications" }, onOpenFindPeople = { selected = "Friends" }, onOpenAi = { selected = "AI" }, onOpenAuthorProfile = { profileUser = it }, initialPostId = postOpenId, initialCommentId = postOpenCommentId, onInitialPostConsumed = { postOpenId = null; postOpenCommentId = null })
             "Search" -> FynxUniversalSearchPanel(
                 onOpenProfile = { username -> profileUser = username; selected = "Home" },
                 onOpenMarketplaceListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
@@ -786,7 +804,10 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Extra Tools" -> FynxExtraToolsPanel()
             "Calendar" -> CalendarPanel()
             "Stories" -> FynxStatusHubPanel(
-                onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 },
+                initialMediaUri = statusInitialMediaUri,
+                initialMediaType = statusInitialMediaType,
+                onInitialMediaAccepted = { statusInitialMediaUri = null; statusInitialMediaType = null },
+                onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 },
                 initialText = marketplaceStatusDraft,
                 onInitialTextAccepted = { marketplaceStatusDraft = null },
                 openOwnerUsername = statusOpenOwner,
@@ -931,14 +952,18 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                     ) {
                         FynxStatusHubPanel(
                             startWithCreator = true,
+                            initialMediaUri = statusInitialMediaUri,
+                            initialMediaType = statusInitialMediaType,
+                            onInitialMediaAccepted = { statusInitialMediaUri = null; statusInitialMediaType = null },
                             onOpenUnifiedCamera = { mode ->
-                                homeCameraInitialMode = mode
+                                // Dismiss the Status creator first. The app-level
+                                // handoff opens CameraX on the next frame, after this
+                                // dialog window has left composition.
                                 statusCreatorRequested = false
                                 statusComposerImmersive = false
-                                selected = "Home"
-                                homeCameraRequest += 1
+                                pendingStatusCameraMode = mode
                             },
-                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false },
+                            onExitCreator = { statusCreatorRequested = false; statusComposerImmersive = false; statusInitialMediaUri = null; statusInitialMediaType = null },
                             onComposerVisibilityChange = { statusComposerImmersive = it }
                         )
                     }

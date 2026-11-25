@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SentimentSatisfied
-import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -77,6 +76,7 @@ fun FynxHomeSocialHubPanel(
     onOpenStories: () -> Unit = {},
     onOpenStatusOwner: (String) -> Unit = {},
     onCreateStatus: () -> Unit = {},
+    onOpenStatusWithMedia: (Uri, String) -> Unit = { _, _ -> },
     onOpenProfile: () -> Unit = {},
     onOpenMarketplace: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
@@ -193,16 +193,35 @@ fun FynxHomeSocialHubPanel(
     }
 
     val gallery = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(12)
+        ActivityResultContracts.PickMultipleVisualMedia(4)
     ) { uris ->
         if (uris.isNotEmpty()) {
-            uris.take(4).forEach { uri -> runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-            val selected = uris.distinct().take(4)
-            val nextUris = (capturedUris.filterNot { it in selected } + selected).take(4)
-            capturedUris = nextUris
-            capturedTypes = nextUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
-            selectedVisualIndex = 0
-            showComposer = true
+            // Preserve media already attached to this draft and append only what fits.
+            val selected = uris.distinct().filterNot { it in capturedUris }
+            val availableSlots = (4 - capturedUris.size).coerceAtLeast(0)
+            val accepted = selected.take(availableSlots)
+            accepted.forEach { uri ->
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
+            if (accepted.isNotEmpty()) {
+                val nextUris = (capturedUris + accepted).take(4)
+                capturedUris = nextUris
+                capturedTypes = nextUris.map { uri -> FynxMultiMediaPostClient.mediaKind(context, uri) }
+                selectedVisualIndex = nextUris.size - accepted.size
+                showComposer = true
+            }
+            if (selected.size > accepted.size) {
+                notice = if (availableSlots == 0) {
+                    "A post can contain up to four photos or videos. Remove an item before adding more."
+                } else {
+                    "A post can contain up to four photos or videos. Added ${accepted.size}; ${selected.size - accepted.size} selected item(s) were not added."
+                }
+            }
         }
     }
 
@@ -1006,36 +1025,6 @@ fun FynxHomeSocialHubPanel(
                             }
                         }
 
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFEAF3FF)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF007FFF).copy(alpha = 0.24f))
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Publish to", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1C2434))
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(selected = publishDestination == "FEED", onClick = { publishDestination = "FEED" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Home Feed") })
-                                    FilterChip(selected = publishDestination == "STATUS", onClick = { publishDestination = "STATUS" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Status") })
-                                    FilterChip(selected = publishDestination == "BOTH", onClick = { publishDestination = "BOTH" }, enabled = !posting && !feedPublished && !statusPublished, label = { Text("Both") })
-                                }
-                                Text(
-                                    when {
-                                        publishDestination != "FEED" && statusMediaCandidates.size > 1 -> "Status supports one photo or video at a time. Remove extra media to share to Status."
-                                        publishDestination != "FEED" && capturedTypes.any { it == "audio" } -> "Voice attachments are not available in this photo/video Status share."
-                                        publishDestination != "FEED" && text.length > FYNX_STATUS_MAX_TEXT_LENGTH -> "Status captions are limited to 700 characters. Shorten the caption to continue."
-                                        feedPublished && publishDestination == "BOTH" -> "Home Feed is published. Complete the Status share to finish this post."
-                                        statusPublished && publishDestination == "BOTH" -> "Status is published. Complete the Home Feed post to finish."
-                                        publishDestination == "BOTH" -> "The same edited media and caption will be shared to both destinations."
-                                        publishDestination == "STATUS" -> "Share this update to your 24-hour Status story."
-                                        else -> "Publish this update to your Home Feed."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (publishDestination != "FEED" && !statusTargetValid) MaterialTheme.colorScheme.error else Color(0xFF475569)
-                                )
-                            }
-                        }
-
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
 
                         Row(
@@ -1342,7 +1331,7 @@ fun FynxHomeSocialHubPanel(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text("Add to your post", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ComposerAction("Marketplace", Icons.Default.Storefront, onClick = { showMorePostOptions = false; onOpenMarketplace() }, enabled = !posting, compact = true)
+                    ComposerAction("Status", Icons.Default.Image, onClick = { showMorePostOptions = false; showComposer = false; onCreateStatus() }, enabled = !posting, compact = true)
                     TextButton(
                         onClick = { showMorePostOptions = false; showMusicPicker = true; notice = null },
                         enabled = !posting && postingAllowed,
@@ -1652,8 +1641,13 @@ fun FynxHomeSocialHubPanel(
                         selectedMusic = selectedCatalogueMusic,
                         onChooseMusic = { showMusicPicker = true; notice = null },
                         onClearMusic = { selectedCatalogueMusic = null; musicPlaying = false },
-                        // Status is selected in the shared New post composer after editing.
-                        showYourStoryAction = false,
+                        showYourStoryAction = cameraEditingMediaUri == null,
+                        onShareToStatus = { uri, type ->
+                            showCamera = false
+                            showFastCamera = false
+                            cameraOpenedFromComposer = false
+                            onOpenStatusWithMedia(uri, type)
+                        },
                         onCaptured = { uri, type ->
                             val editTarget = cameraEditingMediaUri
                             val nextUris = if (editTarget != null) {

@@ -32,7 +32,7 @@ checks = [
     ("Backend media retrieval checks authenticated visibility", 'visibleSocialPost(postId, req.user.sub)' in bootstrap),
     ("Android feed model carries the saved post metadata", 'location: String?' in remote and 'musicMediaId: String?' in remote and 'feelingActivityType: String?' in remote),
     ("Home feed renders saved post metadata", 'post.location' in feed and 'MusicPostPlayer' in feed and 'post.feelingActivity' in feed),
-    ("Marketplace action returns to the real marketplace flow instead of fabricating a post", 'ComposerAction("Marketplace"' in composer and 'onOpenMarketplace()' in composer),
+    ("Status action opens the existing Status creator instead of fabricating a post", 'ComposerAction("Status"' in composer and 'onCreateStatus()' in composer),
     ("Dedicated Batch 10 gate is wired into CI", 'scripts/verify_batch10_create_post_hardening.py' in workflow),
 ]
 

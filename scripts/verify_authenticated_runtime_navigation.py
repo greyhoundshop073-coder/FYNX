@@ -1093,14 +1093,14 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     # Prove the essential no-timer photo path independently of the optional self-timer.
     ordinary_photo = tap_control(
         camera_xml, ["Take photo"], f"{prefix}-camera-ordinary-photo",
-        ["Retake", "Next"]
+        ["Retake", "Status", "Next"]
     )
     ordinary_photo = camera_wait_for_control(
         ordinary_photo, ["Retake"], enabled=True, timeout=30.0,
         prefix=prefix + "-camera-ordinary-photo-ready"
     ) if ordinary_photo else ""
     if ordinary_photo and find_control(ordinary_photo, ["Next"]):
-        report.append("- PASS ordinary photo capture opened the real editor with Retake and Next available")
+        report.append("- PASS ordinary photo capture opened the real editor with Retake, Status and Next available")
         camera_xml = tap_control(
             ordinary_photo, ["Retake"], f"{prefix}-camera-ordinary-photo-retake",
             ["Take photo", "Gallery"]
@@ -1191,14 +1191,14 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         # Retake/Next below so a real capture—not only a countdown—is still verified.
         countdown_capture_xml = tap_control(
             short_timer_selected, ["Take photo"], f"{prefix}-camera-timer-capture-start",
-            ["Cancel timer", "Retake", "Next"], wait_attempts=8, post_wait_attempts=24
+            ["Cancel timer", "Retake", "Status", "Next"], wait_attempts=8, post_wait_attempts=24
         )
         if countdown_capture_xml:
             timed_editor = camera_wait_for_control(
                 countdown_capture_xml, ["Retake"], enabled=True, timeout=30.0,
                 prefix=prefix + "-camera-timer-capture"
             )
-            if find_control(timed_editor, ["Retake"]) and find_control(timed_editor, ["Next"]):
+            if find_control(timed_editor, ["Retake"]) and find_control(timed_editor, ["Status"]) and find_control(timed_editor, ["Next"]):
                 report.append("- PASS explicitly selected 3-second self-timer completed and produced a usable photo editor")
                 screenshot(f"{prefix}-camera-timer-captured-photo.png")
                 camera_xml = tap_control(
@@ -1422,22 +1422,22 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
 
     screenshot(f"{prefix}-camera-photo-editor-initial.png")
     verify_camera_image_signal(f"{prefix}-camera-photo-editor-initial.png", (180, 650, 1260, 1900), prefix + " photo editor preview")
-    verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Next"], prefix + " photo editor")
+    verify_camera_controls_fit_safe_area(editor_xml, ["Retake", "Rotate", "Status", "Next"], prefix + " photo editor")
     (ROOT / f"{prefix}-camera-photo-editor-initial.xml").write_text(editor_xml + chr(10), encoding="utf-8")
     missing_editor = [
-        label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Next"]
+        label for label in ["Looks", "Face FX", "Background", "AI Studio", "Retake", "Status", "Next"]
         if not find_control(editor_xml, [label])
     ]
     if missing_editor:
         FAILURES.append(prefix + ": captured-photo editor missing expected category/action controls: " + ", ".join(missing_editor))
     else:
-        report.append("- PASS photo editor exposes the grouped effect categories and Retake/Rotate/Next actions")
+        report.append("- PASS photo editor exposes the grouped effect categories and separate Retake/Rotate/Status/Next actions")
 
     # Rotate is a real file operation, not just a decorative action. Exercise it before other
     # edits and require the editor and its safe action row to remain usable afterwards.
     rotate_xml = tap_control(
         editor_xml, ["Rotate"], f"{prefix}-camera-photo-rotate",
-        ["Retake", "Next"]
+        ["Retake", "Status", "Next"]
     )
     if rotate_xml:
         editor_xml = camera_wait_for_control(
@@ -1451,7 +1451,7 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             prefix + " rotated photo editor preview"
         )
         verify_camera_controls_fit_safe_area(
-            editor_xml, ["Retake", "Rotate", "Next"],
+            editor_xml, ["Retake", "Rotate", "Status", "Next"],
             prefix + " rotated photo editor"
         )
         if control_is_enabled(editor_xml, ["Next"]):
@@ -1536,12 +1536,12 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
     if retake_ready:
         second_editor = tap_control(
             retake_xml, ["Take photo"], f"{prefix}-camera-photo-before-post-draft",
-            ["Retake", "Rotate", "Next"]
+            ["Retake", "Rotate", "Status", "Next"]
         )
         if second_editor:
             screenshot(f"{prefix}-camera-photo-editor-for-post-draft.png")
             verify_camera_controls_fit_safe_area(
-                second_editor, ["Retake", "Rotate", "Next"],
+                second_editor, ["Retake", "Rotate", "Status", "Next"],
                 prefix + " photo editor before post handoff"
             )
 
@@ -1597,9 +1597,13 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             else:
                 FAILURES.append(prefix + ": photo Text tool did not open")
 
-            # Only Next leaves the shared Camera editor. Status is a composer destination,
-            # not a second camera action, so keep this exact edited preview for the post test.
-            report.append("- PASS camera editor has one Next action; destination choice is deferred to the shared composer")
+            # Status — Your Story and Next are separate editor actions in the reference flow.
+            # Keep this edited preview for the Home Feed draft test; the Status handoff is
+            # exercised in a second capture after the draft has been dismissed.
+            if find_control(second_editor, ["Status"]) and find_control(second_editor, ["Next"]):
+                report.append("- PASS camera editor exposes separate Status — Your Story and Next actions")
+            else:
+                FAILURES.append(prefix + ": photo editor is missing the separate Status or Next action")
             # Put real camera text on the photo before Next so the following local Drafts
             # round trip proves the overlay source/settings survive beyond the live editor.
             draft_text_xml = tap_control(
@@ -1646,35 +1650,11 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
             )
             if draft_xml:
                 verify_post_details_footer_safe_area(draft_xml, prefix + " post details first viewport")
-                destination_labels = ["Home Feed", "Status", "Both"]
-                draft_xml = wait_for_controls(
-                    draft_xml, destination_labels, f"{prefix}-camera-publish-destinations"
-                )
-                # Publish destinations are intentionally below the post details in the
-                # scrollable composer. Scroll its real UIAutomator viewport before declaring
-                # the options missing; checking only the first viewport produced a false red.
-                for scroll_attempt in range(8):
-                    if all(find_control(draft_xml, [label]) for label in destination_labels):
-                        break
-                    scrolled = swipe_vertical_scroll_container(
-                        draft_xml, f"{prefix}-camera-publish-destinations-scroll-{scroll_attempt + 1}"
-                    )
-                    if not scrolled:
-                        break
-                    draft_xml = scrolled
-                missing_destinations = [label for label in destination_labels if not find_control(draft_xml, [label])]
-                if missing_destinations:
-                    FAILURES.append(prefix + ": shared composer is missing destination options " + ", ".join(missing_destinations))
+                if find_control(draft_xml, ["Add description..."]):
+                    report.append("- PASS camera Next opened the reference New post caption/details page; no post was published")
+                    screenshot(f"{prefix}-camera-create-post-caption.png")
                 else:
-                    report.append("- PASS photo composer exposes Home Feed, Status and Both without publishing")
-                    destination_xml = draft_xml
-                    for destination in ["Status", "Both", "Home Feed"]:
-                        destination_xml = tap_control(
-                            destination_xml, [destination],
-                            f"{prefix}-camera-destination-{destination.lower().replace(' ', '-')}",
-                            ["New post"]
-                        ) or destination_xml
-                    draft_xml = destination_xml
+                    FAILURES.append(prefix + ": camera Next opened New post without the reference caption field")
                 # The content viewport may retain a previous scroll offset even though
                 # the fixed New post header is visible. Restore the top before capturing
                 # evidence, checking caption/media controls, or attempting to type.
@@ -2004,7 +1984,8 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
                     else:
                         FAILURES.append(prefix + ": Drafts did not persist the unpublished camera media")
                 home = camera_return_to_home(details_xml, prefix + "-post-draft-dismiss")
-                report.append("- PASS camera Next handed the photo to the reference-style post details page; no post was published")
+                report.append("- PASS camera Next handed the photo to the reference-style Home post details page; no post was published")
+                home = capture_camera_status_handoff(home, prefix)
             else:
                 FAILURES.append(prefix + ": camera Next did not open the New post caption draft")
                 home = camera_return_to_home(second_editor, prefix + "-post-draft-send-failed")
@@ -2015,6 +1996,59 @@ def capture_camera_post_journey(home_xml: str, prefix: str) -> str:
         home = camera_return_to_home(retake_xml or editor_xml, prefix + "-photo-journey-return")
 
     return capture_camera_video_journey(home, prefix)
+
+def capture_camera_status_handoff(home_xml: str, prefix: str) -> str:
+    """Verify the editor's Your Story action opens the existing Status composer with the captured photo."""
+    home = restore_home_feed_top(home_xml, f"{prefix}-status-restore-home-top")
+    if not find_control(home, ["Open FYNX camera"]):
+        FAILURES.append(prefix + ": Home camera entry was unavailable for the direct Status handoff test")
+        return home
+    camera_xml = tap_control(
+        home, ["Open FYNX camera"], f"{prefix}-status-camera-live-preview",
+        ["Switch front/back camera"]
+    )
+    if not camera_xml:
+        return home
+    editor_xml = tap_control(
+        camera_xml, ["Take photo"], f"{prefix}-status-photo-capture",
+        ["Status", "Next"]
+    )
+    if not editor_xml:
+        FAILURES.append(prefix + ": photo capture did not expose the Status — Your Story and Next actions")
+        return camera_return_to_home(camera_xml, prefix + "-status-editor-missing")
+    screenshot(f"{prefix}-camera-status-editor.png")
+    if not (find_control(editor_xml, ["Status"]) and find_control(editor_xml, ["Next"])):
+        FAILURES.append(prefix + ": captured photo editor is missing the separate Status or Next action")
+        return camera_return_to_home(editor_xml, prefix + "-status-action-missing")
+    status_xml = tap_control(
+        editor_xml, ["Status"], f"{prefix}-camera-status-handoff",
+        ["Add a caption", "Send", "Back from Status composer"]
+    )
+    if not status_xml:
+        FAILURES.append(prefix + ": tapping Status — Your Story did not open the existing Status media composer")
+        return camera_return_to_home(editor_xml, prefix + "-status-handoff-failed")
+    screenshot(f"{prefix}-camera-status-composer.png")
+    # The current mature Status composer presents the selected media, an optional
+    # caption field, and Send. It does not use the retired "Preview & Share" screen.
+    # Do not tap Send in this read-only certification.
+    if (
+        find_control(status_xml, ["Add a caption"])
+        and find_control(status_xml, ["Send"])
+        and find_control(status_xml, ["Back from Status composer"])
+    ):
+        report.append("- PASS camera Status — Your Story handed the captured photo into the existing media composer with caption, Send and Back controls; it was not auto-published")
+    else:
+        FAILURES.append(prefix + ": Status handoff did not expose the existing media caption, Send and Back controls")
+    home_after_status = tap_control(
+        status_xml, ["Back from Status composer"], f"{prefix}-camera-status-composer-close",
+        ["Open FYNX camera"]
+    )
+    if home_after_status and find_control(home_after_status, ["Open FYNX camera"]):
+        report.append("- PASS closing the Status composer returned safely to Home")
+        return home_after_status
+    FAILURES.append(prefix + ": closing the Status composer did not return to Home")
+    return home_after_status or status_xml
+
 
 def list_app_cache_videos() -> set[str]:
     """List app-owned source and processed clips using an absolute private-cache path."""
@@ -2138,7 +2172,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
     stop_labels = ["Stop recording", "Stop video note", "Record video", "Record video note"]
     editor = tap_control(
         recording, stop_labels, f"{prefix}-camera-video-record-stop",
-        ["Retake", "Next"]
+        ["Retake", "Status", "Next"]
     )
     if not editor:
         FAILURES.append(prefix + ": recorded video did not reach its preview/editor after the shutter stop action")
@@ -2146,7 +2180,7 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         editor = camera_stop_active_recording(
             current_recording, prefix + "-video-recording-stop-retry", timeout=25.0
         )
-        if not (find_control(editor, ["Retake"]) and find_control(editor, ["Next"])):
+        if not (find_control(editor, ["Retake"]) and find_control(editor, ["Status"]) and find_control(editor, ["Next"])):
             return camera_return_to_home(editor, prefix + "-video-editor-stop-retry-failed")
 
     (ROOT / f"{prefix}-camera-video-editor-before-effects.xml").write_text(
@@ -2201,18 +2235,18 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         report.append("- NOTE app cache video could not be copied out for stream-level verification")
     screenshot(f"{prefix}-camera-video-editor-before-effects.png")
     verify_camera_image_signal(f"{prefix}-camera-video-editor-before-effects.png", (180, 650, 1260, 1900), prefix + " video editor preview")
-    verify_camera_controls_fit_safe_area(editor, ["Retake", "Next"], prefix + " video editor")
+    verify_camera_controls_fit_safe_area(editor, ["Retake", "Status", "Next"], prefix + " video editor")
     # The style carousel is below the initially visible caption field in the
     # bottom-anchored editor viewport; verify the fixed action row first, then scroll
     # the real editor viewport to prove the style choices separately.
     missing = [
-        label for label in ["Retake", "Next"]
+        label for label in ["Retake", "Status", "Next"]
         if not find_control(editor, [label])
     ]
     if missing:
         FAILURES.append(prefix + ": recorded-video editor missing controls: " + ", ".join(missing))
     else:
-        report.append("- PASS emulator recorded a real short video and exposed the Retake/Next action row; Status is selected in the shared publish composer")
+        report.append("- PASS emulator recorded a real short video and exposed separate Status — Your Story and Next actions")
 
     # Test automatic captions when available, but always verify the manual caption field.
     # The emulator may not ship the speech model; that capability limitation must not block
@@ -2578,46 +2612,36 @@ def capture_camera_video_journey(home_xml: str, prefix: str) -> str:
         if not output_path or not pull_app_cache_file(output_path, local_output) or not local_output.is_file() or local_output.stat().st_size <= 1024:
             FAILURES.append(prefix + f": {style_label} export did not leave a readable MP4 in the app cache")
             continue
-        verify_camera_controls_fit_safe_area(styled_xml, ["Retake", "Next"], prefix + f" {style_label} video editor")
+        verify_camera_controls_fit_safe_area(styled_xml, ["Retake", "Status", "Next"], prefix + f" {style_label} video editor")
         screenshot(f"{prefix}-camera-video-style-{slug}-output.png")
         (ROOT / f"{prefix}-camera-video-style-{slug}-output.xml").write_text(styled_xml + chr(10), encoding="utf-8")
         report.append(f"- PASS {style_label} exported a readable MP4; app-side decoded-frame, video-track and source-audio validation passed")
         editor = styled_xml
 
-    # Recorded video shares the same post-capture destination chooser as photos.
+    # Video uses the same separate Status — Your Story and Next actions as photo media.
+    # Next is the Home Feed publishing route; Status was verified in the dedicated photo handoff above.
     current = dump_ui(f"{prefix}-camera-video-before-next.xml") or editor
+    if find_control(current, ["Status"]) and find_control(current, ["Next"]):
+        report.append("- PASS video editor keeps Status — Your Story and Next as separate actions")
+    else:
+        FAILURES.append(prefix + ": video editor is missing the separate Status or Next action")
     if find_control(current, ["Next"]):
         video_post_xml = tap_control(
-            current, ["Next"], f"{prefix}-camera-video-next-to-destinations",
-            ["New post", "Home Feed"]
+            current, ["Next"], f"{prefix}-camera-video-next-to-post-details",
+            ["New post", "Add description...", "Post"]
         )
         if video_post_xml:
-            destination_labels = ["Home Feed", "Status", "Both"]
-            # The same composer places Publish to below the first viewport. Exercise
-            # the actual scroll container before treating its destination chips as absent.
-            for scroll_attempt in range(8):
-                if all(find_control(video_post_xml, [label]) for label in destination_labels):
-                    break
-                scrolled = swipe_vertical_scroll_container(
-                    video_post_xml, f"{prefix}-camera-video-destination-scroll-{scroll_attempt + 1}"
-                )
-                if not scrolled:
-                    break
-                video_post_xml = scrolled
-            missing_destinations = [label for label in destination_labels if not find_control(video_post_xml, [label])]
-            screenshot(f"{prefix}-camera-video-destination-options.png")
-            (ROOT / f"{prefix}-camera-video-destination-options.xml").write_text(
-                video_post_xml + chr(10), encoding="utf-8"
-            )
-            if not missing_destinations:
-                report.append("- PASS recorded video Next opened New post with Home Feed, Status and Both; nothing was published")
+            verify_post_details_footer_safe_area(video_post_xml, prefix + " video post details")
+            screenshot(f"{prefix}-camera-video-post-details.png")
+            if find_control(video_post_xml, ["Add description..."]):
+                report.append("- PASS recorded video Next opened the reference New post caption/details page; nothing was published")
             else:
-                FAILURES.append(prefix + ": video composer destination options are missing " + ", ".join(missing_destinations))
+                FAILURES.append(prefix + ": video Next did not expose the reference New post caption field")
             run("adb", "shell", "input", "keyevent", "KEYCODE_BACK")
             time.sleep(0.6)
-            current = dump_ui(f"{prefix}-camera-video-destination-composer-closed.xml") or video_post_xml
+            current = dump_ui(f"{prefix}-camera-video-post-details-closed.xml") or video_post_xml
         else:
-            FAILURES.append(prefix + ": recorded video Next did not open the shared New post composer")
+            FAILURES.append(prefix + ": recorded video Next did not open the reference New post composer")
     else:
         FAILURES.append(prefix + ": recorded video editor did not expose Next")
 

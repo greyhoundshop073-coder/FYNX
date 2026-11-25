@@ -32,14 +32,27 @@ checks = [
         re.search(r'tap\(\s*"Take photo"\s*,\s*"photo-camera-entry"\s*,\s*\("Take photo"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(photo_camera, "Take photo")' in runtime
         and 'return_to_home("photo-camera")' in runtime
-        and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
+        and "PASS Status Take photo opens the shared CameraX preview in Photo mode; the live shutter becomes enabled after camera binding." in runtime,
+    ),
+    (
+        "Photo and Video runtime checks wait for the actual enabled CameraX shutter/record control, not just visible labels",
+        "def has_enabled_clickable_control(" in runtime
+        and "def wait_for_enabled_control(" in runtime
+        and 'wait_for_enabled_control("Take photo", "photo-camera-preview")' in runtime
+        and 'wait_for_enabled_control("Record video", "video-camera-preview")' in runtime
+        and "remained disabled after" in runtime,
+    ),
+    (
+        "CI pre-grants camera permission on the disposable emulator before testing CameraX controls",
+        'pm", "grant", PACKAGE, "android.permission.CAMERA' in runtime
+        and "disposable CI emulator CAMERA permission granted" in runtime,
     ),
     (
         "Status Record video opens the shared camera in Video mode without starting a recording",
         re.search(r'tap\(\s*"Record video"\s*,\s*"video-camera-entry"\s*,\s*\("Record video"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(video_camera, "Record video")' in runtime
         and 'return_to_home("video-camera")' in runtime
-        and "PASS Status Record video opens the shared live CameraX preview in Video mode." in runtime,
+        and "PASS Status Record video opens the shared CameraX preview in Video mode; the live record control becomes enabled after camera binding." in runtime,
     ),
     (
         "runtime check dismisses the creator without creating or submitting content",

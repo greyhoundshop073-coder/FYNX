@@ -119,7 +119,20 @@ require('mature authenticated publish','FynxStatusClient.create(context, status,
 require('status camera owns lifecycle and back navigation','BackHandler(enabled = recording == null && !cameraImeVisible)' in camera and 'WindowInsets.ime.getBottom(LocalDensity.current)' in camera and 'else onDismiss()' in camera and 'cameraProvider?.unbindAll()' in camera)
 require('status camera profile identity overlay','FynxProfileRemoteClient.get(context, username)' in camera and 'profilePhotoId' in camera and 'FynxRemoteMedia("/api/media/$photoId"' in camera)
 require('Status creation uses the shared Home camera instead of a second Status camera','FynxCameraCapturePanel(' not in hub and 'onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) }' in hub and 'onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) }' in hub and 'onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) }' in hub and 'FynxCameraCapturePanel(' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt'))
-require('shared camera result returns to the unified post composer without a second Status camera','onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app and 'cameraInitialMode = homeCameraInitialMode' in app and 'activeCameraInitialMode = cameraInitialMode' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt') and 'initialMode = activeCameraInitialMode' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt') and 'activeCameraInitialMode = CameraMode.PHOTO' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt') and 'onCapturedWithTextEdits' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt') and 'onOpenStatusWithMedia' not in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt'))
+require('shared CameraX keeps separate Status media handoff and Home post Next routes without creating a second Status camera',
+    'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 }' in app
+    and 'cameraInitialMode = homeCameraInitialMode' in app
+    and 'onOpenStatusWithMedia: (Uri, String) -> Unit' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'onOpenStatusWithMedia = { uri, type ->' in app
+    and 'showYourStoryAction = cameraEditingMediaUri == null' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'onShareToStatus = { uri, type ->' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'onOpenStatusWithMedia(uri, type)' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'initialMediaUri = statusInitialMediaUri' in app
+    and 'initialMediaType = statusInitialMediaType' in app
+    and 'Accept media handed off from the Home camera' in hub
+    and 'initialMode = activeCameraInitialMode' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'onCapturedWithTextEdits' in read('app/src/main/java/com/fynx/app/ui/FynxHomeSocialHubPanel.kt')
+    and 'FynxCameraCapturePanel(' not in hub)
 require('add status Recents filter','recentFilter' in hub and 'Photos' in hub and 'Videos' in hub and 'recentFilterMenu' in hub)
 require('add status media multi-select is functional','selectionMode' in hub and 'selectedMediaUris' in hub and 'toggleSelected' in hub and 'finishSelection' in hub and 'Select multiple media' in hub)
 require('add status Layout creates real collage media','layoutMode' in hub and 'createFynxLayoutCollage' in hub and 'Bitmap.createBitmap(1200, 1200' in hub and 'FynxStatusToolPill' in hub)
