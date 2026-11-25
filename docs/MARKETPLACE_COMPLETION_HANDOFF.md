@@ -33,3 +33,15 @@ The internal escrow and ledger records are not proof of regulated custody or pro
 ## Existing work reused
 
 This workstream consolidates compatible work already present in the open My Shop and saved-products branches rather than rebuilding those features. Their original PRs are inputs to the grouped change, not evidence that the changes are already integrated or certified.
+
+
+## Latest branch verification
+
+- PR: [#605](https://github.com/greyhoundshop073-coder/FYNX/pull/605)
+- Exact verified head: `7982c54bc9b8f4bbe75a2a982c1a05829f1c3846`
+- Backend CI: [run 9331](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45637100049) — all backend validation steps passed, including My Shop privacy/partial edits, Saved Products authorization, PostgreSQL reviews, financial lifecycle and Neon runtime route checks.
+- Android Build: [run 16213](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45637100183) — workflow passed; fast build/test/lint checks passed. Full Android emulator instrumentation, screenshots and APK artifact steps were skipped.
+- Chat Group Parity + Layout Safety: [run 5328](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45637099965) — passed.
+- Chat Final Closure: [run 1593](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45637100123) — passed.
+- The optional live production backend probe was skipped. Green CI does not certify real Paystack custody, live payouts, production refunds, or authenticated multi-account buyer/seller runtime.
+- Marketplace Proof Video Calls remains owned by [PR #599](https://github.com/greyhoundshop073-coder/FYNX/pull/599); no Live Proof/call-engine files are included in this PR.
