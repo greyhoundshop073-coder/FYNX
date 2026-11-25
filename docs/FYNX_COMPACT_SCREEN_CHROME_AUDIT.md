@@ -29,7 +29,7 @@ This is separate from the More feature-directory redesign. It must not replace, 
 
 | Screen | Source finding | Action |
 |---|---|---|
-| More | The app shell already says More; the page repeated a large FYNX Features heading and generic paragraph | Tracked in PR #601; preserve this work. More card glyphs also now distinguish Official Announcements from Advertising and Money Center from Wallet |
+| More | The app shell already says More; the page repeated a large FYNX Features heading and generic paragraph, and the search field was taller than needed | PR #601 removed the repeated heading; this PR reduces the search field to 56dp and tightens its surrounding vertical gaps. More card glyphs distinguish Official Announcements from Advertising and Money Center from Wallet |
 | Money Center | The shell supplies Money Center, while the panel repeated its own title, a long introductory sentence and a large explanatory card | Removed repeated heading/intro card; tightened list top padding; updated the authenticated runtime navigation expectation to use the shell title |
 | Business Account | The shell supplies the title and back action; the panel repeated title/description and added a second Back button at the bottom | Removed duplicate title/description and redundant Back button; Save Business now uses the available row width |
 | Privacy & Safety | The app shell supplies the page title and back action; the child panel drew another back arrow, title and subtitle | Removed the child header and extra status-bar inset; retained privacy content and support/safety controls |
