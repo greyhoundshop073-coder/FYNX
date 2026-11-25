@@ -130,7 +130,23 @@ try {
 
   response = await request("/api/marketplace/shops/sellerone", 2);
   assert.equal(response.status, 200, "public shop profile is readable by an unblocked viewer");
-  assert.equal((await response.json()).shop.shopName, "Seller Studio");
+  const publicShop = (await response.json()).shop;
+  assert.equal(publicShop.shopName, "Seller Studio");
+  assert.equal(Object.hasOwn(publicShop, "contactPhone"), false, "public storefront must never expose the seller's private contact phone");
+  assert.equal(JSON.stringify(publicShop).includes("+2348000000000"), false, "public storefront response must not contain the private phone number");
+  response = await request("/api/marketplace/my-shop", 1);
+  const privateShop = (await response.json()).shop;
+  assert.equal(privateShop.contactPhone, "+2348000000000", "the seller can still see their own private contact phone");
+  response = await request("/api/marketplace/my-shop", 1, {
+    method: "PATCH", body: json({ description: "Updated without replacing shop identity or branding" })
+  });
+  assert.equal(response.status, 200, "partial shop edits are accepted");
+  const partialShop = (await response.json()).shop;
+  assert.equal(partialShop.shopName, "Seller Studio", "omitted shop name is preserved");
+  assert.equal(partialShop.location, "Lagos", "omitted location is preserved");
+  assert.equal(partialShop.contactPhone, "+2348000000000", "omitted private phone is preserved");
+  assert.equal(partialShop.logoMediaId, "101", "omitted logo is preserved");
+  assert.equal(partialShop.coverMediaId, "102", "omitted cover is preserved");
   await pool.query("INSERT INTO blocks(blocker_id,blocked_id) VALUES (2,1)");
   response = await request("/api/marketplace/shops/sellerone", 2);
   assert.equal(response.status, 404, "public shop identity is hidden when either party blocks the other");
@@ -198,6 +214,22 @@ try {
   assert.equal(reviewPage.reviews[0].productTitle, "Test listing");
   assert.equal(reviewPage.limit, 1);
   assert.equal(reviewPage.offset, 0);
+
+  await pool.query("UPDATE marketplace_orders SET status='REFUNDED' WHERE id=$1", [completedOrder]);
+  response = await request("/api/marketplace/sellers/sellerone/reviews?limit=1&offset=0", 3);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).reviews.length, 0, "reviews from subsequently refunded orders must not remain public");
+  response = await request("/api/marketplace/listings/501/reviews?limit=1&offset=0", 3);
+  assert.equal(response.status, 200);
+  const refundedProductReviews = await response.json();
+  assert.equal(refundedProductReviews.reviewCount, 0, "refunded purchases must not inflate product review counts");
+  assert.equal(refundedProductReviews.averageRating, 0, "refunded purchases must not influence product ratings");
+  assert.equal(refundedProductReviews.reviews.length, 0);
+  response = await request("/api/marketplace/sellers/sellerone/reputation", 3);
+  assert.equal(response.status, 200);
+  const refundedReputation = (await response.json()).reputation;
+  assert.equal(refundedReputation.successfulSales, 0, "refunded orders must not count as successful seller sales");
+  assert.equal(refundedReputation.reviewCount, 0, "reviews tied to refunded orders must not count toward seller reputation");
 
   console.log("PostgreSQL shop profile and seller review integration tests GREEN (save/reload, media ownership, avatar isolation, public block privacy, completed-order buyer ownership and duplicate review rejection).");
 } finally {

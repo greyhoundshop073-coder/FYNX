@@ -40,17 +40,20 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     const result = await pool.query(`
       WITH order_stats AS (
         SELECT u.id AS seller_id,u.username,u.display_name,
-          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED')::INTEGER AS successful_orders,
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id)::INTEGER AS successful_orders,
           COUNT(o.id)::INTEGER AS total_orders,
-          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
           COUNT(o.id) FILTER (WHERE o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d
         FROM users u LEFT JOIN marketplace_orders o ON o.seller_id = u.id
         GROUP BY u.id, u.username, u.display_name
       ),
       review_stats AS (
-        SELECT seller_id,COUNT(*)::INTEGER AS review_count,COALESCE(AVG(rating), 0)::NUMERIC(4,2) AS average_rating,
-          COUNT(*) FILTER (WHERE rating >= 4)::INTEGER AS positive_reviews
-        FROM marketplace_seller_reviews GROUP BY seller_id
+        SELECT r.seller_id,COUNT(*)::INTEGER AS review_count,COALESCE(AVG(r.rating), 0)::NUMERIC(4,2) AS average_rating,
+          COUNT(*) FILTER (WHERE r.rating >= 4)::INTEGER AS positive_reviews
+        FROM marketplace_seller_reviews r
+        JOIN marketplace_orders o ON o.id = r.order_id
+        WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
+        GROUP BY r.seller_id
       ),
       ranked AS (
         SELECT s.*,COALESCE(r.review_count, 0)::INTEGER AS review_count,COALESCE(r.average_rating, 0)::NUMERIC(4,2) AS average_rating,
@@ -317,6 +320,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         JOIN marketplace_orders o ON o.id = r.order_id
         LEFT JOIN marketplace_listings l ON l.id = o.listing_id
         WHERE lower(seller.username) = lower($1)
+          AND o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
           AND NOT EXISTS (
             SELECT 1 FROM blocks b
             WHERE (b.blocker_id = $2 AND b.blocked_id = seller.id)
@@ -358,11 +362,13 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         SELECT r.id,r.rating,r.comment,r.created_at,buyer.username AS reviewer_username,buyer.display_name AS reviewer_display_name
         FROM marketplace_product_reviews r JOIN users buyer ON buyer.id=r.buyer_id
         JOIN marketplace_listings listing ON listing.id=r.listing_id
+        JOIN marketplace_orders o ON o.id=r.order_id
         WHERE r.listing_id=$1
+          AND o.status='COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=listing.seller_id) OR (b.blocked_id=$2 AND b.blocker_id=listing.seller_id))
         ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4
       `, [listingId, req.user.sub, limit, offset]);
-      const stats = await pool.query('SELECT COUNT(*)::INTEGER AS review_count,COALESCE(AVG(rating),0)::NUMERIC(4,2) AS average_rating FROM marketplace_product_reviews WHERE listing_id=$1', [listingId]);
+      const stats = await pool.query(`SELECT COUNT(*)::INTEGER AS review_count,COALESCE(AVG(r.rating),0)::NUMERIC(4,2) AS average_rating FROM marketplace_product_reviews r JOIN marketplace_orders o ON o.id=r.order_id WHERE r.listing_id=$1 AND o.status='COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id`, [listingId]);
       return res.json({ reviews: result.rows.map(row => ({ id:String(row.id), rating:Number(row.rating), comment:row.comment || '', createdAt:row.created_at, reviewerUsername:row.reviewer_username, reviewerDisplayName:row.reviewer_display_name || row.reviewer_username })), reviewCount:Number(stats.rows[0]?.review_count || 0), averageRating:Number(stats.rows[0]?.average_rating || 0), limit, offset, hasMore:result.rows.length===limit });
     } catch (error) {
       console.error('marketplace product reviews', error);

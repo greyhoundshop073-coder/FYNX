@@ -22,13 +22,16 @@ const batch2Source = await readFile(path.join(backendDir, "marketplaceBatch2Fina
 const scalabilitySource = await readFile(path.join(backendDir, "scalability.js"), "utf8");
 
 
-for (const [pattern, label] of [
-  [/export const app = express\(\)/, "exported canonical Express application"],
-  [/export async function dispatchRealtimeConnection/, "realtime connection adapter"],
-  [/app\.post\(["']\/api\/auth\/login["']/, "existing login route"],
-  [/registerDiscoveryRoutes\(\{ app, pool, auth \}\)/, "Marketplace discovery routes"],
-  [/registerBuyerWalletRoutes\(\{ app \}\)/, "Wallet routes"]
-]) assert.match(runtime, pattern, `Neon runtime is missing ${label}`);
+for (const [source, pattern, label] of [
+  [runtime, /export const app = express\(\)/, "exported canonical Express application"],
+  [runtime, /export async function dispatchRealtimeConnection/, "realtime connection adapter"],
+  [runtime, /app\.post\(["']\/api\/auth\/login["']/, "existing login route"],
+  [runtime, /registerDiscoveryRoutes\(\{ app, pool, auth \}\)/, "Marketplace discovery routes"],
+  [scalabilitySource, /registerBuyerWalletRoutes\(\{ app \}\)/, "Buyer Wallet routes"],
+  [scalabilitySource, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/, "Marketplace Wallet routes"]
+]) assert.match(source, pattern, "Neon runtime is missing " + label);
+assert.doesNotMatch(runtime, /registerBuyerWalletRoutes\(\{ app \}\)|registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
+  "generated server must not duplicate Wallet routes owned by the shared scalability layer");
 
 for (const route of ["/api/social/feed", "/api/social/posts/multi", "fynxHomeCommentsBatch4b"]) {
   assert.ok(social.includes(route), `Neon social runtime is missing ${route}`);
@@ -41,6 +44,7 @@ for (const [source, pattern, label] of [
   [runtime, /export function getRealtimeLocalUserIds/, "local realtime user filter"],
   [functionSource, /parseTriggerDelivery/, "authenticated Neon schedule trigger parser"],
   [functionSource, /installNeonRealtimeBridge/, "cross-isolate realtime bridge activation"],
+  [functionSource, /await import\("\.\/scalability\.js"\)/, "shared Wallet route registration layer"],
   [functionSource, /upgradeWebSocket/, "Neon WebSocket upgrade adapter"],
   [bridgeSource, /fynx_realtime_events/, "PostgreSQL realtime event outbox"],
   [bridgeSource, /fynx_realtime_connections/, "cross-isolate connection presence"],

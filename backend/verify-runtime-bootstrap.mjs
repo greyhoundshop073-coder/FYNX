@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
+await import("./verify-wallet-route-registration.mjs");
+
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
 const scalability = await readFile(new URL("./scalability.js", import.meta.url), "utf8");
@@ -91,8 +93,6 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
-  "registerBuyerWalletRoutes({ app })",
-  "registerBuyerWalletMarketplaceRoutes({ app })",
   'app.post("/api/auth/login"',
   'app.get("/api/me", auth',
   'app.get("/api/statuses", auth',
