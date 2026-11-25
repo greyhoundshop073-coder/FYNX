@@ -130,7 +130,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.waitUntil(timeoutMillis = 5_000) {
             compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onAllNodesWithText("Shop this product").onFirst().performScrollTo().performClick()
+        compose.onAllNodesWithText("Shop this product")[0].performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
@@ -182,7 +182,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.waitUntil(timeoutMillis = 5_000) {
             compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onAllNodesWithText("Shop this product").onFirst().performScrollTo().performClick()
+        compose.onAllNodesWithText("Shop this product")[0].performScrollTo().performClick()
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
             .performScrollTo()
             .assertIsDisplayed()
