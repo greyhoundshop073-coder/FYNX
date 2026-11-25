@@ -458,8 +458,10 @@ class FynxMarketplaceScreensComposeTest {
     }
 
     private fun scrollToPromoAction(description: String) {
+        // The carousel is a horizontal LazyRow and may not have a vertically
+        // scrollable parent. Drive its LazyList semantics directly instead of
+        // performScrollTo(), which requires a parent scroll container.
         val carousel = compose.onNodeWithTag("fynx-marketplace-promo-carousel")
-        carousel.performScrollTo()
         var found = false
         for (index in 0 until 32) {
             val scrolled = runCatching {
