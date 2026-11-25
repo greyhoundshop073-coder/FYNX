@@ -12,12 +12,13 @@ publisher = read("app/src/main/java/com/fynx/app/ui/FynxSharedStatusPublisher.kt
 drafts = read("app/src/main/java/com/fynx/app/ui/FynxLocalPostDraftStore.kt")
 
 checks = [
-    ("camera no longer has a separate Your Story publish action", "showYourStoryAction = false" in home and "onShareToStatus =" not in home),
+    ("camera editor restores the separate Status — Your Story action alongside Next", "showYourStoryAction = cameraEditingMediaUri == null" in home and "onShareToStatus = { uri, type ->" in home and 'Text("Next")' in read("app/src/main/java/com/fynx/app/ui/FynxCameraCapturePanel.kt")),
+    ("New Post More options replaces the Marketplace shortcut with Status", 'ComposerAction("Status"' in home and 'ComposerAction("Marketplace"' not in home),
     ("Status hub Add Status camera opens the shared Home camera", "onCamera = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in hub and "onRecordVideo = { onOpenUnifiedCamera(CameraMode.VIDEO) }" in hub),
     ("Status timeline camera opens the shared Home camera", "onCameraClick = { onOpenUnifiedCamera(CameraMode.PHOTO) }" in hub),
-    ("Status hub no longer creates a second CameraX panel", "FynxCameraCapturePanel(" not in hub),
-    ("Home receives the shared camera request from Stories", 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; selected = "Home"; homeCameraRequest += 1 }' in app and 'cameraInitialMode = homeCameraInitialMode' in app and 'initialMode = activeCameraInitialMode' in home and 'activeCameraInitialMode = cameraInitialMode' in home and 'activeCameraInitialMode = CameraMode.PHOTO' in home),
-    ("composer presents Home Feed, Status and Both targets", all(f'Text("{label}")' in home for label in ("Home Feed", "Status", "Both"))),
+    ("camera Status handoff enters the existing Status composer with captured media", "initialMediaUri = statusInitialMediaUri" in app and "initialMediaType = statusInitialMediaType" in app and "onInitialMediaAccepted" in app and "Accept media handed off from the Home camera" in hub),
+    ("Home receives the shared camera request from Stories", 'onOpenUnifiedCamera = { mode -> homeCameraInitialMode = mode; statusCreatorRequested = false; statusComposerImmersive = false; selected = "Home"; homeCameraRequest += 1 }' in app and 'cameraInitialMode = homeCameraInitialMode' in app and 'initialMode = activeCameraInitialMode' in home and 'activeCameraInitialMode = cameraInitialMode' in home and 'activeCameraInitialMode = CameraMode.PHOTO' in home),
+    ("reference New Post details keep publishing destinations out of the caption layout", 'Text("Publish to")' not in home and 'FilterChip(selected = publishDestination' not in home and "showYourStoryAction = cameraEditingMediaUri == null" in home),
     ("Status publication uses the existing authenticated media and status APIs", all(x in publisher for x in ("FynxStatusClient.uploadMedia", "FynxStatusClient.create", "FynxStatusStore.save"))),
     ("same edited media URI is sent to Status", "mediaUri = selectedStatusMedia?.first" in home),
     ("confirmed destination is skipped on retry after partial success", "if (needsFeed && !feedPublished)" in home and "if (needsStatus && !statusPublished)" in home),

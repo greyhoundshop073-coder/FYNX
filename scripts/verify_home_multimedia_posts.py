@@ -25,6 +25,9 @@ checks = [
     ("backend exposes authorized post media", "app.get('/api/social/posts/:id/media'" in backend and "visibleSocialPost(postId, req.user.sub)" in backend),
     ("production prestart installs multi-media backend", "socialMultiMediaBootstrap.js" in startup and "installSocialMultiMedia" in startup),
     ("composer routes publishing through the multi-media client", "FynxMultiMediaPostClient.createPost" in composer),
+    ("gallery picker is capped at the supported four media items", "PickMultipleVisualMedia(4)" in composer),
+    ("adding gallery selections preserves existing draft media instead of replacing it", "val selected = uris.distinct().filterNot { it in capturedUris }" in composer and "val nextUris = (capturedUris + accepted).take(4)" in composer),
+    ("gallery overflow is explicitly explained rather than silently discarded", "selected.size > accepted.size" in composer and "selected item(s) were not added" in composer),
     ("composer keeps an editable caption field and forwards the bounded caption", "BasicTextField(" in composer and "value = text" in composer and '"Add description..."' in composer and 'put("text", caption)' in client and "val caption = text.trim().take(4000)" in client),
 ]
 
