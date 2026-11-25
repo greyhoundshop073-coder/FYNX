@@ -173,6 +173,18 @@ def main() -> int:
         "- Safety: no status, text, photo, voice recording, or media is created or submitted.",
     ]
 
+    # This is a disposable CI emulator, not a user's device. Grant CAMERA before
+    # the read-only camera-preview check so Android's first-run permission sheet
+    # cannot cover the real CameraX controls. Production permission UX is unchanged.
+    camera_permission = adb("shell", "pm", "grant", PACKAGE, "android.permission.CAMERA")
+    if camera_permission.returncode != 0:
+        FAILURES.append(
+            "Could not pre-grant CAMERA on the CI emulator: " +
+            (camera_permission.stdout or "PackageManager returned an error").strip()
+        )
+    else:
+        report.append("- PASS disposable CI emulator CAMERA permission granted before camera preview verification.")
+
     pid = adb("shell", "pidof", PACKAGE)
     if pid.returncode != 0 or not (pid.stdout or "").strip():
         FAILURES.append("FYNX is not running in the existing emulator session; refusing to cold-start or reset the local UI session.")

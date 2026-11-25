@@ -27,6 +27,8 @@ import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Runs real FYNX production Marketplace composables against data compiled only
@@ -88,6 +90,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         val expectedDealId = candidates[1].id
         val firstDeal = dealListings.first { it.id == candidates.first().id }
         val secondDeal = dealListings.first { it.id == expectedDealId }
+        // The live Lagos-date promotion (for example, Black Friday) precedes featured products.
+        val firstFeaturedSlideIndex = if (marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) != null) 1 else 0
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -139,13 +143,14 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(firstFeaturedSlideIndex)
         compose.onNodeWithText(firstDeal.title).performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
         // Select the second real slide through the production LazyRow state. This keeps
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(firstFeaturedSlideIndex + 1)
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
@@ -198,6 +203,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
+        val firstFeaturedSlideIndex = if (marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) != null) 1 else 0
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(firstFeaturedSlideIndex)
         compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.

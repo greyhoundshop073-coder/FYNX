@@ -35,6 +35,11 @@ checks = [
         and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
     ),
     (
+        "CI pre-grants camera permission on the disposable emulator before testing CameraX controls",
+        'pm", "grant", PACKAGE, "android.permission.CAMERA' in runtime
+        and "disposable CI emulator CAMERA permission granted" in runtime,
+    ),
+    (
         "Status Record video opens the shared camera in Video mode without starting a recording",
         re.search(r'tap\(\s*"Record video"\s*,\s*"video-camera-entry"\s*,\s*\("Record video"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(video_camera, "Record video")' in runtime

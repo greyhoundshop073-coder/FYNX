@@ -21,6 +21,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Screen-level instrumentation for the real production Marketplace, Seller Center,
@@ -33,6 +35,10 @@ class FynxMarketplaceScreensComposeTest {
 
     private val marketplaceListings =
         FynxMarketplaceIsolatedTestFixtures.listings
+
+    // The banner may prepend a date-driven FYNX campaign before featured product slides.
+    private fun firstFeaturedProductSlideIndex(): Int =
+        if (marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) != null) 1 else 0
 
     private val sellerListings = marketplaceListings.map { item ->
         FynxMarketplaceClient.Listing(
@@ -124,6 +130,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(firstFeaturedProductSlideIndex())
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
@@ -166,6 +173,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(firstFeaturedProductSlideIndex())
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
