@@ -32,7 +32,7 @@ checks = [
         re.search(r'tap\(\s*"Take photo"\s*,\s*"photo-camera-entry"\s*,\s*\("Take photo"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(photo_camera, "Take photo")' in runtime
         and 'return_to_home("photo-camera")' in runtime
-        and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
+        and "PASS Status Take photo opens the shared CameraX preview in Photo mode; the live shutter becomes enabled after camera binding." in runtime,
     ),
     (
         "Photo and Video runtime checks wait for the actual enabled CameraX shutter/record control, not just visible labels",
@@ -52,7 +52,7 @@ checks = [
         re.search(r'tap\(\s*"Record video"\s*,\s*"video-camera-entry"\s*,\s*\("Record video"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(video_camera, "Record video")' in runtime
         and 'return_to_home("video-camera")' in runtime
-        and "PASS Status Record video opens the shared live CameraX preview in Video mode." in runtime,
+        and "PASS Status Record video opens the shared CameraX preview in Video mode; the live record control becomes enabled after camera binding." in runtime,
     ),
     (
         "runtime check dismisses the creator without creating or submitting content",
