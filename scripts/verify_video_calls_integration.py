@@ -159,6 +159,17 @@ checks["The [full-runtime] PR title marker enables build, emulator and screensho
 
 # Disconnect cleanup must run only after the final socket for a user closes,
 # and the same durable group-call state machine must serve Node and Neon.
+checks["Group-call disposal uses the latest call state for end, leave and reject signals"] = (
+    "val latestIsStarter by rememberUpdatedState(isStarter)" in app["group_call"]
+    and "val latestIsIncoming by rememberUpdatedState(isIncoming)" in app["group_call"]
+    and "val latestIsJoined by rememberUpdatedState(isJoined)" in app["group_call"]
+    and "val latestCallEnded by rememberUpdatedState(callEnded)" in app["group_call"]
+    and "val activeId = latestCallId" in app["group_call"]
+    and "if (latestIsStarter) realtimeClient.sendGroupCallEnd" in app["group_call"]
+    and "realtimeClient.sendGroupCallLeave(groupId, activeId)" in app["group_call"]
+    and "realtimeClient.sendGroupCallReject(groupId, activeId)" in app["group_call"]
+)
+
 checks["Group-call disconnect cleanup is implemented and directly tested"] = (
     "disconnectFynxGroupCallsForUser" in backend["group_calls"]
     and "creator_disconnected" in backend["group_calls"]
