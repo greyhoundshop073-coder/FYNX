@@ -52,10 +52,9 @@ fun ReceiptsExpensePanel() {
     }.reversed()
     val total = records.sumOf { it.amount }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Receipts & Expense Records 🧾", style = MaterialTheme.typography.headlineSmall)
-        Text("Keep a simple record of purchases and expenses.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Receipts & Expense Records 🧾", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(6.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
             Text("Recorded expenses", style = MaterialTheme.typography.titleMedium)
             Text(money(total), style = MaterialTheme.typography.headlineMedium)

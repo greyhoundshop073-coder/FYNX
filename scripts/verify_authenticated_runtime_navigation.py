@@ -7521,7 +7521,7 @@ if features:
     screenshot("authenticated-features.png")
     report.append("- PASS authenticated Home -> Features screenshot/UI hierarchy")
     journeys=(
-        ("money",["Money Tools","Money Center","Money Center 💰"],["Money Tools","Money Center","Money Center 💰"]),
+        ("money",["Money Tools","Money Center"],["Money Tools","Money Center"]),
         ("ai",["FYNX AI Assistant"],["FYNX AI Assistant"]),
     )
     for name,labels,expected in journeys:

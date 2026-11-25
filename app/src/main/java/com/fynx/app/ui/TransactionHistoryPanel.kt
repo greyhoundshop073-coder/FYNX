@@ -31,10 +31,10 @@ fun TransactionHistoryPanel() {
             (search.isBlank() || transaction.title.contains(search, true) || transaction.note.contains(search, true) || transaction.date.contains(search, true))
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Transaction History 💸", style = MaterialTheme.typography.headlineSmall)
-        Text("Record income and expenses locally for a clear money history.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Transaction History 💸", style = MaterialTheme.typography.titleLarge)
+        Text("Local records only.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Summary", style = MaterialTheme.typography.titleMedium)
             Text("Income: ${money(income)}")

@@ -68,8 +68,6 @@ fun TodoPanel() {
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("Daily Planning ✅", style = MaterialTheme.typography.headlineSmall)
-        Text("Organize today, stay on top of deadlines and get reminders.", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.bodyMedium)
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             PlannerStat("Active", activeCount.toString(), Modifier.weight(1f))

@@ -19,9 +19,8 @@ fun SpendingInsightsPanel(
     val budgetUsed = if (budget > 0) (expenses / budget).coerceIn(0.0, 1.0).toFloat() else 0f
     val recurringShare = if (expenses > 0) (recurringMonthly / expenses).coerceIn(0.0, 1.0).toFloat() else 0f
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Spending & Expense Insights 📊", style = MaterialTheme.typography.headlineSmall)
-        Text("A safe overview built from existing money totals.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Spending & Expense Insights 📊", style = MaterialTheme.typography.titleLarge)
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             InsightCard("Income", income, Modifier.weight(1f))

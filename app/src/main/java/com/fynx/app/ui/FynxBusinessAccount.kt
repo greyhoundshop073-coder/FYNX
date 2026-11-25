@@ -61,8 +61,6 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
     LaunchedEffect(Unit) { load() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Business Account", style = MaterialTheme.typography.headlineSmall)
-        Text("Your professional FYNX identity connects Marketplace, social posts and advertising.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             OutlinedTextField(name,{name=it.take(120)},Modifier.fillMaxWidth(),label={Text("Business name")},singleLine=true)
@@ -116,7 +114,6 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
             }
         }}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            Button(onClick=onBack,modifier=Modifier.weight(1f)){Text("Back")}
             Button(enabled=!loading&&!saving&&name.isNotBlank()&&username.trim().removePrefix("@").isNotBlank()&&category.isNotBlank(),onClick={
                 saving=true; message=null; scope.launch {
                     try { FynxBusinessClient.save(context,name.trim(),username.trim().removePrefix("@"),category.trim(),description.trim(),location.trim(),phone.trim(),website.trim(),openingHoursText,serviceAreasText,servicesText)
@@ -124,7 +121,7 @@ fun FynxBusinessAccountPanel(onBack: () -> Unit = {}, onOpenAdvertising: () -> U
                         .onFailure { message=it.message ?: "Unable to save business profile." }
                     } finally { saving=false }
                 }
-            },modifier=Modifier.weight(1f)){Text(if(saving)"Saving…" else "Save Business")}
+            },modifier=Modifier.fillMaxWidth()){Text(if(saving)"Saving…" else "Save Business")}
         }
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
             Button(onClick=onOpenAdvertising,modifier=Modifier.weight(1f)){Text("Advertise")}
