@@ -18,8 +18,8 @@ fun MoneyInsightsPanel() {
     val net = income - expenses
     val savingsRate = if (income > 0) ((net / income) * 100).coerceIn(0.0, 100.0) else 0.0
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Money Insights", style = MaterialTheme.typography.titleLarge)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Financial Summary", style = MaterialTheme.typography.titleMedium)
