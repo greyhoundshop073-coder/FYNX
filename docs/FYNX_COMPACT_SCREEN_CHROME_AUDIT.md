@@ -62,12 +62,12 @@ Do not edit these files while their existing PRs own them. Re-audit after their 
 - `FynxApp.kt` app-shell headers/back routing: PR #599 and More PR #601. Do not change shell navigation as part of this cleanup without coordinating those owners.
 - Marketplace, Home, Admin, Wallet, camera and call feature files: preserve their active PRs and ownership; inspect their final merged source before proposing edits.
 
-The screenshot-confirmed Profile > Settings header/search issue remains a tracked high-priority follow-up because `ProfilePanel.kt` is currently owned by PR #586. Do not silently overwrite that work.
+The screenshot-confirmed Profile > Settings chrome issue remains a tracked high-priority follow-up because `ProfilePanel.kt` is currently owned by PR #586. Source tracing shows the outer Profile Back returns to Home while SettingsPanel's inner Back returns to Profile; these are distinct navigation levels, not duplicate actions. The compact fix should hide/collapse the outer Profile shell header while Settings is open, preserve the Settings Back-to-Profile action, remove redundant FYNX branding and generic intro copy, and reduce search height/gaps. Do not simply delete either Back action or silently overwrite PR #586.
 
 ## Remaining audit checklist
 
-- [ ] Profile > Settings: compact repeated header, introductory copy and search field; coordinate the fix with PR #586, which owns `ProfilePanel.kt`.
-- [ ] Notifications: resolve the duplicate back affordance across Home-bell and Profile-settings entry paths with PR #586, preserving each correct return destination.
+- [ ] Profile > Settings: hide/collapse the outer Profile shell header while the Settings page is open (the two existing Back actions have different destinations: Home vs Profile); preserve Settings Back-to-Profile, remove redundant FYNX branding/generic intro, and compact search; coordinate with PR #586.
+- [ ] Notifications: trace Home-bell and Profile-settings entry paths separately; retain back actions when they represent different destinations, and remove only a genuinely duplicated affordance in coordination with PR #586.
 - [ ] Chats and Groups: remove confirmed repeated headings and boilerplate, then inspect search sizing and nested back controls in coordination with PR #588/#599.
 - [ ] Home and Feed: review header chrome, search/discovery controls and pinned overlays without changing feed behaviour.
 - [ ] Friends and Contacts: review titles, search and nested navigation; Contacts is owned by PR #503/#462 and has a coordination request pending.
