@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Delete
@@ -106,7 +105,7 @@ private val fynxGuideArticles = listOf(
 )
 
 @Composable
-fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
+fun FynxExtraToolsPanel() {
     val context = LocalContext.current
     var notes by remember(context) { mutableStateOf(loadQuickNotes(context)) }
     var noteText by remember { mutableStateOf("") }
@@ -138,25 +137,6 @@ fun FynxExtraToolsPanel(onOpenCalendar: () -> Unit) {
                 Column {
                     Text("Quick Notes", style = MaterialTheme.typography.titleMedium)
                     Text("Capture a short note without leaving FYNX.", color = FynxDesign.TextSecondary)
-                }
-            }
-        }
-
-        Card(
-            onClick = onOpenCalendar,
-            modifier = Modifier.fillMaxWidth(),
-            shape = FynxDesign.CardShape,
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
-            border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = 0.5f))
-        ) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = FynxDesign.ControlShape, color = FynxDesign.SelectedContainer) {
-                    Icon(Icons.Default.CalendarMonth, "Events", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(9.dp).size(22.dp))
-                }
-                Spacer(Modifier.width(14.dp))
-                Column {
-                    Text("Events", style = MaterialTheme.typography.titleMedium)
-                    Text("Jump to event planning through Calendar.", color = FynxDesign.TextSecondary)
                 }
             }
         }
