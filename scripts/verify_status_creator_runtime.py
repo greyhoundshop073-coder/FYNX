@@ -125,6 +125,48 @@ def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0
     return latest
 
 
+
+def has_enabled_clickable_control(xml_text: str, label: str) -> bool:
+    if not xml_text:
+        return False
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return False
+    wanted = label.strip().casefold()
+    return any(
+        node.attrib.get("visible-to-user", "true").lower() != "false"
+        and node.attrib.get("enabled", "false").lower() == "true"
+        and node.attrib.get("clickable", "false").lower() == "true"
+        and wanted in (
+            node.attrib.get("text", "").strip().casefold(),
+            node.attrib.get("content-desc", "").strip().casefold(),
+        )
+        for node in root.iter("node")
+    )
+
+
+def wait_for_enabled_control(label: str, stage: str, timeout: float = 18.0) -> str:
+    # Merely seeing a Compose button is not proof that CameraX has bound its
+    # use cases. The real shutter stays disabled until cameraReady is true.
+    latest = dump_ui(f"status-{stage}-before.xml")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if has_enabled_clickable_control(latest, label):
+            # Allow PreviewView one additional frame after the shutter enables.
+            time.sleep(0.8)
+            latest = dump_ui(f"status-{stage}-ready.xml") or latest
+            if has_enabled_clickable_control(latest, label):
+                return latest
+        time.sleep(0.4)
+        latest = dump_ui(f"status-{stage}-wait.xml") or latest
+    FAILURES.append(
+        f"{stage}: CameraX did not become ready; '{label}' remained disabled after {timeout:.0f}s."
+    )
+    screenshot(f"status-{stage}-not-ready.png")
+    (ROOT / f"status-{stage}-not-ready.xml").write_text(latest + "\\n", encoding="utf-8")
+    return ""
+
 def has_visible_label(xml_text: str, label: str) -> bool:
     if not xml_text:
         return False
@@ -236,8 +278,12 @@ def main() -> int:
                 ("Take photo", "Switch front/back camera")
             )
             if photo_camera and find_click_target(photo_camera, "Take photo") and find_click_target(photo_camera, "Switch front/back camera"):
-                report.append("- PASS Status Take photo opens the shared live CameraX preview in Photo mode.")
-                screenshot("authenticated-status-photo-camera-mode.png")
+                photo_ready = wait_for_enabled_control("Take photo", "photo-camera-preview")
+                if photo_ready:
+                    report.append("- PASS Status Take photo opens the shared CameraX preview in Photo mode; the live shutter becomes enabled after camera binding.")
+                    screenshot("authenticated-status-photo-camera-mode.png")
+                else:
+                    FAILURES.append("Status Photo camera controls appeared, but the live CameraX preview never became ready.")
             else:
                 FAILURES.append("Status Take photo did not open the shared CameraX preview in Photo mode.")
             if photo_camera:
@@ -254,8 +300,12 @@ def main() -> int:
                 ("Record video", "Switch front/back camera")
             ) if creator else ""
             if video_camera and find_click_target(video_camera, "Record video") and find_click_target(video_camera, "Switch front/back camera"):
-                report.append("- PASS Status Record video opens the shared live CameraX preview in Video mode.")
-                screenshot("authenticated-status-video-camera-mode.png")
+                video_ready = wait_for_enabled_control("Record video", "video-camera-preview")
+                if video_ready:
+                    report.append("- PASS Status Record video opens the shared CameraX preview in Video mode; the live record control becomes enabled after camera binding.")
+                    screenshot("authenticated-status-video-camera-mode.png")
+                else:
+                    FAILURES.append("Status Video camera controls appeared, but the live CameraX preview never became ready.")
             else:
                 FAILURES.append("Status Record video did not open the shared CameraX preview in Video mode.")
             if video_camera:

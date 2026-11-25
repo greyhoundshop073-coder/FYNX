@@ -35,6 +35,14 @@ checks = [
         and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
     ),
     (
+        "Photo and Video runtime checks wait for the actual enabled CameraX shutter/record control, not just visible labels",
+        "def has_enabled_clickable_control(" in runtime
+        and "def wait_for_enabled_control(" in runtime
+        and 'wait_for_enabled_control("Take photo", "photo-camera-preview")' in runtime
+        and 'wait_for_enabled_control("Record video", "video-camera-preview")' in runtime
+        and "remained disabled after" in runtime,
+    ),
+    (
         "CI pre-grants camera permission on the disposable emulator before testing CameraX controls",
         'pm", "grant", PACKAGE, "android.permission.CAMERA' in runtime
         and "disposable CI emulator CAMERA permission granted" in runtime,
