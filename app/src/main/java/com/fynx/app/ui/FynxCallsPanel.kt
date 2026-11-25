@@ -66,6 +66,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var pendingIncomingAccept by remember { mutableStateOf(false) }
     var pendingIncomingAcceptSignal by remember { mutableStateOf(false) }
     var pendingOutgoingInvite by remember { mutableStateOf(false) }
+    val latestSession by rememberUpdatedState(session)
+    val latestTargetUserId by rememberUpdatedState(targetUserId)
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
 
     lateinit var realtimeClient: FynxRealtimeClient
@@ -177,8 +179,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     DisposableEffect(Unit) {
         realtimeClient.connect()
         onDispose {
-            val active = session
-            val peerId = targetUserId
+            // The realtime client lives for this panel's lifetime; disposal must
+            // inspect the current call, not the initial composition snapshot.
+            val active = latestSession
+            val peerId = latestTargetUserId
             if (active != null && !peerId.isNullOrBlank()) {
                 val isRinging = active.state == FynxCallState.RINGING
                 val isVideo = active.type == FynxCallType.VIDEO
