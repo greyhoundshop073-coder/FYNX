@@ -170,17 +170,10 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        // Use the production featured-product action in the always-present Marketplace
-        // banner. It opens the same real product-details screen without depending on a
-        // recommendation LazyRow being composed in the current viewport.
-        compose.waitUntil(timeoutMillis = 5_000) {
-            compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
-        }
-        // The featured action is already in the first viewport. Click its unique
-        // accessibility target directly; scrolling a stale text node can invalidate it
-        // when the promotional LazyRow advances or recomposes.
+        // Locate the exact featured listing even when campaign or celebration slides
+        // precede it in the carousel.
+        scrollToPromoAction("Shop this product: ${marketplaceListings.first().title}")
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-            .assertIsDisplayed()
             .performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
