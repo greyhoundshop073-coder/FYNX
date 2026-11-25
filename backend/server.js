@@ -19,6 +19,9 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
+import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
+import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
+import { isFynxCallBlocked } from "./callSafety.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -298,6 +301,10 @@ function broadcastToUser(userId, payload) {
     });
   }
 }
+const handleNodeGroupCallSignal = createFynxGroupCallSignalHandler({
+  pool,
+  emitToUser: async (userId, payload) => broadcastToUser(userId, payload)
+});
 async function broadcastMessage(message) {
   const payload = { type: "message", message };
   broadcastToUser(message.senderId, payload);
@@ -1426,6 +1433,14 @@ if (wss) {
       try {
         const body = JSON.parse(raw.toString());
         const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
+        if (body?.type === "group_call") {
+          const handleGroupCall = process.env.FYNX_NEON_FUNCTION === "1"
+            ? globalThis.__fynxNeonHandleGroupCall
+            : handleNodeGroupCallSignal;
+          if (typeof handleGroupCall !== "function") return sendSocket(socket, { type: "group_call", groupId: body.groupId, callId: body.callId, signalType: "error", error: "group call service unavailable" });
+          await handleGroupCall(userId, user, socket, body);
+          return;
+        }
         if (body?.type !== "call") return;
         if (process.env.FYNX_NEON_FUNCTION === "1") {
           const handleCall = globalThis.__fynxNeonHandleCall;
@@ -1437,15 +1452,28 @@ if (wss) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
           if (signalType === "invite") {
-            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const mediaType = body?.callType === "video" ? "video" : "voice";
+            const blockedCallId = validCallId(body?.callId) ? body.callId : newCallId();
+            if (await isFynxCallBlocked(pool, userId, targetUserId)) {
+              return sendSocket(socket, { type: "call", callId: blockedCallId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" });
+            }
+            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
             const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
-            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            let marketplaceContext = null;
+            if (body?.listingId != null) {
+              try {
+                marketplaceContext = await resolveFynxMarketplaceCallContext(pool, userId, targetUserId, body.listingId);
+              } catch (error) {
+                activeCalls.delete(callId);
+                return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "error", error: error?.message || "Marketplace product is unavailable." });
+              }
+            }
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null, ...(marketplaceContext || {}) });
             return;
           }
           const callId = validCallId(body?.callId) ? body.callId : "";
@@ -1482,6 +1510,11 @@ if (wss) {
       } else if (!sockets || !sockets.size) {
         broadcastPresence(userId, false);
         for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
+        disconnectFynxGroupCallsForUser({
+          pool,
+          userId,
+          emitToUser: async (targetUserId, payload) => broadcastToUser(targetUserId, payload)
+        }).catch((error) => console.error("[fynx-group-call] disconnect cleanup failed", error?.message || error));
       }
     });
   } catch { socket.close(1008, "invalid token"); }

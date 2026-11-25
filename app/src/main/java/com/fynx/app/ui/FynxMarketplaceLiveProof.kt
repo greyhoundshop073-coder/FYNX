@@ -17,7 +17,7 @@ import androidx.compose.runtime.*
 @Composable
 internal fun FynxMarketplaceLiveProof(
     listing: FynxRemoteSocialClient.MarketplaceListing,
-    onRequestProof: (listingId: String, sellerUsername: String) -> Unit,
+    onRequestProof: (listingId: String, productTitle: String, sellerUsername: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showCamera by remember { mutableStateOf(false) }
@@ -34,7 +34,7 @@ internal fun FynxMarketplaceLiveProof(
                 onCaptured = { _, _ -> },
                 onLiveProofStart = {
                     showCamera = false
-                    onRequestProof(listing.id, listing.sellerUsername)
+                    onRequestProof(listing.id, listing.title, listing.sellerUsername)
                 },
                 onDismiss = { showCamera = false }
             )
