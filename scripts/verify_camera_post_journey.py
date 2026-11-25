@@ -415,6 +415,8 @@ checks.extend([
      and "restore/reference-camera-publish-journey-20261124" in workflow
      and "ffmpeg -version" in workflow
      and "ffprobe" in runtime),
+])
+
 checks.extend([
     ("While typing, the large media sheet collapses and a two-row glass toolbar stays above the keyboard",
      "compact = true" in camera
