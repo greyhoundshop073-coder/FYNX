@@ -74,6 +74,10 @@ fun FynxGroupCallPanel(
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     val latestCallId by rememberUpdatedState(callId)
     val latestCallType by rememberUpdatedState(callType)
+    val latestIsStarter by rememberUpdatedState(isStarter)
+    val latestIsIncoming by rememberUpdatedState(isIncoming)
+    val latestIsJoined by rememberUpdatedState(isJoined)
+    val latestCallEnded by rememberUpdatedState(callEnded)
 
     val realtimeClient = remember(groupId) {
         FynxRealtimeClient(
@@ -244,11 +248,14 @@ fun FynxGroupCallPanel(
     DisposableEffect(realtimeClient, engine) {
         realtimeClient.connect()
         onDispose {
-            val activeId = callId
-            if (activeId != null && isJoined && !callEnded) {
-                if (isStarter) realtimeClient.sendGroupCallEnd(groupId, activeId)
+            // DisposableEffect is intentionally keyed to the long-lived client and engine.
+            // Read the latest call state here so disposal never acts on the initial
+            // composition snapshot (which would silently skip leave/end/reject signals).
+            val activeId = latestCallId
+            if (activeId != null && latestIsJoined && !latestCallEnded) {
+                if (latestIsStarter) realtimeClient.sendGroupCallEnd(groupId, activeId)
                 else realtimeClient.sendGroupCallLeave(groupId, activeId)
-            } else if (activeId != null && isIncoming && !isJoined) {
+            } else if (activeId != null && latestIsIncoming && !latestIsJoined) {
                 realtimeClient.sendGroupCallReject(groupId, activeId)
             }
             engine.disconnect()
