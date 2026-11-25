@@ -52,7 +52,7 @@ This is separate from the More feature-directory redesign. It must not replace, 
 | Share & Invite | The app shell labels the destination Share, while the panel repeated a large Share & Invite title and an obvious intro paragraph before the action cards | Removed the extra title and generic paragraph; Invite Friends, Share FYNX and Copy Invite cards remain |
 | To-Do | The app shell labels the destination To-Do; the panel added a second Daily Planning headline and generic reminder paragraph | Removed the two introductory lines; task statistics, search, filters and task actions now begin at the top |
 | Group Invite | The app shell already supplies Back for the Invite destination; the panel drew a second Back arrow and an obvious “Review before joining” subtitle | Removed the inner back arrow and redundant subtitle while retaining the specific Group invite title, invite validation and join actions |
-| Financial Overview | The source file exists but currently has no call site in the app; it is not changed until its intended route is confirmed | Removed redundant title/description/footer; retained financial figures and read-only behaviour |
+| Financial Overview | The source file exists but currently has no call site in the app | Left unchanged; confirm its intended route before editing |
 
 ## Protected workstreams and coordination
 
