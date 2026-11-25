@@ -143,6 +143,41 @@ class FynxCallScreensComposeTest {
         saveScreenshot("calls-video-incoming.png")
     }
 
+    @Test
+    fun incomingGroupVideoCallShowsGroupInvitationAndActions() {
+        var dismissed = 0
+        compose.setContent {
+            MaterialTheme {
+                FynxGroupCallPanel(
+                    groupId = "group-call-ui-test",
+                    groupName = "FYNX Test Group",
+                    currentUsername = "fynx_test_member",
+                    initialInvite = FynxRealtimeClient.Event.GroupCall(
+                        groupId = "group-call-ui-test",
+                        callId = "group-video-incoming-001",
+                        callType = "video",
+                        signalType = "group_invite",
+                        creatorId = "seller-user-001",
+                        fromUserId = "seller-user-001",
+                        participants = listOf(
+                            FynxRealtimeClient.Event.GroupCallParticipant("seller-user-001", "fynx_test_seller")
+                        )
+                    ),
+                    onDismiss = { dismissed++ }
+                )
+            }
+        }
+
+        compose.onNodeWithText("FYNX Test Group").assertIsDisplayed()
+        compose.onNodeWithText("Incoming group video call").assertIsDisplayed()
+        compose.onNodeWithText("A member has started a group video call.").assertIsDisplayed()
+        compose.onNodeWithText("Decline").assertIsDisplayed()
+        compose.onNodeWithText("Join call").assertIsDisplayed()
+        saveScreenshot("calls-group-video-incoming.png")
+        compose.onNodeWithText("Decline").performClick()
+        compose.runOnIdle { assertEquals(1, dismissed) }
+    }
+
     private fun saveScreenshot(name: String) {
         // Screenshots are optional evidence; a capture failure must not mask UI assertions.
         runCatching {
