@@ -130,9 +130,10 @@ class FynxMarketplaceScreensComposeTest {
         compose.waitUntil(timeoutMillis = 5_000) {
             compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onAllNodesWithText("Shop this product")[0].performScrollTo().performClick()
+        // The featured action is already in the first viewport. Click its unique
+        // accessibility target directly; scrolling a stale text node can invalidate it
+        // when the promotional LazyRow advances or recomposes.
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
@@ -182,9 +183,10 @@ class FynxMarketplaceScreensComposeTest {
         compose.waitUntil(timeoutMillis = 5_000) {
             compose.onAllNodesWithText("Shop this product").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onAllNodesWithText("Shop this product")[0].performScrollTo().performClick()
+        // The featured action is already in the first viewport. Click its unique
+        // accessibility target directly; scrolling a stale text node can invalidate it
+        // when the promotional LazyRow advances or recomposes.
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
