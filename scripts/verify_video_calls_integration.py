@@ -12,10 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app/src/main/java/com/fynx/app/ui"
 BACKEND = ROOT / "backend"
 
-def read(path: Path) -> str:
-    if not path.is_file():
-        raise AssertionError(f"required source file is missing: {path.relative_to(ROOT)}")
-    return path.read_text(encoding="utf-8")
+def read(path: str | Path) -> str:
+    # Callers intentionally pass both ROOT-based Path objects and repository-
+    # relative strings. Normalize both forms before checking or reading them.
+    resolved = Path(path)
+    if not resolved.is_absolute():
+        resolved = ROOT / resolved
+    if not resolved.is_file():
+        try:
+            display_path = resolved.relative_to(ROOT)
+        except ValueError:
+            display_path = resolved
+        raise AssertionError(f"required source file is missing: {display_path}")
+    return resolved.read_text(encoding="utf-8")
 
 app = {
     name: read(APP / file)
