@@ -43,7 +43,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 internal fun marketplaceOrderAllowsProblemReport(status: String): Boolean =
-    status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION")
+    status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED")
 
 @Composable
 fun FynxMarketplaceOrderLifecycle(
