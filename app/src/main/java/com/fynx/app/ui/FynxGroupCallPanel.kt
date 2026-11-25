@@ -152,7 +152,11 @@ fun FynxGroupCallPanel(
         if (creatorId.isNotBlank() && self != null) isStarter = creatorId == self.userId
         participants.filterNot { it.userId == localUserId }.forEach { peer ->
             val created = engine.ensurePeer(peer.userId)
-            if (created && createOffers) engine.createOffer(peer.userId)
+            // Deterministic offer ownership prevents both sides of a new mesh edge
+            // from creating an offer simultaneously (WebRTC offer glare).
+            if (created && createOffers && localUserId != null && localUserId!! < peer.userId) {
+                engine.createOffer(peer.userId)
+            }
         }
         isJoined = true
         isIncoming = false
