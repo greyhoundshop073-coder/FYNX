@@ -208,6 +208,10 @@ jobs:
         run: python3 scripts/verify_marketplace_runtime_visual_capture.py
       - name: Verify Marketplace seller flow integrity
         run: python3 scripts/verify_marketplace_seller_flow.py
+      - name: Verify Marketplace protected order actions and seller input bounds
+        run: python3 scripts/verify_marketplace_order_guards.py
+      - name: Verify Marketplace seller avatars and empty-catalogue publishing
+        run: python3 scripts/verify_marketplace_presentation_contract.py
       - name: Verify Marketplace advertising campaign product linkage
         run: python3 scripts/verify_marketplace_ad_campaign_product_link.py
       - name: Verify Local Businesses directory navigation and UI

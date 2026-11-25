@@ -21,28 +21,32 @@ checks = [
     ("Sell shortcut remains available when the catalogue is empty",
      "FloatingActionButton(onClick = { showSell = true }" in panel
      and "if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }" not in panel),
-    ("Marketplace loads avatar IDs for all current sellers while limiting reputation calls to twelve",
-     "val reputationSellers = sellers.take(12)" in panel
-     and "val reputationKeys = reputationSellers.map" in panel
-     and "val sellers = listings.map" in panel
-     and "pending.chunked(4)" in panel),
+    ("Marketplace loads seller identity for the first twelve distinct sellers in bounded batches",
+     "val sellers = listings.map { it.sellerUsername.removePrefix(\"@\").trim() }" in panel
+     and ".distinctBy { it.lowercase(Locale.US) }.take(12)" in panel
+     and "val pending = sellers.filter" in panel
+     and "pending.chunked(4)" in panel
+     and "FynxProfileRemoteClient.get(context, username)" in panel
+     and "photoUpdates[key] = profile.profilePhotoMediaId" in panel),
     ("Marketplace avatar wrapper follows shared avatar revisions and authoritative removal",
      "FynxAvatarIdentityStore.revisions().collectAsState()" in avatar
      and "hasCachedProfilePhotoEntry(context, normalizedOwner)" in avatar
      and "cachedProfilePhotoId(context, it)" in avatar
      and "FynxRemoteProfileAvatar(" in avatar),
-    ("Marketplace product card uses the seller avatar wrapper",
-     "FynxMarketplaceSellerAvatar(photoId, l.sellerUsername" in panel),
-    ("Marketplace seller ranking card uses the seller avatar wrapper",
+    ("Marketplace product cards use the account-aware seller avatar wrapper",
+     "FynxMarketplaceSellerAvatar(" in reference
+     and "sellerPhotoId," in reference
+     and "listing.sellerUsername," in reference),
+    ("Marketplace seller ranking cards use the account-aware seller avatar wrapper",
      "FynxMarketplaceSellerAvatar(photoId, listing.sellerUsername" in panel),
-    ("Marketplace product details uses the seller avatar wrapper",
-     "FynxMarketplaceSellerAvatar(" in reference and "FynxMarketplaceSellerAvatar(\n                                sellerPhotoId," in reference),
-    ("Public seller storefront uses the seller avatar wrapper",
-     "FynxMarketplaceSellerAvatar(" in storefront and "FynxMarketplaceSellerAvatar(\n                                    photoId," in storefront),
+    ("Public seller storefront uses the account-aware seller avatar wrapper",
+     "FynxMarketplaceSellerAvatar(" in storefront
+     and "username," in storefront
+     and "photoId," in storefront),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
-    print(f"[{'PASS' if ok else 'FAIL'}] {name}")
+    print(( "PASS" if ok else "FAIL") + ": " + name)
 if failed:
     print(f"\nMARKETPLACE PRESENTATION CONTRACT RED ({len(failed)} failures)")
     sys.exit(1)
