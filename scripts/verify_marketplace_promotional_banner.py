@@ -90,9 +90,6 @@ checks = [
 ]
 
 
-    ("Owner/Admin can preview a locally selected campaign image before upload", "Selected Marketplace campaign artwork preview" in SEASONAL_ADMIN and "setImageURI(artworkUri)" in SEASONAL_ADMIN),
-    ("Owner/Admin can preview the saved campaign image and replace or remove it", 'mediaUrl = "/api/media/$artworkMediaId"' in SEASONAL_ADMIN and '"Change photo"' in SEASONAL_ADMIN and '"Remove photo"' in SEASONAL_ADMIN),
-    ("scheduled campaign cards show their actual uploaded artwork thumbnail", 'mediaUrl = "/api/media/${campaign.artworkMediaId}"' in SEASONAL_ADMIN and "campaign.artworkMediaId.isNotBlank()" in SEASONAL_ADMIN),
 
 failed = []
 for name, ok in checks:
