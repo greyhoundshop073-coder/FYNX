@@ -16,6 +16,9 @@ internal data class FynxMarketplacePayment(
     val currency: String
 )
 
+internal fun isValidMarketplacePaymentEmail(value: String): Boolean =
+    android.util.Patterns.EMAIL_ADDRESS.matcher(value.trim()).matches()
+
 internal fun isTrustedMarketplaceCheckoutUrl(value: String): Boolean {
     val parsed = runCatching { URI(value.trim()) }.getOrNull() ?: return false
     val host = parsed.host?.lowercase(Locale.US) ?: return false
@@ -45,7 +48,7 @@ internal suspend fun initializeMarketplacePayment(
     expectedCurrency: String
 ): Result<FynxMarketplacePayment> {
     val email = customerEmail.trim()
-    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+    if (!isValidMarketplacePaymentEmail(email)) {
         return Result.failure(IllegalArgumentException("Enter a valid email address."))
     }
     if (orderId.trim().isEmpty()) {
@@ -131,7 +134,7 @@ internal suspend fun initializeMarketplaceCheckoutGroupPayment(
     customerEmail: String
 ): Result<FynxMarketplacePayment> {
     val email = customerEmail.trim()
-    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) return Result.failure(IllegalArgumentException("Enter a valid email address."))
+    if (!isValidMarketplacePaymentEmail(email)) return Result.failure(IllegalArgumentException("Enter a valid email address."))
     if (checkoutId.trim().isEmpty()) return Result.failure(IllegalArgumentException("A valid checkout is required."))
     return FynxBackendClient.postJson(
         context,

@@ -112,7 +112,7 @@ private fun FynxLaunchScreen() {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
-                painter = painterResource(com.fynx.app.R.drawable.ic_fynx_logo),
+                painter = painterResource(com.fynx.app.R.drawable.fynx_logo_asset),
                 contentDescription = "FYNX",
                 modifier = Modifier.size(104.dp)
             )

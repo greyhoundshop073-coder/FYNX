@@ -94,3 +94,7 @@ assert.equal(savedImages.logo_media_id, '77');
 assert.equal(savedImages.cover_media_id, null, 'omitted cover remains unchanged');
 
 console.log('Marketplace shop profile PATCH tests passed: preserve omitted images, explicit removal, and single-image replacement.');
+
+// Run privacy and saved-product authorization regressions in the same CI test invocation.
+await import("./verify-marketplace-shop-privacy.mjs");
+await import("./test-marketplace-saved-product-routes.mjs");

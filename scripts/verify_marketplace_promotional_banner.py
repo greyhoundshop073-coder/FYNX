@@ -89,6 +89,8 @@ checks = [
     ("Seller Center retains same-account shop profile details during transient refresh errors", "Previously saved details are still shown" in SELLER_CENTER and "Keep this account's last confirmed shop details visible" in SELLER_CENTER),
 ]
 
+
+
 failed = []
 for name, ok in checks:
     print(("PASS" if ok else "FAIL") + ": " + name)

@@ -76,8 +76,9 @@ fun MarketplacePromotionalBanner(
     onShopNow: () -> Unit,
     onOpenOrders: () -> Unit,
     onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
     autoRotate: Boolean = true,
-    modifier: Modifier = Modifier
+    includeLocalCelebrations: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -112,7 +113,9 @@ fun MarketplacePromotionalBanner(
             localDate = LocalDate.now(lagosZone)
         }
     }
-    val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
+    val celebration = remember(localDate, includeLocalCelebrations) {
+        if (includeLocalCelebrations) marketplaceCelebrationFor(localDate) else null
+    }
     val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, seasonalPromotions, celebration) {
         buildList {
             if (weeklySeller != null) {
