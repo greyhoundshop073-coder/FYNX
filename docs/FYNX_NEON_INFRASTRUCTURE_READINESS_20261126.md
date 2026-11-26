@@ -14,7 +14,7 @@ The historical Neon project `patient-lab-43403708` is the data-bearing FYNX proj
 
 No database rows, schemas, branches, buckets, objects, credentials, Railway variables or deployments were modified during this audit.
 
-**Readiness status: CONDITIONAL — BLOCKED.** Database lineage and schema/data comparisons are verified. The exact value/target of Railway's staged `DATABASE_URL` and the live S3 credential handshake cannot be verified through the connected Railway account because variable values are redacted. The Railway service is offline and its configuration changes remain staged, not live.
+**Readiness status: CONDITIONAL — BLOCKED.** Database lineage and schema/data comparisons are verified. Railway now has the Neon variable names present in the live testing service, but the connected account redacts all values, so the exact `DATABASE_URL` target and S3 credential match remain unverified. The service has no pending staged patch, but its runtime is Offline and its latest deployment failed. Live S3 operations and a verified backup process remain outstanding.
 
 ## 1. Neon project and branch lineage
 
@@ -124,26 +124,25 @@ Environment ID: `51b3423c-ef07-48d8-8c1c-e8dca91d3b81`
 Service: `fynx-backend-testing`  
 Service ID: `aa4eb74c-8907-400a-bfc3-6f6d1cda03b7`
 
-Observed service state:
+Observed service state (rechecked 2026-11-26):
 
-- Service is `live-with-staged-changes`.
-- Current runtime status is Offline; no running replica was reported.
-- Latest deployment record is FAILED (2026-11-03); prior deployments are removed/failed.
-- Current source configuration is the FYNX repository under `/backend`; the staged source branch is `integration/fynx-single-apk-20261013`.
-- Builder change from NIXPACKS to RAILPACK is staged.
-- Pending patch `0e560e21-bc20-4134-bd0a-0781b3fb1eea` is STAGED with 11 changes. It has not been committed and no new deployment was triggered.
+- Service resource state is `live` (configuration exists), but Railway environment health reports runtime `offline` with no active deployments/replicas.
+- Latest deployment `ad50abc2-a52b-40e8-aad1-8d3de1330e08` is FAILED, created 2026-11-03.
+- Deployment source was repository `greyhoundshop073-coder/FYNX`, branch `main`, commit `0498632d1b72bea8aac5610a6778b75417b94af9`, root directory `/backend` — not the canonical integration branch.
+- Builder is currently `RAILPACK`; start command `npm start`; readiness path `/ready`; service domain `fynx-backend-testing-testing.up.railway.app` targets port 8080.
+- The earlier staged patch `0e560e21-bc20-4134-bd0a-0781b3fb1eea` is no longer present: current `staged=null`, with no pending environment work. This is a state change, not evidence that the service is healthy.
+- `DATABASE_URL`, `FYNX_MEDIA_STORAGE_PROVIDER`, `FYNX_NEON_S3_ENDPOINT`, `FYNX_NEON_S3_REGION`, `FYNX_NEON_S3_ACCESS_KEY_ID`, `FYNX_NEON_S3_SECRET_ACCESS_KEY`, and `FYNX_NEON_STORAGE_BUCKET` now appear in the service's live variable-name list. The connector redacts values; it cannot verify their contents or target.
 
-The staged patch adds `DATABASE_URL` and the Neon media configuration variables:
-`FYNX_MEDIA_STORAGE_PROVIDER`, `FYNX_NEON_S3_ENDPOINT`, `FYNX_NEON_S3_REGION`, `FYNX_NEON_S3_ACCESS_KEY_ID`, `FYNX_NEON_S3_SECRET_ACCESS_KEY`, and `FYNX_NEON_STORAGE_BUCKET`, plus two Cloudflare SFU variables. The staged change list confirms these values are additions, not currently live values.
+**Exact Railway DATABASE_URL target: NOT VERIFIED.** The connected Railway account returns variable names only and marks values as redacted. The actual hostname, database name and branch cannot be inspected. A previous PR #580 handoff says the intended target was `fynx-dev-backend-20261122`, but that historical note is not proof of the current encrypted value. The live S3 endpoint and credentials are similarly redacted and cannot be confirmed to match the dev branch.
 
-**Exact Railway DATABASE_URL target: NOT VERIFIED.** The connected Railway account returns variable names only and marks values as redacted. The actual staged hostname, database name and branch therefore cannot be inspected. A previous PR #580 handoff says the staged Railway URL was intended to target `fynx-dev-backend-20261122`, but that historical note is not proof of the current encrypted value. Do not claim the target has been verified. The staged S3 endpoint and credentials are similarly redacted and cannot be confirmed to match the dev branch.
+The 2026-11-03 failed build was investigated. Railway's diagnosis reports failure stage `BUILD_IMAGE`; build logs end with `secret FYNX not found`. The service's failed deployment was built from `main` commit `0498632d1b72bea8aac5610a6778b75417b94af9`, not the canonical integration branch. This is a Railway build-configuration/secret-reference failure, not evidence of a Neon SQL or media adapter failure. The correct secret value/purpose cannot be inferred safely. The owner must inspect Railway's build configuration for a stale or required build-secret reference named `FYNX`, remove the reference if obsolete, or set the intended value securely in Railway if genuinely required. Do not invent or commit a secret. Do not redeploy this `main`-branch source as a substitute for the canonical app/backend.
 
-Before committing the Railway patch, an owner with Railway dashboard access must verify, without sharing credentials:
-1. The staged `DATABASE_URL` host identifies the dev branch endpoint `ep-mute-sun-b5qe9rlr` in project `patient-lab-43403708`; the database path is the intended database (`neondb` unless the app's configured database name differs).
+Before enabling/redeploying the Railway service, an owner with Railway dashboard access must verify, without sharing credentials:
+1. The live `DATABASE_URL` host identifies the dev branch endpoint `ep-mute-sun-b5qe9rlr` in project `patient-lab-43403708`; the database path is the intended database (`neondb` unless the app's configured database name differs).
 2. The hostname is the intended direct or pooled endpoint for the backend runtime. Use direct connections for migrations/dumps; use the Neon pooler hostname for high-concurrency application traffic only after confirming it is enabled and compatible with the runtime.
 3. `FYNX_NEON_S3_ENDPOINT` exactly matches the dev branch endpoint above; region is `us-east-2`; bucket is `fynx-media`; provider is `neon`.
 4. The access key and secret are the matching dev-scoped credential, not the revoked recovery credential.
-5. Values are staged only in the Railway testing environment and remain absent from source control.
+5. Values are stored only in the Railway testing environment and remain absent from source control.
 
 The current branch compute endpoint is `ep-mute-sun-b5qe9rlr`, read-write, idle, with 0.25–2 CU autoscaling limits and suspend timeout setting 0. Recovery endpoint is `ep-solitary-boat-b5jh9ym6`, read-write, idle, 0.25 CU minimum and maximum. The testing endpoint is `ep-proud-star-b54d600q`, read-write, idle, 0.25 CU minimum and maximum. Legacy endpoint metadata reports `pooler_enabled=false`; confirm the actual `-pooler` hostname/availability before relying on pooling.
 
@@ -172,7 +171,7 @@ Neon compute autoscaling is configured at the endpoint level; idle state is expe
 
 ## 7. Existing repository work and overlap
 
-Canonical head inspected: `4382023be9dfd51d43728231504ce8fe9950e125`. The canonical commit's combined status endpoint returned no status entries; this is not proof of a green build. On this audit PR's latest head, GitHub Actions runs #5375 (Chat Group Parity + Layout Safety), #1635 (Chat Final Closure), and #16312 (Android Build) were observed queued; no result is certified yet.
+Canonical base inspected: `4382023be9dfd51d43728231504ce8fe9950e125`. On audit head `a32d963259ea8e6ac210e0669a5b46c4abbd20a8`, GitHub Actions runs #5377 (Chat Group Parity + Layout Safety), #1637 (Chat Final Closure), and #16316 (Android Build) all completed with `success`. These are repository CI results only; they do not prove live Railway/Neon/S3 operation.
 
 Relevant open PRs:
 
@@ -186,8 +185,8 @@ The existing `docs/FYNX_NEON_MEDIA_STORAGE.md` contains an older 23 November sna
 
 1. Preserve `live-recovery-20261101`; treat it as the recovery/reference dataset. Keep `fynx-dev-backend-20261122` as the isolated development target.
 2. Reconcile the backend runtime decision: Railway testing service versus Neon Function, and ensure Android, backend deployment, database and media bucket all point to one agreed testing environment. Do not introduce another backend.
-3. Have the Railway owner inspect the staged `DATABASE_URL` host/database and the six Neon media variable values without disclosing secrets. Confirm the dev branch host and branch-scoped credential.
-4. Verify the current Railway patch and the exact deployment source. Only after the owner confirms the values and the backend PR is approved should the staged patch be committed. Then observe a terminal successful deployment and a healthy readiness probe; staged does not mean live.
+3. Have the Railway owner inspect the live `DATABASE_URL` host/database and the six Neon media variable values without disclosing secrets. Confirm the dev branch host and branch-scoped credential.
+4. Resolve the Railway build failure `secret FYNX not found` in the service's build configuration, and ensure the deployed source is the agreed canonical backend commit/branch. Do not deploy the old `main` commit. Then observe a terminal successful deployment and a healthy `/ready` probe.
 5. Run read-only SQL health/schema checks against dev, then authenticated API smoke tests using dedicated test accounts. Keep production and recovery out of write tests.
 6. Verify a new test media upload end-to-end on dev: upload intent, signed PUT, HEAD validation, finalize, authorized GET, expiry, and deletion/cleanup. Do not forward FYNX bearer tokens to object storage.
 7. Plan the existing PostgreSQL-inline media backfill separately, with idempotency, stable media IDs, checksum/size verification, retry/resume, reference preservation and rollback to the original BYTEA payload. Do not delete inline payloads during the first migration.
@@ -202,20 +201,20 @@ The existing `docs/FYNX_NEON_MEDIA_STORAGE.md` contains an older 23 November sna
 | Compare schema and table counts | Verified | 88 tables / 799 columns / 246 indexes on recovery and dev; matching fingerprints |
 | Compare important record counts | Verified | Exact read-only counts listed above |
 | Preserve recovery branch and data | Verified | No writes or branch mutations performed |
-| Identify Railway staged DATABASE_URL target | Blocked | Values redacted by Railway connector; owner must inspect staged host/database |
+| Identify Railway DATABASE_URL target | Blocked | Live variable names present, but values redacted; owner must inspect host/database |
 | Confirm Neon Object Storage enabled | Verified | Enabled on testing/recovery/dev in us-east-2 |
 | Confirm private bucket and object counts | Verified | Private `fynx-media`; zero objects on testing/recovery/dev |
 | Verify active branch-scoped storage credential exists | Verified | Dev credential metadata and scopes listed; expires 2027-02-21 |
-| Verify staged S3 variables match credential/endpoint | Blocked | Railway values redacted |
+| Verify live S3 variables match credential/endpoint | Blocked | Railway values redacted |
 | Verify actual S3 PUT/HEAD/GET/DELETE | Not run | Requires live credential handshake; no test object written |
 | Review compute/autoscaling/pooling | Partially verified | Compute ranges and idle/scale-to-zero state inspected; pooler hostname not exercised |
 | Review indexes/query/locks | Verified read-only | Sizes, scan counters, unused-index candidates, locks and long-running queries inspected |
 | Verify scheduled snapshots/backup | Blocked / deficient | No snapshots or schedule; no branches protected; Neon rejected protection with HTTP 422 due plan limit |
-| Live Railway service readiness | Blocked | Service Offline; last deployment FAILED; patch still staged |
+| Live Railway service readiness | Blocked | Runtime Offline; no pending patch; last deployment FAILED at image build with `secret FYNX not found`; failed source was `main` commit `0498632d1b72bea8aac5610a6778b75417b94af9` |
 | Production cutover | Not authorised / not performed | Requires owner approval and a verified backup |
 
 ## 10. Explicit non-actions
 
-No production data was written. No data was copied or migrated. No branch was reset, deleted or protected. No bucket or object was created, deleted or made public. No credentials were created, rotated, revoked or exposed. No Railway staged patch was committed. No deployment or paid upgrade was triggered.
+No production data was written. No data was copied or migrated. No branch was reset, deleted or protected. No bucket or object was created, deleted or made public. No credentials were created, rotated, revoked or exposed. No Railway configuration was changed. No deployment or paid upgrade was triggered.
 
-**Stage 1 conclusion:** The data lineage is sufficiently established to recommend recovery as the preservation reference and the matching dev branch as the testing target. Stage 1 is not fully closed until the owner verifies the encrypted Railway target and staged storage values, the backend/runtime target discrepancy is resolved, live media access is exercised, and a reliable backup/recovery schedule is agreed.
+**Stage 1 conclusion:** The data lineage is sufficiently established to recommend recovery as the preservation reference and the matching dev branch as the testing target. Stage 1 is not fully closed until the owner verifies the encrypted Railway target and live storage values, the backend/runtime target discrepancy is resolved, the Railway build-secret failure is corrected against the canonical source, live media access is exercised, and a reliable backup/recovery schedule is agreed.
