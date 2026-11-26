@@ -153,9 +153,10 @@ The current branch compute endpoint is `ep-mute-sun-b5qe9rlr`, read-write, idle,
 - No project snapshots were returned by the snapshot listing.
 - No automatic snapshot schedule was returned for recovery or the existing backup branch.
 - Existing branch `backup-live-recovery-20261114-pre-backend-repair` is ready and descends from recovery, but it is not protected.
-- The recovery and dev branches are also not protected.
+- The recovery, dev, production, testing and existing backup branches all report `protected=false`.
+- An attempt to protect `live-recovery-20261101` through Neon was rejected with HTTP 422: the current plan has reached its maximum number of protected branches. Inspection confirms there are currently zero protected branches, so the plan appears to permit no protected branches at this tier.
 
-The existing backup branch is useful as a historical clone, but it is not a substitute for a verified scheduled backup or protected recovery process. Before any production migration, reset, bulk media backfill or schema-changing operation, establish an owner-approved snapshot/backup and test restoration in an isolated branch. Do not change retention or buy/upgrade infrastructure without approval.
+The existing backup branch is useful as a historical clone, but it is not a substitute for a verified scheduled backup or protected recovery process. The account's current plan blocks branch protection. Do not unprotect/delete anything to work around this, and do not upgrade without owner approval. Before any production migration, reset, bulk media backfill or schema-changing operation, establish an owner-approved snapshot/backup and test restoration in an isolated branch. Do not change retention or buy/upgrade infrastructure without approval.
 
 ## 6. Indexes, query and compute observations
 
@@ -209,7 +210,7 @@ The existing `docs/FYNX_NEON_MEDIA_STORAGE.md` contains an older 23 November sna
 | Verify actual S3 PUT/HEAD/GET/DELETE | Not run | Requires live credential handshake; no test object written |
 | Review compute/autoscaling/pooling | Partially verified | Compute ranges and idle/scale-to-zero state inspected; pooler hostname not exercised |
 | Review indexes/query/locks | Verified read-only | Sizes, scan counters, unused-index candidates, locks and long-running queries inspected |
-| Verify scheduled snapshots/backup | Blocked / deficient | No snapshots or schedule; unprotected backup branch only |
+| Verify scheduled snapshots/backup | Blocked / deficient | No snapshots or schedule; no branches protected; Neon rejected protection with HTTP 422 due plan limit |
 | Live Railway service readiness | Blocked | Service Offline; last deployment FAILED; patch still staged |
 | Production cutover | Not authorised / not performed | Requires owner approval and a verified backup |
 
