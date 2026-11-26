@@ -456,14 +456,6 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall
                         )
-                        if (campaign.artworkMediaId.isNotBlank()) {
-                            FynxRemoteMedia(
-                                mediaUrl = "/api/media/${campaign.artworkMediaId}",
-                                type = "image",
-                                modifier = Modifier.fillMaxWidth().height(112.dp),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        }
                         Text("Starts: ${formatMarketplaceSeasonalDateTime(campaign.startsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Ends: ${formatMarketplaceSeasonalDateTime(campaign.endsAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
