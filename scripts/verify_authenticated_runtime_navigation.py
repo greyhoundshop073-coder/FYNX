@@ -3272,11 +3272,26 @@ def login():
             return xml, "Home was visible behind the permission dialog, but the encrypted server access token was not verifiably present"
     sign_in_gate=find_control(xml,["Sign In"])
     if not sign_in_gate: return xml,"authentication gate was not visible"
-    _,x,y=sign_in_gate; run("adb","shell","input","tap",str(x),str(y))
+    # Hosted emulators can briefly expose the Compose accessibility tree before
+    # WindowManager has attached an input channel to the app surface. A single
+    # coordinate tap during that window is silently discarded. Wake the display,
+    # wait for the real sign-in form, and retry only while the welcome gate remains.
+    run("adb","shell","input","keyevent","KEYCODE_WAKEUP")
+    run("adb","shell","wm","dismiss-keyguard")
     xml=""
-    for _ in range(12):
-        time.sleep(1); xml=dump_ui("authenticated-login-screen.xml")
-        if find_control(xml,["Username"]) or len(find_edit_fields(xml))>=2: break
+    for attempt in range(8):
+        sign_in_gate=find_control(xml or dump_ui("authenticated-login-gate-retry.xml"),["Sign In"])
+        if sign_in_gate:
+            _,x,y=sign_in_gate
+            run("adb","shell","input","tap",str(x),str(y))
+        time.sleep(0.8)
+        xml=dump_ui("authenticated-login-screen.xml")
+        if find_control(xml,["Username"]) or len(find_edit_fields(xml))>=2:
+            break
+        if not find_control(xml,["Sign In"]):
+            # The gate has changed to another screen; keep polling rather than
+            # tapping an unrelated control or assuming the form is ready.
+            time.sleep(0.5)
     screenshot("authenticated-login-screen.png")
     user_control=find_control(xml,["Username"])
     if not user_control:
