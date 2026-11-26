@@ -202,9 +202,9 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
         compose.waitUntil(timeoutMillis = 9_000) {
-            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
+            runCatching { compose.onNodeWithText(candidates[1].title, useUnmergedTree = true).assertIsDisplayed() }.isSuccess
         }
-        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
+        compose.onNodeWithText(candidates[1].title, useUnmergedTree = true).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {
