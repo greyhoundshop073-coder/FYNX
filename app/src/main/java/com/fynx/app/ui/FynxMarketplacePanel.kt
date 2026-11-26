@@ -1489,6 +1489,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            autoRotate = testOnlyListings == null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1558,6 +1559,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            autoRotate = testOnlyListings == null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1622,6 +1624,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            autoRotate = testOnlyListings == null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1748,6 +1751,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            autoRotate = testOnlyListings == null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
