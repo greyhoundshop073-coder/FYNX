@@ -91,8 +91,6 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
-  "registerBuyerWalletRoutes({ app })",
-  "registerBuyerWalletMarketplaceRoutes({ app })",
   'app.post("/api/auth/login"',
   'app.get("/api/me", auth',
   'app.get("/api/statuses", auth',
@@ -104,3 +102,11 @@ assert.match(buyerWallet, /export function registerBuyerWalletRoutes\(\{ app \}\
   "buyer Wallet API module must expose its authenticated route registration function");
 assert.match(buyerWalletMarketplace, /export function registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
   "buyer Wallet Marketplace module must expose its authenticated route registration function");
+assert.match(scalability, /registerBuyerWalletRoutes\(\{ app \}\)/,
+  "the shared scalability layer must own Buyer Wallet route registration");
+assert.match(scalability, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
+  "the shared scalability layer must own Marketplace Wallet route registration");
+assert.doesNotMatch(bootstrap, /registerBuyerWalletRoutes\(\{ app \}\)/,
+  "generated server bootstrap must not duplicate the shared Buyer Wallet route registration");
+assert.doesNotMatch(bootstrap, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
+  "generated server bootstrap must not duplicate the shared Marketplace Wallet route registration");
