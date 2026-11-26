@@ -4,13 +4,15 @@
 **Canonical Android integration branch:** integration/fynx-single-apk-20261013  
 **Audit base commit:** 4382023be9dfd51d43728231504ce8fe9950e125 (26 November 2026)  
 **Feature branch:** feat/fynx-ai-usage-budget-20261126  
+**PR:** #611 — https://github.com/greyhoundshop073-coder/FYNX/pull/611 (open, unmerged)  
+**Tested code commit:** 8856ea4584c0437298082be1353796b2e16ea50d  
 **Stage status:** CONDITIONAL — BLOCKED
 
 ## 1. Executive finding
 
 FYNX already contains an existing Gemini text/image assistant and a separate OpenAI Realtime WebRTC voice implementation. The current scope preserves those providers and the existing authenticated backend; it does not change login, create a second backend, move provider secrets into Android, or activate infrastructure.
 
-The feature branch adds durable, per-user Gemini request limits and token/cost accounting using the existing FYNX PostgreSQL database. It also adds optional per-user and owner-wide monthly spending thresholds. These are source changes pending exact PR CI; they are not yet live-certified.
+PR #611 adds durable, per-user Gemini request limits and token/cost accounting using the existing FYNX PostgreSQL database. It also adds optional per-user and owner-wide monthly spending thresholds. The exact tested code commit 8856ea4584c0437298082be1353796b2e16ea50d passed Backend CI; the successful AI test and security details are recorded below. These source changes are not live-provider certified.
 
 Stage 4 cannot be marked certified. The only Railway service visible to this audit is a testing service whose latest deployment is FAILED (3 November 2026). Its environment variable-name inventory includes GEMINI_API_KEY but does not include OPENAI_API_KEY. A variable name does not prove key validity, account tier, provider billing readiness or a successful request. The canonical Android workflow also has an unrelated instrumentation failure.
 
@@ -70,7 +72,7 @@ Private wallet balances, wallet/PIN secrets, transaction and financial history, 
   - FYNX_AI_USER_MONTHLY_BUDGET_USD sets a per-user estimated monthly Gemini spend threshold.
   - FYNX_AI_MONTHLY_BUDGET_USD sets an owner-wide estimated monthly provider spend threshold.
 - No monthly amount is preconfigured or activated in Railway by this change. The owner must choose the amount before setting either variable.
-- Gemini usageMetadata is collected from normal and streaming responses and summed across tool-call turns. Completed/failed usage events record token totals and estimated cost.
+- Gemini usageMetadata is collected from normal and streaming responses and summed across tool-call turns. The cost calculation includes prompt tokens, tool-result prompt tokens, candidate output tokens and thinking tokens. Completed/failed usage events record token totals and estimated cost.
 - Authenticated GET /api/assistant/usage returns only the current user's daily usage, remaining daily quota, monthly token totals, estimated spend and personal budget threshold.
 - HTTP 429 responses are returned when configured request or spending thresholds have been reached.
 
@@ -78,7 +80,7 @@ Private wallet balances, wallet/PIN secrets, transaction and financial history, 
 
 The cost estimate uses the published standard paid-tier token rates for the default Gemini 3.8 Flash model. A custom model requires explicit input/output price environment variables; otherwise the event cost remains unpriced rather than silently applying the wrong price. Free-tier pricing is different, and the Railway variable inventory does not establish whether the Google project is on free or paid tier.
 
-The monthly stop is based on settled provider usage. One request already in flight can cross a threshold by its own cost, and an abrupt process termination may leave a reservation without returned provider usage metadata. This is monitoring and a stop-new-requests threshold, not a guaranteed hard dollar cap. The owner should also configure billing alerts/limits in the Google provider console.
+The monthly stop is based on settled Gemini provider usage recorded in this ledger. One request already in flight can cross a threshold by its own cost, and an abrupt process termination may leave a reservation without returned provider usage metadata. The current ledger records Gemini only; it does not yet record OpenAI voice usage. This is monitoring and a stop-new-requests threshold, not a guaranteed hard dollar cap. The owner should also configure billing alerts/limits in the Google provider console. When no owner-wide threshold is configured, only per-user locking is used; the shared lock is enabled only for the owner-wide check.
 
 The new limits apply to Gemini-backed text, images, writing and Marketplace copy/photo-review operations. OpenAI voice remains separately measured in the provider billing console until its sideband usage monitor is implemented and validated.
 
@@ -105,7 +107,10 @@ The existing source default gpt-realtime-2.1 has published standard rates:
 - Text output: USD 24 per million tokens.
 - Cached input and image input have separate rates.
 
+The Realtime session also configures gpt-4o-mini-transcribe for input transcription; OpenAI currently lists this at an estimated USD 0.003/minute. Its model page currently labels gpt-4o-mini-transcribe as deprecated, so the owner must confirm a supported transcription model before live certification. These transcription costs are separate from Realtime audio/text token charges.
+
 Official pricing: https://developers.openai.com/api/docs/pricing/
+Transcription model: https://developers.openai.com/api/docs/models/gpt-4o-mini-transcribe
 
 No defensible monthly voice estimate is possible without actual session durations and audio/text token usage. The current source creates a WebRTC session but does not retain the OpenAI call ID, collect sideband response.done usage, calculate per-user audio cost or enforce an owner-wide voice budget. The OpenAI docs describe a server-side sideband WebSocket using the call ID from the Realtime call Location header; response.done contains usage details, and the active call can be ended by the hangup endpoint. This is a valid implementation path, not an implemented or tested FYNX feature yet.
 
@@ -121,11 +126,21 @@ External voice requirements:
 Existing backend prestart already includes the Gemini provider, AI privacy, realtime-authentication, inline-writing, Marketplace listing-copy and Marketplace photo-review tests.
 
 This branch adds:
-- test-fynx-ai-usage-budget.mjs: fake PostgreSQL tests for daily per-user limits, photo-review cap, reservation serialization, settlement, user summary, date-sensitive Gemini price calculation, per-user monthly threshold and owner-wide monthly threshold.
-- Extensions to test-gemini-assistant-provider.mjs: mocked token usage assertions for non-streaming and streaming Gemini responses, with a no-op usage adapter to keep provider tests independent of PostgreSQL.
-- A prestart entry for the new usage budget test.
+- test-fynx-ai-usage-budget.mjs: fake PostgreSQL tests for daily per-user limits, photo-review cap, per-user and owner-wide budget thresholds, reservation locking, settlement and caller-only usage summary.
+- Extensions to test-gemini-assistant-provider.mjs: mocked token usage assertions for non-streaming and streaming Gemini responses, including tool-use prompt tokens and thinking tokens; the no-op usage adapter keeps provider tests independent of PostgreSQL.
+- Explicit Backend CI syntax-check and execution of the new usage test, plus the backend prestart entry.
 
-The feature branch itself has not yet had a PR workflow run at the time this report was created. Do not mark these tests as passed until the exact PR-head Backend CI result confirms them.
+**Verified on code commit 8856ea4584c0437298082be1353796b2e16ea50d:**
+- FYNX Backend CI push run 45799721101: SUCCESS — https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45799721101
+- FYNX Backend CI PR run 45799730710: SUCCESS — https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45799730710
+- Gemini assistant provider tests: 7 suites passed.
+- FYNX AI usage budget tests: GREEN; daily per-user limits, serialization, token/cost metering and usage summary passed.
+- FYNX AI privacy policy tests: GREEN.
+- AI extension contract: 91 checks passed.
+- Large Badge #8 AI certification: 44 checks passed.
+- Node syntax check for fynxAiUsageBudget.js passed; full backend syntax check passed.
+
+The Chat final closure and Chat parity workflows were still running at report update time. The canonical baseline Android Build remains failed at appDeepLinkLaunchesIntoFynx due to an unsupported drawable. No AI live provider test or exact APK runtime screenshot has been completed.
 
 Current canonical baseline evidence:
 - Canonical head at audit: 4382023be9dfd51d43728231504ce8fe9950e125.
