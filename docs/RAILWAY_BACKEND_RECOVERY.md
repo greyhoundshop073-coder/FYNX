@@ -20,9 +20,11 @@ A second Railway project with the same display name exists but has no services. 
 - Public domain: fynx-backend-testing-testing.up.railway.app
 - Public target port: 8080
 - Region: sfo
-- Live config before pending patch: NIXPACKS builder; historical deployment metadata used main.
-- The 11-change patch was committed on 2026-11-26 using Railway accept-deploy (workflow ID commitChanges/51b3423c-ef07-48d8-8c1c-e8dca91d3b81/0e560e21-bc20-4134-bd0a-0781b3fb1eea). The source branch and RAILPACK settings are now live configuration, and no staged changes remain. This did not produce a deployment.
-- Staged changes: source branch integration/fynx-single-apk-20261013; builder RAILPACK; encrypted DATABASE_URL; encrypted FYNX_MEDIA_STORAGE_PROVIDER; encrypted FYNX_NEON_S3_ACCESS_KEY_ID, FYNX_NEON_S3_ENDPOINT, FYNX_NEON_S3_REGION, FYNX_NEON_S3_SECRET_ACCESS_KEY, FYNX_NEON_STORAGE_BUCKET; encrypted CLOUDFLARE_SFU_APP_ID and CLOUDFLARE_SFU_APP_SECRET.
+- Historical deployment metadata used branch main and NIXPACKS. The current service configuration confirms RAILPACK, repository and root directory, but the returned source configuration does not include a branch field. Historical deployment records still show main. The canonical source branch selection is therefore **NOT VERIFIED**.
+- The 11-change patch was committed on 2026-11-26 using Railway accept-deploy (workflow ID commitChanges/51b3423c-ef07-48d8-8c1c-e8dca91d3b81/0e560e21-bc20-4134-bd0a-0781b3fb1eea). The service now reports no staged changes. This did not produce a deployment.
+- The currently listed variables include DATABASE_URL, FYNX_MEDIA_STORAGE_PROVIDER, five FYNX_NEON_S3_* storage settings and two CLOUDFLARE_SFU_* settings. Values were not read. The API did not report these variables as sealed; therefore this report only confirms variable-name presence and treats values as protected, not a cryptographic-encryption claim.
+- GEMINI_API_KEY is also present by variable name. Its value and provider validity remain unverified.
+- NIXPACKS_NODE_VERSION remains in the environment-variable name list although the active builder is RAILPACK. It is not evidence of a remaining NIXPACKS build-secret reference, but can be cleaned up only after confirming it is unused and after owner approval for config changes.
 
 The variable names are verified, but their values are protected and were not read or exposed. Presence does not prove correctness or connectivity. Live variable names also include GEMINI_API_KEY, JWT_SECRET and PAYSTACK_SECRET_KEY. Gemini key presence is verified by name only; validity and runtime use are not verified.
 
@@ -38,9 +40,17 @@ Build Failed: failed to solve: secret FYNX not found
 
 This was an old main/NIXPACKS deployment, not the currently staged canonical-branch/RAILPACK configuration. The current accessible service config and checked canonical repository paths do not reveal a build-secret declaration named FYNX. Checked candidate paths included root/backend Railway, Nixpacks, Railpack and Dockerfile configuration names; none exists on the canonical branch. The failed build log shows Railway loading a generated railpack-plan.json, which is a build artifact, not a committed file.
 
-**Exact-reference status:** the historical builder attempted to resolve a build secret named FYNX, but its originating declaration (historical Railway build configuration versus generated build plan/source metadata) has not been isolated. The currently applied service configuration no longer contains the old NIXPACKS builder setting; however, no new build has run to establish whether the error is eliminated. Do not claim a specific source file references it. Do not create a placeholder secret. Treat this as a historical NIXPACKS build-secret resolution failure until a current canonical RAILPACK build proves otherwise.
+**Exact-reference status:** the historical builder attempted to resolve a build secret named FYNX, but its originating declaration (historical Railway build configuration versus generated build plan/source metadata) has not been isolated. The currently applied service configuration reports RAILPACK, but no new build has run to establish whether the error is eliminated. A code search of the repository's default-branch index did not locate a committed `FYNX` build-secret mount/reference; this search is not a complete proof for the canonical branch. The generated historical `railpack-plan.json` and historical Railway service/build configuration are not available as committed canonical source files. The exact reference remains unresolved. Do not claim a specific source file references it. Do not create a placeholder secret. Treat this as a historical NIXPACKS build-secret resolution failure until a current canonical RAILPACK build proves otherwise.
 
 A separate 2026-11-03 deployment built an image and passed Railway's /ready healthcheck, but was later marked REMOVED and its metadata points to main. It is not proof of a live canonical backend.
+
+## Repository and startup-chain findings
+
+The canonical branch has `backend/package.json` with `start: node --import ./renderScalabilityPreload.js realtimeIsolationBootstrap.js`. npm automatically runs the `prestart` script before `start`. That prestart chain executes a long series of media, AI/Gemini, auth, runtime bootstrap, database-pool, marketplace, notification, social and wallet verification/bootstrap scripts. This is a significant deployment-readiness gate: a successful image build alone is not sufficient; the service must complete prestart and then pass `/ready`. The CI workflow `.github/workflows/fynx-backend-ci.yml` separately runs extensive PostgreSQL-backed and mocked provider tests, including Gemini provider tests without requiring a live key.
+
+The backend CI workflow runs on pull requests only when `backend/**`, `scripts/**`, or the workflow file changes; it also supports manual `workflow_dispatch`. This documentation-only PR does not match its path filters, so no backend CI run is expected from this PR. The connected GitHub tools do not expose a workflow-dispatch action; backend CI must be manually dispatched by an authorized repository user or run on the next relevant backend PR. The workflow's optional live production probe is disabled by default and should remain opt-in.
+
+`docs/FYNX_MEDIA_STORAGE_ROLLOUT.md` is not present on the canonical integration branch (404). A default-branch code-search result shows an older copy dated 2026-11-08 with a historical Railway snapshot; do not treat that stale document as current canonical evidence.
 
 ## PR #597 — Neon endpoint proposal
 PR #597 is open and proposes changing Android's default API URL and production reachability verifier from the Railway service URL to a deployed Neon Function URL. It also migrates saved Railway endpoints to Neon.
@@ -49,13 +59,13 @@ This conflicts with the owner's explicit Stage 3 decision: Railway remains the p
 
 ## Deployment attempt and current external blocker
 
-The 11-change Railway patch was committed on 2026-11-26. Railway then returned this explicit account-level error when asked to reconnect the same GitHub repository/branch to trigger a build: “Your trial has expired. Please select a plan to continue using Railway.” The source configuration now reflects the canonical branch and RAILPACK, but the latest deployment remains the historical FAILED deployment from 2026-11-03. No new build/deployment was created. Railway account-plan renewal or upgrade requires the owner's decision; no payment or upgrade was made.
+The 11-change Railway patch was committed on 2026-11-26. Railway then returned this explicit account-level error when asked to reconnect the same GitHub repository/branch to trigger a build: “Your trial has expired. Please select a plan to continue using Railway.” The service configuration reports RAILPACK and the repository/root, but it does not expose a source branch in the current service description. The attempted source reconnection to the canonical branch was rejected by Railway because the trial expired. The latest deployment remains the historical FAILED deployment from 2026-11-03. No new build/deployment was created. Railway account-plan renewal or upgrade requires the owner's decision; no payment or upgrade was made.
 
 ## Safe deployment procedure
 1. Confirm the exact project, environment and service IDs above.
-2. Re-check canonical branch head and inspect the pending patch. Stop if source, root directory, builder, start command, health path, port or variable names differ from this record.
+2. Re-check canonical branch head and inspect the live Railway source settings. Explicitly verify the source branch is `integration/fynx-single-apk-20261013`; the current service description omits branch, so do not infer it from repository/root alone. Stop if source, root directory, builder, start command, health path, port or variable names differ from this record.
 3. Preserve existing protected secrets. Never recreate sealed values, print credentials, or invent FYNX.
-4. Commit the owner-authorized staged patch. This triggers a canonical-branch build with /backend as root and RAILPACK as builder.
+4. After Railway access is restored, explicitly connect/select the canonical GitHub branch if it is not already selected, then trigger a build with /backend as root and RAILPACK as builder. Confirm the build metadata records the canonical branch and exact commit SHA.
 5. Inspect build logs first. If secret FYNX not found recurs, stop and capture the exact deployment ID/context. Inspect the generated build configuration and correct only the identified stale reference; do not add a dummy secret.
 6. Require deployment status SUCCESS. Verify public GET /health and GET /ready return successful responses.
 7. Verify readiness against the intended Neon branch using non-destructive probes.
@@ -76,18 +86,18 @@ The 11-change Railway patch was committed on 2026-11-26. Railway then returned t
 |---|---|---|
 | Correct Railway project/service | VERIFIED | Correct of two same-named projects; second has no service |
 | Repository/root | VERIFIED | greyhoundshop073-coder/FYNX; /backend |
-| Canonical branch | CONFIGURED — NOT DEPLOYED | Source config now points at canonical branch; trial expiry blocks build |
+| Canonical branch | NOT VERIFIED | Service description omits branch; source reconnect attempt was blocked by expired trial; historical deployments show main |
 | RAILPACK | CONFIGURED — NOT DEPLOYED | Builder setting is now RAILPACK; trial expiry blocks build |
-| DATABASE_URL | PRESENT — VALUE PROTECTED | Encrypted staged name; validate by readiness |
-| Neon S3 variables | PRESENT — VALUE PROTECTED | Five encrypted names; bucket access unverified |
-| Cloudflare SFU | PRESENT — VALUE PROTECTED | Two encrypted names; connectivity unverified |
+| DATABASE_URL | NAME PRESENT — VALUE UNVERIFIED | Variable name is present; value not inspected; validate by readiness |
+| Neon S3 variables | NAMES PRESENT — VALUES UNVERIFIED | Five variable names present; bucket access unverified |
+| Cloudflare SFU | NAMES PRESENT — VALUES UNVERIFIED | Two variable names present; connectivity unverified |
 | Gemini | NAME PRESENT — UNVERIFIED | GEMINI_API_KEY exists by name only |
 | FYNX secret failure | PARTIALLY ISOLATED | Old NIXPACKS deployment; originating declaration not located |
 | Canonical Railway deployment | CONDITIONAL — BLOCKED | Railway tool reports expired trial; account-plan action requires owner approval |
 | /health and /ready | NOT VERIFIED | No current canonical success to probe |
 | Authenticated APIs | NOT VERIFIED | Requires successful deployment and test account |
-| Backend CI | NOT VERIFIED IN THIS AUDIT | Must verify exact canonical commit |
+| Backend CI | NOT RUN FOR DOCS-ONLY PR | Workflow triggers on backend/**, scripts/** or its workflow file; this PR changes docs only. The workflow supports manual dispatch, but no dispatch action is available through the connected GitHub tool. |
 | PR #597 | CONFLICT IDENTIFIED | Neon Android cutover conflicts with Railway-primary decision |
 
 ## Stage 3 exit criteria
-Stage 3 remains CONDITIONAL — BLOCKED. Immediate blocker: Railway trial expired and no deployment can be triggered until the owner decides whether to renew/upgrade. After Railway access is restored, rerun the canonical RAILPACK build, inspect whether the historical FYNX secret error persists, then verify SUCCESS, /health, /ready, authenticated APIs, database, storage/provider checks and backend CI.
+Stage 3 remains CONDITIONAL — BLOCKED. Immediate blocker: Railway trial expired; source branch selection is also not verified. After Railway access is restored, explicitly select the canonical branch, run a fresh RAILPACK build, inspect whether the historical FYNX secret error persists, then verify SUCCESS, /health, /ready, authenticated APIs, database, storage/provider checks and backend CI.
