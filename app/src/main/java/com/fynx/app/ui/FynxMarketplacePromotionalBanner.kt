@@ -76,7 +76,8 @@ fun MarketplacePromotionalBanner(
     onShopNow: () -> Unit,
     onOpenOrders: () -> Unit,
     onRefresh: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    autoRotate: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -249,9 +250,9 @@ fun MarketplacePromotionalBanner(
         }
     }
 
-    LaunchedEffect(slides.map { it.key }) {
+    LaunchedEffect(slides.map { it.key }, autoRotate) {
         listState.scrollToItem(0)
-        if (slides.size > 1) {
+        if (autoRotate && slides.size > 1) {
             while (isActive) {
                 delay(MARKETPLACE_PROMO_ROTATION_MS)
                 if (listState.isScrollInProgress) continue
