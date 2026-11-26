@@ -118,7 +118,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onOpenCategory = {},
                         onShopNow = {},
                         onOpenOrders = {},
-                        onRefresh = {}
+                        onRefresh = {},
+                        autoRotate = false
                     )
                     cardListings.forEach { listing ->
                         MarketplaceReferenceProductCard(
