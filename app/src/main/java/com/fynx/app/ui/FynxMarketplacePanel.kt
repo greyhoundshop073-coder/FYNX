@@ -1462,6 +1462,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
+                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1531,6 +1532,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
+                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1595,6 +1597,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
+                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1721,6 +1724,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
+                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->

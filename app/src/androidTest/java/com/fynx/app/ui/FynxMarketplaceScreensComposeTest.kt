@@ -124,6 +124,10 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
+        compose.waitUntil(timeoutMillis = 3_000) {
+            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
@@ -165,6 +169,10 @@ class FynxMarketplaceScreensComposeTest {
                     testOnlyListings = listOf(marketplaceListings.first())
                 )
             }
+        }
+        compose.waitUntil(timeoutMillis = 3_000) {
+            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+                .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
