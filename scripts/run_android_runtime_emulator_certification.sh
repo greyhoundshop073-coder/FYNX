@@ -83,7 +83,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ] && [ "$runtime_status" -eq 0 ]; the
       echo "- Fixtures: synthetic GET-only responses; no publishing or production mutations."
       echo "- Verified files:"
       for screenshot in "${expected_admin_screenshots[@]}"; do
-        echo "  - `$screenshot`"
+        printf '  - `%s`\n' "$screenshot"
       done
       echo "- Result: ADMIN_SCREENSHOT_EVIDENCE=GREEN"
     } > fynx-runtime-screenshots/FYNX-admin-screenshot-evidence.md

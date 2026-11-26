@@ -327,6 +327,8 @@ for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marke
     require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
 require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
         "Admin emulator certification must fail when any required screenshot is absent")
+require("printf '  - \`%s\`\\\\n' \"$screenshot\"" in emulator_runner and 'echo "  - \`$screenshot\`"' not in emulator_runner,
+        "Admin screenshot evidence manifest must print literal filenames rather than execute backtick command substitutions")
 chat_final_workflow = (ROOT / ".github/workflows/fynx-chat-final-closure.yml").read_text(encoding="utf-8")
 chat_parity_workflow = (ROOT / ".github/workflows/fynx-chat-group-parity-layout.yml").read_text(encoding="utf-8")
 require(admin_branch not in chat_final_workflow and admin_branch not in chat_parity_workflow,

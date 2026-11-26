@@ -249,3 +249,32 @@ The Admin visual certification cases remain GET-only and scroll each section's u
 - Admin Owner Music Library and Owner/Admin campaign screenshots are genuine PixelCopy captures. Instrumentation mirrors them into /sdcard/Download/fynx-admin-test-fixtures before Gradle's test-app cleanup; CI collects that shared directory and still fails closed if any required PNG is absent.
 - Offline role-fixture UI evidence does not certify live API authentication, cross-device campaign delivery, or production publishing. Those require a healthy configured backend and a real authorized Owner/Admin session.
 - Marketplace card interaction instrumentation scrolls the real lazy feed to the Recommended section before tapping the product card, so the card must actually be composed and visible.
+
+
+## 2026-11-26 — Current PR #582 verification and screenshot-manifest correction
+
+This section supersedes the historical PR #527 / November 12 continuation pointers above. Continue on the existing PR #582 branch; do not restart the work or merge it without the user's approval.
+
+- Active PR: [#582 — Owner music and Marketplace campaign publishing](https://github.com/greyhoundshop073-coder/FYNX/pull/582)
+- Branch: `workstream4/admin-trust-support-music-20261123`
+- Verified head before this grouped correction: `afdcfed621fa3a281032abc43479886fa10e4fb9`
+- Canonical base remains `integration/fynx-single-apk-20261013`; this work has not been merged into it.
+- The four required checks on `afdcfed621fa3a281032abc43479886fa10e4fb9` all completed successfully: Android build, Backend validation, Chat Final Closure, and Chat Group Parity/Layout.
+- Android runtime artifact: [run 45704444150](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45704444150), artifact `15065877120`. It contains 14 actual emulator PixelCopy PNG captures, including Owner Activity, announcement editor/management, Owner Music Library, Owner and Admin Marketplace campaigns, People, Safety, Overview, and the offline Marketplace banner.
+- Offline Owner/Admin UI fixtures and Android instrumentation passed (exit code 0). Fixture requests were GET-only; no real publishing or production mutations were performed.
+- Live backend health was `not-configured`. Live authenticated Owner/Admin authorization, real uploads and cross-device publishing remain NOT CERTIFIED and must not be inferred from screenshots or CI.
+
+### Screenshot manifest defect found by inspecting the actual run artifact
+
+- The first successful artifact contained all 14 required PNG files, but `FYNX-admin-screenshot-evidence.md` had 14 blank bullets.
+- Root cause: the shell runner used `echo "  - `$screenshot`"`. In double quotes, the backticks still perform command substitution, so the shell attempted to execute each PNG filename and wrote an empty list. The screenshot files themselves were present and valid; the manifest-generation line was defective.
+- Corrected the runner to use `printf '  - \`%s\`\\n' "$screenshot"`, which emits literal Markdown backticks and the filename without command substitution.
+- Added a regression assertion to `scripts/verify_admin_control_center_contract.py` requiring the safe `printf` form and rejecting the broken `echo` form.
+- After this grouped correction, rerun all required checks and inspect the new artifact's manifest. Do not call the manifest correction verified until the next artifact actually lists every PNG filename.
+
+### Remaining work in this PR
+
+1. Continue Group 3 verification of the Marketplace campaign and Owner-only Music catalogue APIs, including database-backed authorization and mutation/audit behavior where CI fixtures permit.
+2. Preserve the current distinction between device-local offline campaign previews and server-published campaigns.
+3. Obtain a healthy configured backend and real OWNER, ADMIN and ordinary-user sessions before claiming live publishing/authorization certification.
+4. Keep PR #582 open and unmerged pending the user's approval. The canonical APK branch is unchanged.
