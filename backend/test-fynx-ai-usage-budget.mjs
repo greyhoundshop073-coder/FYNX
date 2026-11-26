@@ -55,6 +55,7 @@ try {
   });
   assert.ok(reservation.id);
   assert.ok(pool.calls.some(call => String(call.sql).includes("pg_advisory_xact_lock")));
+  assert.ok(!pool.calls.some(call => String(call.params?.[0] || "").includes("fynx-ai-usage:global")), "do not globally serialize requests when no owner budget is configured");
   assert.ok(pool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
   assert.ok(pool.calls.some(call => String(call.sql) === "COMMIT"));
 
@@ -113,6 +114,7 @@ try {
     error => error instanceof FynxAiUsageLimitError
   );
   assert.ok(!ownerBudgetPool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
+  assert.ok(ownerBudgetPool.calls.some(call => String(call.params?.[0] || "").includes("fynx-ai-usage:global")), "owner budget checks serialize across users");
   if (previousOwnerBudget === undefined) delete process.env.FYNX_AI_MONTHLY_BUDGET_USD;
   else process.env.FYNX_AI_MONTHLY_BUDGET_USD = previousOwnerBudget;
   console.log("FYNX AI usage budget tests GREEN: per-user daily limits, serialized reservations, token/cost metering and usage summary passed");

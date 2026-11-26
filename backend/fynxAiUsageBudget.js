@@ -111,7 +111,9 @@ export async function reserveFynxAiUsage({
   const user = String(userId);
   try {
     await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:global"]);
+    if (ownerMonthlyBudget !== null) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:global"]);
+    }
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:" + user]);
     const counts = await client.query(
       "SELECT COUNT(*) FILTER (WHERE user_id=$1 AND created_at >= date_trunc('day', NOW()))::int AS daily_requests, " +
