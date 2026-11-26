@@ -43,7 +43,7 @@ async function testTextImageHistoryAndToolSchema() {
     executeTool: async () => ({ ok: true }),
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return fakeResponse({ candidates: [{ content: { role: "model", parts: [{ text: "This is a test image description." }] } }] });
+      return fakeResponse({ usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 4 }, candidates: [{ content: { role: "model", parts: [{ text: "This is a test image description." }] } }] });
     }
   });
   assert.equal(result.reply, "This is a test image description.");
@@ -66,6 +66,8 @@ async function testTextImageHistoryAndToolSchema() {
   assert.equal(calls[0].body.tools[0].functionDeclarations[0].name, "get_my_profile");
   assert.equal("additionalProperties" in calls[0].body.tools[0].functionDeclarations[0].parameters, false);
   assert.equal(calls[0].body.toolConfig.functionCallingConfig.mode, "AUTO");
+  assert.equal(recordedUsage[0].inputTokens, 12);
+  assert.equal(recordedUsage[0].outputTokens, 4);
 }
 
 async function testStreamingTextResponse() {
@@ -83,7 +85,7 @@ async function testStreamingTextResponse() {
       assert.equal(options.headers["x-goog-api-key"], "unit-test-only-key");
       return fakeStreamResponse([
         { candidates: [{ content: { role: "model", parts: [{ text: "internal thought", thought: true }, { text: "Hello " }] } }] },
-        { candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
+        { usageMetadata: { promptTokenCount: 21, candidatesTokenCount: 7 }, candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
       ]);
     }
   });
@@ -93,6 +95,8 @@ async function testStreamingTextResponse() {
   assert.equal(result.reply, "Hello from FYNX.");
   assert.equal(chunks.join("").includes("internal thought"), false, "thought-only parts must never reach the user");
   assert.equal(result.pendingAction, null);
+  assert.equal(recordedUsage.at(-1).inputTokens, 21);
+  assert.equal(recordedUsage.at(-1).outputTokens, 7);
 }
 
 async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool() {

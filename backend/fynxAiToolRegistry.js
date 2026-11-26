@@ -445,12 +445,17 @@ export function registerFynxAiRoutes({ app }) {
     }
     const historyLength = normalizedHistory.reduce((total, item) => total + item.text.length, 0);
     if (historyLength > 12000) return res.status(413).json({ error: "conversation history too long" });
-    try { const result = await runAssistantAgent({ message, userId, history: normalizedHistory, context: { summary: contextSummary, currentTask: contextTask } }); return res.json(result); }
+    try {
+      const result = await runAssistantAgent({ message, userId, history: normalizedHistory, context: { summary: contextSummary, currentTask: contextTask } });
+      return res.json(result);
+    } catch (error) {
       if (error instanceof FynxAiUsageLimitError) {
         if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
         return res.status(429).json({ error: error.message, retryAfterSeconds: error.retryAfterSeconds });
       }
-    catch (error) { console.error("FYNX AI agent", error?.message || error); return res.status(502).json({ error: "FYNX AI is temporarily unavailable" }); }
+      console.error("FYNX AI agent", error?.message || error);
+      return res.status(502).json({ error: "FYNX AI is temporarily unavailable" });
+    }
   });
 
   app.post("/api/assistant/writing-copy", assistantJsonBodyParser, async (req, res) => {
