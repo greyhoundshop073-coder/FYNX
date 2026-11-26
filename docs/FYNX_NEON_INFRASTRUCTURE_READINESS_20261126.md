@@ -172,7 +172,7 @@ Neon compute autoscaling is configured at the endpoint level; idle state is expe
 
 ## 7. Existing repository work and overlap
 
-Canonical head inspected: `4382023be9dfd51d43728231504ce8fe9950e125`. The canonical commit's combined status endpoint returned no status entries; this is not proof of a green build.
+Canonical head inspected: `4382023be9dfd51d43728231504ce8fe9950e125`. The canonical commit's combined status endpoint returned no status entries; this is not proof of a green build. On this audit PR's latest head, GitHub Actions runs #5375 (Chat Group Parity + Layout Safety), #1635 (Chat Final Closure), and #16312 (Android Build) were observed queued; no result is certified yet.
 
 Relevant open PRs:
 
