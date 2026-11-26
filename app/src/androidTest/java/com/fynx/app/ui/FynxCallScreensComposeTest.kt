@@ -34,7 +34,8 @@ class FynxCallScreensComposeTest {
                         callerUsername = "@fynx_test_buyer",
                         participantUsernames = listOf("@fynx_test_seller"),
                         type = FynxCallType.VOICE,
-                        state = FynxCallState.CONNECTED
+                        state = FynxCallState.CONNECTED,
+                        speakerEnabled = true
                     ),
                     onAnswer = {},
                     onRetry = {},
@@ -76,7 +77,8 @@ class FynxCallScreensComposeTest {
                         callerUsername = "@fynx_test_buyer",
                         participantUsernames = listOf("@fynx_test_seller"),
                         type = FynxCallType.VIDEO,
-                        state = FynxCallState.CONNECTED
+                        state = FynxCallState.CONNECTED,
+                        speakerEnabled = true
                     ),
                     onAnswer = {},
                     onRetry = {},
