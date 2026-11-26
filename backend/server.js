@@ -22,6 +22,7 @@ import { createEmailAuthController } from "./emailAuthRoutes.js";
 import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
 import { isFynxCallBlocked } from "./callSafety.js";
+import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -1529,6 +1530,7 @@ export async function dispatchRealtimeConnection(socket, req) {
 }
 
 emailAuth.registerRoutes(app, auth);
+if (pool) registerCloudflareSfuRoutes({ app, pool, auth });
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
