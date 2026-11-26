@@ -262,16 +262,39 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel() {
                 }
             }
             when {
-                artworkUri != null -> Text(
-                    "Selected photo: ${artworkUri?.lastPathSegment ?: "image"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                artworkMediaId.isNotBlank() -> Text(
-                    "Photo uploaded and ready to attach.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                artworkUri != null -> {
+                    Text(
+                        "Selected photo: ${artworkUri?.lastPathSegment ?: "image"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    AndroidView(
+                        factory = { viewContext ->
+                            ImageView(viewContext).apply {
+                                scaleType = ImageView.ScaleType.CENTER_CROP
+                                setImageURI(artworkUri)
+                                contentDescription = "Selected Marketplace campaign artwork preview"
+                            }
+                        },
+                        update = { imageView ->
+                            imageView.setImageURI(artworkUri)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(148.dp)
+                    )
+                }
+                artworkMediaId.isNotBlank() -> {
+                    Text(
+                        "Current campaign photo — change it or remove it before saving.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    FynxRemoteMedia(
+                        mediaUrl = "/api/media/$artworkMediaId",
+                        type = "image",
+                        modifier = Modifier.fillMaxWidth().height(148.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                }
             }
         }
         Text("Campaign timing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
