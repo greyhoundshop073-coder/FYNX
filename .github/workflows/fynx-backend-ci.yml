@@ -169,6 +169,8 @@ jobs:
           node --check aiConversationRoutes.js
           node --check geminiAssistantProvider.js
           node test-gemini-assistant-provider.mjs
+          node --check fynxAiUsageBudget.js
+          node test-fynx-ai-usage-budget.mjs
       - name: Run FYNX AI security and extension contracts
         working-directory: .
         run: |
