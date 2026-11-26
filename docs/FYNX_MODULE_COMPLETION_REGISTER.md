@@ -6,8 +6,8 @@
 > **Canonical Android integration branch:** `integration/fynx-single-apk-20261013`  
 > **Release rule:** Only the canonical integration branch produces the official single FYNX APK. Feature-branch APKs and validation artifacts are not release APKs.
 
-Last reviewed: 2026-11-08  
-Register status: **INITIAL BASELINE — module-by-module audits still required**
+Last reviewed: 2026-11-26  
+Register status: **BASELINE UPDATED — Stage 4 FYNX AI audited; closure remains conditional**
 
 ---
 
@@ -87,7 +87,7 @@ This is a starting inventory, not a declaration that every module is unfinished.
 | Marketplace buyer experience | **NOT ASSESSED** | Audit discovery, search, product details, saved items, cart, checkout validation, orders, receipts, disputes and unavailable-backend behavior. |
 | My Shop / seller storefront | **IN PROGRESS** | PRs #460 and #461 are open for public storefront access and earnings breakdown. Verify the complete seller lifecycle and API/privacy contract before closure. |
 | Wallet and payments | **NOT ASSESSED** | Audit ledger correctness, pending/reserved/available balances, funding, payment verification, receipts, refunds, PIN/security and test/live separation. Never claim live payment certification without live-safe verification. |
-| FYNX AI | **IN PROGRESS** | PRs #487 and #488 are open for financial privacy test hardening and read-aloud UI. Audit all AI entry points, text/voice behavior, failure states and explicit exclusion of private financial data. |
+| FYNX AI | **CONDITIONAL — BLOCKED** | Stage 4 audit report: docs/FYNX_AI_STAGE4_AUDIT_REPORT.md. Canonical code audit confirms Gemini 3.8 Flash text/image provider, authenticated Android FYNX backend transport, Neon-owned conversations/attachments, inline writing and Marketplace photo-quality review; five approved public-data/confirmation-gated tools and an explicit private financial-data denylist. Stage 4 branch adds persistent per-user daily limits, separate photo-review cap, optional per-user and owner-wide monthly thresholds, Gemini token/cost accounting and caller-only usage summary. Current feature PR/CI pending. Live tests remain blocked: Railway exposes a FAILED testing backend deployment (2026-11-03); GEMINI_API_KEY variable name exists but validity and free/paid tier are not verified; OPENAI_API_KEY is absent. OpenAI Realtime source is present but lacks server-side call usage monitoring/session-cost enforcement. Canonical Android smoke instrumentation also fails in unrelated appDeepLinkLaunchesIntoFynx due an unsupported drawable; exact canonical runtime screenshots and owner acceptance remain outstanding. |
 | Discovery | **NOT ASSESSED** | Audit discovery entry points, feed/content behavior, navigation, pagination, empty/error states and regression with Home. |
 | Notifications | **NOT ASSESSED** | Audit delivery, deep links, unread/read state, preferences, lifecycle/background behavior and permission denial. |
 | Profile / Avatar | **NOT ASSESSED** | Audit identity/photo update, visibility/privacy, consistency across modules, loading/failure and account ownership. |
