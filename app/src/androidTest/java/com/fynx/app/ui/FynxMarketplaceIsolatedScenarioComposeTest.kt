@@ -119,7 +119,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onShopNow = {},
                         onOpenOrders = {},
                         onRefresh = {},
-                        autoRotate = false
+                        autoRotate = false,
+                        includeLocalCelebrations = false
                     )
                     cardListings.forEach { listing ->
                         MarketplaceReferenceProductCard(
@@ -195,7 +196,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                     sponsoredPromotions = emptyList(),
                     seasonalPromotions = emptyList(),
                     onOpenListing = {}, onOpenSeller = {}, onOpenProduct = {}, onOpenCategory = {},
-                    onShopNow = {}, onOpenOrders = {}, onRefresh = {}
+                    onShopNow = {}, onOpenOrders = {}, onRefresh = {},
+                    includeLocalCelebrations = false
                 )
             }
         }
