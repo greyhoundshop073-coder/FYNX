@@ -103,7 +103,7 @@ export async function reserveFynxAiUsage({
     throw new Error("FYNX AI usage accounting requires the existing FYNX database.");
   }
   const limits = getFynxAiUsageLimits();
-  const monthlyBudget = readOptionalBudget("FYNX_AI_MONTHLY_BUDGET_USD");
+  const monthlyBudget = readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD");
   await ensureUsageSchema(databasePool);
 
   const client = await databasePool.connect();
@@ -159,7 +159,9 @@ export async function settleFynxAiUsage({
   const safeStatus = status === "failed" ? "failed" : "completed";
   const input = Math.max(0, Math.trunc(Number(inputTokens) || 0));
   const output = Math.max(0, Math.trunc(Number(outputTokens) || 0));
-  const cost = Number.isFinite(Number(estimatedCostUsd)) ? Math.max(0, Number(estimatedCostUsd)) : null;
+  const cost = estimatedCostUsd === null || estimatedCostUsd === undefined || estimatedCostUsd === ""
+    ? null
+    : (Number.isFinite(Number(estimatedCostUsd)) ? Math.max(0, Number(estimatedCostUsd)) : null);
   await databasePool.query(
     "UPDATE fynx_ai_usage_events SET status=$2,input_tokens=$3,output_tokens=$4,estimated_cost_usd=$5,finished_at=NOW() " +
     "WHERE id=$1 AND status='reserved'",
@@ -196,6 +198,6 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     monthlyInputTokens: Number(row.monthly_input_tokens || 0),
     monthlyOutputTokens: Number(row.monthly_output_tokens || 0),
     monthlyEstimatedCostUsd: Number(row.monthly_estimated_cost_usd || 0),
-    monthlyBudgetUsd: readOptionalBudget("FYNX_AI_MONTHLY_BUDGET_USD")
+    monthlyBudgetUsd: readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD")
   };
 }

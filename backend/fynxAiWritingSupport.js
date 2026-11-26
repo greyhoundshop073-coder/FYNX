@@ -89,6 +89,7 @@ export async function generateFynxAiWritingCopy({ input, userId, assistantRunner
     history: [],
     context: {},
     imageInputs: [],
+    capability: "inline_writing",
     instructions: [
       FYNX_AI_PRIVACY_INSTRUCTIONS,
       "You are the FYNX inline writing assistant. This is a single-request text rewriting task only.",

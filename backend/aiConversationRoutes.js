@@ -5,6 +5,7 @@ import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runAssistantAgent } from "./fynxAiToolRegistry.js";
+import { FynxAiUsageLimitError } from "./fynxAiUsageBudget.js";
 import { buildAiConversationContext, loadPersistedAiConversationHistory } from "./aiConversationContext.js";
 
 const { Pool } = pg;
@@ -206,6 +207,17 @@ export function registerFynxAiConversationRoutes({ app }) {
         if (!committed) await db.query("ROLLBACK").catch(() => {});
       }
     } catch(error) {
+      if (error instanceof FynxAiUsageLimitError) {
+        if (wantsStream && res.headersSent) {
+          if (!res.destroyed && !res.writableEnded) {
+            res.write("data: " + JSON.stringify({type:"error",message:error.message}) + "\n\n");
+            res.end();
+          }
+          return;
+        }
+        if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
+        return res.status(429).json({ error: error.message, retryAfterSeconds: error.retryAfterSeconds });
+      }
       console.error("[fynx-ai] conversation message failed", JSON.stringify({
         stage,
         errorName:String(error?.name || "Error").slice(0,80),
