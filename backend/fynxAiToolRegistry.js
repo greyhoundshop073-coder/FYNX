@@ -461,6 +461,10 @@ export function registerFynxAiRoutes({ app }) {
       return res.json({ suggestion });
     } catch (error) {
       if (error instanceof FynxAiWritingCopyInputError) return res.status(400).json({ error: error.message });
+      if (error instanceof FynxAiUsageLimitError) {
+        if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
+        return res.status(429).json({ error: error.message, retryAfterSeconds: error.retryAfterSeconds });
+      }
       console.error("FYNX inline AI writing", error?.message || error);
       return res.status(502).json({ error: "FYNX AI could not prepare a writing suggestion right now." });
     }

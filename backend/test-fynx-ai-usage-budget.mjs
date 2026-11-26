@@ -93,6 +93,17 @@ try {
     reserveFynxAiUsage({ userId: "42", capability: "marketplace_photo_review", databasePool: photoLimitPool }),
     error => error instanceof FynxAiUsageLimitError
   );
+
+  const previousMonthlyBudget = process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD;
+  process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD = "2.00";
+  const monthlyLimitPool = fakePool({ monthlyCost: 2.0 });
+  await assert.rejects(
+    reserveFynxAiUsage({ userId: "42", databasePool: monthlyLimitPool }),
+    error => error instanceof FynxAiUsageLimitError
+  );
+  assert.ok(!monthlyLimitPool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
+  if (previousMonthlyBudget === undefined) delete process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD;
+  else process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD = previousMonthlyBudget;
   console.log("FYNX AI usage budget tests GREEN: per-user daily limits, serialized reservations, token/cost metering and usage summary passed");
 } finally {
   if (previousDaily === undefined) delete process.env.FYNX_AI_USER_DAILY_REQUEST_LIMIT;
