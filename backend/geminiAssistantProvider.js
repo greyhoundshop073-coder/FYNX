@@ -269,8 +269,10 @@ export async function runGeminiAssistant({
         model, apiKey, contents, instructions: String(instructions || ""), declarations, fetchImpl, onTextChunk
       });
       const metadata = data?.usageMetadata || {};
-      usageTotals.inputTokens += Math.max(0, Number(metadata.promptTokenCount) || 0);
-      usageTotals.outputTokens += Math.max(0, Number(metadata.candidatesTokenCount) || 0);
+      usageTotals.inputTokens += Math.max(0, Number(metadata.promptTokenCount) || 0)
+        + Math.max(0, Number(metadata.toolUsePromptTokenCount) || 0);
+      usageTotals.outputTokens += Math.max(0, Number(metadata.candidatesTokenCount) || 0)
+        + Math.max(0, Number(metadata.thoughtsTokenCount) || 0);
     const candidate = data?.candidates?.[0];
     const candidateContent = candidate?.content;
     const parts = Array.isArray(candidateContent?.parts) ? candidateContent.parts : [];
