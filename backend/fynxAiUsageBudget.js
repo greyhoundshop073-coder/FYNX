@@ -103,19 +103,22 @@ export async function reserveFynxAiUsage({
     throw new Error("FYNX AI usage accounting requires the existing FYNX database.");
   }
   const limits = getFynxAiUsageLimits();
-  const monthlyBudget = readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD");
+  const userMonthlyBudget = readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD");
+  const ownerMonthlyBudget = readOptionalBudget("FYNX_AI_MONTHLY_BUDGET_USD");
   await ensureUsageSchema(databasePool);
 
   const client = await databasePool.connect();
   const user = String(userId);
   try {
     await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:global"]);
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:" + user]);
     const counts = await client.query(
-      "SELECT COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW()))::int AS daily_requests, " +
-      "COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW()) AND capability='marketplace_photo_review')::int AS daily_photo_reviews, " +
-      "COALESCE(SUM(estimated_cost_usd) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::numeric AS monthly_cost " +
-      "FROM fynx_ai_usage_events WHERE user_id=$1 AND created_at >= date_trunc('month', NOW())",
+      "SELECT COUNT(*) FILTER (WHERE user_id=$1 AND created_at >= date_trunc('day', NOW()))::int AS daily_requests, " +
+      "COUNT(*) FILTER (WHERE user_id=$1 AND created_at >= date_trunc('day', NOW()) AND capability='marketplace_photo_review')::int AS daily_photo_reviews, " +
+      "COALESCE(SUM(estimated_cost_usd) FILTER (WHERE user_id=$1),0)::numeric AS monthly_cost, " +
+      "COALESCE(SUM(estimated_cost_usd),0)::numeric AS global_monthly_cost " +
+      "FROM fynx_ai_usage_events WHERE created_at >= date_trunc('month', NOW())",
       [user]
     );
     const row = counts.rows?.[0] || {};
@@ -127,8 +130,11 @@ export async function reserveFynxAiUsage({
     if (capability === "marketplace_photo_review" && dailyPhotoReviews >= limits.dailyPhotoReviews) {
       throw new FynxAiUsageLimitError("You have reached today's Marketplace photo-review limit. Please try again tomorrow.");
     }
-    if (monthlyBudget !== null && Number(row.monthly_cost || 0) >= monthlyBudget) {
-      throw new FynxAiUsageLimitError("FYNX AI has reached its monthly usage budget. Please try again next month.");
+    if (userMonthlyBudget !== null && Number(row.monthly_cost || 0) >= userMonthlyBudget) {
+      throw new FynxAiUsageLimitError("You have reached your monthly FYNX AI usage budget. Please try again next month.");
+    }
+    if (ownerMonthlyBudget !== null && Number(row.global_monthly_cost || 0) >= ownerMonthlyBudget) {
+      throw new FynxAiUsageLimitError("FYNX AI has reached its owner-set monthly usage budget. Please try again next month.");
     }
 
     const id = randomUUID();
@@ -198,6 +204,6 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     monthlyInputTokens: Number(row.monthly_input_tokens || 0),
     monthlyOutputTokens: Number(row.monthly_output_tokens || 0),
     monthlyEstimatedCostUsd: Number(row.monthly_estimated_cost_usd || 0),
-    monthlyBudgetUsd: readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD")
+    monthlyUserBudgetUsd: readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD")
   };
 }

@@ -24,7 +24,8 @@ function fakePool(counts = {}) {
             return { rows: [{
               daily_requests: counts.dailyRequests || 0,
               daily_photo_reviews: counts.dailyPhotoReviews || 0,
-              monthly_cost: counts.monthlyCost || 0
+              monthly_cost: counts.monthlyCost || 0,
+              global_monthly_cost: counts.globalMonthlyCost || 0
             }] };
           }
           return { rows: [] };
@@ -104,6 +105,16 @@ try {
   assert.ok(!monthlyLimitPool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
   if (previousMonthlyBudget === undefined) delete process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD;
   else process.env.FYNX_AI_USER_MONTHLY_BUDGET_USD = previousMonthlyBudget;
+  const previousOwnerBudget = process.env.FYNX_AI_MONTHLY_BUDGET_USD;
+  process.env.FYNX_AI_MONTHLY_BUDGET_USD = "10.00";
+  const ownerBudgetPool = fakePool({ globalMonthlyCost: 10.00 });
+  await assert.rejects(
+    reserveFynxAiUsage({ userId: "900", databasePool: ownerBudgetPool }),
+    error => error instanceof FynxAiUsageLimitError
+  );
+  assert.ok(!ownerBudgetPool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
+  if (previousOwnerBudget === undefined) delete process.env.FYNX_AI_MONTHLY_BUDGET_USD;
+  else process.env.FYNX_AI_MONTHLY_BUDGET_USD = previousOwnerBudget;
   console.log("FYNX AI usage budget tests GREEN: per-user daily limits, serialized reservations, token/cost metering and usage summary passed");
 } finally {
   if (previousDaily === undefined) delete process.env.FYNX_AI_USER_DAILY_REQUEST_LIMIT;
