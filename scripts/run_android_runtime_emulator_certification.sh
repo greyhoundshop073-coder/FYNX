@@ -62,7 +62,7 @@ if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ] && [ "$runtime_status" -eq 0 ]; the
     "FYNX-admin-owner-activity.png"
     "FYNX-admin-owner-music-library.png"
     "FYNX-admin-admin-marketplace-campaigns.png"
-    "FYNX-marketplace-offline-banner.png"
+    "FYNX-marketplace-offline-campaign-draft.png"
   )
   missing_admin_screenshots=0
   for screenshot in "${expected_admin_screenshots[@]}"; do
