@@ -132,3 +132,36 @@ Backend CI now executes the actual Railway `npm start` command against its isola
 
 ## Stage 3 exit criteria
 Stage 3 remains CONDITIONAL — BLOCKED by the remaining Railway account/source and live-provider work, not by the offline backend engineering baseline. Verified offline: `/ready` gates on PostgreSQL reachability, JWT presence and selected media-adapter configuration; backend dependencies are locked; Node 24 `npm ci` is deterministic; exact-head Backend CI is green; and the real `npm start`/`prestart` chain reaches successful `/ready` and `/health` using the isolated CI Postgres service. Still live-only: restore Railway access, verify the connected canonical branch and current `secret FYNX` config origin, deploy, verify production DB/storage (including actual object upload/read/delete), authenticated APIs, Gemini, approved call/SFU behavior, and confirm Cloudflare secret rotation. Coordinate in-flight PRs #599/#589 and package-script additions #611/#613 before integration; do not duplicate their work.
+
+
+## Current environment inventory and exact-head evidence — 2026-11-27
+
+A fresh Railway service description returned the following **19 variable names** for the testing environment. Values were not read, copied, tested or exposed:
+
+- Core/runtime: `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV`, `FYNX_MEDIA_STORAGE_PROVIDER`.
+- Neon S3-compatible object storage: `FYNX_NEON_S3_ACCESS_KEY_ID`, `FYNX_NEON_S3_ENDPOINT`, `FYNX_NEON_S3_REGION`, `FYNX_NEON_S3_SECRET_ACCESS_KEY`, `FYNX_NEON_STORAGE_BUCKET`.
+- Cloudflare calls: `CLOUDFLARE_SFU_APP_ID`, `CLOUDFLARE_SFU_APP_SECRET`.
+- Gemini: `GEMINI_API_KEY`.
+- Wallet / Paystack configuration: `FYNX_WALLET_CARD_FUNDING_ENABLED`, `FYNX_WALLET_FUNDING_MAX_AMOUNT`, `FYNX_WALLET_FUNDING_MIN_AMOUNT`, `FYNX_WALLET_TEST_MODE_ENABLED`, `PAYSTACK_SECRET_KEY`.
+- Official account configuration: `FYNX_OFFICIAL_USERNAME`.
+- Legacy builder variable: `NIXPACKS_NODE_VERSION`.
+
+Presence of a variable name does not establish that its value is correct, current, valid or used by the deployed process. In particular, `NIXPACKS_NODE_VERSION` is a legacy-looking name while the current builder setting is RAILPACK; no deletion was made because its historical purpose and any external references must be checked after Railway access is restored. No secret value was read. The service API did not expose a sealed-variable-name list, so this report makes no claim about Railway's encryption metadata.
+
+### Exact current PR-head CI refresh
+
+- Current PR head: `62b695d97b99974bf13da58b14bcce916b4d5c62`; base: `9b2401759dfb7e15293ec898685fe86b4ba08a48`.
+- Backend CI [run #45947766681](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45947766681) passed on that exact head: **103 successful steps, one intentionally skipped optional live-production probe, zero failed steps**.
+- The Railway `npm start` smoke step passed, including the full `prestart` chain, isolated PostgreSQL 16, expected `/ready` fields and `/health`.
+- The three additional workflows triggered on the documentation-only head (Android Build, Chat Group Parity + Layout Safety, Chat Final Closure) also concluded successfully. These checks do not certify Railway or provider runtime.
+- Historical Railway build logs were retrieved again for failed deployment `ad50abc2-a52b-40e8-aad1-8d3de1330e08`. They confirm Railpack 0.43.0 loaded generated `railpack-plan.json`, then failed in `[railpack] hash used secrets` with `secret FYNX not found`. No accessible log field identifies the originating declaration, so the source remains unresolved.
+
+### Adjacent open-PR integration watch
+
+- PR #599 (calls/SFU) is 60 commits ahead and 7 behind canonical at this comparison; its Backend CI and chat workflows passed, while its Android build was still in progress. It overlaps call transport owned by #589; do not duplicate it. Rebase and certify before integration.
+- PR #611 (AI usage/voice) is 11 commits ahead and 2 behind; its observed Backend CI, Android Build and chat workflows passed on its then-current head. Its package scripts must be reconciled with the lockfile and this startup smoke after rebase/integration.
+- PR #613 (Marketplace/My Shop offline readiness) is 3 commits ahead and 0 behind. Its observed Backend CI passed, but Android instrumentation timed out at 45 minutes and Chat Final Closure failed after Maven Central returned HTTP 429 for dependencies. These are external dependency/runner failures in that PR's observed run, not failures in PR #608. Rerun exact-head workflows and confirm the cause is cleared before integration.
+
+## Revised Stage 3 boundary
+
+Offline repository engineering and the exact CI startup path are verified green on the current PR head. Stage 3 is **not production-complete** until Railway account access is restored and the canonical branch can be selected, a fresh RAILPACK build proves whether the historical `FYNX` secret error persists, and deployed health/readiness, authenticated APIs, Neon object upload/read/delete, Gemini and approved calling provider are tested. Those live-only checks cannot be truthfully completed while Railway deployment is blocked by the expired trial.
