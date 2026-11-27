@@ -11,9 +11,9 @@ import { FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiPrivacyPolicy.js";
 
 export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
+// Keep the selectable set intentionally small; audio is streamed by OpenAI.
 export const FYNX_AI_REALTIME_VOICES = Object.freeze([
-  "alloy", "ash", "ballad", "coral", "echo",
-  "sage", "shimmer", "verse", "marin", "cedar"
+  "marin", "cedar", "coral", "ash"
 ]);
 export function resolveFynxAiVoice(voice) {
   return FYNX_AI_REALTIME_VOICES.includes(voice) ? voice : FYNX_AI_VOICE;

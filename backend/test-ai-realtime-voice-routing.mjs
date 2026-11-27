@@ -14,7 +14,7 @@ assert.equal(transcription.audio.input.turn_detection.create_response, false);
 assert.equal(transcription.audio.input.turn_detection.interrupt_response, false);
 assert.match(transcription.instructions, /FYNX Gemini is the only assistant answer provider/);
 
-assert.deepEqual(FYNX_AI_REALTIME_VOICES, ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
+assert.deepEqual(FYNX_AI_REALTIME_VOICES, ["marin", "cedar", "coral", "ash"]);
 assert.equal(resolveFynxAiVoice("cedar"), "cedar");
 assert.equal(resolveFynxAiVoice("not-a-voice"), "marin");
 

@@ -1533,7 +1533,7 @@ internal fun FynxAiFullScreenVoice(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Choose the voice FYNX uses when speaking its answers.")
-                    listOf("marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse").forEach { voice ->
+                    listOf("marin", "cedar", "coral", "ash").forEach { voice ->
                         Row(
                             Modifier.fillMaxWidth().clickable { onSpeechVoiceSelected(voice) }.padding(vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically

@@ -61,7 +61,7 @@ Append newest entries at the top. Include date, workstream, outgoing/incoming ow
 | 2026-11-24 | The canonical APK remains tied to `integration/fynx-single-apk-20261013`. | Prevent competing APK snapshots and preserve a single source of truth. |
 
 
-Stage 4 follow-up: add the OpenAI Realtime voice picker (10 built-in voice IDs), local preference persistence, speech-only preview and backend allowlist. The selection affects spoken Gemini answers only; transcription and Gemini answer generation remain unchanged. Portrait/avatar replacement in the FYNX AI voice orb remains a separate visual asset decision pending owner direction.
+Stage 4 follow-up: add the OpenAI Realtime voice picker (4 built-in voice IDs), local preference persistence, speech-only preview and backend allowlist. The selection affects spoken Gemini answers only; transcription and Gemini answer generation remain unchanged. Portrait/avatar replacement in the FYNX AI voice orb remains a separate visual asset decision pending owner direction.
 
 
 Voice selection follow-up: Android now provides a selectable OpenAI Realtime speech voice and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. Physical-device voice-quality and preview checks remain part of runtime certification.
