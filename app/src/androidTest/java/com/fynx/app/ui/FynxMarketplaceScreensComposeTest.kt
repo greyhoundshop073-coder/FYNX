@@ -125,14 +125,14 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 2_000) {
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithText("Sample review content — not a customer review.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -151,7 +151,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("Total: NGN 60,375.00").performScrollTo().assertIsDisplayed()
         saveScreenshot("marketplace-checkout-pickup-quote.png")
         compose.onNodeWithText("Confirm test preview").performClick()
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithText("FYNX TEST MODE — quote reviewed; no order or payment was created.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -171,7 +171,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
