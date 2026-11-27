@@ -34,7 +34,7 @@ source = source.replace('from "./socialRoutes.js";', 'from "./.fynx-runtime-soci
 source = source.replace('registerSocialRoutes(app, { pool, auth, findUserByUsername });', 'registerSocialRoutes(app, { pool, auth, findUserByUsername });\nif (pool) registerDiscoveryRoutes({ app, pool, auth });\nif (pool) registerBusinessRoutes({ app, auth });\nif (pool) registerMarketplacePaystackWebhook({ app, pool });');
 source = source.replace(
   'registerMarketplaceCompletionRoutes({ app, pool, auth });',
-  'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n}'
+  'registerMarketplaceCompletionRoutes({ app, pool, auth });\nif (pool) {\n  registerMarketplaceCheckoutRoutes({ app, pool, auth });\n  registerMarketplaceCheckoutOrderRoutes({ app, pool, auth });\n  registerMarketplaceShippingRoutes({ app, pool, auth });\n}'
 );
 source = source.replace(
   'app.use(express.json({ limit: "18mb", strict: true }));',
