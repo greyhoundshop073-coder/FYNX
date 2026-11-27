@@ -1,12 +1,12 @@
 # FYNX Neon Infrastructure Readiness Report
 
-**Date:** 2026-11-26  
+**Date:** 2026-11-27  
 **Owner/workstream:** Chat — Neon Infrastructure  
 **Repository:** `greyhoundshop073-coder/FYNX`  
 **Canonical branch:** `integration/fynx-single-apk-20261013`  
 **Canonical base inspected:** `4382023be9dfd51d43728231504ce8fe9950e125`  
 **Feature branch:** `infra/fynx-neon-readiness-20261126`  
-**Scope:** Read-only Neon, object-storage, Railway staged-configuration, and repository coordination audit.
+**Scope:** Neon database and object-storage engineering readiness, deployment-path verification, safe recovery planning, and repository coordination.
 
 ## Executive result
 
@@ -14,7 +14,26 @@ The historical Neon project `patient-lab-43403708` is the data-bearing FYNX proj
 
 No database rows, schemas, branches, buckets, objects, credentials, Railway variables or deployments were modified during this audit.
 
-**Readiness status: CONDITIONAL — BLOCKED.** Database lineage and schema/data comparisons are verified. Railway now has the Neon variable names present in the live testing service, but the connected account redacts all values, so the exact `DATABASE_URL` target and S3 credential match remain unverified. The service has no pending staged patch, but its runtime is Offline and its latest deployment failed. Live S3 operations and a verified backup process remain outstanding.
+**Readiness status: ENGINEERING PREPARATION COMPLETE; LIVE MEDIA AND RECOVERY GATES REMAIN.** The active Neon Function is deployed, and live `/health` and `/ready` probes both confirm that the database is ready. The backend already contains the provider-neutral PostgreSQL/Neon/R2 media adapter, signed upload-intent/finalization flow, object verification, protected retrieval, cleanup and mocked regression tests. Neon Object Storage is enabled with a private bucket, but its live signed object lifecycle has not yet been exercised. No user media has been migrated.
+
+## 0. Current live deployment update — 2026-11-27
+
+This section supersedes the earlier 2026-11-26 snapshot wherever service status differs.
+
+- The active backend is the Neon Function `fynxapi` on project `patient-lab-43403708`, branch `fynx-testing` (`br-floral-shape-b5mbajl5`).
+- Invocation URL: `https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech/`.
+- Active deployment #3 completed at `2026-11-27T04:57:31.450316Z`; runtime `nodejs24`, memory 2048 MiB.
+- Live read-only GET probes to `/health` and `/ready` both returned `{"ok":true,"service":"fynx-backend","database":"ready"}` on 2026-11-27. This verifies that the deployed Function can reach its configured Neon database.
+- `/version` responds, but `commit`, `branch`, `environment` and `deploymentId` are all `unknown`. The endpoint currently reads Railway/`SOURCE_VERSION` variables, which are not populated for the Neon Function. This is a deployment-provenance/observability gap, not a database-readiness failure.
+- The active testing branch currently has 81 public tables. Recovery and dev have 88 each and matching schema fingerprints. The testing branch includes core group, notification and media upload-intent tables, but differs from the full recovery/dev schema. Feature-specific routes may create some schemas lazily; `/health` alone does not certify every feature route.
+- Testing-branch Object Storage is enabled in `us-east-2`; its endpoint is `https://br-floral-shape-b5mbajl5.storage.c-7.us-east-2.aws.neon.tech`. The `fynx-media` bucket is private and lists zero objects.
+- The backend media adapter and local/mock regression tests are already present. The live signed PUT/HEAD/GET/DELETE lifecycle was not run because the available connection can inspect bucket metadata and presign URLs but cannot send an authenticated object-upload request.
+- The Railway `fynx-backend-testing` service remains Offline and its historical image build failed with `secret FYNX not found` on noncanonical `main` commit `0498632d1b72bea8aac5610a6778b75417b94af9`. Railway is an inactive fallback; it is not the current active backend path. Do not maintain two live backends.
+- PR #597 already targets this same Neon Function URL on `fynx-testing`, but it remains unmerged; the canonical Android default URL therefore still needs that existing PR's normal review/merge path.
+
+### Final engineering boundary
+
+**Engineering preparation for the Neon database/media integration is complete.** The database lineage is mapped, the preservation/dev branches are identified, the media adapter and contracts exist, the private bucket is configured, and the deployed testing Function is live with database readiness verified. The remaining items are live operational certification (real signed media transfer and authenticated feature journeys), deployment provenance, and owner-approved backup/restore readiness. Do not restart the Railway backend, migrate BYTEA media, reset branches, change production, or buy a higher Neon plan as part of this closeout.
 
 ## 1. Neon project and branch lineage
 
