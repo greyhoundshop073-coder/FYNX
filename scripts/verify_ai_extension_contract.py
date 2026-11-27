@@ -98,7 +98,7 @@ checks = [
     ("voice provider credentials stay server-side", "process.env.OPENAI_API_KEY" in voice and "OPENAI_API_KEY" not in android_voice and "OPENAI_API_KEY" not in android_panel),
     ("Android text AI stays on FYNX backend transport", "FynxBackendClient.get" in android_client and "FynxBackendClient.postJson" in android_client),
     ("Android realtime session stays on FYNX backend transport", "FynxBackendClient.postJson" in android_voice),
-    ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://fynx-backend-testing-testing.up.railway.app\"" in backend_client and "startsWith(\"https://\")" in backend_client),
+    ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech\"" in backend_client and "startsWith(\"https://\")" in backend_client),
     ("voice setup cancellation tears down the Android WebRTC handshake", "voiceConnectionJob?.cancel()" in android_panel and "catch (cancelled: CancellationException)" in android_voice_engine and "throw cancelled" in android_voice_engine),
     ("voice UI reports connected only after the realtime data channel is ready", android_voice_engine.index("dataChannelReady?.awaitWithTimeout()") < android_voice_engine.index("setState(State.CONNECTED, null)")),
     ("voice setup timeouts provide an actionable network error", "FYNX AI voice connection timed out" in android_voice_engine),
