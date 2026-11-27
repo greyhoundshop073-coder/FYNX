@@ -1474,12 +1474,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1545,12 +1543,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1611,12 +1607,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1739,12 +1733,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
