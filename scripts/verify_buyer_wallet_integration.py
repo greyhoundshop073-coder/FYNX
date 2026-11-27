@@ -8,6 +8,7 @@ money = (ROOT / "app/src/main/java/com/fynx/app/ui/MoneyCenterPanel.kt").read_te
 client = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletClient.kt").read_text()
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxBuyerWalletPanel.kt").read_text()
 market = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text()
+reference = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text()
 payments = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePayments.kt").read_text()
 settlement = (ROOT / "backend/marketplaceSettlement.js").read_text()
 wallet_backend = (ROOT / "backend/buyerWallet.js").read_text()
@@ -31,7 +32,15 @@ checks = [
   "deepLinkRequestId: Long = 0L" in app
   and "LaunchedEffect(deepLinkRequestId, deepLinkDestination)" in app),
  ("wallet direct Features entry", '"Wallet" -> key(marketplaceAccountKey) { FynxBuyerWalletPanel() }' in app and '"Wallet", "FYNX Wallet"' in features_panel),
- ("Marketplace Wallet shortcut", 'onOpenWallet: () -> Unit = {}' in market and 'OutlinedButton(onClick = onOpenWallet' in market and 'onOpenWallet = { selected = "Wallet" }' in app),
+ ("Marketplace Wallet icon remains beside Cart and routes to the existing Wallet destination",
+  'onOpenWallet: () -> Unit = {}' in market
+  and 'onWallet = onOpenWallet' in market
+  and 'onOpenWallet = { selected = "Wallet" }' in app
+  and 'onWallet: () -> Unit' in reference
+  and 'contentDescription = "Wallet"' in reference
+  and 'Icons.Default.AccountBalanceWallet' in reference
+  and 'OutlinedButton(onClick = onOpenWallet' not in market
+  and reference.split("internal fun MarketplaceReferenceSearchBar", 1)[1].split("@Composable", 1)[0].index("Icons.Default.ShoppingCart") < reference.split("internal fun MarketplaceReferenceSearchBar", 1)[1].split("@Composable", 1)[0].index("Icons.Default.AccountBalanceWallet")) ,
  ("wallet Money Center entry", 'MoneySection("Wallet", "FYNX Wallet"' in money and '"Wallet" -> FynxBuyerWalletPanel()' in money),
  ("emulator waits for wallet summary and activity loading to settle before capture", "capture_wallet_from_features" in runtime and "wallet_still_loading" in runtime and "range(60)" in runtime and "wallet_settled=True" in runtime and "after summary and activity loading settled" in runtime),
  ("wallet result selector excludes the EditText query and chooses a lower result card", 'node.attrib.get("class") == "android.widget.EditText"' in runtime and "search_bottom=bottom" in runtime and "top >= minimum_card_top" in runtime),
