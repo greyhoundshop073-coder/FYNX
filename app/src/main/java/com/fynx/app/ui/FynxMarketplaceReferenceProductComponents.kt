@@ -311,11 +311,11 @@ internal fun MarketplaceReferenceProductCard(
                         color = Color.Transparent
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            FynxRemoteProfileAvatar(
+                            FynxMarketplaceSellerAvatar(
                                 sellerPhotoId,
+                                listing.sellerUsername,
                                 listing.sellerDisplayName.ifBlank { listing.sellerUsername },
-                                Modifier.size(24.dp).clip(CircleShape),
-                                ownerUsername = listing.sellerUsername
+                                Modifier.size(24.dp).clip(CircleShape)
                             )
                             Spacer(Modifier.width(6.dp))
                             Column(

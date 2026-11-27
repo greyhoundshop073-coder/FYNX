@@ -87,7 +87,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
     var shopLogoMediaId by remember(username) { mutableStateOf<String?>(null) }
     var shopCoverMediaId by remember(username) { mutableStateOf<String?>(null) }
     var shopLocation by remember(username) { mutableStateOf("") }
-    var shopContactPhone by remember(username) { mutableStateOf("") }
     var profileLoading by remember(username) { mutableStateOf(true) }
     var shopProfileError by remember(username) { mutableStateOf<String?>(null) }
     var followedByViewer by remember(username, viewerUsername) { mutableStateOf<Boolean?>(null) }
@@ -186,7 +185,6 @@ internal fun FynxMarketplaceSellerStoreDialog(
                         shopLogoMediaId = shop.optString("logoMediaId").takeIf { it.isNotBlank() && it != "null" }
                         shopCoverMediaId = shop.optString("coverMediaId").takeIf { it.isNotBlank() && it != "null" }
                         shopLocation = shop.optString("location")
-                        shopContactPhone = shop.optString("contactPhone")
                     }
                     .onFailure { failure ->
                         shopProfileError = marketplaceSafeError(failure, "Shop details could not load.")
@@ -304,11 +302,11 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                FynxRemoteProfileAvatar(
+                                FynxMarketplaceSellerAvatar(
                                     photoId,
+                                    username,
                                     profileName.ifBlank { username },
-                                    Modifier.size(36.dp).clip(CircleShape),
-                                    ownerUsername = username
+                                    Modifier.size(36.dp).clip(CircleShape)
                                 )
                                 Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text("Seller account", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -377,10 +375,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                             }
-                            val shopMetadata = listOfNotNull(
-                                shopLocation.trim().takeIf { it.isNotBlank() },
-                                shopContactPhone.trim().takeIf { it.isNotBlank() }?.let { "Contact: " + it }
-                            ).joinToString("  •  ")
+                            val shopMetadata = shopLocation.trim()
                             if (shopMetadata.isNotBlank()) {
                                 Text(
                                     shopMetadata,
