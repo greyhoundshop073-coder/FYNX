@@ -91,8 +91,6 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
-  "registerBuyerWalletRoutes({ app })",
-  "registerBuyerWalletMarketplaceRoutes({ app })",
   'app.post("/api/auth/login"',
   'app.get("/api/me", auth',
   'app.get("/api/statuses", auth',
