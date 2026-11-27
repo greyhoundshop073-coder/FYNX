@@ -387,7 +387,9 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
     }
 
     private fun updatePreDrawRegistration() {
-        val needsAnimationVisibility = artwork is AnimatedImageDrawable || artwork is FynxLegacyGifDrawable
+        val needsAnimationVisibility =
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && artwork is AnimatedImageDrawable) ||
+                artwork is FynxLegacyGifDrawable
         if (isAttachedToWindow && needsAnimationVisibility && !preDrawRegistered && viewTreeObserver.isAlive) {
             viewTreeObserver.addOnPreDrawListener(this)
             preDrawRegistered = true
@@ -401,19 +403,19 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
         val rect = Rect()
         val visible = playbackAllowed && isShown && windowVisibility == View.VISIBLE && getGlobalVisibleRect(rect)
         val drawable = artwork ?: return
-        when (drawable) {
-            is AnimatedImageDrawable -> {
-                if (visible && !drawable.isRunning) drawable.start()
-                else if (!visible && drawable.isRunning) drawable.stop()
-            }
-            is FynxLegacyGifDrawable -> if (visible) drawable.start() else drawable.stop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && drawable is AnimatedImageDrawable) {
+            if (visible && !drawable.isRunning) drawable.start()
+            else if (!visible && drawable.isRunning) drawable.stop()
+        } else if (drawable is FynxLegacyGifDrawable) {
+            if (visible) drawable.start() else drawable.stop()
         }
     }
 
     private fun stopAnimation(drawable: Drawable?) {
-        when (drawable) {
-            is AnimatedImageDrawable -> if (drawable.isRunning) drawable.stop()
-            is FynxLegacyGifDrawable -> drawable.stop()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && drawable is AnimatedImageDrawable) {
+            if (drawable.isRunning) drawable.stop()
+        } else if (drawable is FynxLegacyGifDrawable) {
+            drawable.stop()
         }
     }
 
