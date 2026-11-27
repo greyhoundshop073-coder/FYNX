@@ -1237,34 +1237,41 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     LaunchedEffect(listings) {
         if (testOnlyListings != null) return@LaunchedEffect
+        // Every currently loaded seller needs an avatar for their product card. Keep the
+        // reputation/ranking calls deliberately bounded to twelve sellers.
         val sellers = listings.map { it.sellerUsername.removePrefix("@").trim() }
-            .filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.US) }.take(12)
+            .filter { it.isNotBlank() }.distinctBy { it.lowercase(Locale.US) }
+        val reputationSellers = sellers.take(12)
+        val reputationKeys = reputationSellers.map { it.lowercase(Locale.US) }.toSet()
         val pending = sellers.filter { username ->
             val key = username.lowercase(Locale.US)
-            key !in sellerReputations || !sellerPhotoIds.containsKey(key) || !sellerVerifiedByUsername.containsKey(key)
+            key !in sellerPhotoIds || key !in sellerVerifiedByUsername ||
+                (key in reputationKeys && key !in sellerReputations)
         }
         val reputationUpdates = linkedMapOf<String, FynxMarketplaceClient.SellerReputation>()
         val photoUpdates = linkedMapOf<String, String?>()
         val verifiedUpdates = linkedMapOf<String, Boolean>()
-        // Fetch four sellers at a time; both seller endpoints run concurrently per seller.
+        // Batch profile loads to avoid a burst when pagination introduces many new sellers.
         pending.chunked(4).forEach { batch ->
             val results = coroutineScope {
                 batch.map { username ->
                     async {
                         val key = username.lowercase(Locale.US)
-                        val reputationCall = async {
+                        val needsReputation = key in reputationKeys && key !in sellerReputations
+                        val needsProfile = key !in sellerPhotoIds || key !in sellerVerifiedByUsername
+                        val reputationCall = if (needsReputation) async {
                             runCatching { FynxMarketplaceClient.sellerReputation(context, username).getOrNull() }.getOrNull()
-                        }
-                        val profileCall = async {
-                            runCatching { FynxProfileRemoteClient.get(context, username) }.getOrNull()
-                        }
-                        Triple(key, reputationCall.await(), profileCall.await())
+                        } else null
+                        val profileCall = if (needsProfile) async {
+                            runCatching { FynxProfileRemoteClient.get(context, username).getOrNull() }.getOrNull()
+                        } else null
+                        Triple(key, reputationCall?.await(), profileCall?.await())
                     }
                 }.awaitAll()
             }
-            results.forEach { (key, reputation, profileResult) ->
+            results.forEach { (key, reputation, profile) ->
                 if (reputation != null) reputationUpdates[key] = reputation
-                profileResult?.getOrNull()?.let { profile ->
+                if (profile != null) {
                     photoUpdates[key] = profile.profilePhotoMediaId
                     verifiedUpdates[key] = profile.verified
                 }
@@ -1879,7 +1886,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 }
             }
         }
-        if (listings.isNotEmpty()) FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp + fynxBottomBarSpaceAboveInset()), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
+        FloatingActionButton(onClick = { showSell = true }, modifier = Modifier.align(Alignment.BottomEnd).navigationBarsPadding().imePadding().padding(end = 18.dp, bottom = 18.dp + fynxBottomBarSpaceAboveInset()), shape = RoundedCornerShape(18.dp)) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Sell", modifier = Modifier.padding(end = 14.dp)) }
     }
 
     if (showSell) MarketplaceSellDialog(context, onPublished = { listingId ->
@@ -2184,7 +2191,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
     Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername) }
+                IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxMarketplaceSellerAvatar(photoId, l.sellerUsername, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50))) }
                 Column(Modifier.weight(1f).padding(start = 2.dp)) {
                     Text(l.sellerDisplayName.ifBlank { l.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, style = MaterialTheme.typography.labelLarge)
                     Text(l.storeName.ifBlank { "FYNX seller" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -2230,7 +2237,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
 private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation?, photoId: String?, onProfile: () -> Unit) {
     Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
+            FynxMarketplaceSellerAvatar(photoId, listing.sellerUsername, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)))
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
@@ -2587,6 +2594,7 @@ private fun MarketplacePaymentDialog(
                             value = email,
                             onValueChange = { email = it.trim().take(160) },
                             label = { Text("Payment email") },
+                            supportingText = { if (email.isNotBlank() && !isValidMarketplacePaymentEmail(email)) Text("Enter a valid email address.") },
                             singleLine = true,
                             enabled = !busy,
                             modifier = Modifier.fillMaxWidth()
@@ -2604,7 +2612,7 @@ private fun MarketplacePaymentDialog(
             if (payment == null) {
                 Button(
                     enabled = if (paymentMethod == "FYNX_WALLET") canPayWithWallet
-                        else !busy && email.contains("@") && !walletSummaryLoading,
+                        else !busy && isValidMarketplacePaymentEmail(email) && !walletSummaryLoading,
                     onClick = {
                         busy = true
                         message = null
@@ -3352,15 +3360,18 @@ private fun MarketplaceOrders(context: android.content.Context, orders: List<Fyn
 
 @Composable
 private fun OrderActions(context: android.content.Context, order: FynxRemoteSocialClient.MarketplaceOrder, onChanged: () -> Unit, onClose: () -> Unit) {
-    var dispute by remember { mutableStateOf(false) }
-    var details by remember { mutableStateOf("") }
-    var rating by remember { mutableIntStateOf(5) }
-    var comment by remember { mutableStateOf("") }
-    var showLifecycle by remember { mutableStateOf(false) }
+    var dispute by remember(order.id) { mutableStateOf(false) }
+    var details by remember(order.id) { mutableStateOf("") }
+    var rating by remember(order.id) { mutableIntStateOf(5) }
+    var comment by remember(order.id) { mutableStateOf("") }
+    var showLifecycle by remember(order.id) { mutableStateOf(false) }
+    var actionBusy by remember(order.id) { mutableStateOf(false) }
+    var actionError by remember(order.id) { mutableStateOf<String?>(null) }
+    val canReportProblem = marketplaceOrderAllowsProblemReport(order.status)
     val scope = rememberCoroutineScope()
 
     AlertDialog(
-        onDismissRequest = onClose,
+        onDismissRequest = { if (!actionBusy) onClose() },
         title = { Text("Order ${order.status}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3375,26 +3386,58 @@ private fun OrderActions(context: android.content.Context, order: FynxRemoteSoci
                     Text(when (order.status) { "PAID" -> "Choose delivery or pickup so the seller can fulfill the order."; "SHIPPED" -> "Confirm the order when you receive it."; else -> "Inspect the order and complete it when everything is correct." }, style = MaterialTheme.typography.bodySmall)
                 }
                 when {
-                    dispute -> OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                    dispute -> OutlinedTextField(value = details, onValueChange = { details = it.take(4000); actionError = null }, label = { Text("What happened?") }, minLines = 3, modifier = Modifier.fillMaxWidth(), enabled = !actionBusy)
                     order.status == "PAYMENT_PENDING" -> Text("You can cancel this unpaid order.")
                     order.status == "COMPLETED" -> {
                         Text("Rate seller")
                         Row(verticalAlignment = Alignment.CenterVertically) { (1..5).forEach { star -> TextButton(onClick = { rating = star }) { Text(if (star <= rating) "★" else "☆") } } }
-                        OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("Review") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = comment, onValueChange = { comment = it.take(1200) }, label = { Text("Review") }, minLines = 2, modifier = Modifier.fillMaxWidth())
                     }
                 }
+                actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             when {
-                dispute -> Button(onClick = { scope.launch { FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details).onSuccess { onChanged() } } }) { Text("Open dispute") }
-                order.status == "PAYMENT_PENDING" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() } } }) { Text("Cancel order") }
-                order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(onClick = { showLifecycle = true }) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
-                order.status == "COMPLETED" -> Button(onClick = { scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() } } }) { Text("Submit review") }
+                dispute -> Button(
+                    enabled = !actionBusy && details.trim().isNotEmpty() && canReportProblem,
+                    onClick = {
+                        actionBusy = true
+                        actionError = null
+                        scope.launch {
+                            FynxRemoteSocialClient.disputeMarketplaceOrder(context, order.id, "OTHER", details.trim())
+                                .onSuccess { onChanged() }
+                                .onFailure { actionError = marketplaceSafeError(it, "The dispute could not be opened.") }
+                            actionBusy = false
+                        }
+                    }
+                ) { if (actionBusy) CircularProgressIndicator(Modifier.size(18.dp)) else Text("Open dispute") }
+                order.status == "PAYMENT_PENDING" -> Button(
+                    enabled = !actionBusy,
+                    onClick = { actionBusy = true; scope.launch { FynxRemoteSocialClient.cancelMarketplaceOrder(context, order.id).onSuccess { onChanged() }.onFailure { actionError = marketplaceSafeError(it, "The order could not be cancelled.") }; actionBusy = false } }
+                ) { Text("Cancel order") }
+                order.status == "PAID" || order.status == "SHIPPED" || order.status == "INSPECTION" -> Button(
+                    enabled = !actionBusy,
+                    onClick = { showLifecycle = true }
+                ) { Text(when (order.status) { "PAID" -> "Choose fulfillment"; "SHIPPED" -> "Confirm received"; else -> "Complete order" }) }
+                order.status == "COMPLETED" -> Button(
+                    enabled = !actionBusy,
+                    onClick = { actionBusy = true; scope.launch { FynxRemoteSocialClient.reviewMarketplaceOrder(context, order.id, rating, comment).onSuccess { onChanged() }.onFailure { actionError = marketplaceSafeError(it, "The review could not be submitted.") }; actionBusy = false } }
+                ) { Text("Submit review") }
                 else -> Spacer(Modifier.size(1.dp))
             }
         },
-        dismissButton = { TextButton(onClick = { if (!dispute && order.status != "COMPLETED") dispute = true else onClose() }) { Text(if (!dispute && order.status != "COMPLETED") "Report problem" else "Close") } }
+        dismissButton = {
+            TextButton(enabled = !actionBusy, onClick = {
+                when {
+                    dispute -> { dispute = false; details = ""; actionError = null }
+                    canReportProblem -> { dispute = true; actionError = null }
+                    else -> onClose()
+                }
+            }) {
+                Text(when { dispute -> "Back"; canReportProblem -> "Report problem"; else -> "Close" })
+            }
+        }
     )
 
     if (showLifecycle) FynxMarketplaceOrderLifecycle(context, order, onChanged = { showLifecycle = false; onChanged() }, onClose = { showLifecycle = false })
@@ -3933,6 +3976,7 @@ private fun MarketplaceMultiProductPaymentDialog(
                             value = email,
                             onValueChange = { email = it.trim().take(160) },
                             label = { Text("Paystack payment email") },
+                            supportingText = { if (email.isNotBlank() && !isValidMarketplacePaymentEmail(email)) Text("Enter a valid email address.") },
                             singleLine = true,
                             enabled = !busy,
                             modifier = Modifier.fillMaxWidth()
@@ -3952,7 +3996,7 @@ private fun MarketplaceMultiProductPaymentDialog(
         },
         confirmButton = {
             if (payment == null) {
-                val canContinue = if (paymentMethod == "FYNX_WALLET") canPayWithWallet else !busy && email.contains("@")
+                val canContinue = if (paymentMethod == "FYNX_WALLET") canPayWithWallet else !busy && isValidMarketplacePaymentEmail(email)
                 Button(enabled = canContinue, onClick = {
                     busy = true
                     message = null
