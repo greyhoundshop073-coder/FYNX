@@ -131,7 +131,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
     var artworkUri by remember(testOnlyArtworkUri) { mutableStateOf(testOnlyArtworkUri) }
     var artworkMediaId by remember { mutableStateOf("") }
     var localArtworkUri by remember { mutableStateOf("") }
-    var localTestMode by remember { mutableStateOf(true) }
+    var saveOfflineDraft by remember { mutableStateOf(true) }
     var message by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val artworkPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -313,7 +313,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Offline test mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("Save offline draft", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     if (localTestMode) "On: saves the campaign and photo only on this phone. Publishing stays local and does not require a backend upload or publish request."
                     else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
@@ -356,30 +356,34 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                         }
                     },
                     enabled = !saving
-                ) { Text(if (artworkUri == null && localArtworkUri.isBlank() && artworkMediaId.isBlank()) "Choose photo" else "Change photo") }
+                ) { Text(if (artworkUri == null && localArtworkUri.isBlank() && artworkMediaId.isBlank()) "Choose photo or GIF" else "Change artwork") }
                 if (artworkUri != null || localArtworkUri.isNotBlank() || artworkMediaId.isNotBlank()) {
                     TextButton(
                         onClick = { artworkUri = null; artworkMediaId = ""; localArtworkUri = "" },
                         enabled = !saving
-                    ) { Text("Remove photo") }
+                    ) { Text("Remove artwork") }
                 }
             }
             when {
-                artworkUri != null -> Text(
-                    "Selected photo: ${artworkUri?.lastPathSegment ?: "image"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                localArtworkUri.isNotBlank() -> Text(
-                    "Photo is saved locally on this phone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                artworkMediaId.isNotBlank() -> Text(
-                    "Photo uploaded and ready to attach.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                artworkUri != null -> {
+                    Text("Selected artwork preview", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FynxCampaignArtworkPreview(artworkUri!!, Modifier.fillMaxWidth(), maxHeight = 180)
+                }
+                localArtworkUri.isNotBlank() -> {
+                    Text("Saved artwork preview", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FynxCampaignArtworkPreview(Uri.parse(localArtworkUri), Modifier.fillMaxWidth(), maxHeight = 180)
+                }
+                artworkMediaId.isNotBlank() -> {
+                    Text("Uploaded artwork preview", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FynxRemoteMedia(
+                        mediaUrl = "/api/media/$artworkMediaId",
+                        type = "image",
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        autoPlay = false,
+                        allowImagePreview = false
+                    )
+                }
             }
         }
         Text("Campaign timing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -471,7 +475,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                         )
                         FynxMarketplaceLocalCampaignStore.upsert(context, localCampaign)
                             .onSuccess {
-                                message = "Saved on this phone. The campaign is now available in the Marketplace banner without a backend connection."
+                                message = "Offline draft saved on this phone. It will not appear to buyers until you publish it."
                                 resetEditor()
                                 campaigns = FynxMarketplaceLocalCampaignStore.all(context)
                             }
@@ -600,7 +604,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                         }
                         if (campaign.localOnly) {
                             Text(
-                                "LOCAL · THIS DEVICE",
+                                "OFFLINE DRAFT · THIS DEVICE",
                                 color = MaterialTheme.colorScheme.primary,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
