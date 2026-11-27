@@ -380,7 +380,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                         type = "image",
                         modifier = Modifier.fillMaxWidth().height(180.dp),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        autoPlay = false,
+                        autoPlay = true,
                         allowImagePreview = false
                     )
                 }
