@@ -43,6 +43,8 @@ require('if (activeSection == "Marketplace")' in source and
 visual_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt"
 require(visual_test.is_file(), "Admin publishing section emulator screenshot tests are missing")
 visual = visual_test.read_text(encoding="utf-8")
+require("FynxTheme(accent = FynxAccent.Blue, darkMode = false)" in visual and "MaterialTheme {" not in visual,
+        "Owner/Admin and offline banner runtime screenshots must use the approved FYNX Azure theme")
 for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-banner.png"):
     require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
 require('"GET"' in visual and "requestExecutorForTests" in visual,

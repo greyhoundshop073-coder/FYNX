@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.view.PixelCopy
 import androidx.activity.ComponentActivity
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -75,7 +74,7 @@ class FynxAdminPublishingSectionsVisualTest {
         try {
             val screenState = mutableStateOf(0)
             compose.setContent {
-                MaterialTheme {
+                FynxTheme(accent = FynxAccent.Blue, darkMode = false) {
                     when (screenState.value) {
                         0 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             FynxMarketplaceSeasonalPromotionAdminPanel(
@@ -293,7 +292,7 @@ class FynxAdminPublishingSectionsVisualTest {
             }
         }
         compose.setContent {
-            MaterialTheme {
+            FynxTheme(accent = FynxAccent.Blue, darkMode = false) {
                 FynxAdminControlCenterPanel()
             }
         }
