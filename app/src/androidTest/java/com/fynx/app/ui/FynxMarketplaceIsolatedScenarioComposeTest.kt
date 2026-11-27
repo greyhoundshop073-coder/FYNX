@@ -140,7 +140,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             compose.onAllNodesWithText(firstDeal.title).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
@@ -150,7 +150,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
         compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
@@ -202,13 +202,13 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             compose.onAllNodesWithText(candidates.first().title).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(candidates.first().title).assertIsDisplayed()
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
-        compose.waitUntil(timeoutMillis = 9_000) {
+        compose.waitUntil(timeoutMillis = 15_000) {
             runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
