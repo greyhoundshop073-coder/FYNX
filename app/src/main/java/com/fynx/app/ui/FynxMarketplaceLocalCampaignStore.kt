@@ -2,29 +2,26 @@ package com.fynx.app.ui
 
 import android.content.Context
 import android.net.Uri
-import com.fynx.app.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Device-local Marketplace banner campaigns for offline preview and testing.
+ * Private on-device campaign drafts. They are never inserted into the buyer feed.
  *
- * Artwork is copied into app-private storage, so a Photo Picker URI does not
- * expire when the user leaves the picker. Nothing in this store is sent to the
- * backend or shown on another device.
+ * Artwork is copied into app-private storage, so a Photo Picker URI remains
+ * available after the picker closes. Drafts stay on this device until published
+ * through the authenticated campaign service.
  */
 internal object FynxMarketplaceLocalCampaignStore {
     private const val PREFS = "fynx_marketplace_local_campaigns_v1"
     private const val CAMPAIGNS_KEY = "campaigns"
-    private const val SAMPLES_SEEDED_KEY = "sample_campaigns_seeded"
     private const val MAX_CAMPAIGNS = 20
     private const val MAX_ARTWORK_BYTES = 12L * 1024L * 1024L
     private const val MAX_TOTAL_ARTWORK_BYTES = 48L * 1024L * 1024L
@@ -42,9 +39,7 @@ internal object FynxMarketplaceLocalCampaignStore {
     }
 
     fun all(context: Context): List<FynxMarketplaceSeasonalPromotion> {
-        val appContext = context.applicationContext
-        ensureSampleCampaign(appContext)
-        return readStored(appContext)
+        return readStored(context.applicationContext)
     }
 
     fun active(context: Context): List<FynxMarketplaceSeasonalPromotion> {
@@ -54,8 +49,8 @@ internal object FynxMarketplaceLocalCampaignStore {
 
     fun importArtwork(context: Context, source: Uri): Result<String> = runCatching {
         val appContext = context.applicationContext
-        val mime = appContext.contentResolver.getType(source)?.trim()?.lowercase().orEmpty()
-        require(mime.startsWith("image/")) { "Please choose an image file." }
+        val artworkInfo = FynxCampaignArtworkMedia.inspectUri(appContext, source)
+        val mime = artworkInfo.mimeType
 
         val directory = File(appContext.filesDir, "marketplace-campaign-artwork")
         require(directory.exists() || directory.mkdirs()) { "FYNX could not prepare local campaign storage." }
@@ -63,6 +58,7 @@ internal object FynxMarketplaceLocalCampaignStore {
         require(currentBytes < MAX_TOTAL_ARTWORK_BYTES) { "Local campaign artwork storage is full. Remove an old campaign photo first." }
 
         val extension = when (mime) {
+            "image/gif" -> "gif"
             "image/webp" -> "webp"
             "image/png" -> "png"
             "image/jpeg", "image/jpg" -> "jpg"
@@ -88,6 +84,8 @@ internal object FynxMarketplaceLocalCampaignStore {
                 }
             }
             require(destination.length() > 0L) { "The selected photo is empty." }
+            val storedInfo = FynxCampaignArtworkMedia.inspectFile(destination)
+            require(storedInfo.mimeType == mime) { "The selected artwork changed while it was being saved." }
             Uri.fromFile(destination).toString()
         } catch (error: Throwable) {
             destination.delete()
@@ -97,7 +95,7 @@ internal object FynxMarketplaceLocalCampaignStore {
 
     fun upsert(context: Context, campaign: FynxMarketplaceSeasonalPromotion): Result<Unit> = runCatching {
         require(campaign.localOnly && campaign.id.startsWith("local-")) {
-            "Only device-local campaigns can be saved in offline test mode."
+            "Only device-local campaign drafts can be saved without publishing."
         }
         require(campaign.occasionKey.isNotBlank() && campaign.headline.trim().length >= 3) {
             "Enter a campaign key and a headline of at least three characters."
@@ -132,37 +130,6 @@ internal object FynxMarketplaceLocalCampaignStore {
         Unit
     }
 
-    private fun ensureSampleCampaign(context: Context) {
-        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (preferences.getBoolean(SAMPLES_SEEDED_KEY, false)) return
-
-        synchronized(this) {
-            val currentPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (currentPreferences.getBoolean(SAMPLES_SEEDED_KEY, false)) return
-            if (readStored(context).isEmpty()) {
-                val now = Instant.now()
-                val sample = FynxMarketplaceSeasonalPromotion(
-                    id = "local-sample-fynx-marketplace",
-                    promotionType = "ANNOUNCEMENT",
-                    occasionKey = "fynx-marketplace-welcome",
-                    headline = "Discover more on FYNX",
-                    body = "Explore useful finds and fresh discoveries from sellers on FYNX Marketplace.",
-                    actionLabel = "Explore Marketplace",
-                    artworkMediaId = "",
-                    startsAt = now.minusSeconds(60).toString(),
-                    endsAt = now.plus(44, ChronoUnit.DAYS).toString(),
-                    active = true,
-                    destinationType = "MARKETPLACE",
-                    destinationValue = "",
-                    localArtworkUri = "android.resource://" + context.packageName + "/" + R.drawable.fynx_marketplace_showcase,
-                    localOnly = true
-                )
-                writeStored(context, listOf(sample))
-            }
-            currentPreferences.edit().putBoolean(SAMPLES_SEEDED_KEY, true).apply()
-        }
-    }
-
     private fun readStored(context: Context): List<FynxMarketplaceSeasonalPromotion> {
         val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(CAMPAIGNS_KEY, null) ?: return emptyList()
@@ -174,6 +141,9 @@ internal object FynxMarketplaceLocalCampaignStore {
                     val id = row.optString("id").trim()
                     val occasion = row.optString("occasionKey").trim()
                     val headline = row.optString("headline").trim()
+                    // Remove the previous synthetic sample from existing installs. It was
+                    // demonstration content, not an Owner/Admin-authored campaign.
+                    if (id == "local-sample-fynx-marketplace") continue
                     if (id.isBlank() || occasion.isBlank() || headline.isBlank()) continue
                     add(
                         FynxMarketplaceSeasonalPromotion(
