@@ -55,8 +55,8 @@ object FynxMarketplaceSeasonalPromotionClient {
     }
 
     suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
-        // Publish the device-local preview immediately; a slow/offline backend must not blank the banner.
-        val local = FynxMarketplaceLocalCampaignStore.active(context)
+        // Buyer banners contain only server-published campaigns (or their short-lived cache).
+        // Device-local drafts are private to the Admin editor and never leak into the buyer feed.
         val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
         val cached = if (response.isFailure) {
             withContext(Dispatchers.IO) {
@@ -74,7 +74,7 @@ object FynxMarketplaceSeasonalPromotionClient {
             runCatching { parsePromotions(raw) }.getOrDefault(emptyList())
         }.orEmpty()
         val now = Instant.now()
-        return Result.success((local + remote).distinctBy { it.id }.filter { isMarketplaceSeasonalPromotionEligible(it, now) })
+        return Result.success(remote.distinctBy { it.id }.filter { isMarketplaceSeasonalPromotionEligible(it, now) })
     }
 
     suspend fun listForAdmin(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
@@ -89,18 +89,18 @@ object FynxMarketplaceSeasonalPromotionClient {
     }
 
     suspend fun uploadArtwork(context: Context, uri: Uri): Result<String> {
-        val reportedMime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
-        val suffix = (uri.lastPathSegment ?: uri.path.orEmpty()).substringAfterLast('.', "").lowercase()
-        val inferredMime = when (suffix) {
-            "webp" -> "image/webp"
-            "png" -> "image/png"
-            "jpg", "jpeg" -> "image/jpeg"
-            "heic", "heif" -> "image/heic"
-            else -> "image/webp"
-        }
-        val mime = reportedMime.takeIf { it.startsWith("image/") && !it.endsWith("/*") } ?: inferredMime
-        if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Seasonal artwork must be an image."))
-        return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
+        return runCatching {
+            // Verify the actual file signature and bound GIF dimensions, frame count,
+            // duration and size before handing the original bytes to the shared uploader.
+            withContext(Dispatchers.IO) {
+                FynxCampaignArtworkMedia.inspectUri(context, uri).mimeType
+            }
+        }.fold(
+            onSuccess = { mimeType ->
+                FynxProductionMessaging.uploadMedia(context, uri, mimeType).map { it.id }
+            },
+            onFailure = { Result.failure(it) }
+        )
     }
 
     suspend fun create(
