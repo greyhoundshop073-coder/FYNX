@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
-import { createRealtimeAnswer, isValidRealtimeSessionMode } from "./aiVoiceSession.js";
+import { createRealtimeAnswer, isValidRealtimeSessionMode, FYNX_AI_REALTIME_VOICES } from "./aiVoiceSession.js";
 import { executeFynxAiTool, getFynxAiTools } from "./fynxAiToolRegistry.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -38,6 +38,7 @@ export function registerRealtimeAssistantRoutes({ app }) {
 
     const sdp = typeof req.body?.sdp === "string" ? req.body.sdp : "";
     const mode = typeof req.body?.mode === "string" ? req.body.mode : "assistant";
+    const requestedVoice = typeof req.body?.voice === "string" ? req.body.voice : "";
     if (!isValidRealtimeSessionMode(mode)) {
       return res.status(400).json({ error: "unsupported realtime session mode" });
     }
@@ -46,7 +47,8 @@ export function registerRealtimeAssistantRoutes({ app }) {
     }
 
     try {
-      const answer = await createRealtimeAnswer(sdp, mode);
+      const voice = mode === "speech" && FYNX_AI_REALTIME_VOICES.includes(requestedVoice) ? requestedVoice : undefined;
+      const answer = await createRealtimeAnswer(sdp, mode, voice);
       res.type("application/sdp").send(answer);
     } catch (error) {
       console.error("realtime voice session", error?.message || error);

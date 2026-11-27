@@ -59,3 +59,6 @@ Append newest entries at the top. Include date, workstream, outgoing/incoming ow
 |---|---|---|
 | 2026-11-24 | Multiple ChatGPT chats are supported; each must use bounded ownership, isolated feature branches, a shared register and the same canonical PR destination. | The owner uses multiple sessions due to Free-plan limits, latency and parallel workload. Restricting the project to one conversation would reduce throughput without solving coordination. |
 | 2026-11-24 | The canonical APK remains tied to `integration/fynx-single-apk-20261013`. | Prevent competing APK snapshots and preserve a single source of truth. |
+
+
+Stage 4 follow-up: add the OpenAI Realtime voice picker (10 built-in voice IDs), local preference persistence, speech-only preview and backend allowlist. The selection affects spoken Gemini answers only; transcription and Gemini answer generation remain unchanged. Portrait/avatar replacement in the FYNX AI voice orb remains a separate visual asset decision pending owner direction.

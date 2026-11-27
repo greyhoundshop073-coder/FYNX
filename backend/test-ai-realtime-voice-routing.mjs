@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildRealtimeSessionConfig, isValidRealtimeSessionMode } from "./aiVoiceSession.js";
+import { buildRealtimeSessionConfig, isValidRealtimeSessionMode, FYNX_AI_REALTIME_VOICES, resolveFynxAiVoice } from "./aiVoiceSession.js";
 
 assert.equal(isValidRealtimeSessionMode("assistant"), true);
 assert.equal(isValidRealtimeSessionMode("transcription"), true);
@@ -14,8 +14,13 @@ assert.equal(transcription.audio.input.turn_detection.create_response, false);
 assert.equal(transcription.audio.input.turn_detection.interrupt_response, false);
 assert.match(transcription.instructions, /FYNX Gemini is the only assistant answer provider/);
 
-const speech = buildRealtimeSessionConfig("speech");
+assert.deepEqual(FYNX_AI_REALTIME_VOICES, ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]);
+assert.equal(resolveFynxAiVoice("cedar"), "cedar");
+assert.equal(resolveFynxAiVoice("not-a-voice"), "marin");
+
+const speech = buildRealtimeSessionConfig("speech", "cedar");
 assert.deepEqual(speech.output_modalities, ["audio"]);
+assert.equal(speech.voice, "cedar");
 assert.deepEqual(speech.tools, []);
 assert.equal(speech.tool_choice, "none");
 assert.equal(speech.audio.output.format.type, "audio/pcm");

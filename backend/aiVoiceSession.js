@@ -11,6 +11,13 @@ import { FYNX_AI_PRIVACY_INSTRUCTIONS } from "./fynxAiPrivacyPolicy.js";
 
 export const FYNX_AI_VOICE_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
 export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
+export const FYNX_AI_REALTIME_VOICES = Object.freeze([
+  "alloy", "ash", "ballad", "coral", "echo",
+  "sage", "shimmer", "verse", "marin", "cedar"
+]);
+export function resolveFynxAiVoice(voice) {
+  return FYNX_AI_REALTIME_VOICES.includes(voice) ? voice : FYNX_AI_VOICE;
+}
 
 export const FYNX_AI_VOICE_INSTRUCTIONS = [
   "You are FYNX AI, a smart, warm and concise conversational assistant.",
@@ -32,7 +39,7 @@ export function isValidRealtimeSessionMode(mode) {
   return REALTIME_SESSION_MODES.has(mode);
 }
 
-export function buildRealtimeSessionConfig(mode = "assistant") {
+export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = FYNX_AI_VOICE) {
   if (!isValidRealtimeSessionMode(mode)) throw new Error("Unsupported FYNX realtime session mode.");
 
   const inputAudio = {
@@ -71,7 +78,7 @@ export function buildRealtimeSessionConfig(mode = "assistant") {
     return {
       type: "realtime",
       model: FYNX_AI_VOICE_MODEL,
-      voice: FYNX_AI_VOICE,
+      voice: resolveFynxAiVoice(requestedVoice),
       output_modalities: ["audio"],
       instructions: [
         "You are FYNX's speech output service, not the assistant.",
@@ -103,7 +110,7 @@ export function buildRealtimeSessionConfig(mode = "assistant") {
   };
 }
 
-export async function createRealtimeAnswer(sdpOffer, mode = "assistant") {
+export async function createRealtimeAnswer(sdpOffer, mode = "assistant", voice = FYNX_AI_VOICE) {
   const apiKey = process.env.OPENAI_API_KEY || "";
   if (!isValidRealtimeSessionMode(mode)) throw new Error("Unsupported FYNX realtime session mode.");
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
@@ -113,7 +120,7 @@ export async function createRealtimeAnswer(sdpOffer, mode = "assistant") {
 
   const form = new FormData();
   form.append("sdp", sdpOffer);
-  form.append("session", new Blob([JSON.stringify(buildRealtimeSessionConfig(mode))], { type: "application/json" }));
+  form.append("session", new Blob([JSON.stringify(buildRealtimeSessionConfig(mode, voice))], { type: "application/json" }));
 
   const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",

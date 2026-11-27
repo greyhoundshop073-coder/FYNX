@@ -18,10 +18,10 @@ object FynxAiVoiceSession {
         val preferredVoice: String = "marin"
     )
 
-    suspend fun requestSession(context: Context, sdpOffer: String, mode: String = "assistant"): Result<String> = runCatching {
+    suspend fun requestSession(context: Context, sdpOffer: String, mode: String = "assistant", voice: String = "marin"): Result<String> = runCatching {
         require(sdpOffer.isNotBlank()) { "SDP offer is required" }
         require(mode in setOf("assistant", "transcription", "speech")) { "Unsupported FYNX voice session mode" }
-        val body = JSONObject().put("sdp", sdpOffer).put("mode", mode).toString()
+        val body = JSONObject().put("sdp", sdpOffer).put("mode", mode).put("voice", voice).toString()
         FynxBackendClient.postJson(context, Config().endpoint, body).getOrThrow()
     }
 

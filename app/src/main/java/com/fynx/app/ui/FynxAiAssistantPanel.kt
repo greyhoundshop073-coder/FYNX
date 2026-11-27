@@ -166,6 +166,10 @@ fun FynxAiAssistantPanel(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val voicePreferences = remember(context) { context.getSharedPreferences("fynx_ai_voice_preferences", Context.MODE_PRIVATE) }
+    var selectedSpeechVoice by remember {
+        mutableStateOf(voicePreferences.getString("selected_voice", "marin") ?: "marin")
+    }
     var welcomeDisplayName by remember(currentUsername, currentUserDisplayName) {
         mutableStateOf(currentUserDisplayName.trim().takeUnless { it.isBlank() || it.equals("Your name", ignoreCase = true) }
             ?: currentUsername?.removePrefix("@")?.trim().orEmpty().ifBlank { "there" })
@@ -362,6 +366,7 @@ fun FynxAiAssistantPanel(
                 receiveOnly = true,
                 createInitialResponse = false,
                 sessionMode = "speech",
+                speechVoice = selectedSpeechVoice,
                 onStateChanged = { state, error ->
                     if (state == FynxAiWebRtcEngine.State.FAILED) {
                         scope.launch {
@@ -1369,6 +1374,16 @@ fun FynxAiAssistantPanel(
                     requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
                 }
             },
+            speechVoice = selectedSpeechVoice,
+            onSpeechVoiceSelected = { voice ->
+                selectedSpeechVoice = voice
+                voicePreferences.edit().putString("selected_voice", voice).apply()
+            },
+            onPreviewSpeechVoice = { voice ->
+                selectedSpeechVoice = voice
+                voicePreferences.edit().putString("selected_voice", voice).apply()
+                requestReadAloud("voice-preview-$voice", "Hello. I'm FYNX AI. How can I help you today?")
+            },
             onMenu = {
                 showVoiceScreen = false
                 endVoiceSession()
@@ -1477,9 +1492,13 @@ internal fun FynxAiFullScreenVoice(
     onToggleMute: () -> Unit,
     onClose: () -> Unit,
     onRetry: () -> Unit,
+    speechVoice: String,
+    onSpeechVoiceSelected: (String) -> Unit,
+    onPreviewSpeechVoice: (String) -> Unit,
     onMenu: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showVoicePicker by remember { mutableStateOf(false) }
     val transition = rememberInfiniteTransition(label = "fynxVoiceOrb")
     val orbAnimation = when {
         error != null || muted -> Triple(1.0f, 1.0f, 900)
@@ -1507,6 +1526,34 @@ internal fun FynxAiFullScreenVoice(
         phase == "SPEAKING" -> "FYNX AI is speaking…"
         else -> "Listening…"
     }
+    if (showVoicePicker) {
+        AlertDialog(
+            onDismissRequest = { showVoicePicker = false },
+            title = { Text("FYNX AI voice") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Choose the voice FYNX uses when speaking its answers.")
+                    listOf("marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse").forEach { voice ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onSpeechVoiceSelected(voice) }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = speechVoice == voice, onClick = { onSpeechVoiceSelected(voice) })
+                            Text(voice.replaceFirstChar { it.uppercase() }, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showVoicePicker = false; onPreviewSpeechVoice(speechVoice) }) {
+                    Text("Preview voice")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVoicePicker = false }) { Text("Done") }
+            }
+        )
+    }
     Box(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().imePadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(
@@ -1526,6 +1573,11 @@ internal fun FynxAiFullScreenVoice(
                         }
                     }
                     DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Choose AI voice · $speechVoice") },
+                            leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                            onClick = { showSettings = false; showVoicePicker = true }
+                        )
                         DropdownMenuItem(
                             text = { Text(if (muted) "Unmute microphone" else "Mute microphone") },
                             leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },

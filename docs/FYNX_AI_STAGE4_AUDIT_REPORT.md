@@ -184,3 +184,8 @@ The grouped Android/backend change separates OpenAI voice transport from assista
 - Backend prestart now includes the focused voice-routing test.
 
 This is source-level implementation and mocked contract coverage, not live OpenAI session certification. The current Gemini usage ledger records Gemini token usage; OpenAI transcription/audio usage is not yet recorded in FYNX's per-user ledger. Server-side OpenAI call-ID capture/sideband accounting, authoritative voice-session expiry, physical-device echo/interruption tests, and live provider tests remain outstanding. No new key, deployment, provider account, database or paid service was activated.
+
+
+## User-selectable speech voices
+
+The Stage 4 voice selector exposes the ten supported OpenAI Realtime built-in voices: `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, and `cedar`. The Android client persists the selected voice in app preferences, sends it only with speech-mode session creation, and provides a spoken preview using a fixed sample sentence. The backend validates the requested ID against the allowlist and uses the configured default when the value is invalid. This does not alter transcription mode or Gemini answer generation. Live voice quality and physical-device preview behavior still require runtime certification.
