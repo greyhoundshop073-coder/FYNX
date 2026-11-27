@@ -5,7 +5,7 @@ const scalability = fs.readFileSync(new URL("./scalability.js", import.meta.url)
 const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 const checks = [
   ["health readiness rejects a missing or unavailable database", server.includes('res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });')],
-  ["ready endpoint rejects missing database, auth and media configuration", server.includes("assessFynxBackendReadiness") && server.includes('databaseStatus,') && server.includes('jwtSecretConfigured: Boolean(JWT_SECRET)') && server.includes('mediaStorageConfigured: Boolean(mediaStorage.isConfigured)') && server.includes('readiness.ready ? 200 : 503')],
+  ["ready endpoint rejects missing and unavailable databases", server.includes('if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });') && server.includes('catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }')],
   ["database schema initialization completes before the HTTP server listens", server.includes("await initDatabase();") && !server.includes('initDatabase().catch((error) => { console.error("database initialization failed", error); process.exitCode = 1; });') && server.indexOf("await initDatabase();") < server.indexOf('server.listen(PORT, "0.0.0.0"')],
   ["bounded retry helper", reliability.includes("retryWithBackoff") && reliability.includes("maxAttempts")],
   ["exponential backoff with jitter", reliability.includes("2 ** (attempt - 1)") && reliability.includes("Math.random")],

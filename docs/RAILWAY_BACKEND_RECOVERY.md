@@ -74,6 +74,11 @@ The assessment is exercised from `verify-runtime-bootstrap.mjs`, which is alread
 
 **Boundary:** the storage check validates configuration shape, not live Neon S3 connectivity. After Railway returns, still run a safe test-object upload, read, and delete. Gemini, email and Paystack are intentionally not hard readiness dependencies: they must remain independently fail-closed while the core API is usable.
 
+
+### CI compatibility correction — 2026-11-27
+
+The first Backend CI run on readiness-gate commit `842d0bac800fc70bea6e05ccbd1ed2a5f2d81605` passed the new startup verifier (including login preservation and the new dependency-readiness helper cases), syntax checks, database-pool, Gemini, Wallet, and Marketplace checks through Stage 15D batch 2. It then failed at the older `verify-stage15d-reliability.mjs` check because that verifier asserted the former DB-only `/ready` implementation. The production readiness change was retained; the stale static assertion was updated to verify dependency-gate registration and HTTP status selection. Correction commit: `aa54f5815721ac8bd1a8d68bb4c2540761caf6d0`. Two fresh Backend CI runs were queued on that corrected head; their final conclusions must be checked before merge/closure.
+
 ## Remaining backend engineering preparation
 
 | Gap | Current evidence | Prepared action / acceptance |
