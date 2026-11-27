@@ -274,6 +274,19 @@ Pickup should have an explicit handover/confirmation event rather than pretendin
 
 The seller must not be able to manufacture a buyer receipt/confirmation event.
 
+### 10.1 Nigeria route pricing and accepted-quote integrity
+
+- Nigerian delivery pricing is configured per listing because a seller may dispatch different products from different locations.
+- Each listing has one structured seller dispatch city/LGA and state (including FCT), plus seller-entered destination rates.
+- A rate may target a destination state generally, or a specific city/LGA within that state. An exact city/LGA rate takes precedence over the state-wide rate.
+- Route prices use the listing currency (NGN or USD), and may include an additional-item fee and a seller-defined cap.
+- Delivery within Nigeria must not fall back to an unqualified flat fee or an invented estimate. If the seller has not configured a matching destination route, delivery checkout is blocked with a clear explanation; the buyer may choose pickup where available or contact the seller.
+- FYNX does not operate a delivery fleet in this flow. The seller and buyer arrange the actual handover/dispatch; the Marketplace records the agreed seller-arranged method and financial terms.
+- Before order creation, the backend stores a short-lived, buyer-bound quote containing the exact item amount, route fee, Marketplace fees, currency, fulfillment method and route snapshot. Street address data is bound by a hash rather than copied into the quote record.
+- Single-item and multi-seller order creation must consume the corresponding saved quote and use its stored amounts. They must not silently recalculate delivery or Marketplace charges from live listing settings.
+- The created order, receipt, refund and dispute paths use the immutable order financial fields and route snapshot. A later seller edit to dispatch origin or route prices applies only to future quotes, never to an already accepted order.
+- Pickup remains zero-delivery-fee. Multi-seller checkout still creates separate protected child orders under the existing aggregate checkout; route pricing does not create a second checkout workflow.
+
 ## 11. Buyer protection
 
 The buyer experience should be simple:
