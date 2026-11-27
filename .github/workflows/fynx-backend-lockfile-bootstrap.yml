@@ -1,0 +1,37 @@
+name: FYNX Backend Lockfile Bootstrap
+
+on:
+  pull_request:
+    branches: ["integration/fynx-single-apk-20261013"]
+    paths:
+      - ".github/workflows/fynx-backend-lockfile-bootstrap.yml"
+      - "backend/package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout FYNX
+        uses: actions/checkout@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Generate npm lockfile from the canonical package manifest
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify lockfile with a clean install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Upload generated backend lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: fynx-backend-package-lock
+          path: backend/package-lock.json
+          if-no-files-found: error
+          retention-days: 1
