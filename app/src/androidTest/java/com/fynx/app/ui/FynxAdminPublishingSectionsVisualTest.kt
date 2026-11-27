@@ -105,6 +105,7 @@ class FynxAdminPublishingSectionsVisualTest {
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
                 .performTextInput("A real Admin form save, stored locally with selected artwork.")
+            capture("FYNX-marketplace-offline-campaign-draft.png")
             compose.onNodeWithText("Save offline draft").performScrollTo().performClick()
 
             compose.waitUntil(timeoutMillis = 10_000) {
@@ -126,8 +127,6 @@ class FynxAdminPublishingSectionsVisualTest {
             assertEquals("image/gif", gifInfo.mimeType)
             assertEquals("Two original GIF frames must be preserved in the offline draft", 2, gifInfo.frameCount)
             assertTrue("Local save may make GET refreshes only", methods.all { it.startsWith("GET ") })
-            capture("FYNX-marketplace-offline-campaign-draft.png")
-
             // Device-only drafts must not be mixed into the public buyer campaign feed.
             compose.runOnIdle { screenState.value = 1 }
             compose.waitUntil(timeoutMillis = 10_000) {
