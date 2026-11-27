@@ -79,6 +79,10 @@ The assessment is exercised from `verify-runtime-bootstrap.mjs`, which is alread
 
 The initial Backend CI run on readiness-gate commit `842d0bac800fc70bea6e05ccbd1ed2a5f2d81605` passed the new startup verifier and preceding suites but exposed the legacy DB-only `/ready` assertion in `verify-stage15d-reliability.mjs`. A stale-tree documentation write initially restored that assertion and run `45945216209` failed. The current branch then reapplied the assertion against the shared dependency readiness contract, moved Backend CI to Node 24, and changed installation to `npm ci` using the committed lockfile. **Exact-head verification passed:** Backend CI run [#45945746654](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45945746654), commit `085e25ec3e88ecacec87e99b499a9ee48d5dbe96`, completed successfully with 102 successful workflow steps, zero failed steps; the optional live production probe was skipped because it remains opt-in. This validates CI only, not a live Railway deployment or real provider connectivity.
 
+### Exact startup path coverage
+
+Backend CI now executes the actual Railway `npm start` command against its isolated PostgreSQL 16 service, with a CI-only JWT value and PostgreSQL media provider. Because npm runs `prestart` before `start`, this exercises the complete assembled preflight/bootstrap chain, starts the HTTP server, and requires `/ready` to report DB, authentication and media readiness before confirming `/health`. This is a local CI smoke check; it does not test Railway networking, production secrets, Neon credentials or Cloudflare connectivity.
+
 ## Remaining backend engineering preparation
 
 | Gap | Current evidence | Prepared action / acceptance |
