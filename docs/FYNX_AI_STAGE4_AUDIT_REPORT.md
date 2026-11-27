@@ -189,3 +189,6 @@ This is source-level implementation and mocked contract coverage, not live OpenA
 ## User-selectable speech voices
 
 The Stage 4 voice selector exposes the ten supported OpenAI Realtime built-in voices: `alloy`, `ash`, `ballad`, `coral`, `echo`, `sage`, `shimmer`, `verse`, `marin`, and `cedar`. The Android client persists the selected voice in app preferences, sends it only with speech-mode session creation, and provides a spoken preview using a fixed sample sentence. The backend validates the requested ID against the allowlist and uses the configured default when the value is invalid. This does not alter transcription mode or Gemini answer generation. Live voice quality and physical-device preview behavior still require runtime certification.
+
+
+Voice selection follow-up: Android now provides a selectable OpenAI Realtime speech voice and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. Physical-device voice-quality and preview checks remain part of runtime certification.

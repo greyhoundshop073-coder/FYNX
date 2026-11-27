@@ -146,3 +146,6 @@ The assistant may help a user think through a daily plan using only the details 
 Wallet and Money Tools starters may explain general navigation and concepts only. The AI must not request or inspect a wallet PIN, bank details, balance, private transaction history, payout details or KYC information. It must direct users to the protected Wallet or Money Tools screen for account-specific information. Transfers, payments, withdrawals, refunds and other financial actions remain unavailable to the assistant.
 
 The dashboard must distinguish contextual discovery cards (which start a conversation) from Explore FYNX shortcuts (which open real app destinations). Do not keep a shortcut that routes back to the assistant itself or implies a separate AI tool screen that does not exist.
+
+
+Voice selection follow-up: Android now provides a selectable OpenAI Realtime speech voice and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. Physical-device voice-quality and preview checks remain part of runtime certification.
