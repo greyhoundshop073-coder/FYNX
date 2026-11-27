@@ -344,7 +344,7 @@ internal class FynxLegacyGifDrawable(private val movie: Movie) : Drawable(), Run
     override fun getIntrinsicHeight(): Int = movie.height()
 }
 
-private class FynxCampaignArtworkImageView(context: Context) : ImageView(context), View.OnAttachStateChangeListener,
+internal class FynxCampaignArtworkImageView(context: Context) : ImageView(context), View.OnAttachStateChangeListener,
     android.view.ViewTreeObserver.OnPreDrawListener {
     private var artwork: Drawable? = null
     private var playbackAllowed = true
