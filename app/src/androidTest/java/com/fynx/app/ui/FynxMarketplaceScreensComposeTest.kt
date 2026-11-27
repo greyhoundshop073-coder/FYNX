@@ -96,7 +96,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("My Shop").performClick()
         compose.runOnIdle { assertEquals(1, shopOpened) }
 
-        compose.onNodeWithText("Wallet").performClick()
+        compose.onNodeWithContentDescription("Wallet").performClick()
         compose.runOnIdle { assertEquals(1, walletOpened) }
 
         compose.onNodeWithText("Local businesses").performClick()

@@ -19,6 +19,7 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
+import { visiblePresenceUserIds } from "./presencePrivacy.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -383,6 +384,21 @@ app.get("/health", async (_req, res) => {
   let database = "not-configured";
   if (pool) { try { await pool.query("SELECT 1"); database = "ready"; } catch { database = "unavailable"; } }
   res.status(database === "ready" ? 200 : 503).json({ ok: database === "ready", service: "fynx-backend", database });
+});
+
+// Authenticated, privacy-filtered snapshot for Marketplace/Home presence indicators.
+app.get("/api/presence", auth, async (req, res) => {
+  try {
+    const connectedUserIds = [...clientsByUserId.entries()]
+      .filter(([, sockets]) => sockets && [...sockets].some((socket) => socket.readyState === 1))
+      .map(([userId]) => String(userId));
+    const visibleIds = await visiblePresenceUserIds(String(req.user.sub), connectedUserIds);
+    res.set("Cache-Control", "private, no-store");
+    return res.json({ onlineUserIds: [...visibleIds] });
+  } catch (error) {
+    console.error("[fynx-presence] snapshot failed", error?.message || error);
+    return res.status(503).json({ error: "presence unavailable" });
+  }
 });
 
 app.post("/api/auth/register", async (req, res) => {

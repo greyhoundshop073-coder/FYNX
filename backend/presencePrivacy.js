@@ -55,6 +55,45 @@ async function canSeePresence(viewerId, targetId) {
   return allowed;
 }
 
+/**
+ * Returns only currently online users whose online-visibility setting allows this viewer.
+ * A single bounded query avoids exposing the global presence list or issuing N+1 lookups.
+ */
+export async function visiblePresenceUserIds(viewerId, onlineUserIds) {
+  const viewer = String(viewerId || "").trim();
+  if (!/^\d+$/.test(viewer) || !pool || !Array.isArray(onlineUserIds)) return new Set();
+  const ids = [...new Set(onlineUserIds.map((id) => String(id || "").trim())
+    .filter((id) => /^\d+$/.test(id)))].slice(0, 5_000);
+  if (!ids.length) return new Set();
+
+  const result = await pool.query(`
+    SELECT target.user_id::text AS user_id
+      FROM unnest($2::bigint[]) AS target(user_id)
+      LEFT JOIN privacy_settings p ON p.user_id = target.user_id
+     WHERE target.user_id = $1::bigint
+        OR (
+          (
+            COALESCE(p.online_visibility, 'My friends') = 'Everyone'
+            OR (
+              COALESCE(p.online_visibility, 'My friends') = 'My friends'
+              AND EXISTS (
+                SELECT 1 FROM friendships f
+                 WHERE ((f.user_id = $1 AND f.friend_id = target.user_id)
+                     OR (f.user_id = target.user_id AND f.friend_id = $1))
+                   AND f.status = 'accepted'
+              )
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+             WHERE (b.blocker_id = $1 AND b.blocked_id = target.user_id)
+                OR (b.blocker_id = target.user_id AND b.blocked_id = $1)
+          )
+        )
+  `, [viewer, ids]);
+  return new Set(result.rows.map((row) => String(row.user_id)));
+}
+
 async function areCallPeersBlocked(userId, targetId) {
   if (!userId || !targetId || userId === targetId) return true;
   if (!pool) return true;

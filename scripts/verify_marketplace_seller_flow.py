@@ -40,6 +40,8 @@ social_routes = (ROOT / "backend/socialRoutes.js").read_text()
 marketplace_checkout_route = (ROOT / "backend/marketplaceCheckout.js").read_text()
 settlement_routes = (ROOT / "backend/marketplaceSettlement.js").read_text()
 shop_profile_routes = (ROOT / "backend/marketplaceShopProfiles.js").read_text()
+presence_privacy = (ROOT / "backend/presencePrivacy.js").read_text()
+backend_server = (ROOT / "backend/server.js").read_text()
 
 import re
 
@@ -636,6 +638,31 @@ checks.append(
      and 'Text(if (!marketplacePayoutsEnabled) "Not enabled"' in seller_center
      and "payoutReadinessNotice" in seller_center),
 )
+
+checks.extend([
+    ("Marketplace posted-age label uses the server listing timestamp and fails closed for missing/future dates",
+     "marketplacePostedTimeLabel(listing.createdAtEpochMs, System.currentTimeMillis())" in product_card
+     and "nowEpochMs < createdAtEpochMs" in product_card
+     and "Posted 2 hours ago" in (ROOT / "app/src/test/java/com/fynx/app/ui/FynxMarketplaceProductCardPresentationTest.kt").read_text()),
+    ("Marketplace seller online indicators use realtime presence state on product and seller cards",
+     "MarketplaceSellerPresenceAvatar(" in product_card
+     and "MarketplaceSellerOnlineLabel(listing.sellerId)" in product_card
+     and "MarketplaceSellerPresenceAvatar(listing.sellerId" in marketplace
+     and "FynxOnlinePresenceStore.setOnline(event.userId, event.online)" in app_shell),
+    ("Marketplace online snapshot is authenticated and filtered by each seller's online privacy setting and blocks",
+     'app.get("/api/presence", auth' in backend_server
+     and "visiblePresenceUserIds(String(req.user.sub), connectedUserIds)" in backend_server
+     and "COALESCE(p.online_visibility, \'My friends\')" in presence_privacy
+     and "f.status = \'accepted\'" in presence_privacy
+     and "FROM blocks b" in presence_privacy
+     and "COALESCE(p.online_visibility, 'My friends') = 'Everyone'" in presence_privacy
+     and "COALESCE(p.online_visibility, 'My friends') = 'My friends'" in presence_privacy),
+    ("Marketplace storefront exposes Active now only for a currently online seller profile",
+     "sellerUserId = profile.id.takeIf { it.isNotBlank() }" in storefront
+     and "MarketplaceSellerOnlineLabel(sellerUserId)" in storefront),
+    ("Wallet header icon instrumentation uses its accessible label instead of removed visible text",
+     'compose.onNodeWithContentDescription("Wallet").performClick()' in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceScreensComposeTest.kt").read_text()),
+])
 
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

@@ -75,6 +75,20 @@ class FynxMarketplaceProductCardPresentationTest {
     }
 
     @Test
+    fun postedTimeUsesRealListingTimestampAndAvoidsInventingMissingOrFutureAge() {
+        val now = 2_000_000_000_000L
+        assertEquals("Posted just now", marketplacePostedTimeLabel(now - 20_000L, now))
+        assertEquals("Posted 5 minutes ago", marketplacePostedTimeLabel(now - 5L * 60_000L, now))
+        assertEquals("Posted 1 hour ago", marketplacePostedTimeLabel(now - 60L * 60_000L, now))
+        assertEquals("Posted 2 hours ago", marketplacePostedTimeLabel(now - 2L * 60L * 60L * 1000L, now))
+        assertEquals("Posted yesterday", marketplacePostedTimeLabel(now - 24L * 60L * 60L * 1000L, now))
+        assertEquals("Posted 3 days ago", marketplacePostedTimeLabel(now - 3L * 24L * 60L * 60L * 1000L, now))
+        assertEquals("Posted 1 week ago", marketplacePostedTimeLabel(now - 7L * 24L * 60L * 60L * 1000L, now))
+        assertNull(marketplacePostedTimeLabel(0L, now))
+        assertNull(marketplacePostedTimeLabel(now + 1L, now))
+    }
+
+    @Test
     fun trendingRequiresTopFiveDiscoveryRankAndARealPositiveBackendScore() {
         assertEquals(true, marketplaceIsTrendingDiscoveryRank(1, 72.0))
         assertEquals(true, marketplaceIsTrendingDiscoveryRank(5, 8.0))

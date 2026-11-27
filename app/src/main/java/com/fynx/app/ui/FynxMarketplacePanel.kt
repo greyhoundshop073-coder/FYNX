@@ -2216,11 +2216,12 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
 private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation?, photoId: String?, onProfile: () -> Unit) {
     Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
+            MarketplaceSellerPresenceAvatar(listing.sellerId, photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, listing.sellerUsername, Modifier.size(42.dp), onlineDotSize = 10.dp)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                 Text(listing.category + " • " + (reputation?.let { it.successfulSales.toString() + " sales" } ?: "New seller"), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                MarketplaceSellerOnlineLabel(listing.sellerId)
                 reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                 if (reputation != null && reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
                 TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
