@@ -176,7 +176,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
         scope.launch {
             loading = true
             error = null
-            // Keep the on-device test campaigns visible while the remote list is loading or offline.
+            // Keep saved device-only drafts visible while the remote campaign list is loading or offline.
             campaigns = FynxMarketplaceLocalCampaignStore.all(context)
             FynxMarketplaceSeasonalPromotionClient.listForAdmin(context)
                 .onSuccess { campaigns = it }
@@ -342,10 +342,10 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
-                        val testPickedUri = testOnlyPhotoPicker?.invoke()
+                        val injectedArtworkUri = testOnlyPhotoPicker?.invoke()
                         if (testOnlyPhotoPicker != null) {
-                            if (testPickedUri != null) {
-                                artworkUri = testPickedUri
+                            if (injectedArtworkUri != null) {
+                                artworkUri = injectedArtworkUri
                                 artworkMediaId = ""
                                 localArtworkUri = ""
                                 message = null
@@ -555,7 +555,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Scheduled campaigns", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Campaigns and offline drafts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             TextButton(onClick = { refresh() }, enabled = !loading && !saving) { Text("Refresh") }
         }
         if (loading && campaigns.isEmpty()) {
@@ -571,6 +571,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                 val startDate = parseMarketplaceSeasonalDateTime(campaign.startsAt)
                 val endDate = parseMarketplaceSeasonalDateTime(campaign.endsAt)
                 val campaignStatus = when {
+                    campaign.localOnly -> "DRAFT"
                     !campaign.active -> "PAUSED"
                     startDate == null || endDate == null -> "CHECK DATES"
                     now < startDate.time -> "SCHEDULED"
