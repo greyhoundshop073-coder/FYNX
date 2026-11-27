@@ -8,7 +8,7 @@ on:
       - "backend/test-cloudflare-turn-routes.mjs"
       - ".github/workflows/cloudflare-turn-ci.yml"
   push:
-    branches: [ "integration/fynx-single-apk-20261013" ]
+    branches: [ "feat/cloudflare-turn-credentials-20261127", "integration/fynx-single-apk-20261013" ]
     paths:
       - "backend/cloudflareTurnRoutes.js"
       - "backend/test-cloudflare-turn-routes.mjs"
