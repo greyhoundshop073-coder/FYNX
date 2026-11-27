@@ -20,6 +20,30 @@ Do not implement a separate banner, campaign manager, uploader, destination rout
 - Preserve existing Marketplace discovery content below the banner (Top Sellers, Recommended Products, Near Me, categories and product discovery), and existing Orders/Refresh actions.
 - Optional small looping animated sticker/video-like creative may be supported inside the banner only where the media pipeline, file-size limits, playback lifecycle, accessibility and reduced-motion behavior are implemented. It must not replace the main campaign image or make the banner a full-screen video.
 
+
+
+## 2A. Supported campaign creative formats, including GIF
+
+Campaign artwork is not limited to a static JPEG/PNG. The campaign media contract must support:
+- Static images (JPEG, PNG, WebP where the Android/backend pipeline supports it).
+- Animated GIF creative, including upload, preview, durable storage, retrieval and display with animation preserved.
+- Additional animated formats (such as short muted video/WebP animation) only when the full media pipeline explicitly supports them and the Owner approves the format.
+
+GIF behavior and safeguards:
+- Preserve animation when uploading and retrieving; do not silently flatten an animated GIF into a still image.
+- Preview the actual uploaded creative in the Owner/Admin editor and in the Marketplace banner before publishing.
+- Validate MIME type from file content, file size, dimensions, frame count and decoded resource limits on the server and client. Reject malformed or oversized files with a useful message.
+- Use bounded decoding/caching and lifecycle-aware playback so multiple animated banners do not exhaust memory, drain battery or overload mobile data.
+- Pause animation when the banner is off-screen, the app is backgrounded, or reduced-motion/accessibility settings require a still presentation. Resume safely when visible again.
+- Avoid audio autoplay. If short video creative is later enabled, it must be muted by default, have explicit playback controls where appropriate, and obey data-saver/reduced-motion settings.
+- Keep text/CTA legible and tappable over animated backgrounds; animation must not obscure the destination or Sponsored disclosure.
+- The campaign's media reference, copy, CTA and typed destination remain one atomic campaign record. Replacing the GIF/image must not accidentally retain a stale destination or stale media URL.
+- Add tests for GIF frame preservation, decode failure, size limits, off-screen pause, lifecycle pause/resume, reduced-motion behavior, cache/memory bounds and correct click-through.
+
+## 2B. Product-quality benchmark
+
+Before declaring the FYNX banner standard, compare its complete user journey with mature Marketplace and advertising experiences: photo-led creative, responsive layout, obvious Sponsored disclosure, clear headline/CTA, predictable carousel controls, fast image loading, graceful placeholders, tap-to-destination consistency, advertiser ownership/permissions, campaign scheduling and measurable performance. Record which patterns are adopted and why; do not copy another app's proprietary artwork or imply FYNX has features not implemented.
+
 ## 3. Campaign destinations and click behavior
 
 Every campaign must have an explicit typed destination. The entire visible banner and its CTA should invoke the same configured destination unless a deliberate, documented secondary action is added.
