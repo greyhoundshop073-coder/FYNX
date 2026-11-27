@@ -5,6 +5,18 @@ import { queueFynxNotification } from "./notificationPush.js";
 import { ensureMarketplaceShopProfileSchema } from "./marketplaceShopProfiles.js";
 import { createPlatformAdminRoleResolver } from "./platformAdminRole.js";
 
+export function parseMarketplaceListingId(value) {
+  const normalized = typeof value === "string"
+    ? value.trim()
+    : Number.isSafeInteger(value) && value > 0 ? String(value) : "";
+  if (!/^[1-9][0-9]{0,18}$/.test(normalized)) return null;
+  try {
+    return BigInt(normalized) <= 9223372036854775807n ? normalized : null;
+  } catch {
+    return null;
+  }
+}
+
 export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   const resolvePlatformAdminRole = createPlatformAdminRoleResolver(pool);
   let marketplaceSchemaPromise;
@@ -35,6 +47,7 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
         CREATE INDEX IF NOT EXISTS marketplace_listings_active_idx ON marketplace_listings (active, created_at DESC);
         CREATE INDEX IF NOT EXISTS marketplace_listings_seller_idx ON marketplace_listings (seller_id, active, created_at DESC);
         ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS original_price NUMERIC(14,2);
+        ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0);
         CREATE INDEX IF NOT EXISTS marketplace_listings_category_idx ON marketplace_listings (category, active, created_at DESC);
         CREATE TABLE IF NOT EXISTS marketplace_listing_price_history (
           id BIGSERIAL PRIMARY KEY, listing_id BIGINT NOT NULL REFERENCES marketplace_listings(id) ON DELETE CASCADE,
@@ -387,9 +400,21 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.get("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const result = await pool.query("SELECT EXISTS (SELECT 1 FROM marketplace_saved_products WHERE user_id = $1 AND listing_id = $2) AS saved", [req.user.sub, id]);
+      const id = parseMarketplaceListingId(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid listing id" });
+      const result = await pool.query(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM marketplace_saved_products sp
+          JOIN marketplace_listings l ON l.id = sp.listing_id
+          WHERE sp.user_id = $1 AND sp.listing_id = $2
+            AND NOT EXISTS (
+              SELECT 1 FROM blocks b
+              WHERE (b.blocker_id = $1 AND b.blocked_id = l.seller_id)
+                 OR (b.blocked_id = $1 AND b.blocker_id = l.seller_id)
+            )
+        ) AS saved
+      `, [req.user.sub, id]);
       return res.json({ saved: Boolean(result.rows[0]?.saved) });
     } catch (error) { console.error("marketplace saved product state", error); return res.status(500).json({ error: "saved product state unavailable" }); }
   });
@@ -397,22 +422,33 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   app.post("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
-      const listing = (await pool.query("SELECT id FROM marketplace_listings WHERE id = $1 AND active = TRUE", [id])).rows[0];
-      if (!listing) return res.status(404).json({ error: "listing not found" });
+      const id = parseMarketplaceListingId(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid listing id" });
+      const listing = (await pool.query(`
+        SELECT l.id
+        FROM marketplace_listings l
+        WHERE l.id = $1
+          AND l.active = TRUE
+          AND GREATEST(0, l.quantity - COALESCE(l.reserved_quantity, 0)) > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+            WHERE (b.blocker_id = $2 AND b.blocked_id = l.seller_id)
+               OR (b.blocked_id = $2 AND b.blocker_id = l.seller_id)
+          )
+      `, [id, req.user.sub])).rows[0];
+      if (!listing) return res.status(404).json({ error: "listing not found or unavailable" });
       await pool.query("INSERT INTO marketplace_saved_products(user_id, listing_id) VALUES ($1,$2) ON CONFLICT(user_id,listing_id) DO NOTHING", [req.user.sub, id]);
-      return res.status(201).json({ saved: true, listingId: String(id) });
+      return res.status(201).json({ saved: true, listingId: id });
     } catch (error) { console.error("marketplace save product", error); return res.status(500).json({ error: "product could not be saved" }); }
   });
 
   app.delete("/api/marketplace/listings/:id/saved", auth, async (req, res) => {
     try {
       await ensureMarketplaceSchema();
-      const id = Number(req.params.id);
-      if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+      const id = parseMarketplaceListingId(req.params.id);
+      if (!id) return res.status(400).json({ error: "invalid listing id" });
       await pool.query("DELETE FROM marketplace_saved_products WHERE user_id = $1 AND listing_id = $2", [req.user.sub, id]);
-      return res.json({ saved: false, listingId: String(id) });
+      return res.json({ saved: false, listingId: id });
     } catch (error) { console.error("marketplace unsave product", error); return res.status(500).json({ error: "saved product could not be removed" }); }
   });
   app.get("/api/marketplace/listings/:id/price-watch", auth, async (req, res) => {
@@ -560,8 +596,8 @@ export function registerSocialRoutes({ app, pool, auth, findUserByUsername }) {
   });
 
   app.post("/api/marketplace/listings/:id/reactivate", auth, async (req, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "invalid listing id" });
+    const id = parseMarketplaceListingId(req.params.id);
+    if (!id) return res.status(400).json({ error: "invalid listing id" });
     const client = await pool.connect();
     try {
       await ensureMarketplaceSchema();
