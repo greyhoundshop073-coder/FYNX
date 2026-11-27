@@ -50,7 +50,13 @@ fun FynxMarketplaceOrderLifecycle(
 ) {
     // Checkout already locks the buyer's fulfillment choice into the protected order.
     // Only legacy orders without a saved method may need this recovery dialog.
-    var showFulfillment by remember { mutableStateOf(order.status == "PAID" && order.fulfillmentMethod.isBlank()) }
+    var showFulfillment by remember(order.id) {
+        mutableStateOf(
+            order.status == "PAID" &&
+                (order.fulfillmentMethod.isBlank() ||
+                    (order.fulfillmentMethod == "DELIVERY" && order.shippingAddress == null))
+        )
+    }
     var showDispute by remember { mutableStateOf(false) }
     var disputeDetails by remember { mutableStateOf("") }
     var disputeReason by remember { mutableStateOf("OTHER") }
