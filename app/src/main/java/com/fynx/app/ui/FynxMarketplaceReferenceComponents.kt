@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
@@ -77,6 +78,7 @@ internal fun MarketplaceReferenceSearchBar(
     value: String,
     onValueChange: (String) -> Unit,
     onCart: () -> Unit,
+    onWallet: () -> Unit,
     cartCount: Int,
     modifier: Modifier = Modifier
 ) {
@@ -115,6 +117,14 @@ internal fun MarketplaceReferenceSearchBar(
             IconButton(onClick = onCart) {
                 Icon(Icons.Default.ShoppingCart, "Cart", tint = MaterialTheme.colorScheme.onSurface)
             }
+        }
+        IconButton(onClick = onWallet, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Default.AccountBalanceWallet,
+                contentDescription = "Wallet",
+                tint = FynxDesign.AzureBlue,
+                modifier = Modifier.size(22.dp)
+            )
         }
     }
 }

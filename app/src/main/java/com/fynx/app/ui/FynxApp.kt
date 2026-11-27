@@ -606,15 +606,66 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
-                        FynxLargeHeaderTitle(
-                            when (selected) {
-                                "Chats" -> "Chats"
-                                "Marketplace" -> "Marketplace"
-                                "Features" -> "More"
-                                else -> selected
+                    if (selected == "Marketplace") {
+                        val marketplaceAvatarUsername = authSession.username
+                            ?.removePrefix("@")
+                            ?.trim()
+                            .orEmpty()
+                        Box(
+                            Modifier.size(48.dp)
+                                .clickable(
+                                    enabled = marketplaceAvatarUsername.isNotBlank() &&
+                                        !marketplaceAvatarUsername.equals("preview", ignoreCase = true)
+                                ) {
+                                    marketplaceProfileUsername = marketplaceAvatarUsername
+                                    selected = "Marketplace"
+                                }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = "Open your Marketplace profile"
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val avatarName = myProfile.displayName.ifBlank { marketplaceAvatarUsername }
+                            if (!remoteMyPhotoId.isNullOrBlank()) {
+                                FynxRemoteProfileAvatar(
+                                    mediaId = remoteMyPhotoId,
+                                    contentDescription = avatarName,
+                                    modifier = Modifier.size(38.dp)
+                                        .border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape),
+                                    ownerUsername = marketplaceAvatarUsername,
+                                    allowImagePreview = false
+                                )
+                            } else if (!remoteMyProfileLoaded) {
+                                FynxProfileImage(
+                                    avatarName,
+                                    myPhoto,
+                                    Modifier.size(38.dp)
+                                        .border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape),
+                                    ownerUsername = marketplaceAvatarUsername
+                                )
+                            } else {
+                                FynxAvatar(
+                                    avatarName,
+                                    Modifier.size(38.dp)
+                                        .border(1.5.dp, FynxDesign.AzureBlue.copy(alpha = 0.90f), CircleShape)
+                                )
                             }
-                        )
+                        }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                            FynxLargeHeaderTitle("Marketplace")
+                        }
+                        Spacer(Modifier.size(48.dp))
+                    } else {
+                        Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterStart) {
+                            FynxLargeHeaderTitle(
+                                when (selected) {
+                                    "Chats" -> "Chats"
+                                    "Marketplace" -> "Marketplace"
+                                    "Features" -> "More"
+                                    else -> selected
+                                }
+                            )
+                        }
                     }
                 }
             } else {

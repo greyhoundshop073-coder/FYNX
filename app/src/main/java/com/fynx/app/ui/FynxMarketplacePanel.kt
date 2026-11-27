@@ -1319,6 +1319,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 value = query,
                 onValueChange = { query = it.take(80) },
                 onCart = { showCart = true },
+                onWallet = onOpenWallet,
                 cartCount = cartQuantities.values.sum().coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             )
@@ -1332,11 +1333,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = onOpenWallet, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Wallet", maxLines = 1)
-                    }
                     OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
@@ -1346,15 +1342,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text("Local businesses", maxLines = 1)
-                    }
-                    OutlinedButton(
-                        onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
-                        enabled = currentUsername.isNotBlank() && !currentUsername.trim().equals("preview", ignoreCase = true),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Marketplace profile", maxLines = 1)
                     }
                     OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
