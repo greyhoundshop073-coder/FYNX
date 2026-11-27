@@ -315,7 +315,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Save offline draft", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (saveOfflineDraft) "On: saves the campaign and photo only on this phone. Publishing stays local and does not require a backend upload or publish request."
+                    if (saveOfflineDraft) "On: saves the campaign and artwork only on this phone. It remains a private draft and will not appear to shoppers until you publish it online."
                     else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -334,8 +334,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
-                if (saveOfflineDraft) "Choose a photo from your gallery. FYNX copies it into private app storage so it stays available offline and can be replaced or removed later."
-                else "Choose a photo from your gallery. FYNX uploads it through the authenticated media service for this scheduled campaign.",
+                if (saveOfflineDraft) "Choose a photo or animated GIF. FYNX copies it into private app storage so the artwork stays available offline and can be replaced or removed later."
+                else "Choose a photo or animated GIF. FYNX uploads the original artwork through the authenticated media service for this scheduled campaign.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
