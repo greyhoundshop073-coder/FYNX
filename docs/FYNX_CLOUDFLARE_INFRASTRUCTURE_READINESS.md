@@ -277,3 +277,23 @@ A fresh Railway service inspection of project `FYNX-Isolated-Testing`, environme
 **Correction:** the SFU variable names are present in the live Railway service configuration, not merely a pending staged patch. The failed latest deployment means this is not evidence of a healthy active runtime. The earlier section's historical note about 11 staged changes describes the prior 2026-11-26 observation and is superseded by this current inspection.
 
 This confirms the exact next backend configuration work: after owner-approved secret rotation, verify the SFU pair server-side; provision and set the separate TURN UID/token only after approval; retain Neon storage until the provider value and bucket health are verified; then deploy only through the owner's approved release process.
+
+
+### 2026-11-27 source-level SFU lifecycle review and Android test correction
+
+A focused review of the exact PR #599 head before the test correction, followed by inspection of the corrected branch, found these implementation facts:
+
+- The Android files `FynxCallsPanel.kt`, `FynxGroupCallPanel.kt`, `FynxGroupWebRtcCallEngine.kt` and `FynxRealtimeClient.kt` contain no Cloudflare SFU API client calls, no `/api/calls/sfu/*` requests, no TURN credential fetch, and no `RTCPeerConnection.setConfiguration()` refresh. The current Android call path is therefore still P2P/mesh + signaling; backend SFU routes do not establish media transport by themselves.
+- `backend/cloudflareSfuRoutes.js` has no shared per-session mutation queue. Cloudflare's negotiation guidance requires serializing every mutation for a given session across the full API request and required SDP answer. Concurrent event handlers can race the SDP state machine.
+- The local `/close` route marks the database session ended and publications inactive, but does not invoke Cloudflare's `PUT /sessions/{sessionId}/tracks/close`. This is not proof that upstream media tracks have stopped. Session discard/close semantics must be implemented and verified.
+- Partial success from `tracks/new` is recorded locally, but the route currently returns a generic 502 with the raw upstream result when any track fails. The client/owner needs a deterministic recovery contract that preserves successful allocations and resolves/cleans up failed allocations.
+- A subscriber must complete the SFU-offer → native PeerConnection answer → `PUT .../renegotiate` exchange before another mutation on that receiving session. No native client currently executes this sequence.
+
+These are explicit Cloudflare API requirements, not assumptions:
+- https://developers.cloudflare.com/realtime/sfu/api/
+- https://developers.cloudflare.com/realtime/sfu/get-started/connection-patterns/
+- https://developers.cloudflare.com/realtime/sfu/concepts/negotiation/
+
+**Android CI regression correction:** PR #599 had removed `import androidx.compose.ui.test.onAllNodesWithContentDescription` from `FynxMarketplaceScreensComposeTest.kt`, while two calls remained. The canonical base already contains the import. I restored only that missing import on the existing PR #599 branch in commit `deea249feb0fc0d26dd3a658ac76961143a57e6a`. At the time of this report update, GitHub had not yet exposed a workflow run for that new SHA, so the fix is source-confirmed but **not yet CI-certified**.
+
+**Status remains CONDITIONAL.** Do not claim Cloudflare SFU media, TURN relay, or production call readiness until the native client, per-session serialization, upstream track closure, route/CI integration, TURN configuration, and remote-media acceptance tests pass.
