@@ -45,7 +45,7 @@ require(visual_test.is_file(), "Admin publishing section emulator screenshot tes
 visual = visual_test.read_text(encoding="utf-8")
 require("FynxTheme(accent = FynxAccent.Blue, darkMode = false)" in visual and "MaterialTheme {" not in visual,
         "Owner/Admin and offline banner runtime screenshots must use the approved FYNX Azure theme")
-for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-banner.png"):
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-campaign-draft.png"):
     require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
 require('"GET"' in visual and "requestExecutorForTests" in visual,
         "Admin screenshot fixtures must remain GET-only and must not perform publishing mutations")
@@ -325,7 +325,7 @@ kvm_step_end = emulator_workflow.index("run: |", kvm_step_start)
 kvm_step = emulator_workflow[kvm_step_start:kvm_step_end]
 require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in kvm_step,
         "Admin PR must select the KVM permission setup before starting the hardware-accelerated emulator")
-for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-banner.png"):
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-campaign-draft.png"):
     require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
 require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
         "Admin emulator certification must fail when any required screenshot is absent")
@@ -342,35 +342,82 @@ require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner a
         "Admin runtime must separate offline role-fixture UI from untested live publishing while keeping Android instrumentation failures blocking")
 
 
-require(LOCAL_CAMPAIGN_STORE.is_file(), "device-local Marketplace campaign storage is present")
-require(SAMPLE_BANNER_ARTWORK.is_file(), "bundled FYNX sample Marketplace banner artwork is present")
+require(LOCAL_CAMPAIGN_STORE.is_file(), "private device-only Marketplace campaign draft storage is present")
+artwork_media_file = ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMedia.kt"
+require(artwork_media_file.is_file(), "bounded local campaign photo/GIF preview and validation are present")
 local_store_source = LOCAL_CAMPAIGN_STORE.read_text(encoding="utf-8")
 local_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8")
+local_client_source = LOCAL_CAMPAIGN_CLIENT.read_text(encoding="utf-8")
+banner_source = MARKETPLACE_BANNER.read_text(encoding="utf-8")
+marketplace_source = MARKETPLACE_PANEL.read_text(encoding="utf-8")
+artwork_media_source = artwork_media_file.read_text(encoding="utf-8")
+remote_media_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+messaging_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+storage_source = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
+server_source = (ROOT / "backend/server.js").read_text(encoding="utf-8")
+
 require("PaddingValues(horizontal = 8.dp, vertical = 8.dp)" in local_admin_source and
         "PaddingValues(horizontal = 4.dp, vertical = 8.dp)" in local_admin_source and
         "style = MaterialTheme.typography.labelSmall" in local_admin_source,
         "campaign type and destination buttons must keep their full labels visible on narrow phone widths")
-local_client_source = LOCAL_CAMPAIGN_CLIENT.read_text(encoding="utf-8")
-banner_source = MARKETPLACE_BANNER.read_text(encoding="utf-8")
-marketplace_source = MARKETPLACE_PANEL.read_text(encoding="utf-8")
 require("marketplace-campaign-artwork" in local_store_source and "filesDir" in local_store_source,
-        "local campaign photos must be copied into app-private storage")
-require("MAX_ARTWORK_BYTES" in local_store_source and "MAX_CAMPAIGNS" in local_store_source,
-        "local campaign uploads and count must have explicit limits")
-require("Publish on this phone" in local_admin_source and "localTestMode" in local_admin_source,
-        "Admin campaign manager must expose explicit device-only offline publishing")
-require("localArtworkUri" in local_client_source and "FynxMarketplaceLocalCampaignStore" in local_client_source,
-        "campaign client must merge device-local previews with the remote campaign feed")
-require("MarketplaceLocalCampaignArtwork" in banner_source and "localArtworkUri" in banner_source,
-        "Marketplace banner must render local artwork without the media API")
-require("FynxMarketplaceLocalCampaignStore.active(context)" in marketplace_source,
-        "Marketplace must load local banner campaigns before waiting for backend")
-require("FynxMarketplaceLocalCampaignStore.observe(context).collectAsState()" in marketplace_source,
-        "Marketplace must react immediately when Admin changes a local campaign")
-require("activeCampaigns = MutableStateFlow" in local_store_source and "publishActive(context.applicationContext)" in local_store_source,
-        "local campaign storage must publish state changes to the Marketplace screen")
-require("MAX_CAMPAIGNS = 20" in local_store_source and "seasonalPromotions.take(20).forEach" in banner_source,
-        "the Marketplace banner must support the full twenty-campaign local testing allowance, not a two- or four-slide hard cap")
+        "offline campaign artwork must be copied into app-private storage without a network request")
+require("MAX_ARTWORK_BYTES" in local_store_source and "MAX_CAMPAIGNS" in local_store_source and
+        "MAX_TOTAL_ARTWORK_BYTES" in local_store_source,
+        "offline campaign drafts and local artwork storage must have explicit limits")
+require("FynxCampaignArtworkMedia.inspectUri(appContext, source)" in local_store_source and
+        '"image/gif" -> "gif"' in local_store_source and
+        "FynxCampaignArtworkMedia.inspectFile(destination)" in local_store_source,
+        "offline GIF drafts must retain their original GIF format and be verified after copying")
+require('"Save offline draft"' in local_admin_source and
+        'saveOfflineDraft -> "Save offline draft"' in local_admin_source and
+        '"OFFLINE DRAFT · THIS DEVICE"' in local_admin_source and
+        '"Offline test mode"' not in local_admin_source and
+        '"Publish on this phone"' not in local_admin_source,
+        "device-only campaigns must be labelled as private offline drafts, never as globally published campaigns")
+require("FynxCampaignArtworkPreview(artworkUri!!" in local_admin_source and
+        "FynxCampaignArtworkPreview(Uri.parse(localArtworkUri)" in local_admin_source and
+        "FYNX campaign artwork preview" in artwork_media_source,
+        "Owner/Admin campaign editor must show an actual offline photo/GIF preview after selection and save")
+require("MAX_GIF_BYTES = 8 * 1024 * 1024" in artwork_media_source and
+        "MAX_GIF_DIMENSION = 1600" in artwork_media_source and
+        "MAX_GIF_PIXELS" in artwork_media_source and
+        "MAX_GIF_FRAMES = 60" in artwork_media_source and
+        "MAX_GIF_DURATION_MS = 15_000L" in artwork_media_source,
+        "animated GIFs must have explicit byte, dimension, pixel, frame-count and duration limits")
+require("Movie.decodeByteArray" in artwork_media_source and
+        "ImageDecoder.decodeDrawable" in artwork_media_source and
+        "FynxCampaignArtworkImageView" in artwork_media_source and
+        "getGlobalVisibleRect(rect)" in artwork_media_source,
+        "animated GIF preview must work across supported Android versions and pause outside the visible viewport")
+require("FynxCampaignArtworkMedia.inspectUri(context, uri)" in local_client_source and
+        'detectedMimeType == "image/gif"' in messaging_source and
+        "readMediaBytes(context, uri) to detectedMimeType" in messaging_source,
+        "published GIF uploads must validate the real file and preserve original animated bytes")
+require("image\\/(jpeg|png|webp|gif)" in storage_source and
+        "image" in server_source and "gif" in server_source,
+        "the existing signed media upload service must accept animated GIF files")
+buyer_load_start = local_client_source.index("suspend fun load(context:")
+buyer_load_end = local_client_source.index("suspend fun listForAdmin", buyer_load_start)
+buyer_load = local_client_source[buyer_load_start:buyer_load_end]
+require("FynxMarketplaceLocalCampaignStore" not in buyer_load and
+        "Result.success(remote.distinctBy { it.id }" in buyer_load,
+        "device-only drafts must never be returned by the shared Marketplace buyer campaign feed")
+require("FynxMarketplaceLocalCampaignStore" not in marketplace_source and
+        "localSeasonalCampaigns" not in marketplace_source,
+        "Marketplace buyer carousel must not observe or merge private Owner/Admin draft records")
+require("FynxMarketplaceLocalCampaignStore" in local_admin_source and
+        "FynxMarketplaceLocalCampaignStore.all(context)" in local_admin_source,
+        "Owner/Admin campaign editor must retain access to private drafts while offline")
+require("ensureSampleCampaign" not in local_store_source and
+        'if (id == "local-sample-fynx-marketplace") continue' in local_store_source,
+        "synthetic sample campaign must not be seeded or shown as a real Marketplace promotion")
+require("FynxCampaignArtworkMedia.isGifFile(target)" in remote_media_source and
+        "FynxCampaignArtworkMedia.decodeGifFile(target)" in remote_media_source,
+        "remote Marketplace media must detect and render cached GIFs even when cache MIME metadata is absent")
+require("MAX_CAMPAIGNS = 20" in local_store_source and
+        "seasonalPromotions.take(20).forEach" in banner_source,
+        "campaign draft storage and the Marketplace carousel must enforce an explicit finite campaign limit")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")
