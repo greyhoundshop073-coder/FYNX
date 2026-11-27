@@ -89,18 +89,18 @@ object FynxMarketplaceSeasonalPromotionClient {
     }
 
     suspend fun uploadArtwork(context: Context, uri: Uri): Result<String> {
-        return runCatching {
+        return try {
             // Verify the actual file signature and bound GIF dimensions, frame count,
             // duration and size before handing the original bytes to the shared uploader.
-            withContext(Dispatchers.IO) {
+            val mimeType = withContext(Dispatchers.IO) {
                 FynxCampaignArtworkMedia.inspectUri(context, uri).mimeType
             }
-        }.fold(
-            onSuccess = { mimeType ->
-                FynxProductionMessaging.uploadMedia(context, uri, mimeType).map { it.id }
-            },
-            onFailure = { Result.failure(it) }
-        )
+            FynxProductionMessaging.uploadMedia(context, uri, mimeType).map { it.id }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            Result.failure(error)
+        }
     }
 
     suspend fun create(
