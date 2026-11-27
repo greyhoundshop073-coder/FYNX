@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.PixelCopy
+import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -49,9 +50,9 @@ class FynxAdminPublishingSectionsVisualTest {
 
 
     @Test
-    fun adminCampaignEditorSavesSelectedPhotoOfflineAndFeedsMarketplaceBanner() {
+    fun adminCampaignEditorSavesAnimatedGifDraftOfflineWithoutPublishingItToBuyerFeed() {
         val resolver = compose.activity.contentResolver
-        val artworkUri = createFixtureArtworkUri()
+        val artworkUri = createFixtureArtworkUri(animatedGif = true)
         val occasionKey = "admin-ui-" + System.currentTimeMillis()
         val headline = "Admin UI saved offline campaign"
         val now = OffsetDateTime.now(ZoneId.of("Africa/Lagos"))
@@ -67,6 +68,7 @@ class FynxAdminPublishingSectionsVisualTest {
             assertEquals("Offline Admin campaign editor must not write to a server", "GET", method)
             when (path) {
                 "/api/admin/marketplace/seasonal-promotions" -> """{"promotions":[]}"""
+                "/api/marketplace/seasonal-feed" -> """{"promotions":[]}"""
                 else -> """{}"""
             }
         }
@@ -84,23 +86,12 @@ class FynxAdminPublishingSectionsVisualTest {
                             )
                         }
                         1 -> {
-                            val campaigns = FynxMarketplaceLocalCampaignStore.observe(compose.activity).collectAsState()
-                            MarketplacePromotionalBanner(
-                                listings = emptyList(),
-                                sellerReputations = emptyMap(),
-                                weeklySeller = null,
-                                weeklySellerListing = null,
-                                sponsoredPromotions = emptyList(),
-                                seasonalPromotions = campaigns.value,
-                                onOpenListing = {},
-                                onOpenSeller = {},
-                                onOpenProduct = {},
-                                onOpenCategory = {},
-                                onShopNow = {},
-                                onOpenOrders = {},
-                                onRefresh = {},
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            val buyerCampaigns = androidx.compose.runtime.produceState(
+                                initialValue = emptyList<FynxMarketplaceSeasonalPromotion>()
+                            ) {
+                                value = FynxMarketplaceSeasonalPromotionClient.load(compose.activity).getOrDefault(emptyList())
+                            }
+                            Text("Buyer feed campaigns: ${buyerCampaigns.value.size}")
                         }
                         else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                             FynxMarketplaceSeasonalPromotionAdminPanel()
@@ -108,17 +99,17 @@ class FynxAdminPublishingSectionsVisualTest {
                     }
                 }
             }
-            compose.onNodeWithText("Choose photo").performScrollTo().performClick()
-            compose.onNodeWithText("Selected photo:", substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Choose photo or GIF").performScrollTo().performClick()
+            compose.onNodeWithContentDescription("FYNX campaign artwork preview").performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
                 .performTextInput("A real Admin form save, stored locally with selected artwork.")
-            compose.onNodeWithText("Publish on this phone").performScrollTo().performClick()
+            compose.onNodeWithText("Save offline draft").performScrollTo().performClick()
 
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodesWithText(
-                    "Saved on this phone. The campaign is now available in the Marketplace banner without a backend connection."
+                    "Offline draft saved on this phone. It will not appear to buyers until you publish it."
                 ).fetchSemanticsNodes().isNotEmpty()
             }
 
@@ -131,17 +122,18 @@ class FynxAdminPublishingSectionsVisualTest {
             assertTrue("Selected artwork must be copied into app-private storage", saved.localArtworkUri.startsWith("file:"))
             val privateArtwork = File(Uri.parse(saved.localArtworkUri).path.orEmpty())
             assertTrue("Copied campaign artwork must exist and be non-empty", privateArtwork.isFile && privateArtwork.length() > 0L)
+            val gifInfo = FynxCampaignArtworkMedia.inspectFile(privateArtwork)
+            assertEquals("image/gif", gifInfo.mimeType)
+            assertEquals("Two original GIF frames must be preserved in the offline draft", 2, gifInfo.frameCount)
             assertTrue("Local save may make GET refreshes only", methods.all { it.startsWith("GET ") })
+            capture("FYNX-marketplace-offline-campaign-draft.png")
 
-            // Verify the saved campaign is actually consumed by the Marketplace banner.
+            // Device-only drafts must not be mixed into the public buyer campaign feed.
             compose.runOnIdle { screenState.value = 1 }
             compose.waitUntil(timeoutMillis = 10_000) {
-                runCatching {
-                    compose.onNodeWithText(headline).assertIsDisplayed()
-                    compose.onNodeWithContentDescription("FYNX Marketplace campaign artwork").assertIsDisplayed()
-                }.isSuccess
+                compose.onAllNodesWithText("Buyer feed campaigns: 0").fetchSemanticsNodes().isNotEmpty()
             }
-            capture("FYNX-marketplace-offline-banner.png")
+            assertTrue("Buyer feed must never receive a device-local draft", methods.contains("GET /api/marketplace/seasonal-feed"))
 
             // Reopening the real campaign editor must reload the saved campaign from storage.
             compose.runOnIdle { screenState.value = 2 }
@@ -149,7 +141,7 @@ class FynxAdminPublishingSectionsVisualTest {
                 compose.onAllNodesWithText(headline).fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText(headline).performScrollTo().assertIsDisplayed()
-            compose.onAllNodesWithText("LOCAL · THIS DEVICE")[0].performScrollTo().assertIsDisplayed()
+            compose.onAllNodesWithText("OFFLINE DRAFT · THIS DEVICE")[0].performScrollTo().assertIsDisplayed()
         } finally {
             FynxMarketplaceLocalCampaignStore.all(compose.activity)
                 .filter { it.occasionKey == occasionKey }
@@ -158,28 +150,36 @@ class FynxAdminPublishingSectionsVisualTest {
         }
     }
 
-    private fun createFixtureArtworkUri(): Uri {
+    private fun createFixtureArtworkUri(animatedGif: Boolean = false): Uri {
         val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "fynx-admin-test-" + System.currentTimeMillis() + ".png")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.DISPLAY_NAME, "fynx-admin-test-" + System.currentTimeMillis() + if (animatedGif) ".gif" else ".png")
+            put(MediaStore.Images.Media.MIME_TYPE, if (animatedGif) "image/gif" else "image/png")
             put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/FYNXAdminTests")
         }
         val uri = compose.activity.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             ?: error("Could not create the isolated MediaStore image fixture.")
         try {
-            val bitmap = Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888).apply {
-                eraseColor(android.graphics.Color.rgb(0, 127, 255))
-            }
-            try {
-                val stream = compose.activity.contentResolver.openOutputStream(uri)
-                    ?: error("Could not open the isolated MediaStore image fixture.")
-                stream.use { output ->
-                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
-                        "Could not write the isolated campaign artwork fixture."
-                    }
+            val stream = compose.activity.contentResolver.openOutputStream(uri)
+                ?: error("Could not open the isolated MediaStore image fixture.")
+            if (animatedGif) {
+                val twoFrameGif = Base64.decode(
+                    "R0lGODlhCAAIAIEAAP8AAAAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQIDAAAACwAAAAACAAIAAAIDwABCBxIsKDBgwgTKkwYEAAh+QQIDAAAACwAAAAACAAIAIEAAP8AAAAAAAAAAAAIDwABCBxIsKDBgwgTKkwYEAA7",
+                    Base64.DEFAULT
+                )
+                stream.use { it.write(twoFrameGif) }
+            } else {
+                val bitmap = Bitmap.createBitmap(128, 72, Bitmap.Config.ARGB_8888).apply {
+                    eraseColor(android.graphics.Color.rgb(0, 127, 255))
                 }
-            } finally {
-                bitmap.recycle()
+                try {
+                    stream.use { output ->
+                        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                            "Could not write the isolated campaign artwork fixture."
+                        }
+                    }
+                } finally {
+                    bitmap.recycle()
+                }
             }
             return uri
         } catch (error: Throwable) {
@@ -205,14 +205,14 @@ class FynxAdminPublishingSectionsVisualTest {
     fun ownerCanReachMarketplaceCampaignManagerAndCaptureIt() {
         launchAs("OWNER")
         compose.onNodeWithText("Marketplace").performScrollTo().performClick()
-        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Marketplace campaigns").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign type").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Announcement").assertIsDisplayed()
         compose.onNodeWithText("Special offer").assertIsDisplayed()
         compose.onNodeWithText("Banner headline").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Publish on this phone").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Choose photo").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
         capture("FYNX-admin-owner-marketplace-campaigns.png")
     }
@@ -222,10 +222,10 @@ class FynxAdminPublishingSectionsVisualTest {
         launchAs("ADMIN")
         check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty()) { "ADMIN must not see Owner-only Music Library navigation" }
         compose.onNodeWithText("Marketplace").performScrollTo().performClick()
-        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Publish on this phone").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Marketplace campaigns").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Choose photo").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
         capture("FYNX-admin-admin-marketplace-campaigns.png")
     }
