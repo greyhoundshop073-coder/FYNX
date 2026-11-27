@@ -240,8 +240,14 @@ internal object FynxCampaignArtworkMedia {
     }
 
     fun decodeGifFile(file: File): Drawable {
-        require(isGifFile(file)) { "The downloaded file is not an animated GIF." }
-        require(file.isFile && file.length() in 1..(12L * 1024L * 1024L)) { "The GIF is too large to display." }
+        // Apply the same full signature, byte-size, dimension, frame-count and
+        // total-duration checks to cached/downloaded files as to picker uploads.
+        // This keeps an oversized or malformed remote GIF from bypassing the
+        // Marketplace performance limits simply because it came from the server.
+        val artworkInfo = inspectFile(file)
+        require(artworkInfo.mimeType == "image/gif") {
+            "The downloaded campaign artwork is not a valid GIF."
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = ImageDecoder.createSource(file)
             return configureInfiniteGifLoop(ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
