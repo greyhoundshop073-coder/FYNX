@@ -257,8 +257,10 @@ fun MarketplacePromotionalBanner(
                 onOpenCategory(slide.destinationValue)
             slide.destinationType == "SHOP" && slide.destinationValue.isNotBlank() ->
                 onOpenSeller(slide.destinationValue)
+            slide.destinationType == "MARKETPLACE" &&
+                isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) -> onShopNow()
             slide.destinationType == "NONE" -> Unit
-            else -> onShopNow()
+            else -> Unit // Invalid or unknown campaign destinations must never fall back to the generic feed.
         }
     }
 
@@ -436,7 +438,10 @@ private fun MarketplacePromotionalSlide(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (slide.destinationType != "NONE") Button(
+                val hasValidAction = slide.listing != null ||
+                    !slide.sellerUsername.isNullOrBlank() ||
+                    isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue)
+                if (hasValidAction) Button(
                     onClick = onClick,
                     modifier = Modifier.semantics {
                         contentDescription = if (slide.listing != null && slide.actionLabel == "Shop this product") {
