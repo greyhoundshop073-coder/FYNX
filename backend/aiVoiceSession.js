@@ -26,7 +26,66 @@ export const FYNX_AI_VOICE_INSTRUCTIONS = [
   "When a requested FYNX action is not available as an approved tool, say so clearly instead of pretending it happened.",
 ].join(" ");
 
-export function buildRealtimeSessionConfig() {
+const REALTIME_SESSION_MODES = new Set(["assistant", "transcription", "speech"]);
+
+export function isValidRealtimeSessionMode(mode) {
+  return REALTIME_SESSION_MODES.has(mode);
+}
+
+export function buildRealtimeSessionConfig(mode = "assistant") {
+  if (!isValidRealtimeSessionMode(mode)) throw new Error("Unsupported FYNX realtime session mode.");
+
+  const inputAudio = {
+    noise_reduction: { type: "near_field" },
+    transcription: { model: process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe" }
+  };
+
+  if (mode === "transcription") {
+    return {
+      type: "realtime",
+      model: FYNX_AI_VOICE_MODEL,
+      output_modalities: ["text"],
+      instructions: [
+        "You are FYNX's speech transcription transport, not the assistant.",
+        "Transcribe the user's speech accurately and emit the input transcription event.",
+        "Do not answer, summarize, reason, call tools, or generate an assistant response.",
+        "FYNX Gemini is the only assistant answer provider."
+      ].join(" "),
+      tools: [],
+      tool_choice: "none",
+      audio: {
+        input: {
+          ...inputAudio,
+          turn_detection: {
+            type: "semantic_vad",
+            eagerness: "medium",
+            create_response: false,
+            interrupt_response: false
+          }
+        }
+      }
+    };
+  }
+
+  if (mode === "speech") {
+    return {
+      type: "realtime",
+      model: FYNX_AI_VOICE_MODEL,
+      voice: FYNX_AI_VOICE,
+      output_modalities: ["audio"],
+      instructions: [
+        "You are FYNX's speech output service, not the assistant.",
+        "Only speak the exact text supplied in a speech request.",
+        "Do not answer, summarize, paraphrase, add commentary, or call tools."
+      ].join(" "),
+      tools: [],
+      tool_choice: "none",
+      audio: {
+        output: { format: { type: "audio/pcm", rate: 24000 } }
+      }
+    };
+  }
+
   return {
     type: "realtime",
     model: FYNX_AI_VOICE_MODEL,
@@ -37,16 +96,16 @@ export function buildRealtimeSessionConfig() {
     tool_choice: "auto",
     audio: {
       input: {
-        noise_reduction: { type: "near_field" },
-        transcription: { model: "gpt-4o-mini-transcribe" },
+        ...inputAudio,
         turn_detection: { type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }
       }
     }
   };
 }
 
-export async function createRealtimeAnswer(sdpOffer) {
+export async function createRealtimeAnswer(sdpOffer, mode = "assistant") {
   const apiKey = process.env.OPENAI_API_KEY || "";
+  if (!isValidRealtimeSessionMode(mode)) throw new Error("Unsupported FYNX realtime session mode.");
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
   if (typeof sdpOffer !== "string" || !sdpOffer.trim() || sdpOffer.length > 200_000) {
     throw new Error("A valid WebRTC SDP offer is required.");
@@ -54,7 +113,7 @@ export async function createRealtimeAnswer(sdpOffer) {
 
   const form = new FormData();
   form.append("sdp", sdpOffer);
-  form.append("session", new Blob([JSON.stringify(buildRealtimeSessionConfig())], { type: "application/json" }));
+  form.append("session", new Blob([JSON.stringify(buildRealtimeSessionConfig(mode))], { type: "application/json" }));
 
   const response = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",

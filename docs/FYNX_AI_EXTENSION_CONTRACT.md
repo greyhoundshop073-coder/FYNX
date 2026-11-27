@@ -71,7 +71,10 @@ The review is advisory only. It never modifies, enhances, saves, publishes, stor
    - text replies may use Gemini `streamGenerateContent` SSE so the Android panel can render user-visible text deltas as they arrive; non-streaming callers keep the existing `generateContent` path
    - thought-only model parts must not be forwarded to the user-visible stream; tool calls still execute only through the approved registry and the final reply is persisted before the completion event
    - Gemini credentials are read only from the backend `GEMINI_API_KEY` environment variable and sent in the `x-goog-api-key` request header
-   - realtime voice continues to use the existing server-side OpenAI WebRTC adapter until a separately reviewed migration is approved
+   - realtime voice uses the existing server-side OpenAI WebRTC adapter in explicit modes: transcription-only for microphone input and speech-only for reading a Gemini answer aloud
+   - transcription mode disables OpenAI response generation and exposes no tools; completed transcripts use the existing authenticated conversation message endpoint, so typed and spoken turns share persisted FYNX history and Gemini request-budget controls
+   - speech mode exposes no tools and only reads the exact text supplied by the Android read-aloud flow; it cannot independently answer or change FYNX state
+   - Gemini remains the sole assistant reasoning/provider for ordinary FYNX text, image and voice turns; the legacy unrestricted realtime assistant mode remains available only for backward compatibility and is not selected by the current FYNX voice UI
    - provider changes must not leak into the Android APK
 
 ## Assistant dashboard and conversation experience
@@ -84,6 +87,10 @@ The existing assistant screen should behave like one continuous FYNX conversatio
 - The user can stop receiving a streamed answer. A partial answer is visibly marked as incomplete; stopping the Android request must never be described as undoing a server-side action or proving that the server did not save a response.
 - Automatic scrolling follows new content only while the reader is already near the latest message. When the reader scrolls back, updates must not pull them away; a visible latest-message control returns them to the bottom.
 - Realtime voice retains the existing authenticated WebRTC adapter and provides distinct mute and end-session controls.
+- Current voice input uses OpenAI transcription-only mode; completed transcripts are submitted through the same owned FYNX conversation route as typed messages, and Gemini generates and persists the answer.
+- Spoken answers use an OpenAI speech-only session that receives the saved Gemini answer; that session has no tools and cannot generate an independent assistant answer.
+- Voice mode creates or reuses the active owned FYNX conversation before opening the microphone, preserving the same stored history for typed and spoken turns.
+- User speech detected during read-aloud cancels the current spoken response before the next transcript is sent to Gemini. Physical-device echo and interruption behavior still require certification.
 - Keep all data and actions behind the existing authenticated conversation client and approved tool registry. Do not invent unsupported rename, regenerate, private-history, payment or destructive-action capabilities in the presentation layer.
 - Runtime visual certification opens the actual dashboard from the installed Android app, verifies its assistant header and message composer, and captures the image-attachment menu. It submits no prompt. When run through the debug-only UI entry, the screenshot proves rendering/navigation only and must not be represented as a live Gemini/backend success.
 

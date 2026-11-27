@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
-import { createRealtimeAnswer } from "./aiVoiceSession.js";
+import { createRealtimeAnswer, isValidRealtimeSessionMode } from "./aiVoiceSession.js";
 import { executeFynxAiTool, getFynxAiTools } from "./fynxAiToolRegistry.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -37,12 +37,16 @@ export function registerRealtimeAssistantRoutes({ app }) {
     if (!userId) return;
 
     const sdp = typeof req.body?.sdp === "string" ? req.body.sdp : "";
+    const mode = typeof req.body?.mode === "string" ? req.body.mode : "assistant";
+    if (!isValidRealtimeSessionMode(mode)) {
+      return res.status(400).json({ error: "unsupported realtime session mode" });
+    }
     if (!sdp.trim() || sdp.length > MAX_SDP_LENGTH) {
       return res.status(400).json({ error: "valid WebRTC SDP offer is required" });
     }
 
     try {
-      const answer = await createRealtimeAnswer(sdp);
+      const answer = await createRealtimeAnswer(sdp, mode);
       res.type("application/sdp").send(answer);
     } catch (error) {
       console.error("realtime voice session", error?.message || error);

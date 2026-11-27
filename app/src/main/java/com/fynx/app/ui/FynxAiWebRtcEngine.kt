@@ -56,7 +56,8 @@ class FynxAiWebRtcEngine(
         onEvent: (String) -> Unit = {},
         onToolResult: (String, String) -> Unit = { _, _ -> },
         receiveOnly: Boolean = false,
-        createInitialResponse: Boolean = true
+        createInitialResponse: Boolean = true,
+        sessionMode: String = "assistant"
     ): Result<Unit> {
         return try {
             require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
@@ -101,7 +102,7 @@ class FynxAiWebRtcEngine(
 
             val localSdp = connection.localDescription?.description
                 ?: error("FYNX AI local SDP is unavailable")
-            val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow()
+            val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp, sessionMode).getOrThrow()
             require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
             connection.setRemoteDescriptionAwait(
                 SessionDescription(SessionDescription.Type.ANSWER, answerSdp)

@@ -135,6 +135,7 @@ fun FynxAiAssistantPanel(
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
     var voicePhase by remember { mutableStateOf("LISTENING") }
+    var pendingVoiceTranscript by remember { mutableStateOf<String?>(null) }
     var showVoiceScreen by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
@@ -360,6 +361,7 @@ fun FynxAiAssistantPanel(
             val connection = readAloudEngine.connect(
                 receiveOnly = true,
                 createInitialResponse = false,
+                sessionMode = "speech",
                 onStateChanged = { state, error ->
                     if (state == FynxAiWebRtcEngine.State.FAILED) {
                         scope.launch {
@@ -640,7 +642,20 @@ fun FynxAiAssistantPanel(
         errorMessage = null
         voiceConnectionJob = scope.launch {
             try {
+                if (conversationId == null) {
+                    val created = FynxAiConversationClient.create(context)
+                    if (created.isFailure) {
+                        errorMessage = friendlyFynxAiError(
+                            created.exceptionOrNull() ?: IllegalStateException("Conversation unavailable"),
+                            "FYNX could not prepare your voice conversation. Please try again when the service is available."
+                        )
+                        return@launch
+                    }
+                    conversationId = created.getOrThrow().id
+                }
                 val result = voiceEngine.connect(
+                    createInitialResponse = false,
+                    sessionMode = "transcription",
                     onStateChanged = { state, error ->
                         voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
                         voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
@@ -651,19 +666,13 @@ fun FynxAiAssistantPanel(
                     },
                     onEvent = { rawEvent ->
                         voicePhase = realtimeVoicePhase(rawEvent, voicePhase)
-                        parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
-                            appendAssistantMessage(spoken)
-                            val transcript = extractRealtimeUserTranscript(rawEvent)
-                            if (transcript != null && pendingMessageAction != null) {
-                                val normalized = transcript.trim().lowercase()
-                                    .replace(Regex("[^a-z0-9\\s]"), " ")
-                                    .replace(Regex("\\s+"), " ")
-                                    .trim()
-                                when {
-                                    normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$")) -> confirmPendingMessage()
-                                    normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$")) -> cancelPendingMessage()
-                                }
-                            }
+                        val eventType = runCatching { JSONObject(rawEvent).optString("type") }.getOrDefault("")
+                        if (eventType == "input_audio_buffer.speech_started" && readAloudMessageId != null) {
+                            // A new user turn interrupts the spoken Gemini answer.
+                            stopReadAloud()
+                        }
+                        extractRealtimeUserTranscript(rawEvent)?.let { transcript ->
+                            pendingVoiceTranscript = transcript
                         }
                     },
                     onToolResult = { name, output ->
@@ -811,6 +820,9 @@ fun FynxAiAssistantPanel(
                 }
                 pendingMessageAction = reply.pendingAction
                 failedPrompt = null
+                if (voiceConnected && reply.assistantMessage.text.isNotBlank()) {
+                    requestReadAloud(reply.assistantMessage.id, reply.assistantMessage.text)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -835,6 +847,25 @@ fun FynxAiAssistantPanel(
         }
         generationJob = activeJob
         activeJob.start()
+    }
+
+    LaunchedEffect(pendingVoiceTranscript, loading, creatingConversation, pendingMessageAction, voiceConnected) {
+        val transcript = pendingVoiceTranscript ?: return@LaunchedEffect
+        if (loading || creatingConversation || !voiceConnected) return@LaunchedEffect
+        pendingVoiceTranscript = null
+
+        val normalized = transcript.trim().lowercase()
+            .replace(Regex("[^a-z0-9\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (pendingMessageAction != null && normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$"))) {
+            confirmPendingMessage()
+        } else if (pendingMessageAction != null && normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$"))) {
+            cancelPendingMessage()
+        } else {
+            // Spoken and typed requests use the same persisted conversation route and Gemini agent.
+            sendPrompt(transcript, true)
+        }
     }
 
     LaunchedEffect(listState) {

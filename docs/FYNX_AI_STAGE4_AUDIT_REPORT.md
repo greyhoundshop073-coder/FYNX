@@ -171,3 +171,16 @@ Consequences:
 9. Obtain owner acceptance before changing the module to CERTIFIED — CLOSED.
 
 **Final status: CONDITIONAL — BLOCKED.** This stage improves Gemini request governance and records the existing AI/voice design, but full AI and OpenAI voice certification requires a healthy current backend, verified provider credentials/tier, exact-head PR CI, live API/session tests, canonical Android runtime evidence and owner approval.
+
+## 8. Grouped voice orchestration implementation on the Stage 4 PR
+
+The grouped Android/backend change separates OpenAI voice transport from assistant reasoning:
+
+- OpenAI WebRTC transcription mode emits text transcription events only. Automatic responses are disabled, tool definitions are empty, and tool selection is disabled.
+- Each completed microphone transcript is submitted through the existing authenticated `/api/assistant/conversations/:id/message` route. That route loads the same user-owned persisted history and invokes the existing Gemini provider; its normal database transaction persists both the user turn and Gemini answer.
+- The current voice UI creates or reuses the active FYNX conversation before opening the microphone. Typed and spoken messages therefore share the same conversation ID, persisted history and Gemini request-budget controls.
+- OpenAI speech mode has no tools and is used only to read the exact text from the saved Gemini answer. OpenAI does not independently answer, search FYNX data or perform tools in the current voice UI.
+- A focused backend contract test verifies the modes, confirms transcription cannot generate a model response or call tools, confirms speech has no tools, and retains the legacy assistant mode for compatibility.
+- Backend prestart now includes the focused voice-routing test.
+
+This is source-level implementation and mocked contract coverage, not live OpenAI session certification. The current Gemini usage ledger records Gemini token usage; OpenAI transcription/audio usage is not yet recorded in FYNX's per-user ledger. Server-side OpenAI call-ID capture/sideband accounting, authoritative voice-session expiry, physical-device echo/interruption tests, and live provider tests remain outstanding. No new key, deployment, provider account, database or paid service was activated.
