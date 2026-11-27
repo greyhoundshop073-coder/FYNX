@@ -33,4 +33,30 @@ for fixture_remote in \
   fi
 done
 
+admin_fixture_dir="fynx-runtime-screenshots/admin-test-fixtures"
+mkdir -p "$admin_fixture_dir"
+admin_fixture_status="$admin_fixture_dir/capture-status.txt"
+: > "$admin_fixture_status"
+admin_capture_status=0
+
+# The Admin Compose test writes genuine app-window captures to shared MediaStore,
+# which survives the connected-test task uninstalling the debug target package.
+for screenshot in FYNX-admin-owner-overview.png FYNX-admin-admin-overview.png; do
+  local_file="$admin_fixture_dir/$screenshot"
+  remote_file="/sdcard/Pictures/FYNX/$screenshot"
+  if adb pull "$remote_file" "$local_file" >/dev/null 2>&1 &&
+      [ -s "$local_file" ] &&
+      python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); assert p.read_bytes().startswith(bytes([137,80,78,71,13,10,26,10]))' "$local_file"; then
+    echo "CAPTURED: $screenshot ($(stat -c %s "$local_file") bytes)" | tee -a "$admin_fixture_status"
+  else
+    rm -f "$local_file"
+    echo "NOT_CAPTURED: $screenshot missing or invalid in shared emulator Pictures/FYNX" | tee -a "$admin_fixture_status"
+    admin_capture_status=1
+  fi
+done
+
+if [ "$runtime_status" -eq 0 ] && [ "$admin_capture_status" -ne 0 ]; then
+  runtime_status="$admin_capture_status"
+fi
+
 exit "$runtime_status"
