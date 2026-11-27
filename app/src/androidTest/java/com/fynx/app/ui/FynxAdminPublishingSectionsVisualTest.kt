@@ -213,7 +213,7 @@ class FynxAdminPublishingSectionsVisualTest {
         compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
+        compose.onNodeWithText("Marketplace campaigns").performScrollTo()
         capture("FYNX-admin-owner-marketplace-campaigns.png")
     }
 
@@ -226,7 +226,7 @@ class FynxAdminPublishingSectionsVisualTest {
         compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Marketplace banner campaigns").performScrollTo()
+        compose.onNodeWithText("Marketplace campaigns").performScrollTo()
         capture("FYNX-admin-admin-marketplace-campaigns.png")
     }
 
