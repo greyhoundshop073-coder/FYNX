@@ -346,6 +346,10 @@ require(LOCAL_CAMPAIGN_STORE.is_file(), "device-local Marketplace campaign stora
 require(SAMPLE_BANNER_ARTWORK.is_file(), "bundled FYNX sample Marketplace banner artwork is present")
 local_store_source = LOCAL_CAMPAIGN_STORE.read_text(encoding="utf-8")
 local_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8")
+require("PaddingValues(horizontal = 8.dp, vertical = 8.dp)" in local_admin_source and
+        "PaddingValues(horizontal = 4.dp, vertical = 8.dp)" in local_admin_source and
+        "style = MaterialTheme.typography.labelSmall" in local_admin_source,
+        "campaign type and destination buttons must keep their full labels visible on narrow phone widths")
 local_client_source = LOCAL_CAMPAIGN_CLIENT.read_text(encoding="utf-8")
 banner_source = MARKETPLACE_BANNER.read_text(encoding="utf-8")
 marketplace_source = MARKETPLACE_PANEL.read_text(encoding="utf-8")

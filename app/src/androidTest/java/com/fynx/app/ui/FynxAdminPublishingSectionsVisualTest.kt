@@ -207,6 +207,8 @@ class FynxAdminPublishingSectionsVisualTest {
         compose.onNodeWithText("Marketplace").performScrollTo().performClick()
         compose.onNodeWithText("Marketplace banner campaigns").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign type").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Announcement").assertIsDisplayed()
+        compose.onNodeWithText("Special offer").assertIsDisplayed()
         compose.onNodeWithText("Banner headline").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Publish on this phone").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
