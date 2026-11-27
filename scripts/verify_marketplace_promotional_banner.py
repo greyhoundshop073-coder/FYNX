@@ -19,6 +19,7 @@ ARTWORK_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMe
 LOCAL_CAMPAIGNS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt").read_text(encoding="utf-8")
 REMOTE_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
 GIF_FILE_DECODER = ARTWORK_MEDIA[ARTWORK_MEDIA.index("    fun decodeGifFile(file: File)"):ARTWORK_MEDIA.index("    fun decodePreview(context: Context, uri: Uri)")]
+ARTWORK_MEDIA_TEST = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxCampaignArtworkMediaTest.kt").read_text(encoding="utf-8")
 PRODUCT_LINK_HANDLER = PANEL[PANEL.index("onOpenProduct ="):PANEL.index("onOpenCategory =", PANEL.index("onOpenProduct ="))]
 PRODUCTION_MESSAGING = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
 MEDIA_STORAGE = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
@@ -163,6 +164,13 @@ checks = [
      "The Marketplace banner was left in place." in PRODUCT_LINK_HANDLER
      and "showAllProducts = true" not in PRODUCT_LINK_HANDLER
      and "Browse the current listings instead." not in PRODUCT_LINK_HANDLER),
+
+
+    ("Android instrumentation includes a real two-frame GIF decode test with no network dependency",
+     "twoFrameGifIsValidatedAndDecodedWithoutNetworkAccess" in ARTWORK_MEDIA_TEST
+     and 'assertEquals(2, info.frameCount)' in ARTWORK_MEDIA_TEST
+     and "FynxCampaignArtworkMedia.decodeGifFile(file)" in ARTWORK_MEDIA_TEST
+     and "invalidGifSignatureIsRejectedBeforeDecoding" in ARTWORK_MEDIA_TEST),
 
 ]
 
