@@ -183,11 +183,15 @@ fun FynxRemoteMedia(
                     val contentType = downloaded.contentType.orEmpty()
                     if (autoSaveToGallery) runCatching { saveRemoteMediaToGallery(context, target, contentType, type, resolvedUrl) }
                     val isVideo = isKnownVideo || (type.equals("auto", true) && contentType.startsWith("video/"))
-                    val isGif = type.equals("gif", true) || contentType.equals("image/gif", true)
+                    // Inspect the actual file signature as well as the HTTP header. Cached media
+                    // has no response MIME metadata, and campaign banners historically request
+                    // the generic "image" type; neither case may flatten an animated GIF.
+                    val isGif = type.equals("gif", true) ||
+                        contentType.equals("image/gif", true) ||
+                        FynxCampaignArtworkMedia.isGifFile(target)
                     if (isVideo) MediaLoadResult.Video(target)
-                    else if (isGif && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        val source = ImageDecoder.createSource(target)
-                        MediaLoadResult.Gif(ImageDecoder.decodeDrawable(source), target)
+                    else if (isGif) {
+                        MediaLoadResult.Gif(FynxCampaignArtworkMedia.decodeGifFile(target), target)
                     } else {
                         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         BitmapFactory.decodeFile(target.absolutePath, bounds)
@@ -233,8 +237,8 @@ fun FynxRemoteMedia(
         "gif" -> animatedDrawable?.let { drawable ->
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
             AndroidView(
-                factory = { ctx -> android.widget.ImageView(ctx).apply { scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; setImageDrawable(drawable); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) (drawable as? AnimatedImageDrawable)?.start() } },
-                update = { view -> if (view.drawable !== drawable) view.setImageDrawable(drawable); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) (drawable as? AnimatedImageDrawable)?.takeIf { !it.isRunning }?.start() },
+                factory = { ctx -> FynxCampaignArtworkImageView(ctx).apply { showArtwork(drawable, playbackActive && autoPlay) } },
+                update = { view -> view.showArtwork(drawable, playbackActive && autoPlay) },
                 modifier = imageModifier
             )
         }
