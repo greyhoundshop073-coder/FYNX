@@ -200,40 +200,38 @@ Relevant open PRs:
 
 The existing `docs/FYNX_NEON_MEDIA_STORAGE.md` contains an older 23 November snapshot (including older table and listing counts). It is being edited by #597 and #580, so this infrastructure workstream deliberately leaves it untouched and records this fresh audit in a separate report.
 
-## 8. Safe reconnection and migration sequence
+## 8. Current reconnection and operational sequence
 
-1. Preserve `live-recovery-20261101`; treat it as the recovery/reference dataset. Keep `fynx-dev-backend-20261122` as the isolated development target.
-2. Reconcile the backend runtime decision: Railway testing service versus Neon Function, and ensure Android, backend deployment, database and media bucket all point to one agreed testing environment. Do not introduce another backend.
-3. Have the Railway owner inspect the live `DATABASE_URL` host/database and the six Neon media variable values without disclosing secrets. Confirm the dev branch host and branch-scoped credential.
-4. Resolve the Railway build failure `secret FYNX not found` in the service's build configuration, and ensure the deployed source is the agreed canonical backend commit/branch. Do not deploy the old `main` commit. Then observe a terminal successful deployment and a healthy `/ready` probe.
-5. Run read-only SQL health/schema checks against dev, then authenticated API smoke tests using dedicated test accounts. Keep production and recovery out of write tests.
-6. Verify a new test media upload end-to-end on dev: upload intent, signed PUT, HEAD validation, finalize, authorized GET, expiry, and deletion/cleanup. Do not forward FYNX bearer tokens to object storage.
-7. Plan the existing PostgreSQL-inline media backfill separately, with idempotency, stable media IDs, checksum/size verification, retry/resume, reference preservation and rollback to the original BYTEA payload. Do not delete inline payloads during the first migration.
-8. Before any production cutover, obtain owner approval, take and verify a restorable backup/snapshot, create a production-ready branch from the approved schema/data baseline, apply versioned migrations, verify data and authorization, then test the canonical app against that environment. Do not point production at the current empty default branch.
-9. Record deployed commit, environment, branch ID, schema fingerprint, smoke-test evidence, object counts and recovery procedure. Only mark live verified after real requests and media operations pass.
+1. Keep the current Neon Function URL on `fynx-testing` as the active integration-test endpoint. The live `/health` and `/ready` probes already confirm database connectivity.
+2. Complete the canonical Android endpoint change through existing PR #597 review. Do not create a second Android API client or a parallel backend.
+3. Use a dedicated test account for authenticated smoke tests. Exercise existing login, one protected read route, media upload-intent, upload completion, authorized media retrieval and cleanup. Record request results and object counts.
+4. Run the signed object-storage lifecycle test against the private `fynx-media` bucket: PUT, HEAD, finalization/promotion, authorized GET and deletion/cleanup. This audit could not perform the signed upload itself; do not mark media live-verified until it is exercised.
+5. Keep PostgreSQL BYTEA media as the rollback source. Do not backfill or delete any inline media as part of this handoff.
+6. Before production cutover or any destructive migration, create and verify an owner-approved restorable backup. The current plan rejected branch protection with HTTP 422; do not delete branches or pay for an upgrade without approval.
+7. Keep `live-recovery-20261101` as the preservation/reference branch and `fynx-dev-backend-20261122` as the fuller-schema clone. Do not point production at the empty default branch or change the active testing target without a reviewed migration plan.
+8. Leave the failed Railway service parked. Do not restart it unless the owner explicitly chooses Railway as the fallback and approves resolving its missing build-secret reference and canonical source configuration.
 
-## 9. Verification matrix
+## 9. Final verification matrix
 
 | Requirement | Result | Evidence / remaining action |
 |---|---|---|
-| Identify authoritative data-bearing project | Verified | Historical project and branch lineage inspected |
-| Compare schema and table counts | Verified | 88 tables / 799 columns / 246 indexes on recovery and dev; matching fingerprints |
-| Compare important record counts | Verified | Exact read-only counts listed above |
-| Preserve recovery branch and data | Verified | No writes or branch mutations performed |
-| Identify Railway DATABASE_URL target | Blocked | Live variable names present, but values redacted; owner must inspect host/database |
-| Confirm Neon Object Storage enabled | Verified | Enabled on testing/recovery/dev in us-east-2 |
-| Confirm private bucket and object counts | Verified | Private `fynx-media`; zero objects on testing/recovery/dev |
-| Verify active branch-scoped storage credential exists | Verified | Dev credential metadata and scopes listed; expires 2027-02-21 |
-| Verify live S3 variables match credential/endpoint | Blocked | Railway values redacted |
-| Verify actual S3 PUT/HEAD/GET/DELETE | Not run | Requires live credential handshake; no test object written |
-| Review compute/autoscaling/pooling | Partially verified | Compute ranges and idle/scale-to-zero state inspected; pooler hostname not exercised |
-| Review indexes/query/locks | Verified read-only | Sizes, scan counters, unused-index candidates, locks and long-running queries inspected |
-| Verify scheduled snapshots/backup | Blocked / deficient | No snapshots or schedule; no branches protected; Neon rejected protection with HTTP 422 due plan limit |
-| Live Railway service readiness | Blocked | Runtime Offline; no pending patch; last deployment FAILED at image build with `secret FYNX not found`; failed source was `main` commit `0498632d1b72bea8aac5610a6778b75417b94af9` |
-| Production cutover | Not authorised / not performed | Requires owner approval and a verified backup |
+| Identify authoritative data-bearing Neon project | Verified | Historical project and branch lineage inspected |
+| Preserve full recovery/reference data | Verified | Recovery branch untouched; matching 88-table dev clone exists |
+| Active Neon Function deployment | Verified | `fynxapi` deployment #3 completed 2026-11-27 on `fynx-testing` |
+| Live backend and database health | Verified | `/health` and `/ready` both returned `ok:true`, `database:"ready"` |
+| Private Neon Object Storage bucket | Verified | `fynx-media` exists, private, region `us-east-2`; zero objects |
+| Backend media-storage implementation | Implemented | Existing adapter supports PostgreSQL, Neon and R2; signed upload, object inspection/promotion, retrieval and cleanup contracts are present |
+| Mocked media-storage regression coverage | Present in source | Existing tests cover provider config, signing, HEAD/COPY, retrieval, cleanup, bounds and error classification |
+| Live signed object lifecycle | Not run | Requires a real signed PUT/HEAD/GET/DELETE round trip |
+| Authenticated feature-level API parity | Not run in this workstream | Requires a dedicated test account and route-by-route smoke tests |
+| Active testing-branch schema parity | Partial | 81 tables on `fynx-testing` vs 88 on recovery/dev; module-specific lazy schema creation and all feature routes not exercised |
+| Deployment provenance | Partial | `/version` currently reports commit/branch/environment/deployment ID as `unknown` on Neon Functions |
+| Snapshot/restore and protected recovery | Blocked / deficient | No snapshot schedule found; Neon rejected branch protection with HTTP 422 at current plan level |
+| Railway fallback | Inactive | Service Offline; last build failed with `secret FYNX not found` on noncanonical `main`; not used by active Neon Function |
+| Production cutover | Not authorised / not performed | Requires owner approval and verified restorable backup |
 
-## 10. Explicit non-actions
+## 10. Explicit non-actions and conclusion
 
-No production data was written. No data was copied or migrated. No branch was reset, deleted or protected. No bucket or object was created, deleted or made public. No credentials were created, rotated, revoked or exposed. No Railway configuration was changed. No deployment or paid upgrade was triggered.
+This workstream did not alter production data, change schema definitions, reset/delete branches, create/delete media objects, change credentials, edit Railway variables, deploy code, migrate BYTEA media, switch the canonical Android endpoint, or purchase/upgrade infrastructure.
 
-**Stage 1 conclusion:** The data lineage is sufficiently established to recommend recovery as the preservation reference and the matching dev branch as the testing target. Stage 1 is not fully closed until the owner verifies the encrypted Railway target and live storage values, the backend/runtime target discrepancy is resolved, the Railway build-secret failure is corrected against the canonical source, live media access is exercised, and a reliable backup/recovery schedule is agreed.
+**Stage 1 engineering preparation is complete.** The authoritative Neon project and safe branch roles are documented; the media integration contract and test coverage already exist; the private bucket and deployment configuration are positioned; and the live Neon Function is responding with its database ready. The remaining tasks are live-only certification (signed media lifecycle and authenticated route smoke tests), an observability improvement for Neon deployment provenance, and an owner-approved backup/restore process. PR #597 remains the existing Android endpoint cutover path. No new backend, duplicate endpoint, APK branch, or media migration is required by this infrastructure handoff.
