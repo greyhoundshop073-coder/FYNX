@@ -19,6 +19,7 @@ ARTWORK_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMe
 LOCAL_CAMPAIGNS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt").read_text(encoding="utf-8")
 REMOTE_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
 GIF_FILE_DECODER = ARTWORK_MEDIA[ARTWORK_MEDIA.index("    fun decodeGifFile(file: File)"):ARTWORK_MEDIA.index("    fun decodePreview(context: Context, uri: Uri)")]
+PRODUCT_LINK_HANDLER = PANEL[PANEL.index("onOpenProduct ="):PANEL.index("onOpenCategory =", PANEL.index("onOpenProduct ="))]
 PRODUCTION_MESSAGING = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
 MEDIA_STORAGE = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
 BACKEND_SERVER = (ROOT / "backend/server.js").read_text(encoding="utf-8")
@@ -149,6 +150,19 @@ checks = [
      "Choose a photo or animated GIF." in SEASONAL_ADMIN
      and "private draft" in SEASONAL_ADMIN
      and "authenticated media service" in SEASONAL_ADMIN),
+
+
+    ("campaign CTA buttons are shown only for listings or validated typed destinations",
+     "val hasValidAction = slide.listing != null" in BANNER
+     and "isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue)" in BANNER
+     and "if (hasValidAction) Button(" in BANNER),
+    ("invalid and unknown campaign destinations never fall back to generic Marketplace",
+     "else -> Unit // Invalid or unknown campaign destinations must never fall back to the generic feed." in BANNER
+     and "slide.destinationType == \\"MARKETPLACE\\" &&" in BANNER),
+    ("an unavailable promoted product leaves the campaign banner in place instead of opening unrelated listings",
+     "The Marketplace banner was left in place." in PRODUCT_LINK_HANDLER
+     and "showAllProducts = true" not in PRODUCT_LINK_HANDLER
+     and "Browse the current listings instead." not in PRODUCT_LINK_HANDLER),
 
 ]
 
