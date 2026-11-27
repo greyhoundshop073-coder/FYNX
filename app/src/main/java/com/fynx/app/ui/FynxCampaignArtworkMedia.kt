@@ -110,6 +110,8 @@ internal object FynxCampaignArtworkMedia {
             bytes.startsWithBytes(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) -> "image/png"
             bytes.size >= 12 && bytes.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" &&
                 bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII) == "WEBP" -> "image/webp"
+            bytes.size >= 12 && bytes.copyOfRange(4, 8).toString(Charsets.US_ASCII) == "ftyp" &&
+                bytes.copyOfRange(8, 12).toString(Charsets.US_ASCII).startsWith("hei") -> "image/heic"
             else -> reportedMime?.trim()?.lowercase()?.takeIf { it.startsWith("image/") && !it.endsWith("/*") }
                 ?: "image/jpeg"
         }
