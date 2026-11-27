@@ -261,3 +261,19 @@ Sources:
 7. Obtain a FYNX-controlled domain/zone before DNS, WAF, CDN and DDoS controls can be audited and configured.
 
 No Cloudflare resources, TURN keys, R2 buckets, DNS records, WAF policies, paid products, secrets or deployments were created or modified by this follow-up.
+
+
+### 2026-11-27 Railway environment cross-check (read-only)
+
+A fresh Railway service inspection of project `FYNX-Isolated-Testing`, environment `testing`, service `fynx-backend-testing` supersedes the historical staged-patch wording above:
+
+- The service is **live-configured**, with no pending staged patch at inspection time.
+- Variable names `CLOUDFLARE_SFU_APP_ID` and `CLOUDFLARE_SFU_APP_SECRET` are present in the service environment. Railway withheld all values; presence does not validate either value or prove the app secret matches the Cloudflare app.
+- `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_SECRET` are absent.
+- The inspected R2 variable names `FYNX_R2_ACCOUNT_ID`, `FYNX_R2_ACCESS_KEY_ID`, `FYNX_R2_SECRET_ACCESS_KEY` and `FYNX_R2_BUCKET` are absent.
+- Neon S3 variable names are present, but their values and the configured `FYNX_MEDIA_STORAGE_PROVIDER` value were not exposed in this read-only result; do not infer the selected provider from names alone.
+- Latest Railway deployment is still **FAILED**, created 2026-11-03 18:45 UTC. The service has a Railway service domain, no custom domain, and sleep-on-idle enabled. No deployment or wake/restart was triggered.
+
+**Correction:** the SFU variable names are present in the live Railway service configuration, not merely a pending staged patch. The failed latest deployment means this is not evidence of a healthy active runtime. The earlier section's historical note about 11 staged changes describes the prior 2026-11-26 observation and is superseded by this current inspection.
+
+This confirms the exact next backend configuration work: after owner-approved secret rotation, verify the SFU pair server-side; provision and set the separate TURN UID/token only after approval; retain Neon storage until the provider value and bucket health are verified; then deploy only through the owner's approved release process.
