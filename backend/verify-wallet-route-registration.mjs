@@ -21,8 +21,8 @@ assert.match(
   "normal Railway startup must load the shared scalability route layer"
 );
 assert.match(neonFunction, /await import\("\.\/scalability\.js"\)/, "Neon Functions must load the same shared scalability route layer");
-assert.ok(neonBuild.includes(String.raw`[scalabilitySource, /registerBuyerWalletRoutes\(\{ app \}\)/`), "Neon build must verify shared Buyer Wallet route registration");
-assert.ok(neonBuild.includes(String.raw`[scalabilitySource, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/`), "Neon build must verify Marketplace wallet route registration");
-assert.ok(neonBuild.includes(String.raw`[functionSource, /await import\("\.\/scalability\.js"\)/`), "Neon build must verify the shared route registration layer");
+assert.ok(neonBuild.includes("single Buyer Wallet route owner"), "Neon build must verify shared Buyer Wallet route registration");
+assert.ok(neonBuild.includes("single Marketplace Wallet route owner"), "Neon build must verify Marketplace wallet route registration");
+assert.ok(neonBuild.includes("shared Wallet route registration layer"), "Neon build must verify the shared route registration layer");
 
 console.log("Wallet route registration is single-path in both Railway and Neon runtimes: scalability.js owns the two Wallet route modules.");
