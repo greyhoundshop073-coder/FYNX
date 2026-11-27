@@ -6281,7 +6281,9 @@ def wallet_destination_ready_scrolling(xml_text: str, name: str) -> bool:
     probe_xml = xml_text
     swipes = 0
     ready = False
-    for _ in range(3):
+    # Wallet has several independently scrollable sections; allow enough real swipes
+    # to reach the balance buckets below activity and security cards on compact emulators.
+    for _ in range(8):
         next_xml = swipe_vertical_scroll_container(probe_xml, name + ".xml")
         if not next_xml:
             break
