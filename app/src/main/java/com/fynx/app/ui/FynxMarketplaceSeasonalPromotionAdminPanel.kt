@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -202,12 +203,22 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                     else -> "Seasonal"
                 }
                 if (promotionType == type) {
-                    Button(onClick = { promotionType = type }, modifier = Modifier.weight(1f), enabled = !saving) {
-                        Text(label, maxLines = 1)
+                    Button(
+                        onClick = { promotionType = type },
+                        modifier = Modifier.weight(1f),
+                        enabled = !saving,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall)
                     }
                 } else {
-                    OutlinedButton(onClick = { promotionType = type; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) {
-                        Text(label, maxLines = 1)
+                    OutlinedButton(
+                        onClick = { promotionType = type; message = null; error = null },
+                        modifier = Modifier.weight(1f),
+                        enabled = !saving,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -264,8 +275,25 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("MARKETPLACE", "CATEGORY", "PRODUCT", "SHOP").forEach { type ->
                     val label = when (type) { "CATEGORY" -> "Category"; "PRODUCT" -> "Product"; "SHOP" -> "Shop"; else -> "Marketplace" }
-                    if (destinationType == type) Button(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) { Text(label, maxLines = 1) }
-                    else OutlinedButton(onClick = { destinationType = type; destinationValue = ""; message = null; error = null }, modifier = Modifier.weight(1f), enabled = !saving) { Text(label, maxLines = 1) }
+                    if (destinationType == type) {
+                        Button(
+                            onClick = { destinationType = type; destinationValue = ""; message = null; error = null },
+                            modifier = Modifier.weight(1f),
+                            enabled = !saving,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                        ) {
+                            Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { destinationType = type; destinationValue = ""; message = null; error = null },
+                            modifier = Modifier.weight(1f),
+                            enabled = !saving,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                        ) {
+                            Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
             }
             when (destinationType) {
