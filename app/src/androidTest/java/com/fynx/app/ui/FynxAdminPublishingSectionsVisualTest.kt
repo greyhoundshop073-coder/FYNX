@@ -126,6 +126,17 @@ class FynxAdminPublishingSectionsVisualTest {
             val gifInfo = FynxCampaignArtworkMedia.inspectFile(privateArtwork)
             assertEquals("image/gif", gifInfo.mimeType)
             assertEquals("Two original GIF frames must be preserved in the offline draft", 2, gifInfo.frameCount)
+            val decodedGif = FynxCampaignArtworkMedia.decodeGifFile(privateArtwork)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                assertTrue("Android 9+ preview must decode to a real animated drawable", decodedGif is android.graphics.drawable.AnimatedImageDrawable)
+                assertEquals(
+                    "Campaign GIFs must loop continuously while visible",
+                    android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE,
+                    (decodedGif as android.graphics.drawable.AnimatedImageDrawable).repeatCount
+                )
+            } else {
+                assertTrue("Android 8 preview must retain the animated Movie renderer", decodedGif is FynxLegacyGifDrawable)
+            }
             assertTrue("Local save may make GET refreshes only", methods.all { it.startsWith("GET ") })
             // Device-only drafts must not be mixed into the public buyer campaign feed.
             compose.runOnIdle { screenState.value = 1 }
