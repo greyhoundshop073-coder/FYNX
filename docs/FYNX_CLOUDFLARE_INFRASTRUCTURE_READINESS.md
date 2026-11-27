@@ -205,3 +205,59 @@ This workstream does not own the call engine or shared call PR files. PR #599 ow
 - Any paid activation, R2 migration or production cutover.
 
 **Final status: CONDITIONAL — BLOCKED.** No production infrastructure was changed and no live Cloudflare capability is certified.
+
+
+---
+
+## 11. 2026-11-27 authenticated Cloudflare follow-up (supersedes prior access limitation)
+
+**Inspection method:** authenticated, read-only Cloudflare dashboard inspection through the owner's saved TinyFish session. No resource or account setting was changed. Secret values and payment details were not copied into this report.
+
+### Account inventory now visible
+
+| Area | 2026-11-27 evidence | Engineering conclusion |
+|---|---|---|
+| Realtime Serverless SFU | One app is listed as **FYNX Video Calling**. The UI's app label was inconsistently rendered once as “FYXN”; confirm the intended app by its stable app ID before connecting production traffic. | App existence is confirmed; deployment state, environment, endpoint URL, bindings, app-secret validity and runtime usage were not exposed by the dashboard pages reached. |
+| Realtime TURN keys | The Realtime TURN Server product page shows no TURN Server apps. It does not expose the separate Calls TURN-key inventory. No TURN key UID, label or created/modified timestamp was visible in the inspected dashboard UI. | TURN key existence is **not verified**, not proven absent. Do not create a key until the owner approves provisioning and confirms the previously exposed SFU secret has been rotated. |
+| R2 | R2 opens on subscription/onboarding setup; no bucket is listed and no usage dashboard was visible. The displayed Standard free allowance is 10 GB-month, 1 million Class A operations and 10 million Class B operations. | R2 is not configured for FYNX in the inspected account view. Do not switch the existing Neon-first provider or create a bucket without approval. |
+| DNS | No DNS zones/domains were listed in the inspected account view. | No FYNX domain/zone security can be certified from this account view. |
+| Zero Trust | Overview is an onboarding/default-account page. Operational threat findings, device counts, access policies and logs were not displayed. | Security posture remains unverified; sidebar navigation is not proof that a control is configured. |
+| Observability | SFU analytics/usage destinations showed no populated data. | No real SFU media traffic or call runtime is certified. |
+
+### Official Cloudflare TURN contract cross-check
+
+The isolated route in PR #615 was checked against Cloudflare's current public documentation:
+
+- Credential generation uses `POST https://rtc.live.cloudflare.com/v1/turn/keys/{TURN_KEY_ID}/credentials/generate-ice-servers`, with `Authorization: Bearer {TURN_KEY_API_TOKEN}` and JSON `{ "ttl": ... }`.
+- Cloudflare's API schema specifies the TURN key UID as 32 characters and the returned bearer key as exactly 64 characters; the route's 32-hex UID / 64-hex secret checks match that schema.
+- Cloudflare documents the relay URLs used by the route. Port 53 is a known browser timeout path and is filtered by the route.
+- The documented client refresh mechanism is WebRTC `RTCPeerConnection.setConfiguration()`; Android call engines must still implement credential fetch and refresh.
+- Cloudflare says TURN is free when used together with Realtime SFU; standalone TURN is billed at $0.05 per real-time GB outbound. R2 Standard free allowances are monthly and do not remove charges after the allowance is exceeded.
+
+Sources:
+- https://developers.cloudflare.com/realtime/turn/generate-credentials/
+- https://developers.cloudflare.com/api/resources/calls/subresources/turn/methods/create/
+- https://developers.cloudflare.com/realtime/sfu/
+- https://developers.cloudflare.com/r2/pricing/
+
+### Repository/CI status rechecked 2026-11-27
+
+- Canonical branch remains `integration/fynx-single-apk-20261013`; PR #612 is the latest verified merge and its merge commit is `9b2401759dfb7e15293ec898685fe86b4ba08a48`.
+- PR #615 is based on that canonical SHA. Its exact head `de36002dfb30efecf0f0ef02344dbeade1588a15` has successful checks for Cloudflare TURN Contract, Backend CI, Android Build, Chat Final Closure and Chat Group Parity/Layout Safety.
+- PR #615 is still an isolated backend route module. It is not registered in the active server and is not called by Android yet.
+- PR #599 remains open. Backend CI, Chat Final Closure and Chat Group Parity passed on observed head `109884d7417742098d005e5291a7c9f431069fde`; Android Build failed in `FynxMarketplaceScreensComposeTest.kt` at unresolved `onAllNodesWithContentDescription` references. Do not treat its call integration as certified.
+- PR #589 remains open and is marked non-mergeable in the observed metadata. Its latest observed checks passed, but it overlaps the calling files owned by #599 and must be coordinated rather than duplicated.
+
+### Updated status and safe next steps
+
+**Status: CONDITIONAL — Cloudflare account access achieved; live infrastructure still not ready/certified.**
+
+1. Keep Neon as the active media-storage target until the existing Neon bucket and protected upload lifecycle are verified. R2 is an optional future provider, not a prerequisite to finish app-side media work.
+2. Confirm the SFU app identity and server-side secret validity without displaying secrets. Because a previous setup handoff warned that an SFU secret had been exposed in a downloaded page, rotate that secret before any production deployment; record only the rotation completion/date, never the value.
+3. If the owner approves, create one least-privilege TURN key in the intended Cloudflare account, store its 32-character UID and 64-character key only in the Railway testing secret store, and never put it in Android or Git.
+4. Have the #599 call owner register the PR #615 route with shared auth/rate limiting and add the route test to backend CI. Android must fetch short-lived credentials per active call and refresh before expiry with `setConfiguration()`.
+5. Validate SFU session publish/subscribe and remote cleanup separately from TURN. TURN relay does not implement SFU media routing.
+6. Create/activate an R2 bucket only after an explicit owner decision and a private-bucket/access-policy plan. The current free allowance is bounded; usage alerts and cost controls must be reviewed before growth.
+7. Obtain a FYNX-controlled domain/zone before DNS, WAF, CDN and DDoS controls can be audited and configured.
+
+No Cloudflare resources, TURN keys, R2 buckets, DNS records, WAF policies, paid products, secrets or deployments were created or modified by this follow-up.
