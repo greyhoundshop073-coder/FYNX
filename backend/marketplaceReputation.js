@@ -40,17 +40,20 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
     const result = await pool.query(`
       WITH order_stats AS (
         SELECT u.id AS seller_id,u.username,u.display_name,
-          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED')::INTEGER AS successful_orders,
-          COUNT(o.id)::INTEGER AS total_orders,
-          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
-          COUNT(o.id) FILTER (WHERE o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id)::INTEGER AS successful_orders,
+          COUNT(o.id) FILTER (WHERE o.buyer_id <> o.seller_id)::INTEGER AS total_orders,
+          COUNT(o.id) FILTER (WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id AND o.completed_at >= NOW() - INTERVAL '30 days')::INTEGER AS successful_orders_30d,
+          COUNT(o.id) FILTER (WHERE o.buyer_id <> o.seller_id AND o.created_at >= NOW() - INTERVAL '30 days')::INTEGER AS total_orders_30d
         FROM users u LEFT JOIN marketplace_orders o ON o.seller_id = u.id
         GROUP BY u.id, u.username, u.display_name
       ),
       review_stats AS (
-        SELECT seller_id,COUNT(*)::INTEGER AS review_count,COALESCE(AVG(rating), 0)::NUMERIC(4,2) AS average_rating,
-          COUNT(*) FILTER (WHERE rating >= 4)::INTEGER AS positive_reviews
-        FROM marketplace_seller_reviews GROUP BY seller_id
+        SELECT r.seller_id,COUNT(*)::INTEGER AS review_count,COALESCE(AVG(r.rating), 0)::NUMERIC(4,2) AS average_rating,
+          COUNT(*) FILTER (WHERE r.rating >= 4)::INTEGER AS positive_reviews
+        FROM marketplace_seller_reviews r
+        JOIN marketplace_orders o ON o.id = r.order_id
+        WHERE o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
+        GROUP BY r.seller_id
       ),
       ranked AS (
         SELECT s.*,COALESCE(r.review_count, 0)::INTEGER AS review_count,COALESCE(r.average_rating, 0)::NUMERIC(4,2) AS average_rating,
@@ -95,6 +98,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           ON o.completed_at >= w.week_start
          AND o.completed_at < w.week_end
          AND o.status = 'COMPLETED'
+         AND o.buyer_id <> o.seller_id
         GROUP BY w.week_start, w.week_end, o.seller_id
       ),
       weekly_product_sales AS (
@@ -105,6 +109,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           ON o.completed_at >= w.week_start
          AND o.completed_at < w.week_end
          AND o.status = 'COMPLETED'
+         AND o.buyer_id <> o.seller_id
         GROUP BY w.week_start, w.week_end, o.seller_id, o.listing_id
       ),
       ranked_sellers AS (
@@ -170,6 +175,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           WHERE o.status = 'COMPLETED'
             AND o.completed_at >= w.week_start
             AND o.completed_at < w.week_end
+            AND o.buyer_id <> o.seller_id
           GROUP BY o.seller_id
         ), weekly_product_sales AS (
           SELECT o.seller_id, o.listing_id,
@@ -179,6 +185,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
           WHERE o.status = 'COMPLETED'
             AND o.completed_at >= w.week_start
             AND o.completed_at < w.week_end
+            AND o.buyer_id <> o.seller_id
           GROUP BY o.seller_id, o.listing_id
         ), eligible_sellers AS (
           SELECT s.seller_id, u.username, u.display_name,
@@ -317,6 +324,7 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         JOIN marketplace_orders o ON o.id = r.order_id
         LEFT JOIN marketplace_listings l ON l.id = o.listing_id
         WHERE lower(seller.username) = lower($1)
+          AND o.status = 'COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
           AND NOT EXISTS (
             SELECT 1 FROM blocks b
             WHERE (b.blocker_id = $2 AND b.blocked_id = seller.id)
@@ -358,11 +366,13 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
         SELECT r.id,r.rating,r.comment,r.created_at,buyer.username AS reviewer_username,buyer.display_name AS reviewer_display_name
         FROM marketplace_product_reviews r JOIN users buyer ON buyer.id=r.buyer_id
         JOIN marketplace_listings listing ON listing.id=r.listing_id
+        JOIN marketplace_orders o ON o.id=r.order_id
         WHERE r.listing_id=$1
+          AND o.status='COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id
           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$2 AND b.blocked_id=listing.seller_id) OR (b.blocked_id=$2 AND b.blocker_id=listing.seller_id))
         ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4
       `, [listingId, req.user.sub, limit, offset]);
-      const stats = await pool.query('SELECT COUNT(*)::INTEGER AS review_count,COALESCE(AVG(rating),0)::NUMERIC(4,2) AS average_rating FROM marketplace_product_reviews WHERE listing_id=$1', [listingId]);
+      const stats = await pool.query(`SELECT COUNT(*)::INTEGER AS review_count,COALESCE(AVG(r.rating),0)::NUMERIC(4,2) AS average_rating FROM marketplace_product_reviews r JOIN marketplace_orders o ON o.id=r.order_id WHERE r.listing_id=$1 AND o.status='COMPLETED' AND o.completed_at IS NOT NULL AND o.buyer_id <> o.seller_id`, [listingId]);
       return res.json({ reviews: result.rows.map(row => ({ id:String(row.id), rating:Number(row.rating), comment:row.comment || '', createdAt:row.created_at, reviewerUsername:row.reviewer_username, reviewerDisplayName:row.reviewer_display_name || row.reviewer_username })), reviewCount:Number(stats.rows[0]?.review_count || 0), averageRating:Number(stats.rows[0]?.average_rating || 0), limit, offset, hasMore:result.rows.length===limit });
     } catch (error) {
       console.error('marketplace product reviews', error);
@@ -376,11 +386,12 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       const rating = Number(req.body?.rating);
       const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim().slice(0, 1000) : '';
       if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
-      const orderResult = await pool.query('SELECT id,buyer_id,seller_id,listing_id,status FROM marketplace_orders WHERE id=$1', [req.params.id]);
+      const orderResult = await pool.query('SELECT id,buyer_id,seller_id,listing_id,status,completed_at FROM marketplace_orders WHERE id=$1', [req.params.id]);
       const order = orderResult.rows[0];
       if (!order) return res.status(404).json({ error: 'order not found' });
       if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'only the buyer can review this product' });
-      if (order.status !== 'COMPLETED') return res.status(409).json({ error: 'only completed orders can be reviewed' });
+      if (String(order.buyer_id) === String(order.seller_id)) return res.status(409).json({ error: 'sellers cannot review their own purchases' });
+      if (order.status !== 'COMPLETED' || !order.completed_at) return res.status(409).json({ error: 'only completed orders can be reviewed' });
       if (order.listing_id == null) return res.status(409).json({ error: 'this order is not linked to a product listing' });
       const id = crypto.randomUUID();
       const result = await pool.query('INSERT INTO marketplace_product_reviews(id,listing_id,order_id,seller_id,buyer_id,rating,comment) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(order_id,buyer_id) DO NOTHING RETURNING id,rating,comment,created_at', [id, order.listing_id, order.id, order.seller_id, order.buyer_id, rating, comment]);
@@ -398,11 +409,12 @@ export function registerMarketplaceReputationRoutes({ app, pool, auth }) {
       const rating = Number(req.body?.rating);
       const comment = typeof req.body?.comment === 'string' ? req.body.comment.trim().slice(0, 1000) : '';
       if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
-      const orderResult = await pool.query(`SELECT id, buyer_id, seller_id, status FROM marketplace_orders WHERE id = $1`, [req.params.id]);
+      const orderResult = await pool.query(`SELECT id, buyer_id, seller_id, status,completed_at FROM marketplace_orders WHERE id = $1`, [req.params.id]);
       const order = orderResult.rows[0];
       if (!order) return res.status(404).json({ error: 'order not found' });
       if (String(order.buyer_id) !== String(req.user.sub)) return res.status(403).json({ error: 'only the buyer can review this order' });
-      if (order.status !== 'COMPLETED') return res.status(409).json({ error: 'only completed orders can be reviewed' });
+      if (String(order.buyer_id) === String(order.seller_id)) return res.status(409).json({ error: 'sellers cannot review their own purchases' });
+      if (order.status !== 'COMPLETED' || !order.completed_at) return res.status(409).json({ error: 'only completed orders can be reviewed' });
       const id = crypto.randomUUID();
       const result = await pool.query(`INSERT INTO marketplace_seller_reviews (id, order_id, seller_id, buyer_id, rating, comment) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (order_id, buyer_id) DO NOTHING RETURNING id, rating, comment, created_at`, [id, order.id, order.seller_id, order.buyer_id, rating, comment]);
       if (!result.rows[0]) return res.status(409).json({ error: 'this order has already been reviewed' });

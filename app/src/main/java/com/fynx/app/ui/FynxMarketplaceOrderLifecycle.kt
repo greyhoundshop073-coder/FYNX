@@ -36,10 +36,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+
+internal fun marketplaceOrderAllowsProblemReport(status: String): Boolean =
+    status.trim().uppercase(Locale.US) in setOf("PAID", "SHIPPED", "DELIVERED", "INSPECTION", "COMPLETED")
 
 @Composable
 fun FynxMarketplaceOrderLifecycle(
@@ -283,13 +287,21 @@ fun FynxMarketplaceOrderLifecycle(
                         showDispute = false
                         disputeDetails = ""
                         error = null
-                    } else {
+                    } else if (marketplaceOrderAllowsProblemReport(order.status)) {
                         showDispute = true
                         error = null
+                    } else {
+                        onClose()
                     }
                 },
                 enabled = !busy
-            ) { Text(if (showDispute) "Back" else "Report problem") }
+            ) {
+                Text(when {
+                    showDispute -> "Back"
+                    marketplaceOrderAllowsProblemReport(order.status) -> "Report problem"
+                    else -> "Close"
+                })
+            }
         }
     )
 }
