@@ -90,6 +90,9 @@ internal object FynxCampaignArtworkMedia {
     private fun inspectBytes(bytes: ByteArray, reportedMime: String?): FynxCampaignArtworkInfo {
         require(bytes.isNotEmpty()) { "The selected artwork is empty." }
         val gif = bytes.startsWithAscii("GIF87a") || bytes.startsWithAscii("GIF89a")
+        require(reportedMime?.trim()?.equals("image/gif", ignoreCase = true) != true || gif) {
+            "The selected file is not a valid GIF image."
+        }
         if (gif) {
             require(bytes.size <= MAX_GIF_BYTES) { "Animated GIFs must be 8 MB or smaller to keep Marketplace fast." }
             return inspectGif(bytes)
@@ -219,6 +222,38 @@ internal object FynxCampaignArtworkMedia {
     private fun ByteArray.startsWithBytes(vararg expected: Int): Boolean =
         size >= expected.size && expected.indices.all { (this[it].toInt() and 0xFF) == expected[it] }
 
+    fun isGifFile(file: File): Boolean = runCatching {
+        FileInputStream(file).use { input ->
+            val header = ByteArray(6)
+            input.read(header) == 6 &&
+                (String(header, Charsets.US_ASCII) == "GIF87a" || String(header, Charsets.US_ASCII) == "GIF89a")
+        }
+    }.getOrDefault(false)
+
+    fun decodeGifFile(file: File): Drawable {
+        require(isGifFile(file)) { "The downloaded file is not an animated GIF." }
+        require(file.isFile && file.length() in 1..(12L * 1024L * 1024L)) { "The GIF is too large to display." }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(file)
+            return ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
+                val sourceSize = imageInfo.size
+                val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
+                decoder.setTargetSize(
+                    (sourceSize.width * sample).toInt().coerceAtLeast(1),
+                    (sourceSize.height * sample).toInt().coerceAtLeast(1)
+                )
+            }
+        }
+        val bytes = FileInputStream(file).use(::readBounded)
+        val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
+            ?: throw IllegalArgumentException("This Android version could not decode the GIF.")
+        require(movie.width() in 1..2048 && movie.height() in 1..2048 &&
+            movie.width().toLong() * movie.height().toLong() <= 4_194_304L) {
+            "This GIF is too large to animate safely on this device."
+        }
+        return FynxLegacyGifDrawable(movie)
+    }
+
     fun decodePreview(context: Context, uri: Uri): Drawable {
         val bytes = readBounded(context.contentResolver.openInputStream(uri) ?: error("The selected artwork could not be opened."))
         val info = inspectBytes(bytes, context.contentResolver.getType(uri))
@@ -313,6 +348,7 @@ private class FynxCampaignArtworkImageView(context: Context) : ImageView(context
     android.view.ViewTreeObserver.OnPreDrawListener {
     private var artwork: Drawable? = null
     private var playbackAllowed = true
+    private var preDrawRegistered = false
 
     init {
         scaleType = ScaleType.CENTER_CROP
@@ -327,12 +363,23 @@ private class FynxCampaignArtworkImageView(context: Context) : ImageView(context
         }
         playbackAllowed = allowPlayback
         syncPlayback()
-        if (isAttachedToWindow && viewTreeObserver.isAlive) viewTreeObserver.addOnPreDrawListener(this)
+        updatePreDrawRegistration()
     }
 
     override fun onPreDraw(): Boolean {
         syncPlayback()
         return true
+    }
+
+    private fun updatePreDrawRegistration() {
+        val needsAnimationVisibility = artwork is AnimatedImageDrawable || artwork is FynxLegacyGifDrawable
+        if (isAttachedToWindow && needsAnimationVisibility && !preDrawRegistered && viewTreeObserver.isAlive) {
+            viewTreeObserver.addOnPreDrawListener(this)
+            preDrawRegistered = true
+        } else if ((!needsAnimationVisibility || !isAttachedToWindow) && preDrawRegistered && viewTreeObserver.isAlive) {
+            viewTreeObserver.removeOnPreDrawListener(this)
+            preDrawRegistered = false
+        }
     }
 
     private fun syncPlayback() {
@@ -356,12 +403,13 @@ private class FynxCampaignArtworkImageView(context: Context) : ImageView(context
     }
 
     override fun onViewAttachedToWindow(view: View) {
-        if (viewTreeObserver.isAlive) viewTreeObserver.addOnPreDrawListener(this)
+        updatePreDrawRegistration()
         syncPlayback()
     }
 
     override fun onViewDetachedFromWindow(view: View) {
-        if (viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(this)
+        if (viewTreeObserver.isAlive && preDrawRegistered) viewTreeObserver.removeOnPreDrawListener(this)
+        preDrawRegistered = false
         stopAnimation(artwork)
     }
 
