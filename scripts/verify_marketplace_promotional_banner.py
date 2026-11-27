@@ -18,6 +18,7 @@ PROMOTION_MODELS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePro
 ARTWORK_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMedia.kt").read_text(encoding="utf-8")
 LOCAL_CAMPAIGNS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt").read_text(encoding="utf-8")
 REMOTE_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+GIF_FILE_DECODER = ARTWORK_MEDIA[ARTWORK_MEDIA.index("    fun decodeGifFile(file: File)"):ARTWORK_MEDIA.index("    fun decodePreview(context: Context, uri: Uri)")]
 PRODUCTION_MESSAGING = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
 MEDIA_STORAGE = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
 BACKEND_SERVER = (ROOT / "backend/server.js").read_text(encoding="utf-8")
@@ -137,6 +138,18 @@ checks = [
      "image\\/(jpeg|png|webp|gif)" in MEDIA_STORAGE
      and r"\\(image\\)\\/" in BACKEND_SERVER
      and "image/gif" in BACKEND_SERVER),
+
+    ("cached and downloaded GIFs receive the same full validation before decoding",
+     "val artworkInfo = inspectFile(file)" in GIF_FILE_DECODER
+     and 'artworkInfo.mimeType == "image/gif"' in GIF_FILE_DECODER
+     and "MAX_GIF_BYTES" in ARTWORK_MEDIA
+     and "MAX_GIF_FRAMES" in ARTWORK_MEDIA
+     and "MAX_GIF_DURATION_MS" in ARTWORK_MEDIA),
+    ("Owner/Admin editor explicitly offers animated GIFs for both offline drafts and authenticated publishing",
+     "Choose a photo or animated GIF." in SEASONAL_ADMIN
+     and "private draft" in SEASONAL_ADMIN
+     and "authenticated media service" in SEASONAL_ADMIN),
+
 ]
 
 failed = []
