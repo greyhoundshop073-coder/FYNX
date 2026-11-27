@@ -365,7 +365,6 @@ jobs:
       - name: Run exact Railway npm start preflight and verify local readiness
         env:
           DATABASE_URL: postgresql://fynx_test:fynx_test@localhost:5432/fynx_media_test
-          JWT_SECRET: fynx-ci-only-test-secret-never-used-outside-this-job
           FYNX_MEDIA_STORAGE_PROVIDER: postgres
           NODE_ENV: test
           PORT: "8080"
@@ -383,6 +382,7 @@ jobs:
             rm -f "$LOG_FILE" "$READY_FILE"
           }
           trap cleanup EXIT
+          export JWT_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
           npm start >"$LOG_FILE" 2>&1 &
           SERVER_PID=$!
           for attempt in $(seq 1 120); do
