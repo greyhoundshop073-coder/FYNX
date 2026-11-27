@@ -232,19 +232,26 @@ internal object FynxCampaignArtworkMedia {
         }
     }.getOrDefault(false)
 
+    private fun configureInfiniteGifLoop(drawable: Drawable): Drawable {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            (drawable as? AnimatedImageDrawable)?.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
+        }
+        return drawable
+    }
+
     fun decodeGifFile(file: File): Drawable {
         require(isGifFile(file)) { "The downloaded file is not an animated GIF." }
         require(file.isFile && file.length() in 1..(12L * 1024L * 1024L)) { "The GIF is too large to display." }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val source = ImageDecoder.createSource(file)
-            return ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
+            return configureInfiniteGifLoop(ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
                 val sourceSize = imageInfo.size
                 val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
                 decoder.setTargetSize(
                     (sourceSize.width * sample).toInt().coerceAtLeast(1),
                     (sourceSize.height * sample).toInt().coerceAtLeast(1)
                 )
-            }
+            })
         }
         val bytes = FileInputStream(file).use(::readBounded)
         val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
@@ -262,14 +269,14 @@ internal object FynxCampaignArtworkMedia {
         if (info.mimeType == "image/gif") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val source = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-                return ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
+                return configureInfiniteGifLoop(ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
                     val sourceSize = imageInfo.size
                     val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
                     decoder.setTargetSize(
                         (sourceSize.width * sample).toInt().coerceAtLeast(1),
                         (sourceSize.height * sample).toInt().coerceAtLeast(1)
                     )
-                }
+                })
             }
             val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
                 ?: throw IllegalArgumentException("This Android version could not decode the selected GIF.")
