@@ -1,0 +1,34 @@
+name: FYNX Cloudflare TURN Contract
+
+on:
+  pull_request:
+    branches: [ "integration/fynx-single-apk-20261013" ]
+    paths:
+      - "backend/cloudflareTurnRoutes.js"
+      - "backend/test-cloudflare-turn-routes.mjs"
+      - ".github/workflows/cloudflare-turn-ci.yml"
+  push:
+    branches: [ "integration/fynx-single-apk-20261013" ]
+    paths:
+      - "backend/cloudflareTurnRoutes.js"
+      - "backend/test-cloudflare-turn-routes.mjs"
+      - ".github/workflows/cloudflare-turn-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax-check the TURN route and run isolated contract tests
+        working-directory: backend
+        run: |
+          node --check cloudflareTurnRoutes.js
+          node test-cloudflare-turn-routes.mjs
