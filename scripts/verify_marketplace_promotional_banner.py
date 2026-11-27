@@ -15,6 +15,12 @@ REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf
 FEED_CACHE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")
 MARKETPLACE_RELOAD = PANEL[PANEL.index("    fun reload()"):PANEL.index("    fun loadMoreListings()")]
 PROMOTION_MODELS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionModels.kt").read_text(encoding="utf-8")
+ARTWORK_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMedia.kt").read_text(encoding="utf-8")
+LOCAL_CAMPAIGNS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt").read_text(encoding="utf-8")
+REMOTE_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+PRODUCTION_MESSAGING = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+MEDIA_STORAGE = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
+BACKEND_SERVER = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 
 checks = [
     ("Marketplace home uses the new full-width promotional banner", "MarketplacePromotionalBanner(" in PANEL and "weeklySeller = weeklySeller" in PANEL),
@@ -89,6 +95,48 @@ checks = [
     ("Seller Center retains same-account shop profile details during transient refresh errors", "Previously saved details are still shown" in SELLER_CENTER and "Keep this account's last confirmed shop details visible" in SELLER_CENTER),
 
     ("production calendar celebrations stay enabled while isolated Marketplace fixtures exclude date-driven slides", "includeCalendarCelebrations: Boolean = true" in BANNER and "if (includeCalendarCelebrations) marketplaceCelebrationFor(localDate) else null" in BANNER and PANEL.count("includeCalendarCelebrations = testOnlyListings == null") >= 4 and "includeCalendarCelebrations = false" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceIsolatedScenarioComposeTest.kt").read_text(encoding="utf-8")),
+
+    ("Owner/Admin campaign editor previews the selected local image or GIF without needing a media URL",
+     "FynxCampaignArtworkPreview(artworkUri!!" in SEASONAL_ADMIN
+     and "FynxCampaignArtworkPreview(Uri.parse(localArtworkUri)" in SEASONAL_ADMIN
+     and "FYNX campaign artwork preview" in ARTWORK_MEDIA),
+    ("Offline campaign artwork is copied into app-private storage with GIF files retaining a .gif extension",
+     "FynxCampaignArtworkMedia.inspectUri(appContext, source)" in LOCAL_CAMPAIGNS
+     and '"image/gif" -> "gif"' in LOCAL_CAMPAIGNS
+     and "FynxCampaignArtworkMedia.inspectFile(destination)" in LOCAL_CAMPAIGNS),
+    ("Device-local drafts never enter the shared Marketplace buyer campaign feed",
+     "FynxMarketplaceLocalCampaignStore" not in SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")]
+     and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT),
+    ("Offline drafts are explicitly labelled as drafts rather than locally published campaigns",
+     'Text("Save offline draft"' in SEASONAL_ADMIN
+     and 'saveOfflineDraft -> "Save offline draft"' in SEASONAL_ADMIN
+     and '"OFFLINE DRAFT · THIS DEVICE"' in SEASONAL_ADMIN
+     and "Offline test mode" not in SEASONAL_ADMIN
+     and "Publish on this phone" not in SEASONAL_ADMIN),
+    ("Synthetic sample campaigns are no longer seeded or shown to Marketplace buyers",
+     "ensureSampleCampaign" not in LOCAL_CAMPAIGNS
+     and 'if (id == "local-sample-fynx-marketplace") continue' in LOCAL_CAMPAIGNS),
+    ("Campaign GIF uploads are validated and original GIF bytes are preserved by the shared uploader",
+     "FynxCampaignArtworkMedia.inspectUri(context, uri)" in SEASONAL_CLIENT
+     and 'detectedMimeType == "image/gif"' in PRODUCTION_MESSAGING
+     and "readMediaBytes(context, uri) to detectedMimeType" in PRODUCTION_MESSAGING),
+    ("GIF validation limits file bytes, dimensions, animation frames and duration",
+     "MAX_GIF_BYTES = 8 * 1024 * 1024" in ARTWORK_MEDIA
+     and "MAX_GIF_DIMENSION = 1600" in ARTWORK_MEDIA
+     and "MAX_GIF_FRAMES = 60" in ARTWORK_MEDIA
+     and "MAX_GIF_DURATION_MS = 15_000L" in ARTWORK_MEDIA),
+    ("The remote media renderer detects cached GIFs from file signatures, not only HTTP headers",
+     "FynxCampaignArtworkMedia.isGifFile(target)" in REMOTE_MEDIA
+     and "fun isGifFile(file: File)" in ARTWORK_MEDIA),
+    ("GIF animation uses lifecycle and visible-viewport gating with Android 8 fallback decoding",
+     "FynxCampaignArtworkImageView(ctx)" in REMOTE_MEDIA
+     and "getGlobalVisibleRect(rect)" in ARTWORK_MEDIA
+     and "Movie.decodeByteArray" in ARTWORK_MEDIA
+     and "AnimatedImageDrawable" in ARTWORK_MEDIA),
+    ("Backend signed upload path already accepts image/gif without a new campaign-specific backend dependency",
+     "image\\/(jpeg|png|webp|gif)" in MEDIA_STORAGE
+     and r"\\(image\\)\\/" in BACKEND_SERVER
+     and "image/gif" in BACKEND_SERVER),
 ]
 
 failed = []
