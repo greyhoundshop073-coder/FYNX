@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { assessFynxBackendReadiness } from "./deploymentReadiness.js";
 
 const bootstrap = await readFile(new URL("./serverBootstrap.js", import.meta.url), "utf8");
 const server = await readFile(new URL("./server.js", import.meta.url), "utf8");
@@ -9,6 +10,38 @@ const realtimeBootstrap = await readFile(new URL("./realtimeIsolationBootstrap.j
 const adminRoutes = await readFile(new URL("./adminRoutes.js", import.meta.url), "utf8");
 const supportRoutes = await readFile(new URL("./supportRoutes.js", import.meta.url), "utf8");
 const neonFunction = await readFile(new URL("./neon-function.js", import.meta.url), "utf8");
+const readinessConfigured = assessFynxBackendReadiness({
+  databaseStatus: "ready",
+  jwtSecretConfigured: true,
+  mediaStorageConfigured: true,
+  mediaStorageProvider: "neon"
+});
+assert.deepEqual(readinessConfigured, {
+  ready: true,
+  checks: {
+    database: "ready",
+    authentication: "ready",
+    mediaStorage: "ready",
+    mediaStorageProvider: "neon"
+  }
+}, "all required backend dependencies must pass readiness");
+
+for (const failedDependency of [
+  { databaseStatus: "unavailable", jwtSecretConfigured: true, mediaStorageConfigured: true },
+  { databaseStatus: "not-configured", jwtSecretConfigured: true, mediaStorageConfigured: true },
+  { databaseStatus: "ready", jwtSecretConfigured: false, mediaStorageConfigured: true },
+  { databaseStatus: "ready", jwtSecretConfigured: true, mediaStorageConfigured: false }
+]) {
+  assert.equal(assessFynxBackendReadiness(failedDependency).ready, false,
+    "a missing or unavailable core dependency must fail readiness");
+}
+assert.equal(assessFynxBackendReadiness({
+  databaseStatus: "ready",
+  jwtSecretConfigured: true,
+  mediaStorageConfigured: true,
+  mediaStorageProvider: "unexpected"
+}).checks.mediaStorageProvider, "unknown", "unknown provider labels must not be echoed into readiness");
+
 const normalizedServer = server.replace(/\s+/g, " ").toLowerCase();
 assert.ok(!normalizedServer.includes("update users set verified = false;"),
   "backend startup must never reset existing users verification status");
@@ -91,8 +124,6 @@ for (const contract of [
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
   "registerMarketplaceCompletionRoutes({ app, pool, auth })",
-  "registerBuyerWalletRoutes({ app })",
-  "registerBuyerWalletMarketplaceRoutes({ app })",
   'app.post("/api/auth/login"',
   'app.get("/api/me", auth',
   'app.get("/api/statuses", auth',
@@ -104,3 +135,16 @@ assert.match(buyerWallet, /export function registerBuyerWalletRoutes\(\{ app \}\
   "buyer Wallet API module must expose its authenticated route registration function");
 assert.match(buyerWalletMarketplace, /export function registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/,
   "buyer Wallet Marketplace module must expose its authenticated route registration function");
+
+const readyRoute = server.match(/app\.get\(["']\/ready["'][\s\S]*?\n\}\);/);
+assert.ok(readyRoute, "backend must expose a readiness route");
+assert.match(readyRoute[0], /assessFynxBackendReadiness/,
+  "readiness must use the shared dependency assessment");
+assert.match(readyRoute[0], /Boolean\(JWT_SECRET\)/,
+  "readiness must require authentication configuration");
+assert.match(readyRoute[0], /Boolean\(mediaStorage\.isConfigured\)/,
+  "readiness must require the selected media provider's configuration");
+assert.match(readyRoute[0], /readiness\.ready \? 200 : 503/,
+  "missing core dependencies must return HTTP 503");
+assert.doesNotMatch(readyRoute[0], /process\.env\.(?:JWT_SECRET|DATABASE_URL|.*SECRET_ACCESS_KEY)/,
+  "readiness must not expose or read raw secret values in its response route");

@@ -61,6 +61,28 @@ This conflicts with the owner's explicit Stage 3 decision: Railway remains the p
 
 The 11-change Railway patch was committed on 2026-11-26. Railway then returned this explicit account-level error when asked to reconnect the same GitHub repository/branch to trigger a build: “Your trial has expired. Please select a plan to continue using Railway.” The service configuration reports RAILPACK and the repository/root, but it does not expose a source branch in the current service description. The attempted source reconnection to the canonical branch was rejected by Railway because the trial expired. The latest deployment remains FAILED deployment ad50abc2-a52b-40e8-aad1-8d3de1330e08 from 2026-11-03. Its exact log shows Railpack 0.43.0 loading a generated `railpack-plan.json`, then failing at `[railpack] hash used secrets` with `failed to solve: secret FYNX not found`. The GitHub source tree at that exact failed commit (0498632d1b72bea8aac5610a6778b75417b94af9) does not contain `railpack-plan.json`, `backend/railpack-plan.json`, `railway.toml`, `backend/railway.toml`, or `backend/railpack.json`; the plan is therefore not a committed file at those paths. This narrows the failing reference to generated plan/build metadata or Railway-side configuration, but does not identify which one. Do not create a secret named FYNX. No new build/deployment was created. Railway account-plan renewal or upgrade requires the owner's decision; no payment or upgrade was made.
 
+## Backend engineering readiness gate
+
+The canonical backend's previous `/ready` endpoint proved only that PostgreSQL answered `SELECT 1`. It could return HTTP 200 even when `JWT_SECRET` was absent or the selected object-storage provider was structurally misconfigured. The backend now uses a shared, secret-safe readiness assessment:
+
+- **Database:** requires a successful `SELECT 1` from the shared pool.
+- **Authentication:** requires `JWT_SECRET` to be present; the value is never returned.
+- **Media storage:** requires the selected provider's configuration to pass the existing adapter's structural validation. The response reports only the provider name and a status, never credentials or endpoints containing credentials.
+- A missing or unavailable core dependency returns HTTP 503. A ready response returns HTTP 200.
+
+The assessment is exercised from `verify-runtime-bootstrap.mjs`, which is already part of the backend `prestart` chain and Backend CI. It tests the all-green case and independent database, auth and storage failure cases. This prevents Railway from being marked ready when core authenticated media journeys cannot start.
+
+**Boundary:** the storage check validates configuration shape, not live Neon S3 connectivity. After Railway returns, still run a safe test-object upload, read, and delete. Gemini, email and Paystack are intentionally not hard readiness dependencies: they must remain independently fail-closed while the core API is usable.
+
+## Remaining backend engineering preparation
+
+| Gap | Current evidence | Prepared action / acceptance |
+|---|---|---|
+| Deterministic dependency install | No `backend/package-lock.json` exists at the canonical head; the historical Railpack log warned that adding a lockfile improves deterministic installs. | Generate the lockfile with npm against the exact canonical `backend/package.json`, review it, then switch CI to `npm ci`. Do not hand-author or guess transitive package versions. |
+| Runtime version parity | Backend CI explicitly uses Node 20; the historical successful Railway Railpack build selected Node 24.22.1. | Align the CI runtime with the chosen Railway runtime after the pending backend PRs are reconciled; rerun the complete backend matrix on that version. |
+| Cloudflare SFU integration | Railway lists `CLOUDFLARE_SFU_APP_ID` and `CLOUDFLARE_SFU_APP_SECRET`, but the inspected canonical call/realtime modules (`server.js`, `r6gIntegrationRoutes.js`, `realtimeIsolationRuntime.js`, `aiRealtimeRoutes.js`) contain no references to those names or an SFU adapter. | Do not label Cloudflare SFU ready based on variables alone. Identify and implement/test the approved SFU provider adapter and credential contract before advertising server-mediated video relay. Existing signalling must not be mistaken for an SFU. |
+| Provider runtime reachability | Environment variable names exist, but values/connectivity remain unverified. | After deployment, independently probe Neon object storage, Gemini and any selected call provider. Never print secret values. |
+
 ## Safe deployment procedure
 1. Confirm the exact project, environment and service IDs above.
 2. Re-check canonical branch head and inspect the live Railway source settings. Explicitly verify the source branch is `integration/fynx-single-apk-20261013`; the current service description omits branch, so do not infer it from repository/root alone. Stop if source, root directory, builder, start command, health path, port or variable names differ from this record.
@@ -94,10 +116,10 @@ The 11-change Railway patch was committed on 2026-11-26. Railway then returned t
 | Gemini | NAME PRESENT — UNVERIFIED | GEMINI_API_KEY exists by name only |
 | FYNX secret failure | PARTIALLY ISOLATED | Failed main-branch RAILPACK 0.43.0 build; generated plan requests missing secret; source declaration not located |
 | Canonical Railway deployment | CONDITIONAL — BLOCKED | Railway tool reports expired trial; account-plan action requires owner approval |
-| /health and /ready | NOT VERIFIED | No current canonical success to probe |
+| /health and /ready | IMPLEMENTED — RUNTIME NOT VERIFIED | `/ready` now gates on DB reachability, JWT presence and selected media-provider configuration; exact commit CI and Railway runtime still pending |
 | Authenticated APIs | NOT VERIFIED | Requires successful deployment and test account |
-| Backend CI | NOT RUN FOR DOCS-ONLY PR | Workflow triggers on backend/**, scripts/** or its workflow file; this PR changes docs only. The workflow supports manual dispatch, but no dispatch action is available through the connected GitHub tool. |
+| Backend CI | PENDING FOR BACKEND CHANGE | Workflow triggers on backend/**, scripts/** or its workflow file; this PR changes docs only. The workflow supports manual dispatch, but no dispatch action is available through the connected GitHub tool. |
 | PR #597 | CONFLICT IDENTIFIED | Neon Android cutover conflicts with Railway-primary decision |
 
 ## Stage 3 exit criteria
-Stage 3 remains CONDITIONAL — BLOCKED. Immediate blocker: Railway trial expired; source branch selection is also not verified. New log evidence corrects the earlier builder attribution: the failed build was RAILPACK 0.43.0 (not NIXPACKS), and the missing `FYNX` secret is requested during generated-plan secret hashing. A separate Railpack build previously succeeded through `/ready`, but was removed and used `main`. After Railway access is restored, explicitly select the canonical branch, run a fresh RAILPACK build, inspect whether the historical FYNX secret error persists, then verify SUCCESS, /health, /ready, authenticated APIs, database, storage/provider checks and backend CI.
+Stage 3 remains CONDITIONAL — BLOCKED. Engineering readiness has been improved: `/ready` now rejects missing database, authentication or media-provider configuration, with regression cases integrated into the existing prestart/CI verifier. Remaining non-Railway engineering gaps are a generated dependency lockfile, Node 20/24 CI-runtime parity, and a confirmed Cloudflare SFU adapter. Immediate external blocker: Railway trial expired; source branch selection is also not verified. New log evidence corrects the earlier builder attribution: the failed build was RAILPACK 0.43.0 (not NIXPACKS), and the missing `FYNX` secret is requested during generated-plan secret hashing. A separate Railpack build previously succeeded through `/ready`, but was removed and used `main`. After Railway access is restored, explicitly select the canonical branch, run a fresh RAILPACK build, inspect whether the historical FYNX secret error persists, then verify SUCCESS, /health, /ready, authenticated APIs, database, storage/provider checks and backend CI.

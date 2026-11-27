@@ -27,7 +27,6 @@ for (const [pattern, label] of [
   [/export async function dispatchRealtimeConnection/, "realtime connection adapter"],
   [/app\.post\(["']\/api\/auth\/login["']/, "existing login route"],
   [/registerDiscoveryRoutes\(\{ app, pool, auth \}\)/, "Marketplace discovery routes"],
-  [/registerBuyerWalletRoutes\(\{ app \}\)/, "Wallet routes"]
 ]) assert.match(runtime, pattern, `Neon runtime is missing ${label}`);
 
 for (const route of ["/api/social/feed", "/api/social/posts/multi", "fynxHomeCommentsBatch4b"]) {
@@ -49,6 +48,9 @@ for (const [source, pattern, label] of [
   [settlementSource, /startTimer = true/, "timer-free settlement scan"],
   [paymentExpirySource, /export async function expireUnpaidMarketplaceReservations/, "scheduled reservation expiry"],
   [batch2Source, /export async function runMarketplaceBatch2RecoveryOnce/, "scheduled payment recovery"],
+  [scalabilitySource, /registerBuyerWalletRoutes\(\{ app \}\)/, "single Buyer Wallet route owner"],
+  [scalabilitySource, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/, "single Marketplace Wallet route owner"],
+  [functionSource, /await import\("\.\/scalability\.js"\)/, "shared Wallet route registration layer"],
   [scalabilitySource, /FYNX_NEON_FUNCTION/, "request-runtime background timer guard"]
 ]) assert.match(source, pattern, `Neon runtime is missing ${label}`);
 
