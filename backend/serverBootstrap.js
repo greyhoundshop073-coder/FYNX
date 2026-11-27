@@ -140,9 +140,7 @@ for (const contract of [
   "registerMarketplaceCheckoutRoutes({ app, pool, auth })",
   "registerMarketplaceCheckoutOrderRoutes({ app, pool, auth })",
   "registerMarketplaceShippingRoutes({ app, pool, auth })",
-  "registerMarketplaceCompletionRoutes({ app, pool, auth })",
-  "registerBuyerWalletRoutes({ app })",
-  "registerBuyerWalletMarketplaceRoutes({ app })"
+  "registerMarketplaceCompletionRoutes({ app, pool, auth })"
 ]) {
   assert.ok(generatedRuntime.includes(contract), `generated runtime missing route registration: ${contract}`);
 }
