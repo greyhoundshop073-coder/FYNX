@@ -20,7 +20,9 @@ data class FynxMarketplaceSeasonalPromotion(
     val endsAt: String,
     val active: Boolean,
     val destinationType: String = "MARKETPLACE",
-    val destinationValue: String = ""
+    val destinationValue: String = "",
+    val localArtworkUri: String = "",
+    val localOnly: Boolean = false
 )
 
 object FynxMarketplaceSeasonalPromotionClient {
@@ -40,49 +42,63 @@ object FynxMarketplaceSeasonalPromotionClient {
             destinationValue = value.optString("destinationValue").trim()
         )
 
-    suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
-        val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
-        val raw = if (response.isSuccess) {
-            response.getOrThrow()
-        } else {
-            withContext(Dispatchers.IO) {
-                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
-            } ?: return Result.failure(response.exceptionOrNull() ?: IllegalStateException("Seasonal promotion feed is unavailable."))
-        }
-        if (response.isSuccess) {
-            withContext(Dispatchers.IO) {
-                FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", raw)
-            }
-        }
-        return runCatching {
-            val rows = JSONObject(raw).optJSONArray("promotions")
-                ?: throw IllegalStateException("Seasonal promotion response was incomplete.")
-            val now = Instant.now()
-            buildList {
-                for (index in 0 until rows.length()) {
-                    val row = rows.optJSONObject(index) ?: continue
-                    val promotion = parsePromotion(row)
-                    if (isMarketplaceSeasonalPromotionEligible(promotion, now)) add(promotion)
-                }
+    private fun parsePromotions(raw: String): List<FynxMarketplaceSeasonalPromotion> {
+        val rows = JSONObject(raw).optJSONArray("promotions")
+            ?: throw IllegalStateException("Seasonal promotion response was incomplete.")
+        return buildList {
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val promotion = parsePromotion(row)
+                if (promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank()) add(promotion)
             }
         }
     }
 
-    suspend fun listForAdmin(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> =
-        FynxBackendClient.get(context, "/api/admin/marketplace/seasonal-promotions").mapCatching { raw ->
-            val rows = JSONObject(raw).optJSONArray("promotions")
-                ?: throw IllegalStateException("Seasonal campaign list was incomplete.")
-            buildList {
-                for (index in 0 until rows.length()) {
-                    val row = rows.optJSONObject(index) ?: continue
-                    val promotion = parsePromotion(row)
-                    if (promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank()) add(promotion)
+    suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
+        // Publish the device-local preview immediately; a slow/offline backend must not blank the banner.
+        val local = FynxMarketplaceLocalCampaignStore.active(context)
+        val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
+        val cached = if (response.isFailure) {
+            withContext(Dispatchers.IO) {
+                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
+            }
+        } else null
+        val remoteRaw = if (response.isSuccess) {
+            response.getOrThrow().also { raw ->
+                withContext(Dispatchers.IO) {
+                    FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", raw)
                 }
             }
+        } else cached
+        val remote = remoteRaw?.let { raw ->
+            runCatching { parsePromotions(raw) }.getOrDefault(emptyList())
+        }.orEmpty()
+        val now = Instant.now()
+        return Result.success((local + remote).distinctBy { it.id }.filter { isMarketplaceSeasonalPromotionEligible(it, now) })
+    }
+
+    suspend fun listForAdmin(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {
+        val local = withContext(Dispatchers.IO) { FynxMarketplaceLocalCampaignStore.all(context) }
+        val response = FynxBackendClient.get(context, "/api/admin/marketplace/seasonal-promotions")
+        val remote = response.mapCatching(::parsePromotions)
+        return when {
+            remote.isSuccess -> Result.success((local + remote.getOrThrow()).distinctBy { it.id })
+            local.isNotEmpty() -> Result.success(local)
+            else -> Result.failure(response.exceptionOrNull() ?: IllegalStateException("Seasonal campaign list is unavailable."))
         }
+    }
 
     suspend fun uploadArtwork(context: Context, uri: Uri): Result<String> {
-        val mime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
+        val reportedMime = context.contentResolver.getType(uri)?.trim()?.lowercase().orEmpty()
+        val suffix = (uri.lastPathSegment ?: uri.path.orEmpty()).substringAfterLast('.', "").lowercase()
+        val inferredMime = when (suffix) {
+            "webp" -> "image/webp"
+            "png" -> "image/png"
+            "jpg", "jpeg" -> "image/jpeg"
+            "heic", "heif" -> "image/heic"
+            else -> "image/webp"
+        }
+        val mime = reportedMime.takeIf { it.startsWith("image/") && !it.endsWith("/*") } ?: inferredMime
         if (!mime.startsWith("image/")) return Result.failure(IllegalArgumentException("Seasonal artwork must be an image."))
         return FynxProductionMessaging.uploadMedia(context, uri, mime).map { it.id }
     }
@@ -161,16 +177,20 @@ object FynxMarketplaceSeasonalPromotionClient {
         }
     }
 
-    suspend fun setActive(context: Context, id: String, active: Boolean): Result<Unit> =
-        FynxBackendClient.patchJson(
+    suspend fun setActive(context: Context, id: String, active: Boolean): Result<Unit> {
+        if (id.startsWith("local-")) return FynxMarketplaceLocalCampaignStore.setActive(context, id, active)
+        return FynxBackendClient.patchJson(
             context,
             "/api/admin/marketplace/seasonal-promotions/${Uri.encode(id)}",
             JSONObject().put("active", active).toString()
         ).map { Unit }
+    }
 
-    suspend fun delete(context: Context, id: String): Result<Unit> =
-        FynxBackendClient.delete(
+    suspend fun delete(context: Context, id: String): Result<Unit> {
+        if (id.startsWith("local-")) return FynxMarketplaceLocalCampaignStore.delete(context, id)
+        return FynxBackendClient.delete(
             context,
             "/api/admin/marketplace/seasonal-promotions/${Uri.encode(id)}"
         ).map { Unit }
+    }
 }

@@ -30,7 +30,7 @@ checks = [
     ("weekly winner product is fetched from the exact canonical listing before display", "loadExactMarketplaceListing(context, winner.featuredListingId)" in PANEL and "weeklySellerListing = exact" in PANEL),
     ("banner uses a full-width fixed-height photographic slide", "Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp)" in BANNER and "MARKETPLACE_PROMO_BANNER_HEIGHT_DP = 224" in BANNER),
     ("banner uses real FYNX media with a crop fit", "FynxRemoteMedia(" in BANNER and "contentScale = ContentScale.Crop" in BANNER),
-    ("banner rotates automatically on a timer and supports manual horizontal swipes", "MARKETPLACE_PROMO_ROTATION_MS = 6_500L" in BANNER and "LaunchedEffect(slides.map { it.key })" in BANNER and "delay(MARKETPLACE_PROMO_ROTATION_MS)" in BANNER and "animateScrollToItem(next)" in BANNER and "userScrollEnabled = true" in BANNER),
+    ("banner rotates automatically on a timer and supports manual horizontal swipes", "MARKETPLACE_PROMO_ROTATION_MS = 6_500L" in BANNER and "LaunchedEffect(slides.map { it.key }, autoRotate)" in BANNER and "if (autoRotate && slides.size > 1)" in BANNER and "delay(MARKETPLACE_PROMO_ROTATION_MS)" in BANNER and "animateScrollToItem(next)" in BANNER and "userScrollEnabled = true" in BANNER),
     ("banner remains a normal vertical Marketplace feed item while listings load and after loading", 'item(key = "marketplace-loading-hero")' in PANEL and 'item(key = "marketplace-hero")' in PANEL and "loading && listings.isEmpty() -> LazyColumn(" in PANEL and "MarketplacePromotionalBanner(" in PANEL),
     ("empty Marketplace catalogue still displays the promotional banner above its empty state", 'item(key = "marketplace-empty-hero")' in PANEL and 'item(key = "marketplace-empty-state")' in PANEL and 'listings.isEmpty() -> LazyColumn(' in PANEL and "No products yet" in PANEL),
     ("promotional banner does not use sticky or overlay placement over product cards", "stickyHeader" not in PANEL and "absoluteOffset(" not in BANNER and "offset(" not in BANNER and "Column(modifier.fillMaxWidth()" in BANNER),
@@ -87,6 +87,8 @@ checks = [
     ("Seller Center inventory state is scoped to the signed-in seller account", "remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }" in SELLER_CENTER and "LaunchedEffect(sellerAccountKey) { refresh() }" in SELLER_CENTER),
     ("Seller Center keeps previously loaded inventory visible during refresh failures", "Previously loaded listings are shown" in SELLER_CENTER and "if (loading && listings.isEmpty() && archivedListings.isEmpty())" in SELLER_CENTER and "Refreshing your inventory…" in SELLER_CENTER),
     ("Seller Center retains same-account shop profile details during transient refresh errors", "Previously saved details are still shown" in SELLER_CENTER and "Keep this account's last confirmed shop details visible" in SELLER_CENTER),
+
+    ("production calendar celebrations stay enabled while isolated Marketplace fixtures exclude date-driven slides", "includeCalendarCelebrations: Boolean = true" in BANNER and "if (includeCalendarCelebrations) marketplaceCelebrationFor(localDate) else null" in BANNER and PANEL.count("includeCalendarCelebrations = testOnlyListings == null") >= 4 and "includeCalendarCelebrations = false" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceIsolatedScenarioComposeTest.kt").read_text(encoding="utf-8")),
 ]
 
 failed = []

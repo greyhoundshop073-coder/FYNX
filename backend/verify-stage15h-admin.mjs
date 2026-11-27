@@ -4,6 +4,8 @@ const admin=fs.readFileSync(new URL('./adminRoutes.js',import.meta.url),'utf8');
 const scalability=fs.readFileSync(new URL('./scalability.js',import.meta.url),'utf8');
 const trustSafety=fs.readFileSync(new URL('./trustSafety.js',import.meta.url),'utf8');
 const support=fs.readFileSync(new URL('./supportRoutes.js',import.meta.url),'utf8');
+const social=fs.readFileSync(new URL('./socialRoutes.js',import.meta.url),'utf8');
+const musicPanel=fs.readFileSync(new URL('../app/src/main/java/com/fynx/app/ui/FynxMusicAdminPanel.kt',import.meta.url),'utf8');
 const checks=[
  ['admin route module exists and exports registration',admin.includes('export function registerAdminRoutes')],
  ['announcements are server-backed',admin.includes('fynx_announcements')&&admin.includes("/api/announcements")],
@@ -17,6 +19,16 @@ const checks=[
  ['open content reports are protected against duplicate submissions',trustSafety.includes('safety_content_reports_open_duplicate_idx')&&trustSafety.includes("status IN ('OPEN','UNDER_REVIEW')")],
  ['admin content report review is protected and audited',admin.includes('/api/admin/content-reports')&&admin.includes('ensureTrustSafetySchema(routePool)')&&admin.includes('requireAdmin')&&admin.includes('safety_content_moderation_audit')],
  ['content report status transitions reject invalid state changes',admin.includes('allowedNextStatuses')&&admin.includes('INVALID_REPORT_STATUS_TRANSITION')&&admin.includes('CONTENT_REPORT_REVIEW')],
+ ['Music catalogue exposes add, list, activate/restore and remove operations',[
+   "app.post('/api/admin/social/music/catalogue'",
+   "app.get('/api/admin/social/music/catalogue'",
+   "app.patch('/api/admin/social/music/catalogue/:id'",
+   "app.delete('/api/admin/social/music/catalogue/:id'"
+ ].every(route=>social.includes(route))],
+ ['all Music catalogue endpoints are OWNER-only at the backend',social.includes("role !== 'OWNER'")&&(social.match(/role !== 'OWNER'/g)||[]).length>=4],
+ ['Music uploads require the signed-in Owner to own an audio media object',social.includes("String(media.rows[0].owner_id) !== String(req.user.sub)")&&social.includes("startsWith('audio/')")],
+ ['failed Music publication preserves uploaded media and offers a retry',musicPanel.includes("uploadedMediaId = it.id")&&musicPanel.includes("Retry publish")],
+ ['Music activate, hide and remove operations write Admin activity events',social.includes("MUSIC_TRACK_ACTIVATED")&&social.includes("MUSIC_TRACK_HIDDEN")&&social.includes("MUSIC_TRACK_REMOVED")&&social.includes("recordMusicAdminActivity")],
  ['no hardcoded API secret exists',!/sk-[A-Za-z0-9_-]{20,}/.test(admin)],
  ['support routes use the shared bounded PostgreSQL pool',support.includes('getFynxDatabasePool') && support.includes('createAdminAuthMiddleware') && !support.includes('new Pool(')],
  ['support routes enforce session-version authentication',support.includes('createAdminAuthMiddleware') && support.includes('./adminRoutes.js')],

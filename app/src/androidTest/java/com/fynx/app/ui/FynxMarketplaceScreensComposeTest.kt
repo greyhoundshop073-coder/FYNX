@@ -125,11 +125,11 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
+        // Find the featured product by its unique listing identity; campaign and
+        // calendar slides can legitimately appear before it in the carousel.
+        scrollToPromoAction("Shop this product: ${marketplaceListings.first().title}")
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+            .performClick()
         compose.onNodeWithText("Product details").assertIsDisplayed()
         compose.onNodeWithText("Product reviews").performScrollTo().assertIsDisplayed()
         compose.waitUntil(timeoutMillis = 2_000) {
@@ -171,11 +171,11 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}").performClick()
+        // Locate the exact featured listing even when campaign or celebration slides
+        // precede it in the carousel.
+        scrollToPromoAction("Shop this product: ${marketplaceListings.first().title}")
+        compose.onNodeWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
+            .performClick()
         compose.onNodeWithText("Buy now").performScrollTo().performClick()
         compose.onNodeWithText("Delivery").performClick()
         compose.onNodeWithText("Full name").performTextInput("FYNX Test Buyer")
@@ -455,6 +455,27 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
+    }
+
+    private fun scrollToPromoAction(description: String) {
+        // The carousel is a horizontal LazyRow and may not have a vertically
+        // scrollable parent. Drive its LazyList semantics directly instead of
+        // performScrollTo(), which requires a parent scroll container.
+        val carousel = compose.onNodeWithTag("fynx-marketplace-promo-carousel")
+        var found = false
+        for (index in 0 until 32) {
+            val scrolled = runCatching {
+                carousel.performScrollToIndex(index)
+                compose.waitForIdle()
+            }.isSuccess
+            if (!scrolled) break
+            if (compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty()) {
+                found = true
+                break
+            }
+        }
+        assertTrue("Marketplace carousel did not expose '$description' in any slide", found)
+        compose.onNodeWithContentDescription(description).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {

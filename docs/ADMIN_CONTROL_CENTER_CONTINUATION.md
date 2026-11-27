@@ -1,5 +1,7 @@
 # FYNX Owner/Admin Control Center — Continuation Handoff
 
+> **27 November update:** PR #527 was merged into `integration/fynx-single-apk-20261013` on 23 November. Its Control Center foundation is already canonical. The remaining Owner/Admin publishing, seasonal campaign and final verification work continues in PR #582 (`workstream4/admin-trust-support-music-20261123`). The historical PR #527 references below describe the earlier handoff and must not be treated as current branch status.
+
 **Purpose:** This is the durable work order for the next ChatGPT Think session or contributor. Continue the existing implementation until the remaining scope below is implemented and verified. Do not restart, produce a status-only report, or call the work complete merely because a screen or endpoint exists.
 
 ## 1. Where to resume
@@ -104,7 +106,7 @@ Do not say “done” until all applicable items below have evidence on the fina
 - [ ] OWNER, ADMIN, and non-admin authorization behavior tested where credentials/environment allow.
 - [ ] Live backend status is reported truthfully; never convert a skipped probe into a green result.
 - [ ] Final diff reviewed for unrelated changes and preservation of other workstreams.
-- [ ] PR #527 remains open pending the user's merge approval.
+- [ ] PR #527 is already merged; keep PR #582 open and unmerged pending the user's merge approval.
 
 At final handoff, provide only the essential result: grouped work completed, meaningful commit SHAs, PR link, exact CI status, runtime evidence, and any verified blocker. Keep this document updated after each grouped push so the next session can resume from the real latest state.
 
@@ -121,7 +123,7 @@ At final handoff, provide only the essential result: grouped work completed, mea
 
 ## 6. Next action
 
-Continue the remaining runtime/authorization verification for Group 1, then finish Group 2 and Group 3 in order. The account-only report submission path, target-owned appeal rule, and OWNER/ADMIN role resolution have now been inspected. Do not treat static contract checks as runtime proof. Keep PR #527 open and do not merge without the user's approval.
+Continue the remaining runtime/authorization verification for Group 1, then finish Group 2 and Group 3 in order. The account-only report submission path, target-owned appeal rule, and OWNER/ADMIN role resolution have now been inspected. Do not treat static contract checks as runtime proof. Continue on PR #582; keep it open and do not merge without the user's approval.
 
 ## 8. Current continuation update — 12 November 2026
 
@@ -188,3 +190,93 @@ Continue the remaining runtime/authorization verification for Group 1, then fini
 - The same validator is used by announcement creation and editing/rescheduling, and the contract verifier checks these cases are guarded.
 - Commits: `da61e9789a30a77a52ca0d4d4bb6de1862bdc905` (backend), `821b203d510c50d0bc6896c459468007fadef965` (verifier).
 - This is source-level hardening; live schedule execution and media upload still require backend/runtime verification.
+
+
+## 2026-11-23 — publishing section discoverability and emulator evidence
+
+- Existing Owner music catalogue and Marketplace seasonal campaign implementations were reused. No duplicate uploader, catalogue or ad manager was created.
+- Owner now has a dedicated Music Library section; Owner/Admin campaign management is inside Marketplace and clearly separated from seller-sponsored ads.
+- The dashboard safety-action metric includes content moderation decisions; the canonical integration test already exercises the content-report queue and dashboard counts.
+- Added GET-only emulator fixtures that capture Owner Music Library, Owner Marketplace campaigns and Admin Marketplace campaigns, and assert that Admin cannot access the Owner-only Music Library tab.
+- Android CI is scoped to Admin-only runtime evidence on this branch; screenshot files are pulled into the runtime artifact. Chat Final Closure and Chat Group Parity/Layout are also run on this branch.
+- Screenshots and test fixtures do not create real tracks, campaigns, media objects, database rows or production mutations. Live authenticated Owner/Admin backend certification remains separate.
+
+
+## 2026-11-23 — Admin emulator trigger and evidence gate correction
+
+- Root cause: the Admin branch had `FYNX_ADMIN_VISUALS_ONLY=1` and an artifact upload condition, but its PR head was absent from the condition that actually starts the Android emulator/instrumentation step. The build could therefore pass without running the three Admin screenshot tests.
+- Corrected the Android emulator step selection for `workstream4/admin-trust-support-music-20261123`.
+- The emulator runner now treats all three Admin screenshot files as required evidence after a successful instrumentation run. A missing file makes the runtime job fail; a manifest records the exact files only after all three are present.
+- Removed the Admin branch from the push triggers of Chat Final Closure and Chat Group Parity/Layout. Their normal pull-request checks remain unchanged.
+- Extended the Admin contract verifier to guard the emulator trigger, required screenshot collection and absence of unrelated Chat push triggers.
+- The screenshot fixtures remain GET-only. A successful screenshot run proves the real Android UI rendered for synthetic read-only responses; it does not prove live publishing, real media uploads or production OWNER/ADMIN authorization.
+- This is a workflow and evidence-integrity correction only. It does not change login, production data, or other feature implementations.
+
+
+## 2026-11-23 — Emulator prerequisites and pre-existing CI assertion correction
+
+- The first corrected PR run selected the Admin emulator step but skipped the preceding KVM permission step. Added the Admin PR head to that prerequisite so the hardware-accelerated emulator receives the same device permissions as other runtime-certified branches.
+- The Backend CI failure was traced to a stale regex in `scripts/verify_chat_end_to_end.py`: it required `FynxProductionMessaging.sendText(context,` on one line, while the unchanged canonical `ConversationPanel.kt` uses a normal multiline call. The verifier now accepts whitespace/newlines between the opening parenthesis and `context`.
+- No Chat application code or Admin production endpoint was changed for this correction.
+- The Admin contract verifier now checks both the emulator-step selection and the KVM prerequisite selection.
+- Re-run all affected checks on the new final PR head. The previous emulator attempt is not considered screenshot proof unless its artifact contains all three required files and the evidence manifest.
+
+
+## 2026-11-23 — Android screenshot-test compilation correction
+
+- The first emulator run successfully passed the Android build and KVM setup, but Android test compilation failed before tests ran because this Compose test dependency does not expose the imported `assertDoesNotExist` extension.
+- Replaced that unsupported extension with the supported semantics-collection query `onAllNodesWithText(...).fetchSemanticsNodes().isEmpty()`, preserving the runtime assertion that ADMIN cannot see the Owner-only Music Library tab.
+- The Admin contract verifier now requires this negative-visibility assertion so it cannot silently disappear from the instrumentation test.
+- No production Kotlin UI, backend route, or Chat implementation changed in this correction. Re-run the emulator suite before treating screenshot evidence as complete.
+
+
+## Offline Marketplace banner preview — 24 November 2026
+
+PR #582 extends the existing Marketplace campaign manager instead of creating a second advertising system.
+
+- The Admin campaign form defaults to **Offline test mode**. Publishing in this mode copies the selected gallery image into app-private storage, saves the campaign metadata locally, and makes it available to the Marketplace banner on that same device without a backend request.
+- The bundled FYNX sample campaign artwork is a replaceable starting example. Admins can add, edit, pause, activate, replace, and remove local campaigns from the existing campaign manager.
+- The Marketplace screen loads eligible local campaigns before requesting the remote seasonal feed, and an observable local-campaign state flow refreshes the banner as soon as an Admin saves, pauses, activates, or deletes a device-only campaign—even when the Marketplace tab remains in the back stack.
+- The local store is deliberately device-scoped. It does not publish to other phones. Turning Offline test mode off keeps the existing authenticated server publishing flow for campaigns intended for all users.
+- Local uploads are copied out of the temporary Photo Picker URI. Each photo is capped at 12 MB, the store allows up to 20 campaigns and 48 MB of copied artwork, and deletion/replacement removes FYNX-owned local artwork.
+- Existing server campaigns and the backend media route remain supported. The local preview is additive and does not change seller-sponsored ads, weekly seller selection, or the existing promotion API contract.
+
+The Admin visual certification cases remain GET-only and scroll each section's upload controls into view before asserting. A fourth emulator case renders the production Marketplace banner from the bundled local sample campaign, waits for the actual local artwork image to load, and captures that screen. A successful Android runtime run must produce all four real emulator screenshots; a static contract or a green unit-test run is not a substitute for those images.
+
+
+## Offline Admin campaign and screenshot closure
+
+- The Admin Marketplace campaign editor is exercised through its actual Compose fields and local-save button, including a MediaStore-backed image fixture copied into private app storage.
+- The verification checks that the saved campaign appears in the Marketplace promotional banner and remains listed after reopening the editor. The test uses GET-only request fixtures and must not issue a publishing write.
+- Admin Owner Music Library and Owner/Admin campaign screenshots are genuine PixelCopy captures. Instrumentation mirrors them into /sdcard/Download/fynx-admin-test-fixtures before Gradle's test-app cleanup; CI collects that shared directory and still fails closed if any required PNG is absent.
+- Offline role-fixture UI evidence does not certify live API authentication, cross-device campaign delivery, or production publishing. Those require a healthy configured backend and a real authorized Owner/Admin session.
+- Marketplace card interaction instrumentation scrolls the real lazy feed to the Recommended section before tapping the product card, so the card must actually be composed and visible.
+
+
+## 2026-11-26 — Current PR #582 verification and screenshot-manifest correction
+
+This section supersedes the historical PR #527 / November 12 continuation pointers above. Continue on the existing PR #582 branch; do not restart the work or merge it without the user's approval.
+
+- Active PR: [#582 — Owner music and Marketplace campaign publishing](https://github.com/greyhoundshop073-coder/FYNX/pull/582)
+- Branch: `workstream4/admin-trust-support-music-20261123`
+- Verified head before this grouped correction: `afdcfed621fa3a281032abc43479886fa10e4fb9`
+- Canonical base remains `integration/fynx-single-apk-20261013`; this work has not been merged into it.
+- The four required checks on `afdcfed621fa3a281032abc43479886fa10e4fb9` all completed successfully: Android build, Backend validation, Chat Final Closure, and Chat Group Parity/Layout.
+- Android runtime artifact: [run 45704444150](https://github.com/greyhoundshop073-coder/FYNX/actions/runs/45704444150), artifact `15065877120`. It contains 14 actual emulator PixelCopy PNG captures, including Owner Activity, announcement editor/management, Owner Music Library, Owner and Admin Marketplace campaigns, People, Safety, Overview, and the offline Marketplace banner.
+- Offline Owner/Admin UI fixtures and Android instrumentation passed (exit code 0). Fixture requests were GET-only; no real publishing or production mutations were performed.
+- Live backend health was `not-configured`. Live authenticated Owner/Admin authorization, real uploads and cross-device publishing remain NOT CERTIFIED and must not be inferred from screenshots or CI.
+
+### Screenshot manifest defect found by inspecting the actual run artifact
+
+- The first successful artifact contained all 14 required PNG files, but `FYNX-admin-screenshot-evidence.md` had 14 blank bullets.
+- Root cause: the shell runner used `echo "  - `$screenshot`"`. In double quotes, the backticks still perform command substitution, so the shell attempted to execute each PNG filename and wrote an empty list. The screenshot files themselves were present and valid; the manifest-generation line was defective.
+- Corrected the runner to use `printf '  - \`%s\`\\n' "$screenshot"`, which emits literal Markdown backticks and the filename without command substitution.
+- Added a regression assertion to `scripts/verify_admin_control_center_contract.py` requiring the safe `printf` form and rejecting the broken `echo` form.
+- After this grouped correction, rerun all required checks and inspect the new artifact's manifest. Do not call the manifest correction verified until the next artifact actually lists every PNG filename.
+
+### Remaining work in this PR
+
+1. Continue Group 3 verification of the Marketplace campaign and Owner-only Music catalogue APIs, including database-backed authorization and mutation/audit behavior where CI fixtures permit.
+2. Preserve the current distinction between device-local offline campaign previews and server-published campaigns.
+3. Obtain a healthy configured backend and real OWNER, ADMIN and ordinary-user sessions before claiming live publishing/authorization certification.
+4. Keep PR #582 open and unmerged pending the user's approval. The canonical APK branch is unchanged.

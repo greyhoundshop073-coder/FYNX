@@ -1,6 +1,10 @@
 package com.fynx.app.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
@@ -21,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -29,9 +34,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -58,7 +65,8 @@ private data class MarketplacePromoSlide(
     val celebration: Boolean = false,
     val artworkMediaId: String? = null,
     val destinationType: String = "MARKETPLACE",
-    val destinationValue: String = ""
+    val destinationValue: String = "",
+    val localArtworkUri: String = ""
 )
 
 @Composable
@@ -77,7 +85,8 @@ fun MarketplacePromotionalBanner(
     onOpenOrders: () -> Unit,
     onRefresh: () -> Unit,
     autoRotate: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    includeCalendarCelebrations: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -112,7 +121,9 @@ fun MarketplacePromotionalBanner(
             localDate = LocalDate.now(lagosZone)
         }
     }
-    val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
+    val celebration = remember(localDate, includeCalendarCelebrations) {
+        if (includeCalendarCelebrations) marketplaceCelebrationFor(localDate) else null
+    }
     val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, seasonalPromotions, celebration) {
         buildList {
             if (weeklySeller != null) {
@@ -129,7 +140,7 @@ fun MarketplacePromotionalBanner(
                     )
                 )
             }
-            seasonalPromotions.take(4).forEach { promotion ->
+            seasonalPromotions.take(20).forEach { promotion ->
                 add(
                     MarketplacePromoSlide(
                         key = "scheduled-campaign-${promotion.id}",
@@ -146,7 +157,8 @@ fun MarketplacePromotionalBanner(
                         celebration = promotion.promotionType == "SEASONAL",
                         artworkMediaId = promotion.artworkMediaId.takeIf { it.isNotBlank() },
                         destinationType = promotion.destinationType,
-                        destinationValue = promotion.destinationValue
+                        destinationValue = promotion.destinationValue,
+                        localArtworkUri = promotion.localArtworkUri
                     )
                 )
             }
@@ -337,8 +349,9 @@ private fun MarketplacePromotionalSlide(
     ) {
         Box(Modifier.fillMaxSize()) {
             val listing = slide.listing
-            val hasRemoteArtwork = listing?.mediaIds?.isNotEmpty() == true || !slide.artworkMediaId.isNullOrBlank()
-            val showBrandedFallback = !hasRemoteArtwork && !slide.isWeeklyWinner
+            val hasArtwork = listing?.mediaIds?.isNotEmpty() == true ||
+                !slide.artworkMediaId.isNullOrBlank() || slide.localArtworkUri.isNotBlank()
+            val showBrandedFallback = !hasArtwork && !slide.isWeeklyWinner
             if (listing != null && listing.mediaIds.isNotEmpty()) {
                 val mediaUrl = remember(listing.id, listing.mediaIds.first()) {
                     FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())
@@ -350,6 +363,8 @@ private fun MarketplacePromotionalSlide(
                     contentScale = ContentScale.Crop,
                     rounded = false
                 )
+            } else if (slide.localArtworkUri.isNotBlank()) {
+                MarketplaceLocalCampaignArtwork(slide.localArtworkUri, Modifier.fillMaxSize())
             } else if (!slide.artworkMediaId.isNullOrBlank()) {
                 FynxRemoteMedia(
                     mediaUrl = "/api/media/${slide.artworkMediaId}",
@@ -378,7 +393,7 @@ private fun MarketplacePromotionalSlide(
                     Brush.horizontalGradient(
                         0f to Color(0xFF101D31).copy(alpha = 0.97f),
                         0.52f to Color(0xFF101D31).copy(alpha = 0.82f),
-                        1f to Color(0xFF101D31).copy(alpha = if (hasRemoteArtwork) 0.18f else 0.58f)
+                        1f to Color(0xFF101D31).copy(alpha = if (hasArtwork) 0.18f else 0.58f)
                     )
                 )
             )
@@ -530,4 +545,37 @@ private fun easterSunday(year: Int): LocalDate {
     val month = (h + l - 7 * m + 114) / 31
     val day = ((h + l - 7 * m + 114) % 31) + 1
     return LocalDate.of(year, month, day)
+}
+
+@Composable
+private fun MarketplaceLocalCampaignArtwork(uriValue: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap by produceState<Bitmap?>(initialValue = null, uriValue) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val uri = Uri.parse(uriValue)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+                val largestSide = maxOf(bounds.outWidth, bounds.outHeight)
+                val sample = (largestSide / 1400).coerceAtLeast(1)
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = Integer.highestOneBit(sample)
+                }
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, options)
+                }
+            }.getOrNull()
+        }
+    }
+    bitmap?.let { image ->
+        Image(
+            bitmap = image.asImageBitmap(),
+            contentDescription = "FYNX Marketplace campaign artwork",
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    }
 }

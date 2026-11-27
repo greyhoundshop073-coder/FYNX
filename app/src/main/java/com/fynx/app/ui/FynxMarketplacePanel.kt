@@ -926,6 +926,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
     var weeklySellerListing by remember(currentUsername) { mutableStateOf<FynxRemoteSocialClient.MarketplaceListing?>(null) }
     var sponsoredPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSponsoredPromotion>>(emptyList()) }
     var seasonalPromotions by remember(currentUsername) { mutableStateOf<List<FynxMarketplaceSeasonalPromotion>>(emptyList()) }
+    val localSeasonalCampaigns by FynxMarketplaceLocalCampaignStore.observe(context).collectAsState()
+    LaunchedEffect(localSeasonalCampaigns) {
+        val remoteCampaigns = seasonalPromotions.filterNot { it.localOnly }
+        seasonalPromotions = (localSeasonalCampaigns + remoteCampaigns).distinctBy { it.id }
+    }
     val discoveryHighlightIds = remember(listings) {
         listings.mapIndexedNotNull { index, listing ->
             listing.id.takeIf { marketplaceIsTrendingDiscoveryRank(index + 1, listing.discoveryScore) }
@@ -973,9 +978,11 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reloadSeasonalPromotions() {
         scope.launch {
+            // Make device-local preview campaigns visible immediately, before a backend request can time out.
+            seasonalPromotions = FynxMarketplaceLocalCampaignStore.active(context)
             FynxMarketplaceSeasonalPromotionClient.load(context)
                 .onSuccess { seasonalPromotions = it }
-            // Retain the current schedule on transient failures; fixed-date fallbacks remain available.
+            // The local schedule remains available when the seasonal feed is offline.
         }
     }
 
@@ -1463,6 +1470,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1533,6 +1541,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1598,6 +1607,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1725,6 +1735,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->

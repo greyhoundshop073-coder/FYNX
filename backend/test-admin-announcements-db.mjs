@@ -254,6 +254,37 @@ try {
   const editedRow = await db.query("SELECT title FROM fynx_announcements WHERE id=$1", [imageAnnouncementId]);
   assert.equal(editedRow.rows[0].title, "Announcement with artwork updated");
 
+  // Admin activity search must include actor display names, use stable bounded
+  // pagination, avoid returning unused audit metadata, and never be cacheable.
+  const activityByDisplayName = await invoke("GET", "/api/admin/activity", {
+    token: "admin", query: { q: "Admin Two", limit: 1, offset: 0 }
+  });
+  assert.equal(activityByDisplayName.statusCode, 200);
+  assert.equal(activityByDisplayName.headers["cache-control"], "private, no-store");
+  assert.equal(activityByDisplayName.body.activities.length, 1);
+  assert.equal(activityByDisplayName.body.activities[0].actorDisplayName, "Admin Two",
+    "activity search must match the actor's display name, not only username");
+  assert.equal(activityByDisplayName.body.hasMore, true,
+    "activity search must expose the next page when more matches exist");
+  assert.equal(Object.hasOwn(activityByDisplayName.body.activities[0], "metadata"), false,
+    "the Admin activity UI does not need raw audit metadata; do not disclose it in the response");
+  const activitySecondPage = await invoke("GET", "/api/admin/activity", {
+    token: "admin", query: { q: "Admin Two", limit: 1, offset: 1 }
+  });
+  assert.equal(activitySecondPage.statusCode, 200);
+  assert.equal(activitySecondPage.body.activities.length, 1);
+  assert.notEqual(activitySecondPage.body.activities[0].id, activityByDisplayName.body.activities[0].id,
+    "activity pages must be stable and non-overlapping");
+  const activityByAction = await invoke("GET", "/api/admin/activity", {
+    token: "admin", query: { action: "ANNOUNCEMENT_PUBLISHED", limit: 10, offset: 0 }
+  });
+  assert.equal(activityByAction.statusCode, 200);
+  assert.ok(activityByAction.body.activities.length > 0);
+  assert.ok(activityByAction.body.activities.every(item => item.action === "ANNOUNCEMENT_PUBLISHED"),
+    "activity action filters must return only the selected action");
+  const ordinaryActivity = await invoke("GET", "/api/admin/activity", { token: "regular" });
+  assert.equal(ordinaryActivity.statusCode, 403, "ordinary users must not access the Admin activity audit");
+
   // Force audit failure: the announcement mutation and its audit row must roll back together.
   await db.query(`
     CREATE FUNCTION reject_admin_audit() RETURNS trigger LANGUAGE plpgsql AS $$
