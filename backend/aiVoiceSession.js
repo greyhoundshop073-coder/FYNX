@@ -78,7 +78,6 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
     return {
       type: "realtime",
       model: FYNX_AI_VOICE_MODEL,
-      voice: resolveFynxAiVoice(requestedVoice),
       output_modalities: ["audio"],
       instructions: [
         "You are FYNX's speech output service, not the assistant.",
@@ -88,7 +87,7 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
       tools: [],
       tool_choice: "none",
       audio: {
-        output: { format: { type: "audio/pcm", rate: 24000 } }
+        output: { voice: resolveFynxAiVoice(requestedVoice), format: { type: "audio/pcm", rate: 24000 } }
       }
     };
   }
@@ -96,7 +95,6 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
   return {
     type: "realtime",
     model: FYNX_AI_VOICE_MODEL,
-    voice: FYNX_AI_VOICE,
     output_modalities: ["audio"],
     instructions: FYNX_AI_VOICE_INSTRUCTIONS,
     tools: getFynxAiTools(),
@@ -105,7 +103,8 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
       input: {
         ...inputAudio,
         turn_detection: { type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }
-      }
+      },
+      output: { voice: FYNX_AI_VOICE }
     }
   };
 }

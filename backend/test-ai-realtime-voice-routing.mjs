@@ -20,7 +20,7 @@ assert.equal(resolveFynxAiVoice("not-a-voice"), "marin");
 
 const speech = buildRealtimeSessionConfig("speech", "cedar");
 assert.deepEqual(speech.output_modalities, ["audio"]);
-assert.equal(speech.voice, "cedar");
+assert.equal(speech.audio.output.voice, "cedar");
 assert.deepEqual(speech.tools, []);
 assert.equal(speech.tool_choice, "none");
 assert.equal(speech.audio.output.format.type, "audio/pcm");
@@ -28,6 +28,7 @@ assert.match(speech.instructions, /Only speak the exact text supplied/);
 
 const legacy = buildRealtimeSessionConfig("assistant");
 assert.deepEqual(legacy.output_modalities, ["audio"]);
+assert.equal(legacy.audio.output.voice, "marin");
 assert.ok(legacy.tools.length > 0);
 assert.equal(legacy.tool_choice, "auto");
 assert.throws(() => buildRealtimeSessionConfig("unexpected"), /Unsupported/);
