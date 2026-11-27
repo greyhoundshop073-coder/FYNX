@@ -167,7 +167,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
         artworkUri = null
         artworkMediaId = ""
         localArtworkUri = ""
-        localTestMode = true
+        saveOfflineDraft = true
         startsAt = ""
         endsAt = ""
     }
@@ -315,16 +315,16 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Save offline draft", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (localTestMode) "On: saves the campaign and photo only on this phone. Publishing stays local and does not require a backend upload or publish request."
+                    if (saveOfflineDraft) "On: saves the campaign and photo only on this phone. Publishing stays local and does not require a backend upload or publish request."
                     else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Switch(
-                checked = localTestMode,
+                checked = saveOfflineDraft,
                 onCheckedChange = {
-                    localTestMode = it
+                    saveOfflineDraft = it
                     message = null
                     error = null
                 },
@@ -334,7 +334,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("Campaign artwork (optional)", style = MaterialTheme.typography.labelLarge)
             Text(
-                if (localTestMode) "Choose a photo from your gallery. FYNX copies it into private app storage so it stays available offline and can be replaced or removed later."
+                if (saveOfflineDraft) "Choose a photo from your gallery. FYNX copies it into private app storage so it stays available offline and can be replaced or removed later."
                 else "Choose a photo from your gallery. FYNX uploads it through the authenticated media service for this scheduled campaign.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -440,7 +440,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                 scope.launch {
                     val selectedDestinationType = if (destinationLinkEnabled) destinationType else "NONE"
                     val selectedDestinationValue = if (destinationLinkEnabled) destinationValue else ""
-                    if (localTestMode) {
+                    if (saveOfflineDraft) {
                         var savedArtworkUri = localArtworkUri
                         if (artworkUri != null) {
                             val imported = withContext(Dispatchers.IO) {
@@ -536,7 +536,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             if (saving) CircularProgressIndicator() else Text(
                 when {
                     editingCampaignId != null -> "Save campaign changes"
-                    localTestMode -> "Publish on this phone"
+                    saveOfflineDraft -> "Save offline draft"
                     else -> "Schedule campaign for everyone"
                 }
             )
@@ -545,7 +545,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             TextButton(
                 onClick = {
                     resetEditor()
-                    message = "Campaign editing cancelled."
+                    message = "Campaign draft editing cancelled."
                     error = null
                 },
                 enabled = !saving
@@ -625,7 +625,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                                     editingCampaignId = campaign.id
                                     editingCampaignLocal = campaign.localOnly
                                     editingCampaignActive = campaign.active
-                                    localTestMode = campaign.localOnly
+                                    saveOfflineDraft = campaign.localOnly
                                     localArtworkUri = campaign.localArtworkUri
                                     promotionType = campaign.promotionType
                                     occasionKey = campaign.occasionKey
