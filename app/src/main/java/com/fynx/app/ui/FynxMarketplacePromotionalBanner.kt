@@ -251,11 +251,11 @@ fun MarketplacePromotionalBanner(
             slide.isWeeklyWinner && !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
             slide.listing != null -> onOpenListing(slide.listing)
             !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
-            slide.destinationType == "PRODUCT" && slide.destinationValue.isNotBlank() ->
+            slide.destinationType == "PRODUCT" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
                 onOpenProduct(slide.destinationValue)
-            slide.destinationType == "CATEGORY" && slide.destinationValue.isNotBlank() ->
+            slide.destinationType == "CATEGORY" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
                 onOpenCategory(slide.destinationValue)
-            slide.destinationType == "SHOP" && slide.destinationValue.isNotBlank() ->
+            slide.destinationType == "SHOP" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
                 onOpenSeller(slide.destinationValue)
             slide.destinationType == "MARKETPLACE" &&
                 isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) -> onShopNow()
