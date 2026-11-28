@@ -105,6 +105,8 @@ jobs:
         run: |
           gcloud auth list --filter=status:ACTIVE --format="value(account)"
           gcloud config get-value project
+      - name: Verify repair workflows use reviewed canonical-branch PRs
+        run: python3 scripts/verify_safe_repair_workflows.py
       - name: Verify FYNX network transport architecture
         run: |
           echo "Running FYNX network certification on ${GITHUB_SHA}"
