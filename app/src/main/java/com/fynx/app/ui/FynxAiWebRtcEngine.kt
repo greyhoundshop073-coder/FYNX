@@ -23,6 +23,7 @@ import org.webrtc.RtpTransceiver
 import org.webrtc.SessionDescription
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** WebRTC transport for FYNX AI realtime voice. The provider credential remains server-side. */
 class FynxAiWebRtcEngine(
@@ -47,7 +48,7 @@ class FynxAiWebRtcEngine(
     private val realtimeToolCallCount = AtomicInteger(0)
     private val maxRealtimeToolCalls = 8
     private var state: State = State.IDLE
-    @Volatile private var remoteSessionActive: Boolean = false
+    private val remoteSessionActive = AtomicBoolean(false)
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
@@ -121,7 +122,7 @@ class FynxAiWebRtcEngine(
             val localSdp = connection.localDescription?.description
                 ?: error("FYNX AI local SDP is unavailable")
             val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp, sessionMode, speechVoice).getOrThrow()
-            remoteSessionActive = true
+            remoteSessionActive.set(true)
             require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
             connection.setRemoteDescriptionAwait(
                 SessionDescription(SessionDescription.Type.ANSWER, answerSdp)
@@ -151,8 +152,7 @@ class FynxAiWebRtcEngine(
     }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
-        val shouldEndRemoteSession = remoteSessionActive
-        remoteSessionActive = false
+        val shouldEndRemoteSession = remoteSessionActive.getAndSet(false)
         if (shouldEndRemoteSession) {
             // Local media is torn down immediately; the authenticated backend
             // then hangs up the provider call and finalizes usage off the UI thread.
