@@ -23,6 +23,7 @@ import org.webrtc.RtpTransceiver
 import org.webrtc.SessionDescription
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** WebRTC transport for FYNX AI realtime voice. The provider credential remains server-side. */
 class FynxAiWebRtcEngine(
@@ -47,16 +48,35 @@ class FynxAiWebRtcEngine(
     private val realtimeToolCallCount = AtomicInteger(0)
     private val maxRealtimeToolCalls = 8
     private var state: State = State.IDLE
+    private val remoteSessionActive = AtomicBoolean(false)
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
-    init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
+    init {
+        initializeWebRtcRuntime(appContext)
+        factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
+    }
+
+    private companion object {
+        @Volatile private var webRtcRuntimeInitialized = false
+
+        @Synchronized
+        private fun initializeWebRtcRuntime(context: Context) {
+            if (webRtcRuntimeInitialized) return
+            PeerConnectionFactory.initialize(
+                PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
+            )
+            webRtcRuntimeInitialized = true
+        }
+    }
     suspend fun connect(
         onStateChanged: (State, String?) -> Unit = { _, _ -> },
         onEvent: (String) -> Unit = {},
         onToolResult: (String, String) -> Unit = { _, _ -> },
         receiveOnly: Boolean = false,
-        createInitialResponse: Boolean = true
+        createInitialResponse: Boolean = true,
+        sessionMode: String = "assistant",
+        speechVoice: String = "marin"
     ): Result<Unit> {
         return try {
             require(state != State.CONNECTING && state != State.CONNECTED) { "FYNX AI voice is already connected" }
@@ -101,7 +121,8 @@ class FynxAiWebRtcEngine(
 
             val localSdp = connection.localDescription?.description
                 ?: error("FYNX AI local SDP is unavailable")
-            val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp).getOrThrow()
+            val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp, sessionMode, speechVoice).getOrThrow()
+            remoteSessionActive.set(true)
             require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
             connection.setRemoteDescriptionAwait(
                 SessionDescription(SessionDescription.Type.ANSWER, answerSdp)
@@ -131,8 +152,18 @@ class FynxAiWebRtcEngine(
     }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
+        val shouldEndRemoteSession = remoteSessionActive.getAndSet(false)
+        if (shouldEndRemoteSession) {
+            // Local media is torn down immediately; the authenticated backend
+            // then hangs up the provider call and finalizes usage off the UI thread.
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                FynxAiVoiceSession.endSession(appContext)
+            }
+        }
         localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolJob.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
     }
+    /** Release the native factory when this composable permanently leaves the screen. */
+    fun dispose() { close(); factory.dispose() }
     private suspend fun createOffer(connection: PeerConnection): SessionDescription = CompletableDeferred<SessionDescription>().also { deferred -> connection.createOffer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { deferred.complete(description) }; override fun onCreateFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, MediaConstraints()) }.awaitWithTimeout()
     private suspend fun awaitLocalDescription() { localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared") }
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) { localDescriptionReady = CompletableDeferred(); setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { localDescriptionReady?.complete(description.description) }; override fun onSetFailure(error: String) { localDescriptionReady?.completeExceptionally(IllegalStateException(error)) } }, description) }
