@@ -98,7 +98,9 @@ assert.ok(calls.some(call => call[0] === "sideband" && call[1] === "rtc_route123
 const ended = responseRecorder();
 await hangupRoute({ headers, body: {} }, ended);
 assert.equal(ended.statusCode, 200);
-assert.deepEqual(ended.payload, { ok: true, active: true, alreadyEnded: false });
+assert.deepEqual(ended.payload, {
+  ok: true, active: true, alreadyEnded: false, usageFinalizationPending: false
+});
 assert.ok(calls.some(call => call[0] === "hangup" && call[1] === "rtc_route12345"));
 assert.deepEqual(monitorEvents, ["completed"]);
 
