@@ -44,6 +44,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
+    var directCallIsInitiator by remember { mutableStateOf(initialIncomingCallId == null && initialOutgoing) }
+    var relaySetupComplete by remember { mutableStateOf(false) }
+    var relayRefreshSeconds by remember { mutableLongStateOf(0L) }
     var session by remember {
         mutableStateOf<FynxCallSession?>(
             initialIncomingCallId?.let { callId ->
@@ -136,6 +139,28 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
     mediaEngineForCleanup[0] = mediaEngine
 
+    suspend fun configureCallRelay(callId: String, restartOfferOwner: Boolean): Long {
+        val configuration = FynxCallIceServerProvider.fetch(context, callId).getOrNull()
+        if (session?.id != callId) return 0L
+        return if (configuration != null) {
+            mediaEngine.updateIceServers(configuration.servers, restartOfferOwner)
+            configuration.refreshAfterSeconds
+        } else {
+            errorMessage = "Call relay is not available yet. FYNX is trying a direct connection and will retry."
+            120L
+        }
+    }
+
+    fun beginCallRelaySetup(callId: String, restartOfferOwner: Boolean, onReady: (() -> Unit)? = null) {
+        scope.launch {
+            val refreshAfter = configureCallRelay(callId, restartOfferOwner)
+            if (session?.id != callId || refreshAfter <= 0L) return@launch
+            relayRefreshSeconds = refreshAfter
+            relaySetupComplete = true
+            onReady?.invoke()
+        }
+    }
+
     realtimeClient = remember {
         FynxRealtimeClient(
             context = context,
@@ -147,6 +172,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         "invite" -> if (!initialOutgoing && session == null) {
                             val incomingName = event.fromUsername?.removePrefix("@").orEmpty().ifBlank { event.fromUserId }
                             video = event.callType.equals("video", true)
+                            directCallIsInitiator = false
+                            relaySetupComplete = false
+                            relayRefreshSeconds = 0L
                             targetUserId = event.fromUserId
                             targetUsername = incomingName
                             targetAvatarUsername = event.fromUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
@@ -160,11 +188,14 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         }
                         "accept" -> if (session?.id == event.callId) {
                             session?.let { current ->
-                            if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                            session = FynxCallsFoundation.start(current)
-                            FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
-                            calls = FynxCallsStore.load(context)
-                            mediaEngine.createOffer()
+                                if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
+                                session = FynxCallsFoundation.start(current)
+                                FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
+                                calls = FynxCallsStore.load(context)
+                                // Wait for short-lived TURN credentials before the first offer.
+                                beginCallRelaySetup(current.id, restartOfferOwner = true) {
+                                    if (session?.id == current.id) mediaEngine.createOffer()
+                                }
                             }
                         }
                         "offer" -> if (session?.id == event.callId && !event.sdp.isNullOrBlank()) {
@@ -235,6 +266,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                     failCallSignaling(current.id)
                     return@rememberLauncherForActivityResult
                 }
+                // The server marks the call active on acceptance; now it can issue TURN credentials.
+                beginCallRelaySetup(current.id, restartOfferOwner = false)
                 session = current.copy(state = FynxCallState.CONNECTING)
                 FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                 calls = FynxCallsStore.load(context)
@@ -268,6 +301,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             return
         }
         mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false
+        directCallIsInitiator = true
+        relaySetupComplete = false
+        relayRefreshSeconds = 0L
         video = isVideo; activeCall = username; targetUsername = username; targetAvatarUsername = username; errorMessage = null
         scope.launch {
             val resolvedId = resolveUser(username)
@@ -317,6 +353,25 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         }
     }
 
+    LaunchedEffect(session?.id, relaySetupComplete) {
+        val activeId = session?.id ?: return@LaunchedEffect
+        if (!relaySetupComplete || relayRefreshSeconds <= 0L) return@LaunchedEffect
+        var refreshAfter = relayRefreshSeconds
+        while (session?.id == activeId && relaySetupComplete) {
+            delay(refreshAfter.coerceIn(60L, 86_400L) * 1_000L)
+            val refreshResult = FynxCallIceServerProvider.fetch(context, activeId).getOrNull()
+            if (session?.id != activeId) return@LaunchedEffect
+            if (refreshResult != null) {
+                mediaEngine.updateIceServers(refreshResult.servers, restartOfferOwner = directCallIsInitiator)
+                refreshAfter = refreshResult.refreshAfterSeconds
+            } else {
+                errorMessage = "Call relay refresh failed. The current connection will be kept and FYNX will retry."
+                refreshAfter = 120L
+            }
+            relayRefreshSeconds = refreshAfter
+        }
+    }
+
     LaunchedEffect(session?.id, session?.state) {
         val current = session ?: return@LaunchedEffect
         val waitingForAnswer = current.state == FynxCallState.RINGING || current.state == FynxCallState.CONNECTING
@@ -349,6 +404,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         failCallSignaling(current.id)
                         return@FynxActiveCallPanel
                     }
+                    // The server marks the call active on acceptance; now it can issue TURN credentials.
+                    beginCallRelaySetup(current.id, restartOfferOwner = false)
                     session = current.copy(state = FynxCallState.CONNECTING)
                     FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                     calls = FynxCallsStore.load(context)
