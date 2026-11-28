@@ -76,6 +76,8 @@ fun MarketplacePromotionalBanner(
     onShopNow: () -> Unit,
     onOpenOrders: () -> Unit,
     onRefresh: () -> Unit,
+    autoRotate: Boolean = true,
+    includeCalendarCelebrations: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -111,7 +113,9 @@ fun MarketplacePromotionalBanner(
             localDate = LocalDate.now(lagosZone)
         }
     }
-    val celebration = remember(localDate) { marketplaceCelebrationFor(localDate) }
+    val celebration = remember(localDate, includeCalendarCelebrations) {
+        if (includeCalendarCelebrations) marketplaceCelebrationFor(localDate) else null
+    }
     val slides = remember(weeklySeller, weeklySellerListing, featuredListings, sponsoredPromotions, seasonalPromotions, celebration) {
         buildList {
             if (weeklySeller != null) {
@@ -249,9 +253,9 @@ fun MarketplacePromotionalBanner(
         }
     }
 
-    LaunchedEffect(slides.map { it.key }) {
+    LaunchedEffect(slides.map { it.key }, autoRotate) {
         listState.scrollToItem(0)
-        if (slides.size > 1) {
+        if (autoRotate && slides.size > 1) {
             while (isActive) {
                 delay(MARKETPLACE_PROMO_ROTATION_MS)
                 if (listState.isScrollInProgress) continue
