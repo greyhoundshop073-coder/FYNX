@@ -84,3 +84,13 @@ A navigation destination must expose one visible exit affordance for one navigat
 - Status Add Status / creator: the Add Status surface has an X close action and a parent Stories/Status shell header may still be present depending on route state. PR #603 and PR #586 were asked to coordinate the visible active-level header and preserve Android Back.
 
 Do not apply a repository-wide replacement of Close icons with Back arrows: many X icons intentionally remove media, clear a field, cancel a reply, or close a true modal where no Back toolbar exists.
+### Full-screen surfaces converted to Back
+
+These are navigation exits, not content-removal actions, so their X glyphs were replaced with the standard Back arrow while preserving the existing close/dismiss callbacks and Android Back handling:
+- Home Comments full-screen panel: Back arrow in the left header; refresh remains on the right; Android Back still calls the same close callback.
+- Home post-media viewer: Back arrow replaces the viewer X; media paging and all post actions remain unchanged.
+- Home video discovery page and immersive discovery viewer: Back arrow replaces X; the immersive arrow is positioned at the top-left with status-bar inset.
+- Home fullscreen media viewer: Back arrow is positioned at the top-left with the status-bar inset.
+- Other user's profile post viewer: Back arrow replaces the page-dismiss X.
+
+Content-action X controls remain intact (remove media, clear search, cancel reply, remove location/music, etc.). The Chat conversation duplicate exit remains assigned to PR #588, and Status Add Status header coordination remains assigned to PR #603/#586.
