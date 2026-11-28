@@ -34,7 +34,7 @@ const pool = {
       if (row?.mutation_state === "IN_PROGRESS") row.mutation_state = params[1];
       return { rows: [], rowCount: row ? 1 : 0 };
     }
-    if (sql.startsWith("SELECT session_id,call_id,user_id,mutation_state")) {
+    if (sql.trimStart().startsWith("SELECT session_id,call_id,user_id,mutation_state")) {
       const row = sessions.get(params[0]);
       const valid = row && !row.ended_at && row.user_id === String(params[1]) && row.call_id === params[2];
       return { rows: valid ? [{ ...row }] : [], rowCount: valid ? 1 : 0 };
@@ -46,7 +46,7 @@ const pool = {
       else publications.push({ call_id: callId, user_id: String(userId), session_id: sessionId, track_name: trackName, mid, active: true });
       return { rows: [], rowCount: 1 };
     }
-    if (sql.startsWith("SELECT p.session_id,p.track_name")) {
+    if (sql.trimStart().startsWith("SELECT p.session_id,p.track_name")) {
       const [callId, publisherSessionId, subscriberId, trackNames] = params;
       const rows = publications.filter((item) =>
         item.call_id === callId && item.session_id === publisherSessionId &&
