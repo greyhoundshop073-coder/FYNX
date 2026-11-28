@@ -148,29 +148,36 @@ Current canonical baseline evidence:
 - Chat Group Parity run 45786365225 passed on the canonical head.
 - Open PR #597 proposes moving the Android default API endpoint to the existing Neon Function. Its 23 November Android, backend, Chat closure and parity workflows passed, including AI contract/security checks, but PR #597 is still open and those results are not evidence for the current canonical head or this Stage 4 feature branch.
 
-## 6. Railway and live-test status
+## 6. Current backend and live-test status
 
-The Railway workspace exposed to this audit has one service, fynx-backend-testing, rooted at /backend. Its latest deployment is FAILED and dated 3 November 2026. The available environment variable-name inventory includes GEMINI_API_KEY and does not include OPENAI_API_KEY. Secret values were not read or disclosed.
+The active Neon Function for the existing FYNX testing branch was rechecked on 28 November 2026. Function inventory shows `fynxapi`, deployment #3, Node.js 24, status `completed`, created 27 November 2026. Read-only HTTP GET probes against its deployed URL returned:
+- `GET /health`: HTTP 200, `ok: true`, `service: "fynx-backend"`, `database: "ready"`.
+- `GET /ready`: HTTP 200, `ok: true`, `service: "fynx-backend"`, `database: "ready"`.
+
+The deployed Function's non-secret environment-variable-name inventory includes `GEMINI_API_KEY` and `JWT_SECRET`, but does not include `OPENAI_API_KEY`. Secret values were not read or disclosed. The Railway `fynx-backend-testing` service remains failed (last deployment 3 November 2026); it is not the active healthy endpoint used for this probe.
+
+Important distinction: the active Neon Function health check proves the service and database are reachable; it does not prove the Gemini key is valid, the Google project tier/quota is suitable, that the unmerged PR #611 usage-budget code is deployed, or that authenticated AI requests succeed. PR #611 remains open and unmerged. No OpenAI voice test can pass on the current Function until a valid server-side `OPENAI_API_KEY` is configured.
 
 Consequences:
-- Gemini live requests cannot be certified. Presence of GEMINI_API_KEY is not proof that its value is valid, that the Google project has quota, or that the project is on the paid tier.
-- OpenAI Realtime voice cannot be live-tested from the exposed environment until the owner supplies a valid server-side OPENAI_API_KEY.
+- The active backend health blocker is cleared for read-only service/database readiness. The authenticated Gemini/AI journey remains unverified.
+- OpenAI Realtime voice remains externally blocked by the missing server-side `OPENAI_API_KEY`.
+- Confirm the Google project quota, billing/data-handling tier and key validity through a controlled authenticated test before claiming live Gemini certification.
 - No deployment, credential edit, paid service activation, backend migration or infrastructure purchase was performed.
 - No alternative backend or storage system was created.
 
 ## 7. Remaining work and certification gate
 
-1. Run and inspect Backend CI on the exact Stage 4 PR head; fix any failures and rerun.
-2. Confirm the active backend endpoint and healthy deployment with the owner/Stage 2 workstream. Do not overlap or revert PR #597's endpoint work.
-3. Validate Gemini using the existing server-side key only after backend recovery; confirm paid/free project tier and billing alerts.
-4. Set owner-approved daily and monthly usage values in the active existing backend environment. No spend ceiling has been selected by this code change.
+1. Complete exact-head Backend CI, Android build/test/lint and the Chat/Groups regression workflows for the latest PR #611 head.
+2. Verify the deployed Neon Function contains the required Stage 4 backend changes after PR #611 is reviewed and integrated; do not deploy an unmerged feature branch.
+3. Run authenticated Gemini text/image/conversation tests against the healthy Neon Function using an authorized test account; verify the key, quota, selected Google project tier and billing alerts.
+4. Set owner-approved per-user and owner-wide daily/monthly Gemini spending values in the active existing backend environment. No monthly spend ceiling has been selected by this code change.
 5. Add and test OpenAI Realtime call-ID capture, sideband monitoring, usage token aggregation, per-user voice accounting and server-enforced duration/cost controls.
-6. Configure OPENAI_API_KEY only in the existing backend secret store and perform live voice tests after backend recovery.
-7. Re-run the exact canonical Android instrumentation/runtime suite and capture actual application screenshots after the separate smoke-test drawable failure is corrected by its owner.
-8. Run live authenticated journeys for conversation history/media, text/image prompts, writing draft, Marketplace photo review, allowlisted tools, explicit message confirmation and protected-data denial.
-9. Obtain owner acceptance before changing the module to CERTIFIED — CLOSED.
+6. Configure `OPENAI_API_KEY` only in the existing backend secret store, then run live OpenAI transcription and speech tests. Do not expose the key or switch production services as part of this source change.
+7. Re-run the exact canonical Android instrumentation/runtime suite and capture actual application screenshots; confirm portrait crop, voice selection, microphone permission, echo/interrupt, reconnect and hangup.
+8. Run authenticated end-to-end journeys for conversation history/media, text/image prompts, writing draft, Marketplace photo review, allowlisted tools, explicit message confirmation and protected-data denial.
+9. Record the exact integrated canonical commit and APK provenance, then obtain owner acceptance before changing the module to CERTIFIED — CLOSED.
 
-**Final status: CONDITIONAL — BLOCKED.** This stage improves Gemini request governance and records the existing AI/voice design, but full AI and OpenAI voice certification requires a healthy current backend, verified provider credentials/tier, exact-head PR CI, live API/session tests, canonical Android runtime evidence and owner approval.
+**Final status: CONDITIONAL — BLOCKED.** The existing Neon backend is currently healthy and its database readiness is confirmed. Stage 4 is not certified: the Gemini live journey has not been authenticated and tested, OpenAI Realtime lacks a configured server key and usage/session accounting, the latest exact-head CI is still running, and Android runtime/device evidence and owner approval remain outstanding.
 
 ## 8. Grouped voice orchestration implementation on the Stage 4 PR
 
