@@ -181,6 +181,8 @@ jobs:
           node test-ai-realtime-sideband.mjs
           node test-ai-realtime-route-lifecycle.mjs
           node test-fynx-ai-usage-budget.mjs
+      - name: Verify Neon Function packaging includes AI routes and lifecycle modules
+        run: npm run verify:neon
       - name: Run FYNX AI security and extension contracts
         working-directory: .
         run: |
