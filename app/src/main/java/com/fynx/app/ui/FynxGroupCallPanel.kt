@@ -254,12 +254,18 @@ fun FynxGroupCallPanel(
                 offerStartedFor.remove(participant.userId)
                 peerConnected.remove(participant.userId)
             }
-            "group_offer" -> if (mediaTransport == "fallback") {
+            "group_offer" -> {
                 val peerId = event.fromUserId
-                if (peerId.isNotBlank() && !event.sdp.isNullOrBlank()) {
-                    ensurePeerAndNegotiate(peerId, initiateOffer = false)
-                    offerStartedFor.add(peerId)
-                    engine.acceptOfferAndCreateAnswer(peerId, event.sdp)
+                val offerSdp = event.sdp
+                if (peerId.isNotBlank() && !offerSdp.isNullOrBlank()) scope.launch {
+                    val needsSfuCleanup = mediaTransport != "fallback"
+                    mediaTransport = "fallback"
+                    if (needsSfuCleanup) runCatching { sfuMedia.stop() }
+                    if (callId != null && isJoined && !callEnded) {
+                        ensurePeerAndNegotiate(peerId, initiateOffer = false)
+                        offerStartedFor.add(peerId)
+                        engine.acceptOfferAndCreateAnswer(peerId, offerSdp)
+                    }
                 }
             }
             "group_answer" -> if (mediaTransport == "fallback") {
@@ -338,11 +344,11 @@ fun FynxGroupCallPanel(
             return@LaunchedEffect
         }
 
-        if (setup.isSuccess) {
+        if (setup.isSuccess && mediaTransport != "fallback") {
             mediaTransport = "sfu"
             statusText = "Connected through Cloudflare media relay"
             try {
-                while (true) {
+                while (callId == activeCallId && isJoined && !callEnded && mediaTransport == "sfu") {
                     sfuMedia.syncPublications(activeCallId)
                     delay(2_500L)
                 }
@@ -362,7 +368,7 @@ fun FynxGroupCallPanel(
                 }
             }
         } else {
-            sfuMedia.disconnect()
+            if (setup.isSuccess) runCatching { sfuMedia.stop() } else sfuMedia.disconnect()
             mediaTransport = "fallback"
             statusText = "Cloudflare relay unavailable; using direct connections"
             latestParticipants.filterNot { it.userId == latestLocalUserId }.forEach { member ->
