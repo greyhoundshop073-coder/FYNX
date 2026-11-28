@@ -115,14 +115,15 @@ const noActive = responseRecorder();
 await hangupRoute({ headers: { authorization: "Bearer " + jwt.sign({ sub: "99" }, process.env.JWT_SECRET) }, body: {} }, noActive);
 assert.deepEqual(noActive.payload, { ok: true, active: false });
 
-const conflictApp = { post(path, ...callbacks) { this.handler = callbacks.at(-1); } };
+const conflictHandlers = new Map();
+const conflictApp = { post(path, ...callbacks) { conflictHandlers.set(path, callbacks.at(-1)); } };
 registerRealtimeAssistantRoutes({
   app: conflictApp,
   databasePoolProvider: () => ({}),
   reserveUsage: async () => { throw new FynxAiUsageSessionActiveError(); }
 });
 const conflict = responseRecorder();
-await conflictApp.handler({ headers, body: { sdp: "v=0 offer", mode: "transcription" } }, conflict);
+await conflictHandlers.get("/api/assistant/realtime-session")({ headers, body: { sdp: "v=0 offer", mode: "transcription" } }, conflict);
 assert.equal(conflict.statusCode, 409);
 assert.match(conflict.payload.error, /already active/);
 
