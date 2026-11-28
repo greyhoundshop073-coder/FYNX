@@ -114,7 +114,6 @@ class FynxAdminPublishingSectionsVisualTest {
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
                 .performTextInput("A real Admin form save, stored locally with selected artwork.")
-            capture("FYNX-marketplace-offline-campaign-draft.png")
             compose.onNodeWithTag("fynx-campaign-save-button").performScrollTo().performClick()
 
             compose.waitUntil(timeoutMillis = 10_000) {
@@ -161,6 +160,8 @@ class FynxAdminPublishingSectionsVisualTest {
             }
             compose.onNodeWithText(headline).performScrollTo().assertIsDisplayed()
             compose.onAllNodesWithText("OFFLINE DRAFT · THIS DEVICE")[0].performScrollTo().assertIsDisplayed()
+            // Capture only after the draft has been saved and reloaded by the real editor.
+            capture("FYNX-marketplace-offline-campaign-draft.png")
         } finally {
             FynxMarketplaceLocalCampaignStore.all(compose.activity)
                 .filter { it.occasionKey == occasionKey }
