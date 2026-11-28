@@ -4,7 +4,9 @@ import {
   createRealtimeCall, hangupFynxRealtimeCall, isValidRealtimeSessionMode,
   FYNX_AI_REALTIME_VOICES, FYNX_AI_VOICE_MODEL
 } from "./aiVoiceSession.js";
-import { connectFynxRealtimeSideband } from "./aiRealtimeSideband.js";
+import {
+  connectFynxRealtimeSideband, isFynxRealtimeUsageModelSupported
+} from "./aiRealtimeSideband.js";
 import { getFynxDatabasePool } from "./databasePool.js";
 import {
   reserveFynxAiUsage, settleFynxAiUsage, attachFynxAiRealtimeCall,
@@ -65,6 +67,9 @@ export function registerRealtimeAssistantRoutes({
     }
     if (!sdp.trim() || sdp.length > MAX_SDP_LENGTH) {
       return res.status(400).json({ error: "valid WebRTC SDP offer is required" });
+    }
+    if (!isFynxRealtimeUsageModelSupported(FYNX_AI_VOICE_MODEL)) {
+      return res.status(503).json({ error: "FYNX realtime voice pricing is not configured for the selected model." });
     }
 
     const databasePool = databasePoolProvider();
