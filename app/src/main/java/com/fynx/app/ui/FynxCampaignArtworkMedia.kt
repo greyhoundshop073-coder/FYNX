@@ -60,6 +60,9 @@ internal object FynxCampaignArtworkMedia {
     private const val MAX_GIF_PIXELS = 2_560_000L
     private const val MAX_GIF_FRAMES = 60
     private const val MAX_GIF_DURATION_MS = 15_000L
+    // Bound total decoded canvas pixels across every frame, not just compressed bytes.
+    // Large, highly-compressed GIFs can otherwise expand into hundreds of MB in memory.
+    private const val MAX_GIF_TOTAL_FRAME_PIXELS = 32_000_000L
     private const val MAX_PREVIEW_DIMENSION = 1440
 
     fun inspectUri(context: Context, uri: Uri): FynxCampaignArtworkInfo {
@@ -140,6 +143,7 @@ internal object FynxCampaignArtworkMedia {
 
         var frames = 0
         var durationMs = 0L
+        var totalCanvasFramePixels = 0L
         var pendingFrameDelayMs = 100L
         while (true) {
             val marker = input.read()
@@ -165,15 +169,28 @@ internal object FynxCampaignArtworkMedia {
                 0x2C -> {
                     val descriptor = ByteArray(9)
                     require(input.readFully(descriptor) == descriptor.size) { "This GIF file is incomplete." }
+                    val left = (descriptor[0].toInt() and 0xFF) or ((descriptor[1].toInt() and 0xFF) shl 8)
+                    val top = (descriptor[2].toInt() and 0xFF) or ((descriptor[3].toInt() and 0xFF) shl 8)
+                    val frameWidth = (descriptor[4].toInt() and 0xFF) or ((descriptor[5].toInt() and 0xFF) shl 8)
+                    val frameHeight = (descriptor[6].toInt() and 0xFF) or ((descriptor[7].toInt() and 0xFF) shl 8)
                     val localPacked = descriptor[8].toInt() and 0xFF
+                    require(frameWidth > 0 && frameHeight > 0 &&
+                        left.toLong() + frameWidth <= width.toLong() &&
+                        top.toLong() + frameHeight <= height.toLong()) {
+                        "The selected GIF contains a frame outside its image canvas."
+                    }
                     if ((localPacked and 0x80) != 0) skipFully(input, 3 * (1 shl ((localPacked and 0x07) + 1)))
                     require(input.read() >= 0) { "This GIF file is incomplete." } // LZW minimum code size
                     skipSubBlocks(input)
                     frames += 1
                     durationMs += pendingFrameDelayMs
+                    totalCanvasFramePixels += width.toLong() * height.toLong()
                     pendingFrameDelayMs = 100L
                     require(frames <= MAX_GIF_FRAMES) { "Animated GIFs can contain up to 60 frames." }
                     require(durationMs <= MAX_GIF_DURATION_MS) { "Animated GIFs can run for up to 15 seconds." }
+                    require(totalCanvasFramePixels <= MAX_GIF_TOTAL_FRAME_PIXELS) {
+                        "This GIF has too many decoded animation pixels. Reduce its dimensions or frame count."
+                    }
                 }
                 else -> throw IllegalArgumentException("The selected GIF file has an invalid frame structure.")
             }
