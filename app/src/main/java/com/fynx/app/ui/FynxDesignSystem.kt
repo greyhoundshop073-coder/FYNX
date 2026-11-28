@@ -180,6 +180,18 @@ internal fun fynxSystemBarIconAppearance(darkMode: Boolean): FynxSystemBarIconAp
         useDarkNavigationBarIcons = !darkMode
     )
 
+internal fun fynxEffectiveDarkMode(
+    appearance: String,
+    systemDarkMode: Boolean,
+    scheduledNightModeActive: Boolean
+): Boolean = when (appearance) {
+    "Light" -> false
+    "Dark", "Charcoal Black", "Black AMOLED" -> true
+    "System" -> systemDarkMode || scheduledNightModeActive
+    else -> systemDarkMode || scheduledNightModeActive
+}
+
+
 private fun Context.findFynxActivity(): Activity? {
     var current: Context? = this
     while (current is ContextWrapper) {
@@ -224,14 +236,7 @@ fun FynxTheme(
     val charcoal = appearance == "Charcoal Black"
     val amoled = appearance == "Black AMOLED"
     val scheduledNight = appearance == "System" && scheduledNightModeActive(context)
-    val effectiveDarkMode = when (appearance) {
-        "Light" -> false
-        "Dark" -> true
-        "Charcoal Black" -> true
-        "Black AMOLED" -> true
-        "System" -> darkMode || scheduledNight
-        else -> darkMode || scheduledNight
-    }
+    val effectiveDarkMode = fynxEffectiveDarkMode(appearance, darkMode, scheduledNight)
     val view = LocalView.current
     val systemBarAppearance = fynxSystemBarIconAppearance(effectiveDarkMode)
     SideEffect {
