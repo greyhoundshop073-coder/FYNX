@@ -58,21 +58,25 @@ object FynxMarketplaceSeasonalPromotionClient {
         // Buyer banners contain only server-published campaigns (or their short-lived cache).
         // Device-local drafts are private to the Admin editor and never leak into the buyer feed.
         val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
-        val cached = if (response.isFailure) {
-            withContext(Dispatchers.IO) {
-                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
-            }
-        } else null
         val remoteRaw = if (response.isSuccess) {
             response.getOrThrow().also { raw ->
                 withContext(Dispatchers.IO) {
                     FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", raw)
                 }
             }
-        } else cached
-        val remote = remoteRaw?.let { raw ->
-            runCatching { parsePromotions(raw) }.getOrDefault(emptyList())
-        }.orEmpty()
+        } else {
+            val cached = withContext(Dispatchers.IO) {
+                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
+            }
+            // A failed refresh with no valid cache must not masquerade as an empty
+            // campaign feed: callers retain the campaigns already on screen.
+            cached ?: return Result.failure(
+                response.exceptionOrNull()
+                    ?: IllegalStateException("Seasonal promotion feed is temporarily unavailable.")
+            )
+        }
+        val remote = runCatching { parsePromotions(remoteRaw) }
+            .getOrElse { return Result.failure(it) }
         val now = Instant.now()
         return Result.success(remote.distinctBy { it.id }.filter { isMarketplaceSeasonalPromotionEligible(it, now) })
     }
