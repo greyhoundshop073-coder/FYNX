@@ -104,6 +104,13 @@ assert.deepEqual(ended.payload, {
 assert.ok(calls.some(call => call[0] === "hangup" && call[1] === "rtc_route12345"));
 assert.deepEqual(monitorEvents, ["completed"]);
 
+const coldInstanceHangup = responseRecorder();
+await hangupRoute({ headers, body: {} }, coldInstanceHangup);
+assert.deepEqual(coldInstanceHangup.payload, {
+  ok: true, active: true, alreadyEnded: false, usageFinalizationPending: true
+});
+assert.ok(!calls.some(call => call[0] === "settle"), "a process without the sideband must not settle a zero-usage record");
+
 const noActive = responseRecorder();
 await hangupRoute({ headers: { authorization: "Bearer " + jwt.sign({ sub: "99" }, process.env.JWT_SECRET) }, body: {} }, noActive);
 assert.deepEqual(noActive.payload, { ok: true, active: false });
@@ -119,4 +126,28 @@ await conflictApp.handler({ headers, body: { sdp: "v=0 offer", mode: "assistant"
 assert.equal(conflict.statusCode, 409);
 assert.match(conflict.payload.error, /already active/);
 
-console.log("FYNX Realtime route lifecycle tests GREEN: reservation before provider setup, authenticated call binding, sideband start, ownership-scoped hangup and active-session protection");
+const failureApp = { post(path, ...callbacks) { this.handlers ||= new Map(); this.handlers.set(path, callbacks.at(-1)); } };
+let failedHangups = 0;
+let failedSettlements = 0;
+registerRealtimeAssistantRoutes({
+  app: failureApp,
+  databasePoolProvider: () => ({}),
+  reserveUsage: async () => reservation,
+  createCall: async () => ({ answer: "v=0 answer", callId: "rtc_failed123" }),
+  attachCall: async () => true,
+  connectSideband: async () => { throw new Error("sideband unavailable"); },
+  hangupCall: async () => { failedHangups += 1; return { ended: true }; },
+  settleUsage: async input => {
+    failedSettlements += 1;
+    assert.equal(input.status, "failed");
+  }
+});
+const failed = responseRecorder();
+await failureApp.handlers.get("/api/assistant/realtime-session")(
+  { headers, body: { sdp: "v=0 offer", mode: "assistant" } }, failed
+);
+assert.equal(failed.statusCode, 502);
+assert.equal(failedHangups, 1, "failed sideband startup must hang up the provider call once");
+assert.equal(failedSettlements, 1, "failed sideband startup must settle its reservation once");
+
+console.log("FYNX Realtime route lifecycle tests GREEN: reservation before provider setup, authenticated call binding, sideband start, same/cold-instance hangup, single cleanup and active-session protection");
