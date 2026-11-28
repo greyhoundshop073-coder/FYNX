@@ -107,6 +107,12 @@ checks = [
      "FynxCampaignArtworkMedia.inspectUri(appContext, source)" in LOCAL_CAMPAIGNS
      and '"image/gif" -> "gif"' in LOCAL_CAMPAIGNS
      and "FynxCampaignArtworkMedia.inspectFile(destination)" in LOCAL_CAMPAIGNS),
+
+    ("Private local campaign drafts and artwork are namespaced to the signed-in FYNX account",
+     "FynxAuthStore.accountStorageKey(context)" in LOCAL_CAMPAIGNS
+     and "MessageDigest.getInstance(\"SHA-256\")" in LOCAL_CAMPAIGNS
+     and "marketplace-campaign-artwork_" in LOCAL_CAMPAIGNS
+     and "privateCampaignDraftsAreIsolatedBetweenSignedInAccounts" in ARTWORK_MEDIA_TEST),
     ("Device-local drafts never enter the shared Marketplace buyer campaign feed",
      "FynxMarketplaceLocalCampaignStore" not in SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")]
      and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT),
