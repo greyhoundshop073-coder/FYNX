@@ -271,5 +271,6 @@ class FynxWebRtcTwoParticipantLoopbackTest {
                 }, description)
             }
         }
+        Unit
     }
 }
