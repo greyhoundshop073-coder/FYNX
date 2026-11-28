@@ -61,16 +61,31 @@ try {
 
   await settleFynxAiUsage({
     reservation, status: "completed", inputTokens: 123, outputTokens: 456,
-    estimatedCostUsd: 0.002, databasePool: pool
+    inputAudioTokens: 11, inputTextTokens: 12, outputAudioTokens: 13, outputTextTokens: 14,
+    inputAudioSeconds: 2.5, estimatedCostUsd: 0.002, databasePool: pool
   });
   const update = pool.calls.find(call => String(call.sql).includes("UPDATE fynx_ai_usage_events"));
-  assert.deepEqual(update.params, [reservation.id, "completed", 123, 456, 0.002]);
+  assert.deepEqual(update.params, [reservation.id, "completed", 123, 456, 11, 12, 13, 14, 2.5, 0.002]);
 
   const summaryPool = fakePool();
   summaryPool.query = async (sql, params) => {
     summaryPool.calls.push({ sql: String(sql), params });
     if (String(sql).includes("monthly_input_tokens")) {
-      return { rows: [{ daily_requests: 5, daily_photo_reviews: 2, monthly_input_tokens: 1200, monthly_output_tokens: 300, monthly_estimated_cost_usd: "0.0125" }] };
+      return { rows: [{
+        daily_requests: 5, daily_photo_reviews: 2, monthly_input_tokens: 1200, monthly_output_tokens: 300,
+        monthly_input_audio_tokens: 90, monthly_input_text_tokens: 40,
+        monthly_output_audio_tokens: 80, monthly_output_text_tokens: 30,
+        monthly_input_audio_seconds: "7.5", monthly_estimated_cost_usd: "0.0125"
+      }] };
+    }
+    if (String(sql).includes("GROUP BY provider,capability,model")) {
+      return { rows: [{
+        provider: "openai", capability: "voice_session", model: "gpt-realtime-2.1",
+        requests: 2, input_tokens: "120", output_tokens: "80",
+        input_audio_tokens: "90", input_text_tokens: "30",
+        output_audio_tokens: "70", output_text_tokens: "10",
+        input_audio_seconds: "7.5", estimated_cost_usd: "0.004"
+      }] };
     }
     return { rows: [] };
   };
@@ -81,6 +96,18 @@ try {
   assert.equal(summary.remainingDailyPhotoReviews, 4);
   assert.equal(summary.monthlyInputTokens, 1200);
   assert.equal(summary.monthlyOutputTokens, 300);
+  assert.equal(summary.monthlyInputAudioTokens, 90);
+  assert.equal(summary.monthlyInputTextTokens, 40);
+  assert.equal(summary.monthlyOutputAudioTokens, 80);
+  assert.equal(summary.monthlyOutputTextTokens, 30);
+  assert.equal(summary.monthlyInputAudioSeconds, 7.5);
+  assert.equal(summary.providerUsage.length, 1);
+  assert.equal(summary.providerUsage[0].provider, "openai");
+  assert.equal(summary.providerUsage[0].capability, "voice_session");
+  assert.equal(summary.providerUsage[0].requests, 2);
+  assert.equal(summary.providerUsage[0].inputAudioTokens, 90);
+  assert.equal(summary.providerUsage[0].outputAudioTokens, 70);
+  assert.equal(summary.providerUsage[0].estimatedCostUsd, 0.004);
   assert.equal(summary.monthlyEstimatedCostUsd, 0.0125);
 
   const dailyLimitPool = fakePool({ dailyRequests: 30 });
