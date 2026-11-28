@@ -316,8 +316,14 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text("Save offline draft", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (saveOfflineDraft) "On: saves the campaign and artwork only on this phone. It remains a private draft and will not appear to shoppers until you publish it online."
-                    else "Off: uses the authenticated publishing service so the campaign can be delivered to other users.",
+                    when {
+                        editingCampaignId != null && !editingCampaignLocal ->
+                            "Published campaigns remain server-managed. Start a new campaign to create a private offline draft with its own artwork."
+                        saveOfflineDraft ->
+                            "On: saves the campaign and artwork only on this phone. It remains a private draft and will not appear to shoppers until you publish it online."
+                        else ->
+                            "Off: uses the authenticated publishing service so the campaign can be delivered to other users."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -329,7 +335,8 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                     message = null
                     error = null
                 },
-                enabled = !saving
+                enabled = !saving && (editingCampaignId == null || editingCampaignLocal),
+                modifier = Modifier.testTag("fynx-campaign-offline-draft-switch")
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -443,6 +450,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                     val selectedDestinationValue = if (destinationLinkEnabled) destinationValue else ""
                     if (saveOfflineDraft) {
                         var savedArtworkUri = localArtworkUri
+                        var newlyImportedArtworkUri: String? = null
                         if (artworkUri != null) {
                             val imported = withContext(Dispatchers.IO) {
                                 FynxMarketplaceLocalCampaignStore.importArtwork(context, artworkUri!!)
@@ -452,6 +460,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                                 saving = false
                                 return@launch
                             }
+                            newlyImportedArtworkUri = savedArtworkUri
                         }
                         val campaignId = if (editingCampaignLocal) {
                             editingCampaignId ?: ("local-" + UUID.randomUUID().toString())
@@ -481,6 +490,9 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
                                 campaigns = FynxMarketplaceLocalCampaignStore.all(context)
                             }
                             .onFailure {
+                                newlyImportedArtworkUri?.let {
+                                    FynxMarketplaceLocalCampaignStore.discardUnattachedArtwork(context, it)
+                                }
                                 error = marketplaceSafeError(it, "The local Marketplace campaign could not be saved.")
                             }
                     } else {

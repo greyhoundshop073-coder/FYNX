@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -145,15 +146,14 @@ class FynxAdminPublishingSectionsVisualTest {
             assertEquals("image/gif", gifInfo.mimeType)
             assertEquals("Two original GIF frames must be preserved in the offline draft", 2, gifInfo.frameCount)
             val decodedGif = FynxCampaignArtworkMedia.decodeGifFile(privateArtwork)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                assertTrue("Android 9+ preview must decode to a real animated drawable", decodedGif is android.graphics.drawable.AnimatedImageDrawable)
+            if (decodedGif is android.graphics.drawable.AnimatedImageDrawable) {
                 assertEquals(
                     "Campaign GIFs must loop continuously while visible",
                     android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE,
-                    (decodedGif as android.graphics.drawable.AnimatedImageDrawable).repeatCount
+                    decodedGif.repeatCount
                 )
             } else {
-                assertTrue("Android 8 preview must retain the animated Movie renderer", decodedGif is FynxLegacyGifDrawable)
+                assertTrue("The compatible animated Movie fallback must remain available", decodedGif is FynxLegacyGifDrawable)
             }
             assertTrue("Local save may make GET refreshes only", methods.all { it.startsWith("GET ") })
             // Device-only drafts must not be mixed into the public buyer campaign feed.
@@ -170,13 +170,69 @@ class FynxAdminPublishingSectionsVisualTest {
             }
             compose.onNodeWithText(headline).performScrollTo().assertIsDisplayed()
             compose.onAllNodesWithText("OFFLINE DRAFT · THIS DEVICE")[0].performScrollTo().assertIsDisplayed()
-            // Capture only after the draft has been saved and reloaded by the real editor.
+            compose.onNodeWithText("Edit").performScrollTo().performClick()
+            compose.onNodeWithText("Saved artwork preview").performScrollTo().assertIsDisplayed()
+            compose.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    compose.onNodeWithContentDescription("FYNX campaign artwork preview").fetchSemanticsNode()
+                    true
+                }.getOrDefault(false)
+            }
+            compose.onNodeWithContentDescription("FYNX campaign artwork preview").performScrollTo().assertIsDisplayed()
+            val reopenedArtwork = FynxCampaignArtworkMedia.decodePreview(compose.activity, Uri.parse(saved.localArtworkUri))
+            assertTrue(
+                "The saved GIF must remain animated after the offline draft is reopened",
+                reopenedArtwork is android.graphics.drawable.AnimatedImageDrawable ||
+                    reopenedArtwork is FynxLegacyGifDrawable
+            )
+            // Capture the actual re-opened local draft and its persisted GIF preview.
             capture("FYNX-marketplace-offline-campaign-draft.png")
         } finally {
             FynxMarketplaceLocalCampaignStore.all(compose.activity)
                 .filter { it.occasionKey == occasionKey }
                 .forEach { FynxMarketplaceLocalCampaignStore.delete(compose.activity, it.id).getOrThrow() }
             resolver.delete(artworkUri, null, null)
+            val restore = authPrefs.edit()
+            if (previousUsername == null) restore.remove("username") else restore.putString("username", previousUsername)
+            restore.apply()
+        }
+    }
+
+    @Test
+    fun publishedCampaignCannotBeSwitchedToOfflineDraftWithoutCopyingItsArtwork() {
+        val authPrefs = compose.activity.getSharedPreferences("fynx_auth", android.content.Context.MODE_PRIVATE)
+        val previousUsername = authPrefs.getString("username", null)
+        authPrefs.edit().putString("username", "fynx-remote-campaign-edit-" + System.currentTimeMillis()).apply()
+        val now = OffsetDateTime.now(ZoneId.of("Africa/Lagos"))
+        val startsAt = now.minusDays(1).withHour(9).withMinute(0).withSecond(0).withNano(0)
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        val endsAt = now.plusDays(3).withHour(18).withMinute(0).withSecond(0).withNano(0)
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        FynxBackendClient.requestExecutorForTests = { _, method, path, _, _ ->
+            assertEquals("The published-campaign editor must remain read-only in this test", "GET", method)
+            if (path == "/api/admin/marketplace/seasonal-promotions") {
+                """{"promotions":[{"id":"server-campaign-42","promotionType":"SEASONAL","occasionKey":"remote-campaign","headline":"Published campaign to edit","body":"Published server campaign","actionLabel":"Shop now","artworkMediaId":"remote-media-42","startsAt":"$startsAt","endsAt":"$endsAt","active":true,"destinationType":"MARKETPLACE","destinationValue":""}]}"""
+            } else {
+                """{}"""
+            }
+        }
+        try {
+            compose.setContent {
+                FynxTheme(accent = FynxAccent.Blue, darkMode = false) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        FynxMarketplaceSeasonalPromotionAdminPanel()
+                    }
+                }
+            }
+            compose.waitUntil(timeoutMillis = 10_000) {
+                compose.onAllNodesWithText("Published campaign to edit").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("Edit").performScrollTo().performClick()
+            compose.onNodeWithTag("fynx-campaign-offline-draft-switch").assertIsNotEnabled()
+            compose.onNodeWithText(
+                "Published campaigns remain server-managed. Start a new campaign to create a private offline draft with its own artwork."
+            ).performScrollTo().assertIsDisplayed()
+        } finally {
             val restore = authPrefs.edit()
             if (previousUsername == null) restore.remove("username") else restore.putString("username", previousUsername)
             restore.apply()

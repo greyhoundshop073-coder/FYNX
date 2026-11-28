@@ -103,10 +103,12 @@ checks = [
      "FynxCampaignArtworkPreview(artworkUri!!" in SEASONAL_ADMIN
      and "FynxCampaignArtworkPreview(Uri.parse(localArtworkUri)" in SEASONAL_ADMIN
      and "FYNX campaign artwork preview" in ARTWORK_MEDIA),
-    ("Offline campaign artwork is copied into app-private storage with GIF files retaining a .gif extension",
+    ("Offline campaign artwork is copied into app-private storage with GIF files retaining a .gif extension and failed unattached copies can be removed",
      "FynxCampaignArtworkMedia.inspectUri(appContext, source)" in LOCAL_CAMPAIGNS
      and '"image/gif" -> "gif"' in LOCAL_CAMPAIGNS
-     and "FynxCampaignArtworkMedia.inspectFile(destination)" in LOCAL_CAMPAIGNS),
+     and "FynxCampaignArtworkMedia.inspectFile(destination)" in LOCAL_CAMPAIGNS
+     and "discardUnattachedArtwork" in LOCAL_CAMPAIGNS
+     and "discardUnattachedArtwork" in SEASONAL_ADMIN),
 
     ("Private local campaign drafts and artwork are namespaced to the signed-in FYNX account",
      "FynxAuthStore.accountStorageKey(context)" in LOCAL_CAMPAIGNS
@@ -118,12 +120,20 @@ checks = [
      and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT
      and "cached ?: return Result.failure(" in SEASONAL_CLIENT
      and "getOrElse { return Result.failure(it) }" in SEASONAL_CLIENT),
+    ("Malformed successful campaign responses cannot poison the last-known-good offline cache",
+     SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")].index("parsePromotions(remoteRaw)") <
+         SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")].index('writeResponse(context, "seasonal_promotions"')
+     and "malformedSuccessfulPromotionResponseDoesNotReplaceLastKnownGoodCache" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceFeedCacheTest.kt").read_text(encoding="utf-8")),
     ("Offline drafts are explicitly labelled as drafts rather than locally published campaigns",
      'Text("Save offline draft"' in SEASONAL_ADMIN
      and 'saveOfflineDraft -> "Save offline draft"' in SEASONAL_ADMIN
      and '"OFFLINE DRAFT · THIS DEVICE"' in SEASONAL_ADMIN
      and "Offline test mode" not in SEASONAL_ADMIN
      and "Publish on this phone" not in SEASONAL_ADMIN),
+    ("Published campaigns cannot be silently copied into artwork-less local drafts",
+     'enabled = !saving && (editingCampaignId == null || editingCampaignLocal)' in SEASONAL_ADMIN
+     and "Published campaigns remain server-managed" in SEASONAL_ADMIN
+     and "publishedCampaignCannotBeSwitchedToOfflineDraftWithoutCopyingItsArtwork" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt").read_text(encoding="utf-8")),
     ("Synthetic sample campaigns are no longer seeded or shown to Marketplace buyers",
      "ensureSampleCampaign" not in LOCAL_CAMPAIGNS
      and 'if (id == "local-sample-fynx-marketplace") continue' in LOCAL_CAMPAIGNS),
@@ -142,23 +152,26 @@ checks = [
     ("The remote media renderer detects cached GIFs from file signatures, not only HTTP headers",
      "FynxCampaignArtworkMedia.isGifFile(target)" in REMOTE_MEDIA
      and "fun isGifFile(file: File)" in ARTWORK_MEDIA),
-    ("GIF animation uses lifecycle and visible-viewport gating with Android 8 fallback decoding",
-     "FynxCampaignArtworkImageView(ctx)" in REMOTE_MEDIA
+    ("GIF animation uses lifecycle and visible-viewport gating while generic remote media respects its requested fit/crop mode",
+     "FynxCampaignArtworkImageView(ctx, gifScaleType)" in REMOTE_MEDIA
+     and "val gifScaleType = if (contentScale == ContentScale.Crop)" in REMOTE_MEDIA
      and "getGlobalVisibleRect(rect)" in ARTWORK_MEDIA
      and "ValueAnimator.areAnimatorsEnabled()" in ARTWORK_MEDIA
      and "Movie.decodeByteArray" in ARTWORK_MEDIA
-     and "AnimatedImageDrawable" in ARTWORK_MEDIA),
+     and "if (fitCenter) minOf(widthScale, heightScale)" in ARTWORK_MEDIA
+     and "remoteGifRendererKeepsFitCenterWhileCampaignArtworkUsesCrop" in ARTWORK_MEDIA_TEST),
     ("Backend signed upload path already accepts image/gif without a new campaign-specific backend dependency",
      "image\\/(jpeg|png|webp|gif)" in MEDIA_STORAGE
      and r"\\(image\\)\\/" in BACKEND_SERVER
      and "image/gif" in BACKEND_SERVER),
 
-    ("cached and downloaded GIFs receive the same full validation before decoding",
+    ("cached and downloaded GIFs receive the same full validation before decoding and keep a compatibility fallback",
      "val artworkInfo = inspectFile(file)" in GIF_FILE_DECODER
      and 'artworkInfo.mimeType == "image/gif"' in GIF_FILE_DECODER
      and "MAX_GIF_BYTES" in ARTWORK_MEDIA
      and "MAX_GIF_FRAMES" in ARTWORK_MEDIA
-     and "MAX_GIF_DURATION_MS" in ARTWORK_MEDIA),
+     and "MAX_GIF_DURATION_MS" in ARTWORK_MEDIA
+     and "Movie.decodeByteArray" in GIF_FILE_DECODER),
     ("Owner/Admin editor explicitly offers animated GIFs for both offline drafts and authenticated publishing",
      "Choose a photo or animated GIF." in SEASONAL_ADMIN
      and "private draft" in SEASONAL_ADMIN

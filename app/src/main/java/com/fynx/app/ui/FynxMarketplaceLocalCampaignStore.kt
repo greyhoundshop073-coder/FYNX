@@ -121,6 +121,11 @@ internal object FynxMarketplaceLocalCampaignStore {
         }
     }
 
+    /** Remove a newly copied artwork file when its draft record could not be committed. */
+    fun discardUnattachedArtwork(context: Context, artworkUri: String) {
+        deleteOwnedArtwork(context.applicationContext, artworkUri)
+    }
+
     fun upsert(context: Context, campaign: FynxMarketplaceSeasonalPromotion): Result<Unit> = runCatching {
         require(campaign.localOnly && campaign.id.startsWith("local-")) {
             "Only device-local campaign drafts can be saved without publishing."

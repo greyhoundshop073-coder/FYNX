@@ -699,9 +699,6 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
             if (activeSection == "Marketplace") {
-            Text("Marketplace banner campaigns", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-            Text("Publish FYNX offers and promotions with a campaign photo and a direct product, shop or category destination. These campaigns are separate from seller-sponsored ads.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
             FynxMarketplaceSeasonalPromotionAdminPanel()
             Spacer(Modifier.height(20.dp))
             Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)

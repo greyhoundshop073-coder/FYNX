@@ -3,11 +3,13 @@ package com.fynx.app.ui
 import android.graphics.Bitmap
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
+import android.widget.ImageView
 import android.net.Uri
 import android.os.Build
 import android.util.Base64
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -34,11 +36,10 @@ class FynxCampaignArtworkMediaTest {
             assertEquals(2, info.height)
 
             val drawable = FynxCampaignArtworkMedia.decodeGifFile(file)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                assertTrue("Android 9+ must retain an animated drawable", drawable is AnimatedImageDrawable)
-            } else {
-                assertTrue("Android 8 must use the Movie fallback", drawable is FynxLegacyGifDrawable)
-            }
+            assertTrue(
+                "Every supported Android version must retain an animated GIF drawable",
+                drawable is AnimatedImageDrawable || drawable is FynxLegacyGifDrawable
+            )
         } finally {
             file.delete()
         }
@@ -71,6 +72,10 @@ class FynxCampaignArtworkMediaTest {
             assertTrue("A static photo preview must remain a bitmap drawable", preview is BitmapDrawable)
             assertEquals(320, preview.intrinsicWidth)
             assertEquals(180, preview.intrinsicHeight)
+            val copiedUri = Uri.fromFile(storedArtwork!!)
+            FynxMarketplaceLocalCampaignStore.discardUnattachedArtwork(context, copiedUri.toString())
+            assertFalse("An unattached artwork copy must be removable after a failed draft save", storedArtwork!!.exists())
+            storedArtwork = null
         } finally {
             bitmap.recycle()
             storedArtwork?.delete()
@@ -81,6 +86,15 @@ class FynxCampaignArtworkMediaTest {
         }
     }
 
+
+    @Test
+    fun remoteGifRendererKeepsFitCenterWhileCampaignArtworkUsesCrop() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val remoteMediaView = FynxCampaignArtworkImageView(context, ImageView.ScaleType.FIT_CENTER)
+        val campaignArtworkView = FynxCampaignArtworkImageView(context)
+        assertEquals(ImageView.ScaleType.FIT_CENTER, remoteMediaView.scaleType)
+        assertEquals(ImageView.ScaleType.CENTER_CROP, campaignArtworkView.scaleType)
+    }
 
     @Test
     fun oversizedDecodedGifFrameBudgetIsRejectedBeforeDecoding() {

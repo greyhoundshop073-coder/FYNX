@@ -236,9 +236,17 @@ fun FynxRemoteMedia(
     when (kind) {
         "gif" -> animatedDrawable?.let { drawable ->
             val imageModifier = if (rounded) modifier.clip(RoundedCornerShape(14.dp)) else modifier
+            val gifScaleType = if (contentScale == ContentScale.Crop) {
+                android.widget.ImageView.ScaleType.CENTER_CROP
+            } else {
+                android.widget.ImageView.ScaleType.FIT_CENTER
+            }
             AndroidView(
-                factory = { ctx -> FynxCampaignArtworkImageView(ctx).apply { showArtwork(drawable, playbackActive && autoPlay) } },
-                update = { view -> view.showArtwork(drawable, playbackActive && autoPlay) },
+                factory = { ctx -> FynxCampaignArtworkImageView(ctx, gifScaleType).apply { showArtwork(drawable, playbackActive && autoPlay) } },
+                update = { view ->
+                    view.scaleType = gifScaleType
+                    view.showArtwork(drawable, playbackActive && autoPlay)
+                },
                 modifier = imageModifier
             )
         }

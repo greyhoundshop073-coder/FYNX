@@ -59,11 +59,7 @@ object FynxMarketplaceSeasonalPromotionClient {
         // Device-local drafts are private to the Admin editor and never leak into the buyer feed.
         val response = FynxBackendClient.get(context, "/api/marketplace/seasonal-feed")
         val remoteRaw = if (response.isSuccess) {
-            response.getOrThrow().also { raw ->
-                withContext(Dispatchers.IO) {
-                    FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", raw)
-                }
-            }
+            response.getOrThrow()
         } else {
             val cached = withContext(Dispatchers.IO) {
                 FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 5L * 60L * 1000L)
@@ -75,8 +71,15 @@ object FynxMarketplaceSeasonalPromotionClient {
                     ?: IllegalStateException("Seasonal promotion feed is temporarily unavailable.")
             )
         }
+        // Parse before cache replacement: a malformed HTTP 200 must not poison
+        // the last-known-good response used by offline buyer-feed recovery.
         val remote = runCatching { parsePromotions(remoteRaw) }
             .getOrElse { return Result.failure(it) }
+        if (response.isSuccess) {
+            withContext(Dispatchers.IO) {
+                FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", remoteRaw)
+            }
+        }
         val now = Instant.now()
         return Result.success(remote.distinctBy { it.id }.filter { isMarketplaceSeasonalPromotionEligible(it, now) })
     }

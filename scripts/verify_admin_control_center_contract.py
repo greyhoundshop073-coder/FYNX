@@ -36,10 +36,12 @@ def require(condition: bool, message: str) -> None:
 require('if (activeSection == "Music Library" && d.role == "OWNER")' in source and
         'add("Music Library")' in source,
         "the Music Library must have a dedicated Owner-only Admin section")
+campaign_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8") if LOCAL_CAMPAIGN_ADMIN.is_file() else ""
 require('if (activeSection == "Marketplace")' in source and
-        "Marketplace banner campaigns" in source and
-        "FynxMarketplaceSeasonalPromotionAdminPanel()" in source,
-        "Marketplace campaign manager must be reachable from the Marketplace section")
+        "FynxMarketplaceSeasonalPromotionAdminPanel()" in source and
+        'Text("Marketplace campaigns"' in campaign_admin_source and
+        "Marketplace banner campaigns" not in source,
+        "Marketplace campaign manager must have one clear title inside the Marketplace section")
 visual_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt"
 require(visual_test.is_file(), "Admin publishing section emulator screenshot tests are missing")
 visual = visual_test.read_text(encoding="utf-8")

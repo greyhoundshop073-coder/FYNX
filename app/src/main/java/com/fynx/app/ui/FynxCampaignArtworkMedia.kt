@@ -259,24 +259,27 @@ internal object FynxCampaignArtworkMedia {
     }
 
     fun decodeGifFile(file: File): Drawable {
-        // Apply the same full signature, byte-size, dimension, frame-count and
-        // total-duration checks to cached/downloaded files as to picker uploads.
-        // This keeps an oversized or malformed remote GIF from bypassing the
-        // Marketplace performance limits simply because it came from the server.
         val artworkInfo = inspectFile(file)
         require(artworkInfo.mimeType == "image/gif") {
             "The downloaded campaign artwork is not a valid GIF."
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val source = ImageDecoder.createSource(file)
-            return configureInfiniteGifLoop(ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
-                val sourceSize = imageInfo.size
-                val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
-                decoder.setTargetSize(
-                    (sourceSize.width * sample).toInt().coerceAtLeast(1),
-                    (sourceSize.height * sample).toInt().coerceAtLeast(1)
-                )
-            })
+            val decoded = try {
+                val source = ImageDecoder.createSource(file)
+                ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
+                    val sourceSize = imageInfo.size
+                    val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
+                    decoder.setTargetSize(
+                        (sourceSize.width * sample).toInt().coerceAtLeast(1),
+                        (sourceSize.height * sample).toInt().coerceAtLeast(1)
+                    )
+                }
+            } catch (_: Exception) {
+                null
+            }
+            if (decoded is AnimatedImageDrawable || (decoded != null && artworkInfo.frameCount <= 1)) {
+                return configureInfiniteGifLoop(decoded)
+            }
         }
         val bytes = FileInputStream(file).use(::readBounded)
         val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
@@ -296,8 +299,14 @@ internal object FynxCampaignArtworkMedia {
                 // Prefer a resolver-backed source for picker URIs. Some Android
                 // ImageDecoder implementations reject animated GIFs supplied as
                 // ByteBuffer even though the same bytes decode from a file/URI.
-                val decoded = runCatching {
-                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                val decoded = try {
+                    val source = if (uri.scheme == "file") {
+                        val file = File(uri.path.orEmpty())
+                        require(file.isFile) { "The saved campaign artwork could not be found." }
+                        ImageDecoder.createSource(file)
+                    } else {
+                        ImageDecoder.createSource(context.contentResolver, uri)
+                    }
                     ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
                         val sourceSize = imageInfo.size
                         val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
@@ -306,8 +315,12 @@ internal object FynxCampaignArtworkMedia {
                             (sourceSize.height * sample).toInt().coerceAtLeast(1)
                         )
                     }
-                }.getOrNull()
-                if (decoded != null) return configureInfiniteGifLoop(decoded)
+                } catch (_: Exception) {
+                    null
+                }
+                if (decoded is AnimatedImageDrawable || (decoded != null && info.frameCount <= 1)) {
+                    return configureInfiniteGifLoop(decoded)
+                }
             }
             // Bounded validation above has already checked dimensions, frame
             // count, duration and aggregate decoded-frame budget. Keep a
@@ -346,7 +359,7 @@ internal object FynxCampaignArtworkMedia {
     }
 }
 
-internal class FynxLegacyGifDrawable(private val movie: Movie) : Drawable(), Runnable {
+internal class FynxLegacyGifDrawable(private val movie: Movie, internal var fitCenter: Boolean = false) : Drawable(), Runnable {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private var playing = false
     private var startedAt = 0L
@@ -354,7 +367,9 @@ internal class FynxLegacyGifDrawable(private val movie: Movie) : Drawable(), Run
     override fun draw(canvas: Canvas) {
         val bounds = bounds
         if (bounds.width() <= 0 || bounds.height() <= 0 || movie.width() <= 0 || movie.height() <= 0) return
-        val scale = maxOf(bounds.width().toFloat() / movie.width(), bounds.height().toFloat() / movie.height())
+        val widthScale = bounds.width().toFloat() / movie.width()
+        val heightScale = bounds.height().toFloat() / movie.height()
+        val scale = if (fitCenter) minOf(widthScale, heightScale) else maxOf(widthScale, heightScale)
         val drawWidth = movie.width() * scale
         val drawHeight = movie.height() * scale
         val save = canvas.save()
@@ -393,14 +408,17 @@ internal class FynxLegacyGifDrawable(private val movie: Movie) : Drawable(), Run
 }
 
 @SuppressLint("AppCompatCustomView") // Internal Compose artwork host; no AppCompat widgets or theme APIs are used.
-internal class FynxCampaignArtworkImageView(context: Context) : ImageView(context), View.OnAttachStateChangeListener,
+internal class FynxCampaignArtworkImageView(
+    context: Context,
+    scaleType: ImageView.ScaleType = ImageView.ScaleType.CENTER_CROP
+) : ImageView(context), View.OnAttachStateChangeListener,
     android.view.ViewTreeObserver.OnPreDrawListener {
     private var artwork: Drawable? = null
     private var playbackAllowed = true
     private var preDrawRegistered = false
 
     init {
-        scaleType = ScaleType.CENTER_CROP
+        this.scaleType = scaleType
         addOnAttachStateChangeListener(this)
     }
 
@@ -411,6 +429,7 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
             setImageDrawable(drawable)
         }
         playbackAllowed = allowPlayback
+        (drawable as? FynxLegacyGifDrawable)?.fitCenter = scaleType == ScaleType.FIT_CENTER
         syncPlayback()
         updatePreDrawRegistration()
     }
