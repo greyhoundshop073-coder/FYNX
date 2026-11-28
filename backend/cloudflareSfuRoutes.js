@@ -202,7 +202,8 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       `SELECT p.session_id,p.track_name FROM fynx_call_sfu_publications p
        JOIN fynx_call_sfu_sessions s ON s.session_id=p.session_id
        WHERE p.call_id=$1 AND p.session_id=$2 AND p.active=TRUE AND s.ended_at IS NULL
-         AND p.user_id<>$3 AND p.track_name=ANY($4::text[])`,
+         AND p.user_id<>$3 AND p.track_name=ANY($4::text[])
+       ORDER BY array_position($4::text[],p.track_name)`,
       [callId, publisherSessionId, String(req.user.sub), trackNames]
     );
     if (publisher.rowCount !== trackNames.length) return res.status(403).json({ error: "requested media publication is not available to this caller" });
@@ -224,7 +225,11 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       }
       const state = needsRenegotiation(result) ? "AWAITING_RENEGOTIATION" : "READY";
       await finishMutation(sessionId, state);
-      return res.json({ ...result, mutationState: state });
+      const tracksWithNames = receivedTracks.map((track, index) => ({
+        ...track,
+        trackName: publisher.rows[index]?.track_name || track.trackName || null
+      }));
+      return res.json({ ...result, tracks: tracksWithNames, mutationState: state });
     } catch (error) {
       await finishMutation(sessionId, "RECOVERY_REQUIRED");
       throw error;

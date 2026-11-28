@@ -92,6 +92,9 @@ class FynxGroupWebRtcCallEngine(
     }
 
     fun isReadyForCall(): Boolean = started && audioTrack != null && (!videoCallEnabled || videoTrack != null)
+    internal fun sfuPeerConnectionFactory(): PeerConnectionFactory = factory
+    internal fun sfuLocalAudioTrack(): AudioTrack? = audioTrack
+    internal fun sfuLocalVideoTrack(): VideoTrack? = videoTrack
 
     /**
      * Replace the initial STUN-only configuration with server-issued short-lived TURN
