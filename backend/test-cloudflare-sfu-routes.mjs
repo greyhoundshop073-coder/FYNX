@@ -3,8 +3,8 @@ import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
 
 const routes = new Map();
 const app = {
-  post(path, _auth, handler) { routes.set(`POST ${path}`, handler); },
-  put(path, _auth, handler) { routes.set(`PUT ${path}`, handler); }
+  post(path, ...handlers) { routes.set(`POST ${path}`, handlers.at(-1)); },
+  put(path, ...handlers) { routes.set(`PUT ${path}`, handlers.at(-1)); }
 };
 const sessions = new Map();
 const publications = [];
@@ -106,7 +106,7 @@ const resolveActiveCall = async (callId, userId) =>
     : null;
 
 registerCloudflareSfuRoutes({
-  app, pool, auth: (_req, _res, next) => next(), fetchImpl,
+  app, pool, auth: (_req, _res, next) => next(), rateLimit: (_req, _res, next) => next(), fetchImpl,
   env: { CLOUDFLARE_SFU_APP_ID: "test-app", CLOUDFLARE_SFU_APP_SECRET: "test-secret" },
   resolveActiveCall
 });
