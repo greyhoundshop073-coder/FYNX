@@ -23,7 +23,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
   }
   let schemaPromise;
   const ensureSchema = () => {
-    if (!schemaPromise) schemaPromise = pool.query(\`
+    if (!schemaPromise) schemaPromise = pool.query(`
       CREATE TABLE IF NOT EXISTS fynx_call_sfu_sessions (
         session_id TEXT PRIMARY KEY,
         call_id TEXT NOT NULL,
@@ -49,7 +49,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       );
       ALTER TABLE fynx_call_sfu_publications
         ADD COLUMN IF NOT EXISTS mid TEXT;
-    \`).catch((error) => { schemaPromise = null; throw error; });
+    `).catch((error) => { schemaPromise = null; throw error; });
     return schemaPromise;
   };
   const configured = () => Boolean(env.CLOUDFLARE_SFU_APP_ID && env.CLOUDFLARE_SFU_APP_SECRET);
@@ -59,9 +59,9 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       error.status = 503;
       throw error;
     }
-    const response = await fetchImpl(\`\${API_BASE}/apps/\${encodeURIComponent(env.CLOUDFLARE_SFU_APP_ID)}\${path}\`, {
+    const response = await fetchImpl(`${API_BASE}/apps/${encodeURIComponent(env.CLOUDFLARE_SFU_APP_ID)}${path}`, {
       method,
-      headers: { Authorization: \`Bearer \${env.CLOUDFLARE_SFU_APP_SECRET}\`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${env.CLOUDFLARE_SFU_APP_SECRET}`, "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     let payload = {};
@@ -90,17 +90,17 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       return (await resolveActiveCall(callId, String(userId))) || null;
     }
     const result = await pool.query(
-      \`SELECT id FROM fynx_realtime_calls
-       WHERE id=$1 AND status='ACTIVE' AND (caller_id=$2 OR callee_id=$2) LIMIT 1\`,
+      `SELECT id FROM fynx_realtime_calls
+       WHERE id=$1 AND status='ACTIVE' AND (caller_id=$2 OR callee_id=$2) LIMIT 1`,
       [callId, String(userId)]
     );
     return result.rows[0] || null;
   };
   const getOwnedSession = async (sessionId, userId, callId, requireActiveCall = true) => {
     const result = await pool.query(
-      \`SELECT session_id,call_id,user_id,mutation_state
+      `SELECT session_id,call_id,user_id,mutation_state
        FROM fynx_call_sfu_sessions
-       WHERE session_id=$1 AND user_id=$2 AND call_id=$3 AND ended_at IS NULL LIMIT 1\`,
+       WHERE session_id=$1 AND user_id=$2 AND call_id=$3 AND ended_at IS NULL LIMIT 1`,
       [sessionId, String(userId), callId]
     );
     const session = result.rows[0] || null;
@@ -112,10 +112,10 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
   // A returned SFU offer leaves the session fenced until /renegotiate accepts its answer.
   const claimMutation = async (sessionId, userId, callId, allowedStates = ["READY"]) => {
     const result = await pool.query(
-      \`UPDATE fynx_call_sfu_sessions SET mutation_state='IN_PROGRESS'
+      `UPDATE fynx_call_sfu_sessions SET mutation_state='IN_PROGRESS'
        WHERE session_id=$1 AND user_id=$2 AND call_id=$3 AND ended_at IS NULL
          AND mutation_state=ANY($4::text[])
-       RETURNING session_id\`,
+       RETURNING session_id`,
       [sessionId, String(userId), callId, allowedStates]
     );
     return Boolean(result.rowCount);
@@ -156,7 +156,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       return res.status(409).json({ error: "this media session has another operation pending; complete renegotiation or recover the session first" });
     }
     try {
-      const result = await sfuRequest(\`/sessions/\${encodeURIComponent(sessionId)}/tracks/new\`, "POST", {
+      const result = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}/tracks/new`, "POST", {
         sessionDescription,
         tracks: tracks.map(({ mid, trackName }) => ({ location: "local", mid, trackName }))
       });
@@ -164,9 +164,9 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       for (const track of successful) {
         const source = tracks.find((item) => item.trackName === track.trackName);
         if (source) await pool.query(
-          \`INSERT INTO fynx_call_sfu_publications(call_id,user_id,session_id,track_name,mid,active)
+          `INSERT INTO fynx_call_sfu_publications(call_id,user_id,session_id,track_name,mid,active)
            VALUES($1,$2,$3,$4,$5,TRUE)
-           ON CONFLICT(session_id,track_name) DO UPDATE SET mid=EXCLUDED.mid,active=TRUE\`,
+           ON CONFLICT(session_id,track_name) DO UPDATE SET mid=EXCLUDED.mid,active=TRUE`,
           [callId, String(req.user.sub), sessionId, source.trackName, source.mid]
         );
       }
@@ -192,10 +192,10 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     }
     if (!await getOwnedSession(sessionId, req.user.sub, callId)) return res.status(403).json({ error: "call session access denied" });
     const publisher = await pool.query(
-      \`SELECT p.session_id,p.track_name FROM fynx_call_sfu_publications p
+      `SELECT p.session_id,p.track_name FROM fynx_call_sfu_publications p
        JOIN fynx_call_sfu_sessions s ON s.session_id=p.session_id
        WHERE p.call_id=$1 AND p.session_id=$2 AND p.active=TRUE AND s.ended_at IS NULL
-         AND p.user_id<>$3 AND p.track_name=ANY($4::text[])\`,
+         AND p.user_id<>$3 AND p.track_name=ANY($4::text[])`,
       [callId, publisherSessionId, String(req.user.sub), trackNames]
     );
     if (publisher.rowCount !== trackNames.length) return res.status(403).json({ error: "requested media publication is not available to this caller" });
@@ -203,7 +203,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       return res.status(409).json({ error: "this media session has another operation pending; complete renegotiation or recover the session first" });
     }
     try {
-      const result = await sfuRequest(\`/sessions/\${encodeURIComponent(sessionId)}/tracks/new\`, "POST", {
+      const result = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}/tracks/new`, "POST", {
         tracks: publisher.rows.map((track) => ({ location: "remote", sessionId: track.session_id, trackName: track.track_name }))
       });
       const state = needsRenegotiation(result) ? "AWAITING_RENEGOTIATION" : "READY";
@@ -226,7 +226,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       return res.status(409).json({ error: "this media session is not waiting for a renegotiation answer" });
     }
     try {
-      const result = await sfuRequest(\`/sessions/\${encodeURIComponent(sessionId)}/renegotiate\`, "PUT", { sessionDescription });
+      const result = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}/renegotiate`, "PUT", { sessionDescription });
       await finishMutation(sessionId, "READY");
       return res.json({ ...result, mutationState: "READY" });
     } catch (error) {
@@ -245,12 +245,12 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
       return res.status(409).json({ error: "media session cleanup is already running; retry after it finishes" });
     }
     try {
-      const snapshot = await sfuRequest(\`/sessions/\${encodeURIComponent(sessionId)}\`, "GET");
+      const snapshot = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}`, "GET");
       const activeMids = [...new Set((Array.isArray(snapshot?.tracks) ? snapshot.tracks : [])
         .filter((track) => track && track.status !== "inactive" && validId(String(track.mid || ""), 16))
         .map((track) => String(track.mid)))];
       if (activeMids.length) {
-        const closed = await sfuRequest(\`/sessions/\${encodeURIComponent(sessionId)}/tracks/close\`, "PUT", {
+        const closed = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}/tracks/close`, "PUT", {
           tracks: activeMids.map((mid) => ({ mid })),
           force: true
         });
