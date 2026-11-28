@@ -76,6 +76,9 @@ class FynxAiVisualAuditActivity : ComponentActivity() {
                             onToggleMute = { muted = !muted },
                             onClose = { finish() },
                             onRetry = {},
+                            speechVoice = "marin",
+                            onSpeechVoiceSelected = {},
+                            onPreviewSpeechVoice = {},
                             onMenu = { finish() }
                         )
                     }
