@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
 import java.util.UUID
+import java.security.MessageDigest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,21 +21,47 @@ import kotlinx.coroutines.flow.asStateFlow
  * through the authenticated campaign service.
  */
 internal object FynxMarketplaceLocalCampaignStore {
-    private const val PREFS = "fynx_marketplace_local_campaigns_v1"
+    private const val PREFS_PREFIX = "fynx_marketplace_local_campaigns_v1_"
     private const val CAMPAIGNS_KEY = "campaigns"
+    private const val ARTWORK_DIRECTORY_PREFIX = "marketplace-campaign-artwork_"
     private const val MAX_CAMPAIGNS = 20
     private const val MAX_ARTWORK_BYTES = 12L * 1024L * 1024L
     private const val MAX_TOTAL_ARTWORK_BYTES = 48L * 1024L * 1024L
     private val activeCampaigns = MutableStateFlow<List<FynxMarketplaceSeasonalPromotion>>(emptyList())
+    @Volatile private var observedAccountNamespace: String? = null
+
+    /**
+     * Device-local drafts are isolated by the signed-in FYNX account. The
+     * username is never used directly in a path or preference name.
+     */
+    private fun accountNamespace(context: Context): String? {
+        val account = FynxAuthStore.accountStorageKey(context)?.trim()?.lowercase()
+            ?.takeIf { it.isNotBlank() } ?: return null
+        return MessageDigest.getInstance("SHA-256")
+            .digest(account.toByteArray(Charsets.UTF_8))
+            .take(16)
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun preferencesName(context: Context): String? =
+        accountNamespace(context)?.let { PREFS_PREFIX + it }
+
+    private fun artworkDirectory(context: Context): File? =
+        accountNamespace(context)?.let { File(context.filesDir, ARTWORK_DIRECTORY_PREFIX + it) }
 
     fun observe(context: Context): StateFlow<List<FynxMarketplaceSeasonalPromotion>> {
-        if (activeCampaigns.value.isEmpty()) {
+        val namespace = accountNamespace(context)
+        if (namespace != observedAccountNamespace) {
+            observedAccountNamespace = namespace
+            activeCampaigns.value = if (namespace == null) emptyList() else active(context)
+        } else if (namespace != null && activeCampaigns.value.isEmpty()) {
             activeCampaigns.value = active(context)
         }
         return activeCampaigns.asStateFlow()
     }
 
     private fun publishActive(context: Context) {
+        observedAccountNamespace = accountNamespace(context)
         activeCampaigns.value = active(context)
     }
 
@@ -52,7 +79,8 @@ internal object FynxMarketplaceLocalCampaignStore {
         val artworkInfo = FynxCampaignArtworkMedia.inspectUri(appContext, source)
         val mime = artworkInfo.mimeType
 
-        val directory = File(appContext.filesDir, "marketplace-campaign-artwork")
+        val directory = artworkDirectory(appContext)
+            ?: throw IllegalStateException("Sign in to FYNX before saving private campaign artwork.")
         require(directory.exists() || directory.mkdirs()) { "FYNX could not prepare local campaign storage." }
         val currentBytes = directory.listFiles()?.sumOf { it.length() } ?: 0L
         require(currentBytes < MAX_TOTAL_ARTWORK_BYTES) { "Local campaign artwork storage is full. Remove an old campaign photo first." }
@@ -131,7 +159,8 @@ internal object FynxMarketplaceLocalCampaignStore {
     }
 
     private fun readStored(context: Context): List<FynxMarketplaceSeasonalPromotion> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefsName = preferencesName(context) ?: return emptyList()
+        val raw = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .getString(CAMPAIGNS_KEY, null) ?: return emptyList()
         return runCatching {
             val rows = JSONArray(raw)
@@ -189,7 +218,9 @@ internal object FynxMarketplaceLocalCampaignStore {
                     .put("localOnly", true)
             )
         }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefsName = preferencesName(context)
+            ?: throw IllegalStateException("Sign in to FYNX before saving a private campaign draft.")
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
             .edit()
             .putString(CAMPAIGNS_KEY, rows.toString())
             .apply()
@@ -200,7 +231,7 @@ internal object FynxMarketplaceLocalCampaignStore {
         val uri = runCatching { Uri.parse(artworkUri) }.getOrNull() ?: return
         if (uri.scheme != "file") return
         runCatching {
-            val directory = File(context.filesDir, "marketplace-campaign-artwork").canonicalFile
+            val directory = artworkDirectory(context)?.canonicalFile ?: return@runCatching
             val target = File(uri.path.orEmpty()).canonicalFile
             if (target.parentFile == directory) target.delete()
         }
