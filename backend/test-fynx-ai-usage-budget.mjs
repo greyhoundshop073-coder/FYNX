@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import {
   FynxAiUsageLimitError,
+  FynxAiUsageSessionActiveError,
+  attachFynxAiRealtimeCall,
+  getActiveFynxAiRealtimeCall,
   estimateGeminiCostUsd,
   getFynxAiUsageLimits,
   getFynxAiUsageSummary,
@@ -20,6 +23,9 @@ function fakePool(counts = {}) {
       return {
         async query(sql, params) {
           calls.push({ sql: String(sql), params });
+          if (String(sql).includes("AND capability LIKE 'voice_%'")) {
+            return { rows: counts.activeVoice ? [{ active: 1 }] : [] };
+          }
           if (String(sql).includes("COUNT(*) FILTER")) {
             return { rows: [{
               daily_requests: counts.dailyRequests || 0,
@@ -58,6 +64,44 @@ try {
   assert.ok(!pool.calls.some(call => String(call.params?.[0] || "").includes("fynx-ai-usage:global")), "do not globally serialize requests when no owner budget is configured");
   assert.ok(pool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
   assert.ok(pool.calls.some(call => String(call.sql) === "COMMIT"));
+  const voiceConflictPool = fakePool({ activeVoice: true });
+  await assert.rejects(
+    reserveFynxAiUsage({
+      userId: "42", provider: "openai", capability: "voice_assistant",
+      model: "gpt-realtime-2.1", databasePool: voiceConflictPool
+    }),
+    error => error instanceof FynxAiUsageSessionActiveError && error.status === 409
+  );
+  assert.ok(!voiceConflictPool.calls.some(call => String(call.sql).includes("INSERT INTO fynx_ai_usage_events")));
+
+  const realtimePool = fakePool();
+  const realtimeReservation = await reserveFynxAiUsage({
+    userId: "84", provider: "openai", capability: "voice_assistant",
+    model: "gpt-realtime-2.1", databasePool: realtimePool
+  });
+  const realtimePoolQueries = [];
+  realtimePool.query = async (sql, params) => {
+    realtimePoolQueries.push({ sql: String(sql), params });
+    if (String(sql).includes("UPDATE fynx_ai_usage_events SET realtime_call_id")) return { rowCount: 1 };
+    if (String(sql).includes("SELECT id,realtime_call_id")) {
+      return { rows: [{ id: realtimeReservation.id, realtime_call_id: "rtc_test12345", model: "gpt-realtime-2.1", capability: "voice_assistant" }] };
+    }
+    return { rows: [] };
+  };
+  assert.equal(await attachFynxAiRealtimeCall({
+    reservation: realtimeReservation, callId: "rtc_test12345", databasePool: realtimePool
+  }), true);
+  assert.deepEqual(realtimePoolQueries.find(call => call.sql.includes("UPDATE fynx_ai_usage_events SET realtime_call_id")).params,
+    [realtimeReservation.id, "84", "rtc_test12345"]);
+  assert.deepEqual(await getActiveFynxAiRealtimeCall("84", realtimePool), {
+    id: realtimeReservation.id, userId: "84", callId: "rtc_test12345",
+    model: "gpt-realtime-2.1", capability: "voice_assistant"
+  });
+  await assert.rejects(
+    attachFynxAiRealtimeCall({ reservation: realtimeReservation, callId: "not-valid", databasePool: realtimePool }),
+    /valid FYNX AI reservation and Realtime call ID/
+  );
+
 
   await settleFynxAiUsage({
     reservation, status: "completed", inputTokens: 123, outputTokens: 456,
