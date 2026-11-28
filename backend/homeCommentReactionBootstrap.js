@@ -7,7 +7,7 @@ export async function installHomeCommentReactions() {
   const socialPath = path.join(backendDir, "socialRoutes.js");
   let source = await readFile(socialPath, "utf8");
   if (source.includes("fynxHomeCommentReactionsBatch")) return;
-  const marker = "\n}\n";
+  const marker = String.fromCharCode(10) + "}" + String.fromCharCode(10);
   const index = source.lastIndexOf(marker);
   if (index < 0) throw new Error("Home comment reactions could not locate social route closing marker");
   const routes = `

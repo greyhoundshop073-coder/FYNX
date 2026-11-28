@@ -53,11 +53,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
-          cache-dependency-path: backend/package.json
+          cache-dependency-path: backend/package-lock.json
       - name: Install backend dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Verify provider-portable media storage adapters and cache
         working-directory: backend
         run: node test-media-storage.mjs && node verify-media-object-storage.mjs && node verify-media-payload-cache.mjs
@@ -362,3 +362,39 @@ jobs:
         continue-on-error: true
         working-directory: .
         run: node scripts/verify_production_backend_reachability.mjs
+      - name: Run exact Railway npm start preflight and verify local readiness
+        env:
+          DATABASE_URL: postgresql://fynx_test:fynx_test@localhost:5432/fynx_media_test
+          FYNX_MEDIA_STORAGE_PROVIDER: postgres
+          NODE_ENV: test
+          PORT: "8080"
+        run: |
+          set -euo pipefail
+          LOG_FILE="$(mktemp)"
+          READY_FILE="$(mktemp)"
+          SERVER_PID=""
+          cleanup() {
+            if [[ -n "$SERVER_PID" ]]; then
+              kill -TERM "$SERVER_PID" 2>/dev/null || true
+              wait "$SERVER_PID" 2>/dev/null || true
+            fi
+            if [[ -s "$LOG_FILE" ]]; then cat "$LOG_FILE"; fi
+            rm -f "$LOG_FILE" "$READY_FILE"
+          }
+          trap cleanup EXIT
+          export JWT_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
+          npm start >"$LOG_FILE" 2>&1 &
+          SERVER_PID=$!
+          for attempt in $(seq 1 120); do
+            if curl --silent --show-error --fail http://127.0.0.1:8080/ready >"$READY_FILE"; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ ! -s "$READY_FILE" ]]; then
+            echo "FYNX npm start did not reach /ready within 120 seconds"
+            exit 1
+          fi
+          node -e 'const r=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")); const expected={ok:true,database:"ready",authentication:"ready",mediaStorage:"ready",mediaStorageProvider:"postgres"}; for (const [key,value] of Object.entries(expected)) if (r[key]!==value) throw new Error("Unexpected /ready field: "+key);' "$READY_FILE"
+          curl --silent --show-error --fail http://127.0.0.1:8080/health

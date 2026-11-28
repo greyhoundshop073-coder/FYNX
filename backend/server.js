@@ -1,4 +1,5 @@
 import { getFynxDatabasePool } from "./databasePool.js";
+import { assessFynxBackendReadiness } from "./deploymentReadiness.js";
 import { randomUUID } from "node:crypto";
 import express from "express";
 // Profile-photo media follows profile visibility and block state.
@@ -375,9 +376,26 @@ app.get("/version", (_req, res) => {
 });
 
 app.get("/ready", async (_req, res) => {
-  if (!pool) return res.status(503).json({ ok: false, service: "fynx-backend", database: "not-configured" });
-  try { await pool.query("SELECT 1"); return res.status(200).json({ ok: true, service: "fynx-backend", database: "ready" }); }
-  catch { return res.status(503).json({ ok: false, service: "fynx-backend", database: "unavailable" }); }
+  let databaseStatus = "not-configured";
+  if (pool) {
+    try {
+      await pool.query("SELECT 1");
+      databaseStatus = "ready";
+    } catch {
+      databaseStatus = "unavailable";
+    }
+  }
+  const readiness = assessFynxBackendReadiness({
+    databaseStatus,
+    jwtSecretConfigured: Boolean(JWT_SECRET),
+    mediaStorageConfigured: Boolean(mediaStorage.isConfigured),
+    mediaStorageProvider: mediaStorage.provider
+  });
+  return res.status(readiness.ready ? 200 : 503).json({
+    ok: readiness.ready,
+    service: "fynx-backend",
+    ...readiness.checks
+  });
 });
 
 app.get("/health", async (_req, res) => {

@@ -41,7 +41,8 @@ assert.match(marketplaceMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provide
 assert.doesNotMatch(marketplaceMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(marketplaceMediaRoute.indexOf("if (!result.rows[0])") < marketplaceMediaRoute.indexOf("redirectStoredMedia"));
 
-const socialMediaRoute = route(socialSource, "app.get('/api/social/media/:id'", "\n\n}");
+// Route extraction tolerates a missing blank separator and both LF/CRLF checkouts.
+const socialMediaRoute = route(socialSource, "app.get('/api/social/media/:id'", "\n}");
 assert.match(socialMediaRoute, /SELECT mm\.mime_type,\s*mm\.storage_provider,\s*mm\.object_key\s+FROM message_media mm/);
 assert.doesNotMatch(socialMediaRoute, /SELECT mm\.mime_type\s*,\s*mm\.data/);
 assert.ok(socialMediaRoute.indexOf("if(!r.rows[0])") < socialMediaRoute.indexOf("redirectStoredMedia"));
