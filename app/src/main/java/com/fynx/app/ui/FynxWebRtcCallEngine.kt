@@ -137,7 +137,9 @@ class FynxWebRtcCallEngine(
             callbacks.onError("The relay configuration could not be applied to this call.")
             return
         }
-        if (restartOfferOwner) {
+        // Before the first remote description, new ICE servers will be used
+        // by the initial offer/answer; an ICE-restart offer is only needed on refresh.
+        if (restartOfferOwner && remoteDescriptionSet) {
             iceRestartPending = true
             restartWithUpdatedIceIfReady()
         }
