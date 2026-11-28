@@ -94,3 +94,4 @@ These are navigation exits, not content-removal actions, so their X glyphs were 
 - Other user's profile post viewer: Back arrow replaces the page-dismiss X.
 
 Content-action X controls remain intact (remove media, clear search, cancel reply, remove location/music, etc.). The Chat conversation duplicate exit remains assigned to PR #588, and Status Add Status header coordination remains assigned to PR #603/#586.
+- The profile post swipe viewer explicitly maps Android system Back to the same `onClose` destination as its visible Back arrow (`ProfilePostSwipeViewer`).
