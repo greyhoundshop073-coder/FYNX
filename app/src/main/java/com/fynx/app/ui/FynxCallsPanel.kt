@@ -321,10 +321,14 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         if (realtimeState != FynxRealtimeClient.State.CONNECTED) return@LaunchedEffect
         if (pendingIncomingAcceptSignal) {
             val peerId = targetUserId ?: current.callerUsername
+            // Fetch TURN while the server still has this exact invite in RINGING state.
+            // Apply it before accepting so the first incoming SDP answer uses relay candidates.
+            val refreshAfter = configureCallRelay(current.id, restartOfferOwner = false)
+            if (session?.id != current.id) return@LaunchedEffect
+            relayRefreshSeconds = refreshAfter.coerceAtLeast(120L)
+            relaySetupComplete = true
             if (realtimeClient.sendCallAccept(current.id, peerId, video)) {
                 pendingIncomingAcceptSignal = false
-                // The accepted signal makes the call eligible for short-lived TURN credentials.
-                beginCallRelaySetup(current.id, restartOfferOwner = false)
                 FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                 calls = FynxCallsStore.load(context)
                 errorMessage = null
