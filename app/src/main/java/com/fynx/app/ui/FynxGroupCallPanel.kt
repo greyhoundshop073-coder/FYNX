@@ -311,7 +311,7 @@ fun FynxGroupCallPanel(
             val configuration = FynxCallIceServerProvider.fetch(context, activeCallId).getOrNull()
             if (configuration != null) {
                 engine.updateIceServers(configuration.servers, localUserId)
-                sfuMedia.updateIceServers(configuration.servers)
+                sfuMedia.refreshIceServers(configuration.servers)
                 delay(configuration.refreshAfterSeconds.coerceIn(60L, 86_400L) * 1_000L)
             } else {
                 errorMessage = "Relay setup is unavailable right now. FYNX will keep trying a direct connection."
