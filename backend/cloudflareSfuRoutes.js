@@ -160,6 +160,12 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
         sessionDescription,
         tracks: tracks.map(({ mid, trackName }) => ({ location: "local", mid, trackName }))
       });
+      // Cloudflare's local-publication recipe returns an SDP answer for the
+      // endpoint to apply. An SFU offer here is not the publish handshake.
+      if (!validSdp(result?.sessionDescription) || result.sessionDescription.type !== "answer") {
+        await finishMutation(sessionId, "RECOVERY_REQUIRED");
+        return res.status(502).json({ error: "media service did not return the expected publication answer; replace or recover this session" });
+      }
       const successful = Array.isArray(result?.tracks) ? result.tracks.filter((track) => !track.errorCode && !track.errorDescription) : [];
       for (const track of successful) {
         const source = tracks.find((item) => item.trackName === track.trackName);
@@ -187,7 +193,8 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
     const { callId, publisherSessionId, trackNames } = req.body || {};
     if (!validId(sessionId) || !validId(publisherSessionId) || !validId(callId, 80) ||
         !Array.isArray(trackNames) || trackNames.length < 1 || trackNames.length > 2 ||
-        trackNames.some((name) => !["microphone","camera"].includes(name))) {
+        trackNames.some((name) => !["microphone","camera"].includes(name)) ||
+        new Set(trackNames).size !== trackNames.length) {
       return res.status(400).json({ error: "valid publisher session and track names are required" });
     }
     if (!await getOwnedSession(sessionId, req.user.sub, callId)) return res.status(403).json({ error: "call session access denied" });
@@ -206,6 +213,15 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       const result = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}/tracks/new`, "POST", {
         tracks: publisher.rows.map((track) => ({ location: "remote", sessionId: track.session_id, trackName: track.track_name }))
       });
+      const receivedTracks = Array.isArray(result?.tracks) ? result.tracks : [];
+      const successfulTracks = receivedTracks.filter((track) =>
+        !track?.errorCode && !track?.errorDescription && validId(String(track?.mid || ""), 16)
+      );
+      if (successfulTracks.length !== trackNames.length ||
+          (needsRenegotiation(result) && (!validSdp(result?.sessionDescription) || result.sessionDescription.type !== "offer"))) {
+        await finishMutation(sessionId, "RECOVERY_REQUIRED");
+        return res.status(502).json({ error: "one or more requested media tracks could not be subscribed or negotiated; replace or recover this session" });
+      }
       const state = needsRenegotiation(result) ? "AWAITING_RENEGOTIATION" : "READY";
       await finishMutation(sessionId, state);
       return res.json({ ...result, mutationState: state });
@@ -241,7 +257,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
     if (!validId(sessionId) || !validId(callId, 80)) return res.status(400).json({ error: "valid session and call IDs are required" });
     // Cleanup remains authorized by original session ownership even after a call has ended.
     if (!await getOwnedSession(sessionId, req.user.sub, callId, false)) return res.status(403).json({ error: "call session access denied" });
-    if (!await claimMutation(sessionId, req.user.sub, callId, ["READY", "AWAITING_RENEGOTIATION", "RECOVERY_REQUIRED"])) {
+    if (!await claimMutation(sessionId, req.user.sub, callId, ["READY", "RECOVERY_REQUIRED"])) {
       return res.status(409).json({ error: "media session cleanup is already running; retry after it finishes" });
     }
     try {
