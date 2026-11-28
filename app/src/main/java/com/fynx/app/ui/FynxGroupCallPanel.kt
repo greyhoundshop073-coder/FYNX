@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import org.webrtc.AudioTrack
 import org.webrtc.IceCandidate
@@ -246,6 +247,23 @@ fun FynxGroupCallPanel(
     LaunchedEffect(groupEvents) {
         for (event in groupEvents) {
             applyGroupEvent(event)
+        }
+    }
+
+    // TURN credentials are fetched only after the server has confirmed this user
+    // is JOINED in the active group call. Refresh before they expire.
+    LaunchedEffect(callId, isJoined, callEnded, localUserId) {
+        val activeCallId = callId ?: return@LaunchedEffect
+        if (!isJoined || callEnded) return@LaunchedEffect
+        while (true) {
+            val configuration = FynxCallIceServerProvider.fetch(context, activeCallId).getOrNull()
+            if (configuration != null) {
+                engine.updateIceServers(configuration.servers, localUserId)
+                delay(configuration.refreshAfterSeconds.coerceIn(60L, 86_400L) * 1_000L)
+            } else {
+                errorMessage = "Relay setup is unavailable right now. FYNX will keep trying a direct connection."
+                delay(120_000L)
+            }
         }
     }
 
