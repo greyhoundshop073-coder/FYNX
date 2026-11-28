@@ -1,6 +1,9 @@
 package com.fynx.app.ui
 
+import android.graphics.Bitmap
 import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.os.Build
 import android.util.Base64
 import androidx.test.platform.app.InstrumentationRegistry
@@ -8,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.io.FileOutputStream
 
 class FynxCampaignArtworkMediaTest {
     @Test
@@ -35,6 +39,37 @@ class FynxCampaignArtworkMediaTest {
             }
         } finally {
             file.delete()
+        }
+    }
+
+    @Test
+    fun staticPhotoCanBeCopiedAndPreviewedWithoutNetworkAccess() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val source = File.createTempFile("fynx-campaign-photo-", ".png", context.cacheDir)
+        var storedArtwork: File? = null
+        val bitmap = Bitmap.createBitmap(320, 180, Bitmap.Config.ARGB_8888)
+        try {
+            FileOutputStream(source).use { output ->
+                assertTrue("The local photo fixture must encode successfully", bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            }
+            // This exercises the same app-private copy path used by Save offline draft.
+            // No backend client, media upload or network transport is involved.
+            val storedUri = FynxMarketplaceLocalCampaignStore.importArtwork(context, Uri.fromFile(source)).getOrThrow()
+            storedArtwork = File(Uri.parse(storedUri).path.orEmpty())
+            assertTrue("The private photo copy must exist", storedArtwork!!.isFile)
+            val info = FynxCampaignArtworkMedia.inspectFile(storedArtwork!!)
+            assertEquals("image/png", info.mimeType)
+            assertEquals(320, info.width)
+            assertEquals(180, info.height)
+
+            val preview = FynxCampaignArtworkMedia.decodePreview(context, Uri.fromFile(storedArtwork!!))
+            assertTrue("A static photo preview must remain a bitmap drawable", preview is BitmapDrawable)
+            assertEquals(320, preview.intrinsicWidth)
+            assertEquals(180, preview.intrinsicHeight)
+        } finally {
+            bitmap.recycle()
+            storedArtwork?.delete()
+            source.delete()
         }
     }
 
