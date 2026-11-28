@@ -135,6 +135,8 @@ class FynxAiWebRtcEngine(
     fun close() {
         localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolJob.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
     }
+    /** Release the native factory when this composable permanently leaves the screen. */
+    fun dispose() { close(); factory.dispose() }
     private suspend fun createOffer(connection: PeerConnection): SessionDescription = CompletableDeferred<SessionDescription>().also { deferred -> connection.createOffer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { deferred.complete(description) }; override fun onCreateFailure(error: String) { deferred.completeExceptionally(IllegalStateException(error)) } }, MediaConstraints()) }.awaitWithTimeout()
     private suspend fun awaitLocalDescription() { localDescriptionReady?.awaitWithTimeout() ?: error("Local FYNX AI SDP was not prepared") }
     private fun PeerConnection.setLocalDescriptionAwait(description: SessionDescription) { localDescriptionReady = CompletableDeferred(); setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { localDescriptionReady?.complete(description.description) }; override fun onSetFailure(error: String) { localDescriptionReady?.completeExceptionally(IllegalStateException(error)) } }, description) }

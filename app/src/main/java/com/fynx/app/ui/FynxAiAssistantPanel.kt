@@ -724,7 +724,8 @@ fun FynxAiAssistantPanel(
         onDispose {
             generationJob?.cancel()
             stopReadAloud()
-            voiceEngine.close()
+            readAloudEngine.dispose()
+            voiceEngine.dispose()
         }
     }
 
