@@ -2336,11 +2336,13 @@ private fun MarketplaceDetails(
                             Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
                             MarketplaceSellerOnlineLabel(l.sellerId)
                             sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
-                        if (l.location.isNotBlank()) {
-                            Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (l.location.isNotBlank()) {
+                                Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                     TextButton(onClick = onProfile) { Text("View shop") }
+                }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
