@@ -11,6 +11,7 @@ const SCHEMA_SQL = [
   "  capability TEXT NOT NULL,",
   "  model TEXT NOT NULL,",
   "  status TEXT NOT NULL CHECK (status IN ('reserved','completed','failed')),",
+  "  realtime_call_id TEXT,",
   "  input_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),",
   "  output_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),",
   "  input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0),",
@@ -24,6 +25,10 @@ const SCHEMA_SQL = [
   "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
   "  finished_at TIMESTAMPTZ",
   ")",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS realtime_call_id TEXT",
+  ";",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_fynx_ai_usage_realtime_call ON fynx_ai_usage_events(realtime_call_id) WHERE realtime_call_id IS NOT NULL",
   ";",
   "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0)",
   ";",
@@ -86,6 +91,18 @@ export class FynxAiUsageLimitError extends Error {
   }
 }
 
+export class FynxAiUsageSessionActiveError extends Error {
+  constructor() {
+    super("A FYNX AI voice session is already active on this account.");
+    this.name = "FynxAiUsageSessionActiveError";
+    this.status = 409;
+  }
+}
+
+function validRealtimeCallId(callId) {
+  return typeof callId === "string" && /^rtc_[A-Za-z0-9_-]{4,128}$/.test(callId);
+}
+
 export function getFynxAiUsageLimits() {
   return {
     dailyRequests: readPositiveInteger("FYNX_AI_USER_DAILY_REQUEST_LIMIT", DEFAULT_DAILY_REQUEST_LIMIT, 1000),
@@ -136,6 +153,14 @@ export async function reserveFynxAiUsage({
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:global"]);
     }
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:" + user]);
+    if (String(provider) === "openai" && String(capability).startsWith("voice_")) {
+      const active = await client.query(
+        "SELECT 1 FROM fynx_ai_usage_events WHERE user_id=$1 AND provider='openai' " +
+        "AND capability LIKE 'voice_%' AND status='reserved' LIMIT 1",
+        [user]
+      );
+      if (active.rows?.length) throw new FynxAiUsageSessionActiveError();
+    }
     const counts = await client.query(
       "SELECT COUNT(*) FILTER (WHERE user_id=$1 AND created_at >= date_trunc('day', NOW()))::int AS daily_requests, " +
       "COUNT(*) FILTER (WHERE user_id=$1 AND created_at >= date_trunc('day', NOW()) AND capability='marketplace_photo_review')::int AS daily_photo_reviews, " +
@@ -173,6 +198,42 @@ export async function reserveFynxAiUsage({
   } finally {
     client.release();
   }
+}
+
+export async function attachFynxAiRealtimeCall({ reservation, callId, databasePool = getFynxDatabasePool() } = {}) {
+  if (!reservation?.id || !reservation?.userId || !validRealtimeCallId(callId)) {
+    throw new Error("A valid FYNX AI reservation and Realtime call ID are required.");
+  }
+  await ensureUsageSchema(databasePool);
+  const result = await databasePool.query(
+    "UPDATE fynx_ai_usage_events SET realtime_call_id=$3 " +
+    "WHERE id=$1 AND user_id=$2 AND provider='openai' AND status='reserved' AND realtime_call_id IS NULL",
+    [reservation.id, String(reservation.userId), callId]
+  );
+  if (Number(result.rowCount || 0) !== 1) {
+    throw new Error("FYNX AI voice reservation could not be bound to its Realtime call.");
+  }
+  return true;
+}
+
+export async function getActiveFynxAiRealtimeCall(userId, databasePool = getFynxDatabasePool()) {
+  if (userId === null || userId === undefined || String(userId).trim() === "") return null;
+  await ensureUsageSchema(databasePool);
+  const result = await databasePool.query(
+    "SELECT id,realtime_call_id,model,capability FROM fynx_ai_usage_events " +
+    "WHERE user_id=$1 AND provider='openai' AND capability LIKE 'voice_%' " +
+    "AND status='reserved' AND realtime_call_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+    [String(userId)]
+  );
+  const row = result.rows?.[0];
+  if (!row || !validRealtimeCallId(String(row.realtime_call_id || ""))) return null;
+  return {
+    id: String(row.id),
+    userId: String(userId),
+    callId: String(row.realtime_call_id),
+    model: String(row.model || ""),
+    capability: String(row.capability || "")
+  };
 }
 
 export async function settleFynxAiUsage({
