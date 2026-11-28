@@ -7,6 +7,7 @@ assert.equal(isValidRealtimeSessionMode("speech"), true);
 assert.equal(isValidRealtimeSessionMode("unexpected"), false);
 
 const transcription = buildRealtimeSessionConfig("transcription");
+assert.equal(transcription.audio.input.transcription.model, "gpt-live-transcribe");
 assert.deepEqual(transcription.output_modalities, ["text"]);
 assert.deepEqual(transcription.tools, []);
 assert.equal(transcription.tool_choice, "none");

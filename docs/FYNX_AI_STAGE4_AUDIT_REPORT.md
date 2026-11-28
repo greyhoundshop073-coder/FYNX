@@ -192,3 +192,8 @@ The Stage 4 voice selector intentionally exposes four supported OpenAI Realtime 
 
 
 Voice selection follow-up: Android now provides a selectable OpenAI Realtime speech voice and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. Physical-device voice-quality and preview checks remain part of runtime certification.
+
+
+## Transcription model compatibility update
+
+The live microphone path now defaults to `gpt-live-transcribe`, with the existing `OPENAI_TRANSCRIPTION_MODEL` environment override retained. This replaces the deprecated `gpt-4o-mini-transcribe` default ahead of its February 26, 2027 shutdown. The voice routing test asserts the selected default. Provider runtime behavior still requires a valid OpenAI key and live backend certification.

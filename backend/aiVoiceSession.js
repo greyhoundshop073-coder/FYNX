@@ -44,7 +44,7 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
 
   const inputAudio = {
     noise_reduction: { type: "near_field" },
-    transcription: { model: process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-4o-mini-transcribe" }
+    transcription: { model: process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-live-transcribe" }
   };
 
   if (mode === "transcription") {
