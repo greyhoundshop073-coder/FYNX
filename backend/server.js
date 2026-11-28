@@ -394,7 +394,7 @@ app.get("/api/presence", auth, async (req, res) => {
       .map(([userId]) => String(userId));
     const viewerId = String(req.user.sub);
     const [visibleIds, lastActiveAtByUserId] = await Promise.all([
-      visiblePresenceUserIds(viewerId, connectedUserIds),
+      visiblePresenceUserIds(String(req.user.sub), connectedUserIds),
       visibleLastActiveAtByUserId(viewerId)
     ]);
     res.set("Cache-Control", "private, no-store");
