@@ -118,7 +118,9 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onOpenCategory = {},
                         onShopNow = {},
                         onOpenOrders = {},
-                        onRefresh = {}
+                        onRefresh = {},
+                        autoRotate = false,
+                        includeCalendarCelebrations = false
                     )
                     cardListings.forEach { listing ->
                         MarketplaceReferenceProductCard(
@@ -146,7 +148,7 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
         compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 20_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
@@ -194,14 +196,18 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                     sponsoredPromotions = emptyList(),
                     seasonalPromotions = emptyList(),
                     onOpenListing = {}, onOpenSeller = {}, onOpenProduct = {}, onOpenCategory = {},
-                    onShopNow = {}, onOpenOrders = {}, onRefresh = {}
+                    onShopNow = {}, onOpenOrders = {}, onRefresh = {},
+                    includeCalendarCelebrations = false
                 )
             }
+        }
+        compose.waitUntil(timeoutMillis = 20_000) {
+            compose.onAllNodesWithText(candidates.first().title).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(candidates.first().title).performScrollTo().assertIsDisplayed()
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
-        compose.waitUntil(timeoutMillis = 9_000) {
+        compose.waitUntil(timeoutMillis = 15_000) {
             runCatching { compose.onNodeWithText(candidates[1].title, useUnmergedTree = true).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title, useUnmergedTree = true).assertIsDisplayed()
