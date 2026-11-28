@@ -97,6 +97,11 @@ fun FynxMarketplaceShippingSettingsCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Text(
+                "For Nigerian deliveries, configure the seller dispatch origin and destination-specific prices in the route section below. The flat base fee is retained for existing non-Nigerian delivery arrangements.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             if (loading) {
                 CircularProgressIndicator()
@@ -246,6 +251,7 @@ fun FynxMarketplaceShippingSettingsCard(
                     }
                 }
             }
+            FynxMarketplaceRouteRatesSection(context = context, listingId = listingId)
         }
     }
 

@@ -49,7 +49,8 @@ internal data class FynxMarketplaceCheckoutQuote(
     val marketplaceFeeBuyer: Double,
     val discountAmount: Double,
     val total: Double,
-    val protectionText: String
+    val protectionText: String,
+    val deliveryRouteText: String = ""
 )
 
 internal fun marketplaceQuoteExpired(expiresAt: String, now: Instant = Instant.now()): Boolean = runCatching { !Instant.parse(expiresAt).isAfter(now) }.getOrDefault(true)
@@ -112,7 +113,8 @@ internal fun marketplaceCheckoutIntentFingerprint(
     listingId: String,
     quantity: Int,
     fulfillmentMethod: String,
-    address: FynxMarketplaceCheckoutAddress?
+    address: FynxMarketplaceCheckoutAddress?,
+    quoteId: String = ""
 ): String {
     require(accessToken.isNotBlank()) { "A signed-in account is required for checkout." }
     require(listingId.isNotBlank()) { "A product is required for checkout." }
@@ -126,6 +128,7 @@ internal fun marketplaceCheckoutIntentFingerprint(
         put("listingId", listingId.trim())
         put("quantity", quantity)
         put("fulfillmentMethod", method)
+        if (quoteId.isNotBlank()) put("quoteId", quoteId.trim())
         if (method == "DELIVERY") {
             val value = requireNotNull(address)
             // Match the backend's existing input bounds before hashing the intent.
@@ -298,7 +301,18 @@ internal fun parseMarketplaceCheckoutQuoteResponse(
         marketplaceFeeBuyer = marketplaceFeeBuyer,
         discountAmount = discountAmount,
         total = total,
-        protectionText = quote.optJSONObject("protection")?.optString("payout").orEmpty()
+        protectionText = quote.optJSONObject("protection")?.optString("payout").orEmpty(),
+        deliveryRouteText = if (method == "DELIVERY") {
+            fun place(key: String): String {
+                val value = quote.optJSONObject(key) ?: return ""
+                val city = value.optString("city").trim()
+                val state = value.optString("state").trim()
+                return listOf(city, state).filter { it.isNotBlank() }.joinToString(", ")
+            }
+            val origin = place("shippingOrigin")
+            val destination = place("shippingDestination")
+            if (origin.isNotBlank() && destination.isNotBlank()) "$origin → $destination" else ""
+        } else ""
     )
 }
 
@@ -471,6 +485,7 @@ internal suspend fun createProtectedMarketplaceCheckoutOrder(
         put("quantity", quantity)
         put("fulfillmentMethod", method)
         put("orderId", orderId)
+        put("quoteId", expectedQuote.id)
         if (method == "DELIVERY") {
             val a = address ?: return Result.failure(IllegalArgumentException("Delivery address is required."))
             put("name", a.name.trim())
@@ -608,7 +623,13 @@ internal fun FynxMarketplaceCheckoutDialog(
                     OutlinedTextField(address, { address = it; invalidateQuote() }, label = { Text("Delivery address") }, enabled = !busy, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(city, { city = it; invalidateQuote() }, label = { Text("City") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
-                        OutlinedTextField(state, { state = it; invalidateQuote() }, label = { Text("State") }, singleLine = true, enabled = !busy, modifier = Modifier.weight(1f))
+                        NigerianStatePicker(
+                            value = state,
+                            label = "State",
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f),
+                            onValueChange = { state = it; invalidateQuote() }
+                        )
                     }
                 }
                 Button(onClick = { refreshQuote() }, enabled = !busy && quantityError == null, modifier = Modifier.fillMaxWidth()) {
@@ -619,6 +640,9 @@ internal fun FynxMarketplaceCheckoutDialog(
                     Text("Order summary", style = MaterialTheme.typography.titleSmall)
                     Text("Subtotal: ${q.currency} ${String.format(Locale.US, "%,.2f", q.subtotal)}")
                     Text("Delivery: ${q.currency} ${String.format(Locale.US, "%,.2f", q.deliveryFee)}")
+                    if (q.deliveryRouteText.isNotBlank()) {
+                        Text("Delivery route: ${q.deliveryRouteText}", style = MaterialTheme.typography.bodySmall)
+                    }
                     Text("FYNX fee: ${q.currency} ${String.format(Locale.US, "%,.2f", q.marketplaceFeeBuyer)}")
                     Text("Discount: ${q.currency} ${String.format(Locale.US, "%,.2f", q.discountAmount)}")
                     Text("Total: ${q.currency} ${String.format(Locale.US, "%,.2f", q.total)}", style = MaterialTheme.typography.titleLarge)
@@ -653,7 +677,8 @@ internal fun FynxMarketplaceCheckoutDialog(
                             listing.id,
                             q.quantity,
                             q.fulfillmentMethod,
-                            checkoutAddress
+                            checkoutAddress,
+                            quoteId = q.id
                         )
                     }
                     val stableOrderId = intentFingerprint?.let { marketplaceCheckoutOrderId(context, it) }

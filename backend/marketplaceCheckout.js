@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { inspectTrustSafetyText } from './trustSafety.js';
-import { calculateMarketplaceShipping, ensureMarketplaceShippingSchema, isMarketplaceDestinationCovered } from './marketplaceShipping.js';
+import { resolveMarketplaceShipping, ensureMarketplaceShippingSchema, isMarketplaceDestinationCovered } from './marketplaceShipping.js';
 
 export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
   const parsePositiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
@@ -17,13 +17,21 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
     if (providerFeePayer !== 'FYNX') throw new Error('unsupported marketplace provider fee payer');
     return { mode, bps, fixed, buyerShare, version, providerFeePayer };
   };
+  const checkoutAddressHash = (address) => crypto.createHash('sha256').update(JSON.stringify({
+    name: String(address?.name || '').trim(),
+    phone: String(address?.phone || '').trim(),
+    address: String(address?.address || '').trim(),
+    city: String(address?.city || '').trim(),
+    state: String(address?.state || '').trim(),
+    country: String(address?.country || '').trim()
+  })).digest('hex');
   const normalizeAddress = (value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const name = typeof value.name === 'string' ? value.name.trim().slice(0, 120) : '';
     const phone = typeof value.phone === 'string' ? value.phone.trim().slice(0, 40) : '';
-    const address = typeof value.address === 'string' ? value.address.trim().slice(0, 500) : '';
+    const address = typeof value.address === 'string' ? value.address.trim().slice(0, 300) : '';
     if (!name || !phone || !address) return null;
-    return { name, phone, address, city: typeof value.city === 'string' ? value.city.trim().slice(0, 100) : '', state: typeof value.state === 'string' ? value.state.trim().slice(0, 100) : '', country: typeof value.country === 'string' ? value.country.trim().slice(0, 100) : '' };
+    return { name, phone, address, city: typeof value.city === 'string' ? value.city.trim().slice(0, 120) : '', state: typeof value.state === 'string' ? value.state.trim().slice(0, 120) : '', country: typeof value.country === 'string' ? value.country.trim().slice(0, 120) : '' };
   };
   app.post('/api/marketplace/checkout/quote', auth, async (req, res) => {
     const listingId = parsePositiveInt(req.body?.listingId); const quantity = parsePositiveInt(req.body?.quantity); const fulfillmentMethod = normalizeMethod(req.body?.fulfillmentMethod);
@@ -56,16 +64,39 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' });
       }
+      const shipping = await resolveMarketplaceShipping(client, listing, quantity, fulfillmentMethod, shippingAddress || {});
+      if (shipping?.available === false) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: shipping.error, code: shipping.code });
+      }
       const unitPrice = Number(listing.price); const productSubtotal = Math.round(unitPrice * quantity * 100) / 100;
-      const shipping = calculateMarketplaceShipping(listing, quantity, fulfillmentMethod); const deliveryFee = shipping.fee;
+      const deliveryFee = Number(shipping.fee || 0);
       const config = feeConfig(); const rawFee = Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100; const marketplaceFee = Math.max(0, rawFee);
       const buyerShare = config.mode === 'BUYER' ? 1 : config.mode === 'SELLER' ? 0 : config.mode === 'SPLIT' ? config.buyerShare / 10000 : 0;
       const marketplaceFeeBuyer = Math.round(marketplaceFee * buyerShare * 100) / 100; const marketplaceFeeSeller = Math.round((marketplaceFee - marketplaceFeeBuyer) * 100) / 100;
       const discountAmount = 0; const buyerTotal = Math.round((productSubtotal + deliveryFee + marketplaceFeeBuyer - discountAmount) * 100) / 100; const sellerNetAmount = Math.round((productSubtotal + deliveryFee - marketplaceFeeSeller) * 100) / 100;
       if (!(buyerTotal > 0) || sellerNetAmount < 0) { await client.query('ROLLBACK'); return res.status(500).json({ error: 'checkout total calculation failed' }); }
       const quoteId = crypto.randomUUID(); const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const quote = {
+        id: quoteId, expiresAt, listingId: String(listing.id), listingUpdatedAt: listing.updated_at || null,
+        sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name,
+        productTitle: listing.title, quantity, unitPrice, currency, fulfillmentMethod, shippingAddress,
+        shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note,
+        shippingOrigin: shipping.origin || null, shippingDestination: shipping.destination || null, shippingRouteId: shipping.routeId || null,
+        shippingRate: shipping.rateSnapshot || null,
+        subtotal: productSubtotal, deliveryFee, marketplaceFee, marketplaceFeeBuyer, marketplaceFeeSeller,
+        discountAmount, total: buyerTotal, sellerNetAmount, feePolicy: config.mode, feePolicyVersion: config.version,
+        providerFeePayer: config.providerFeePayer,
+        discount: { amount: 0, code: null, status: 'NOT_APPLIED' },
+        protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' }
+      };
+      const storedQuote = { ...quote, shippingAddress: undefined, shippingAddressHash: shippingAddress ? checkoutAddressHash(shippingAddress) : null };
+      await client.query(
+        "INSERT INTO marketplace_checkout_quotes(id,buyer_id,quote_type,payload,expires_at) VALUES($1,$2,'SINGLE',$3::jsonb,$4)",
+        [quoteId, req.user.sub, JSON.stringify(storedQuote), expiresAt]
+      );
       await client.query('COMMIT');
-      return res.json({ quote: { id: quoteId, expiresAt, listingId: String(listing.id), listingUpdatedAt: listing.updated_at || null, sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, productTitle: listing.title, quantity, unitPrice, currency, fulfillmentMethod, shippingAddress, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, subtotal: productSubtotal, deliveryFee, marketplaceFee, marketplaceFeeBuyer, marketplaceFeeSeller, discountAmount, total: buyerTotal, feePolicy: config.mode, feePolicyVersion: config.version, providerFeePayer: config.providerFeePayer, discount: { amount: 0, code: null, status: 'NOT_APPLIED' }, protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' } } });
+      return res.json({ quote });
     } catch (error) { try { await client.query('ROLLBACK'); } catch {} console.error('marketplace checkout quote', error); return res.status(500).json({ error: 'checkout quote could not be prepared' }); }
     finally { client.release(); }
   });
@@ -166,8 +197,12 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
 
         const unitPrice = Number(listing.price);
         const productSubtotal = Math.round(unitPrice * item.quantity * 100) / 100;
-        const shipping = calculateMarketplaceShipping(listing, item.quantity, item.fulfillmentMethod);
-        const lineDeliveryFee = shipping.fee;
+        const shipping = await resolveMarketplaceShipping(client, listing, item.quantity, item.fulfillmentMethod, item.shippingAddress || {});
+        if (shipping?.available === false) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: shipping.error, code: shipping.code, listingId: String(listing.id) });
+        }
+        const lineDeliveryFee = Number(shipping.fee || 0);
         const rawFee = Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100;
         const lineMarketplaceFee = Math.max(0, rawFee);
         const buyerShare = config.mode === 'BUYER' ? 1 : config.mode === 'SELLER' ? 0 : config.mode === 'SPLIT' ? config.buyerShare / 10000 : 0;
@@ -199,6 +234,10 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
           shippingProvider: shipping.provider,
           shippingFeePolicy: shipping.feePolicy,
           shippingNote: shipping.note,
+          shippingOrigin: shipping.origin || null,
+          shippingDestination: shipping.destination || null,
+          shippingRouteId: shipping.routeId || null,
+          shippingRate: shipping.rateSnapshot || null,
           subtotal: productSubtotal,
           deliveryFee: lineDeliveryFee,
           marketplaceFee: lineMarketplaceFee,
@@ -216,27 +255,38 @@ export function registerMarketplaceCheckoutRoutes({ app, pool, auth }) {
       }
       const quoteId = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      const quote = {
+        id: quoteId,
+        expiresAt,
+        itemCount: quotedItems.length,
+        currency: checkoutCurrency,
+        items: quotedItems,
+        subtotal: Math.round(subtotal * 100) / 100,
+        deliveryFee: Math.round(deliveryFee * 100) / 100,
+        marketplaceFee: Math.round(marketplaceFee * 100) / 100,
+        marketplaceFeeBuyer: Math.round(marketplaceFeeBuyer * 100) / 100,
+        marketplaceFeeSeller: Math.round(marketplaceFeeSeller * 100) / 100,
+        discountAmount: 0,
+        total,
+        feePolicy: config.mode,
+        feePolicyVersion: config.version,
+        providerFeePayer: config.providerFeePayer,
+        protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' }
+      };
+      const storedQuote = {
+        ...quote,
+        items: quotedItems.map((item) => ({
+          ...item,
+          shippingAddress: undefined,
+          shippingAddressHash: item.shippingAddress ? checkoutAddressHash(item.shippingAddress) : null
+        }))
+      };
+      await client.query(
+        "INSERT INTO marketplace_checkout_quotes(id,buyer_id,quote_type,payload,expires_at) VALUES($1,$2,'MULTI',$3::jsonb,$4)",
+        [quoteId, req.user.sub, JSON.stringify(storedQuote), expiresAt]
+      );
       await client.query('COMMIT');
-      return res.json({
-        quote: {
-          id: quoteId,
-          expiresAt,
-          itemCount: quotedItems.length,
-          currency: checkoutCurrency,
-          items: quotedItems,
-          subtotal: Math.round(subtotal * 100) / 100,
-          deliveryFee: Math.round(deliveryFee * 100) / 100,
-          marketplaceFee: Math.round(marketplaceFee * 100) / 100,
-          marketplaceFeeBuyer: Math.round(marketplaceFeeBuyer * 100) / 100,
-          marketplaceFeeSeller: Math.round(marketplaceFeeSeller * 100) / 100,
-          discountAmount: 0,
-          total,
-          feePolicy: config.mode,
-          feePolicyVersion: config.version,
-          providerFeePayer: config.providerFeePayer,
-          protection: { payment: 'PROTECTED', payout: 'RELEASED_AFTER_BUYER_CONFIRMATION' }
-        }
-      });
+      return res.json({ quote });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}
       console.error('marketplace multi-product checkout quote', error);

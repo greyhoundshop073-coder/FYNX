@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { inspectTrustSafetyText } from './trustSafety.js';
-import { calculateMarketplaceShipping, ensureMarketplaceShippingSchema, isMarketplaceDestinationCovered } from './marketplaceShipping.js';
+import { ensureMarketplaceShippingSchema } from './marketplaceShipping.js';
 
 export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
   let schemaPromise;
@@ -10,6 +10,14 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
     }
     return schemaPromise;
   };
+  const checkoutAddressHash = (address) => crypto.createHash('sha256').update(JSON.stringify({
+    name: String(address?.name || '').trim(),
+    phone: String(address?.phone || '').trim(),
+    address: String(address?.address || '').trim(),
+    city: String(address?.city || '').trim(),
+    state: String(address?.state || '').trim(),
+    country: String(address?.country || '').trim()
+  })).digest('hex');
   const positiveInt = (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; };
   const uuid = (value) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value.trim()) ? value.trim() : null;
   const clean = (value, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -101,21 +109,61 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       if (!['NGN','USD'].includes(currency)) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'this Marketplace currency is not active yet', code: 'UNSUPPORTED_MARKETPLACE_CURRENCY' }); }
       if (method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for this listing' }); }
       if (method === 'PICKUP' && !listing.pickup_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is no longer available for this listing' }); }
-      if (method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, address))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to this destination', code: 'DESTINATION_NOT_COVERED' }); }
       const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
       if (quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available', code: 'INSUFFICIENT_STOCK' }); }
-      const unitPrice = Number(listing.price); const productSubtotal = Math.round(unitPrice * quantity * 100) / 100;
-      const shipping = calculateMarketplaceShipping(listing, quantity, method); const deliveryFee = shipping.fee;
-      const config = feeConfig(); const totalFee = Math.max(0, Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100);
-      const buyerShare = config.mode === 'BUYER' ? 1 : config.mode === 'SELLER' ? 0 : config.mode === 'SPLIT' ? config.buyerShare / 10000 : 0;
-      const marketplaceFeeBuyer = Math.round(totalFee * buyerShare * 100) / 100; const marketplaceFeeSeller = Math.round((totalFee - marketplaceFeeBuyer) * 100) / 100;
-      const buyerTotal = Math.round((productSubtotal + deliveryFee + marketplaceFeeBuyer) * 100) / 100; const sellerNetAmount = Math.round((productSubtotal + deliveryFee - marketplaceFeeSeller) * 100) / 100;
-      if (!(buyerTotal > 0) || sellerNetAmount < 0) { await client.query('ROLLBACK'); return res.status(500).json({ error: 'marketplace accounting calculation failed' }); }
+      const quoteId = uuid(req.body?.quoteId);
+      if (!quoteId) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'review the checkout total again before creating an order', code: 'CHECKOUT_QUOTE_REQUIRED' }); }
+      const quoteRow = (await client.query(
+        "SELECT payload FROM marketplace_checkout_quotes WHERE id=$1 AND buyer_id=$2 AND quote_type='SINGLE' AND consumed_at IS NULL AND expires_at>NOW() FOR UPDATE",
+        [quoteId, req.user.sub]
+      )).rows[0];
+      const acceptedQuote = quoteRow?.payload;
+      if (!acceptedQuote ||
+          String(acceptedQuote.listingId) !== String(listing.id) ||
+          String(acceptedQuote.sellerId) !== String(listing.seller_id) ||
+          Number(acceptedQuote.quantity) !== quantity ||
+          String(acceptedQuote.fulfillmentMethod || '').toUpperCase() !== method ||
+          String(acceptedQuote.currency || '').toUpperCase() !== currency ||
+          (method === 'DELIVERY' && acceptedQuote.shippingAddressHash !== checkoutAddressHash(address))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'the reviewed checkout quote is missing, expired or no longer matches this order; review the exact total again', code: 'CHECKOUT_QUOTE_MISMATCH' });
+      }
+      const unitPrice = Number(acceptedQuote.unitPrice);
+      const productSubtotal = Number(acceptedQuote.subtotal);
+      const deliveryFee = Number(acceptedQuote.deliveryFee);
+      const totalFee = Number(acceptedQuote.marketplaceFee);
+      const marketplaceFeeBuyer = Number(acceptedQuote.marketplaceFeeBuyer);
+      const marketplaceFeeSeller = Number(acceptedQuote.marketplaceFeeSeller);
+      const buyerTotal = Number(acceptedQuote.total);
+      const sellerNetAmount = Number(acceptedQuote.sellerNetAmount);
+      const discountAmount = Number(acceptedQuote.discountAmount || 0);
+      const feeMode = String(acceptedQuote.feePolicy || 'SELLER');
+      const feeVersion = String(acceptedQuote.feePolicyVersion || '1');
+      const shipping = {
+        fee: deliveryFee,
+        provider: String(acceptedQuote.shippingProvider || 'SELLER_ARRANGED'),
+        feePolicy: String(acceptedQuote.shippingFeePolicy || 'FLAT_BASE'),
+        note: String(acceptedQuote.shippingNote || ''),
+        origin: acceptedQuote.shippingOrigin || null,
+        destination: acceptedQuote.shippingDestination || null,
+        routeId: acceptedQuote.shippingRouteId || null,
+        rateSnapshot: acceptedQuote.shippingRate || null
+      };
+      const expectedSubtotal = Math.round(Number(acceptedQuote.unitPrice) * quantity * 100) / 100;
+      if (![unitPrice, productSubtotal, deliveryFee, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount, discountAmount].every(Number.isFinite) ||
+          unitPrice <= 0 || productSubtotal <= 0 || deliveryFee < 0 || totalFee < 0 || marketplaceFeeBuyer < 0 ||
+          marketplaceFeeSeller < 0 || buyerTotal <= 0 || sellerNetAmount < 0 ||
+          Math.abs(expectedSubtotal - productSubtotal) > 0.02 ||
+          Math.abs(buyerTotal - (productSubtotal + deliveryFee + marketplaceFeeBuyer - discountAmount)) > 0.02) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'the saved checkout quote contains inconsistent amounts; review checkout again', code: 'CHECKOUT_QUOTE_INVALID' });
+      }
       const shippingAddress = method === 'DELIVERY' ? address : null;
-      const snapshot = { listingId: String(listing.id), sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, storeName: listing.store_name, title: listing.title, description: listing.description, price: unitPrice, currency, category: listing.category, condition: listing.condition, location: listing.location, deliveryAvailable: Boolean(listing.delivery_available), pickupAvailable: Boolean(listing.pickup_available), deliveryFee, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, productSubtotal, marketplaceFee: totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, paymentProviderFee: 0, discountAmount: 0, buyerTotal, sellerNetAmount, feePolicy: config.mode, feePolicyVersion: config.version, providerFeePayer: 'FYNX', fulfillmentMethod: method, shippingAddress, buyerNote, mediaIds: Array.isArray(listing.media_ids) ? listing.media_ids.map(String) : [] };
-      const inserted = await client.query(`INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,product_subtotal,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,buyer_total,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,total_amount,currency,product_snapshot,status,fulfillment_method,shipping_address,buyer_note,shipping_method,shipping_note,shipping_fee_policy) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12,$13,$14,$15,'FYNX',$12,$16,$17::jsonb,'PAYMENT_PENDING',$18,$19::jsonb,$20,$21,$22,$23) RETURNING *`, [orderId, req.user.sub, listing.seller_id, listing.id, quantity, unitPrice, deliveryFee, productSubtotal, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount, config.mode, config.version, currency, JSON.stringify(snapshot), method, shippingAddress ? JSON.stringify(shippingAddress) : null, buyerNote, shipping.provider, shipping.note, shipping.feePolicy]);
+      const snapshot = { listingId: String(listing.id), sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, storeName: listing.store_name, title: listing.title, description: listing.description, price: unitPrice, currency, category: listing.category, condition: listing.condition, location: listing.location, deliveryAvailable: Boolean(listing.delivery_available), pickupAvailable: Boolean(listing.pickup_available), deliveryFee, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, shippingOrigin: shipping.origin, shippingDestination: shipping.destination, shippingRouteId: shipping.routeId, shippingRate: shipping.rateSnapshot, checkoutQuoteId: quoteId, productSubtotal, marketplaceFee: totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, paymentProviderFee: 0, discountAmount, buyerTotal, sellerNetAmount, feePolicy: feeMode, feePolicyVersion: feeVersion, providerFeePayer: 'FYNX', fulfillmentMethod: method, shippingAddress, buyerNote, mediaIds: Array.isArray(listing.media_ids) ? listing.media_ids.map(String) : [] };
+      const inserted = await client.query(`INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,product_subtotal,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,buyer_total,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,total_amount,currency,product_snapshot,status,fulfillment_method,shipping_address,buyer_note,shipping_method,shipping_note,shipping_fee_policy,checkout_quote_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12,$13,$14,$15,'FYNX',$12,$16,$17::jsonb,'PAYMENT_PENDING',$18,$19::jsonb,$20,$21,$22,$23,$24) RETURNING *`, [orderId, req.user.sub, listing.seller_id, listing.id, quantity, unitPrice, deliveryFee, productSubtotal, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount, feeMode, feeVersion, currency, JSON.stringify(snapshot), method, shippingAddress ? JSON.stringify(shippingAddress) : null, buyerNote, shipping.provider, shipping.note, shipping.feePolicy, quoteId]);
       await client.query(`UPDATE marketplace_listings SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE id=$2`, [quantity, listing.id]);
-      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'CHECKOUT_CONFIRMED',NULL,'PAYMENT_PENDING',$3::jsonb)`, [orderId, req.user.sub, JSON.stringify({ quantity, fulfillmentMethod: method, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, protected: true, buyerTotal, currency })]);
+      await client.query(`INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,'CHECKOUT_CONFIRMED',NULL,'PAYMENT_PENDING',$3::jsonb)`, [orderId, req.user.sub, JSON.stringify({ quantity, fulfillmentMethod: method, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingOrigin: shipping.origin, shippingDestination: shipping.destination, checkoutQuoteId: quoteId, protected: true, buyerTotal, currency })]);
+      await client.query('UPDATE marketplace_checkout_quotes SET consumed_at=NOW() WHERE id=$1 AND consumed_at IS NULL', [quoteId]);
       await client.query('COMMIT');
       const row = inserted.rows[0];
       return res.status(201).json({ order: publicCheckoutOrder(row) });
@@ -124,7 +172,8 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
   });
   app.post('/api/marketplace/checkout/multi-order', auth, async (req, res) => {
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
-    const checkoutId = uuid(req.body?.checkoutId) || crypto.randomUUID();
+    const checkoutId = uuid(req.body?.checkoutId);
+    if (!checkoutId) return res.status(400).json({ error: 'review the cart total before creating protected checkout', code: 'CHECKOUT_QUOTE_REQUIRED' });
     if (!rawItems.length) return res.status(400).json({ error: 'at least one cart item is required' });
     if (rawItems.length > 20) return res.status(400).json({ error: 'a multi-product checkout supports at most 20 different products' });
     const items = rawItems.map((item) => ({ listingId: positiveInt(item?.listingId), quantity: positiveInt(item?.quantity), method: clean(item?.fulfillmentMethod, 20).toUpperCase(), address: { name: clean(item?.name, 120), phone: clean(item?.phone, 40), address: clean(item?.address, 300), city: clean(item?.city, 120), state: clean(item?.state, 120), country: clean(item?.country, 120) } }));
@@ -178,6 +227,17 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
         await client.query('ROLLBACK');
         return res.status(503).json({ error: 'marketplace payments are not configured yet', code: 'PAYMENT_PROVIDER_NOT_CONFIGURED' });
       }
+      const quoteRow = (await client.query(
+        "SELECT payload FROM marketplace_checkout_quotes WHERE id=$1 AND buyer_id=$2 AND quote_type='MULTI' AND consumed_at IS NULL AND expires_at>NOW() FOR UPDATE",
+        [checkoutId, req.user.sub]
+      )).rows[0];
+      const acceptedQuote = quoteRow?.payload;
+      const quotedItems = Array.isArray(acceptedQuote?.items) ? acceptedQuote.items : [];
+      const quotedById = new Map(quotedItems.map((item) => [String(item.listingId), item]));
+      if (!acceptedQuote || quotedItems.length !== items.length || String(acceptedQuote.id) !== checkoutId) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'the reviewed cart quote is missing or expired; review the cart total again', code: 'CHECKOUT_QUOTE_MISMATCH' });
+      }
       const sortedItems = [...items].sort((a, b) => a.listingId - b.listingId);
       const lines = []; let checkoutCurrency = null;
       for (const item of sortedItems) {
@@ -193,17 +253,44 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
         checkoutCurrency = currency;
         if (item.method === 'DELIVERY' && !listing.delivery_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'delivery is no longer available for one of the selected listings' }); }
         if (item.method === 'PICKUP' && !listing.pickup_available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'pickup is no longer available for one of the selected listings' }); }
-        if (item.method === 'DELIVERY' && !(await isMarketplaceDestinationCovered(client, listing.id, item.address))) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'seller does not currently deliver to one of the selected destinations', code: 'DESTINATION_NOT_COVERED' }); }
+        const quoted = quotedById.get(String(listing.id));
+        if (!quoted || Number(quoted.quantity) !== item.quantity ||
+            String(quoted.fulfillmentMethod || '').toUpperCase() !== item.method ||
+            String(quoted.sellerId) !== String(listing.seller_id) ||
+            String(quoted.currency || '').toUpperCase() !== currency ||
+            (item.method === 'DELIVERY' && quoted.shippingAddressHash !== checkoutAddressHash(item.address))) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'a cart item no longer matches the reviewed quote; review the exact total again', code: 'CHECKOUT_QUOTE_MISMATCH', listingId: String(listing.id) });
+        }
         const available = Number(listing.quantity) - Number(listing.reserved_quantity || 0);
         if (item.quantity > available) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'requested quantity is not available for one of the selected products', code: 'INSUFFICIENT_STOCK' }); }
-        const unitPrice = Number(listing.price); const productSubtotal = Math.round(unitPrice * item.quantity * 100) / 100;
-        const shipping = calculateMarketplaceShipping(listing, item.quantity, item.method); const config = feeConfig();
-        const totalFee = Math.max(0, Math.round((productSubtotal * (config.bps / 10000) + config.fixed) * 100) / 100);
-        const buyerShare = config.mode === 'BUYER' ? 1 : config.mode === 'SELLER' ? 0 : config.mode === 'SPLIT' ? config.buyerShare / 10000 : 0;
-        const marketplaceFeeBuyer = Math.round(totalFee * buyerShare * 100) / 100; const marketplaceFeeSeller = Math.round((totalFee - marketplaceFeeBuyer) * 100) / 100;
-        const buyerTotal = Math.round((productSubtotal + shipping.fee + marketplaceFeeBuyer) * 100) / 100; const sellerNetAmount = Math.round((productSubtotal + shipping.fee - marketplaceFeeSeller) * 100) / 100;
-        if (!(buyerTotal > 0) || sellerNetAmount < 0) { await client.query('ROLLBACK'); return res.status(500).json({ error: 'marketplace accounting calculation failed' }); }
-        lines.push({ item, listing, currency, unitPrice, productSubtotal, shipping, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount, feeMode: config.mode, feeVersion: config.version });
+        const unitPrice = Number(quoted.unitPrice);
+        const productSubtotal = Number(quoted.subtotal);
+        const shipping = {
+          fee: Number(quoted.deliveryFee),
+          provider: String(quoted.shippingProvider || 'SELLER_ARRANGED'),
+          feePolicy: String(quoted.shippingFeePolicy || 'FLAT_BASE'),
+          note: String(quoted.shippingNote || ''),
+          origin: quoted.shippingOrigin || null,
+          destination: quoted.shippingDestination || null,
+          routeId: quoted.shippingRouteId || null,
+          rateSnapshot: quoted.shippingRate || null
+        };
+        const totalFee = Number(quoted.marketplaceFee);
+        const marketplaceFeeBuyer = Number(quoted.marketplaceFeeBuyer);
+        const marketplaceFeeSeller = Number(quoted.marketplaceFeeSeller);
+        const buyerTotal = Number(quoted.total);
+        const sellerNetAmount = Number(quoted.sellerNetAmount);
+        const feeMode = String(acceptedQuote.feePolicy || 'SELLER');
+        const feeVersion = String(acceptedQuote.feePolicyVersion || '1');
+        if (![unitPrice, productSubtotal, shipping.fee, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount].every(Number.isFinite) ||
+            unitPrice <= 0 || productSubtotal <= 0 || shipping.fee < 0 || totalFee < 0 || marketplaceFeeBuyer < 0 || marketplaceFeeSeller < 0 || buyerTotal <= 0 || sellerNetAmount < 0 ||
+            Math.abs(productSubtotal - Math.round(unitPrice * item.quantity * 100) / 100) > 0.02 ||
+            Math.abs(buyerTotal - (productSubtotal + shipping.fee + marketplaceFeeBuyer)) > 0.02) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'a saved cart quote contains inconsistent amounts; review checkout again', code: 'CHECKOUT_QUOTE_INVALID' });
+        }
+        lines.push({ item, listing, quoted, currency, unitPrice, productSubtotal, shipping, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal, sellerNetAmount, feeMode, feeVersion });
       }
       const subtotal = Math.round(lines.reduce((sum, line) => sum + line.productSubtotal, 0) * 100) / 100;
       const deliveryFee = Math.round(lines.reduce((sum, line) => sum + line.shipping.fee, 0) * 100) / 100;
@@ -214,13 +301,21 @@ export function registerMarketplaceCheckoutOrderRoutes({ app, pool, auth }) {
       for (const line of lines) {
         const { item, listing, shipping, currency, unitPrice, productSubtotal, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, buyerTotal: lineBuyerTotal, sellerNetAmount, feeMode, feeVersion } = line;
         const orderId = crypto.randomUUID(); const shippingAddress = item.method === 'DELIVERY' ? item.address : null; const buyerNote = clean(req.body?.buyerNote, 1000);
-        const snapshot = { listingId: String(listing.id), sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, storeName: listing.store_name, title: listing.title, description: listing.description, price: unitPrice, currency, category: listing.category, condition: listing.condition, location: listing.location, deliveryAvailable: Boolean(listing.delivery_available), pickupAvailable: Boolean(listing.pickup_available), deliveryFee: shipping.fee, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, productSubtotal, marketplaceFee: totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, paymentProviderFee: 0, discountAmount: 0, buyerTotal: lineBuyerTotal, sellerNetAmount, feePolicy: feeMode, feePolicyVersion: feeVersion, providerFeePayer: 'FYNX', fulfillmentMethod: item.method, shippingAddress, buyerNote, mediaIds: Array.isArray(listing.media_ids) ? listing.media_ids.map(String) : [] };
-        const inserted = (await client.query('INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,product_subtotal,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,buyer_total,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,total_amount,currency,product_snapshot,status,fulfillment_method,shipping_address,buyer_note,shipping_method,shipping_note,shipping_fee_policy) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12,$13,$14,$15,\'FYNX\',$12,$16,$17::jsonb,\'PAYMENT_PENDING\',$18,$19::jsonb,$20,$21,$22,$23) RETURNING *', [orderId, req.user.sub, listing.seller_id, listing.id, item.quantity, unitPrice, shipping.fee, productSubtotal, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, lineBuyerTotal, sellerNetAmount, feeMode, feeVersion, currency, JSON.stringify(snapshot), item.method, shippingAddress ? JSON.stringify(shippingAddress) : null, buyerNote, shipping.provider, shipping.note, shipping.feePolicy])).rows[0];
+        const snapshot = { listingId: String(listing.id), sellerId: String(listing.seller_id), sellerUsername: listing.seller_username, sellerDisplayName: listing.seller_display_name, storeName: listing.store_name, title: listing.title, description: listing.description, price: unitPrice, currency, category: listing.category, condition: listing.condition, location: listing.location, deliveryAvailable: Boolean(listing.delivery_available), pickupAvailable: Boolean(listing.pickup_available), deliveryFee: shipping.fee, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingNote: shipping.note, shippingOrigin: shipping.origin, shippingDestination: shipping.destination, shippingRouteId: shipping.routeId, shippingRate: shipping.rateSnapshot, checkoutQuoteId: checkoutId, productSubtotal, marketplaceFee: totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, paymentProviderFee: 0, discountAmount: 0, buyerTotal: lineBuyerTotal, sellerNetAmount, feePolicy: feeMode, feePolicyVersion: feeVersion, providerFeePayer: 'FYNX', fulfillmentMethod: item.method, shippingAddress, buyerNote, mediaIds: Array.isArray(listing.media_ids) ? listing.media_ids.map(String) : [] };
+        const inserted = (await client.query('INSERT INTO marketplace_orders (id,buyer_id,seller_id,listing_id,quantity,unit_price,delivery_fee,product_subtotal,marketplace_fee,marketplace_fee_buyer,marketplace_fee_seller,payment_provider_fee,discount_amount,buyer_total,seller_net_amount,fee_policy,fee_policy_version,provider_fee_payer,total_amount,currency,product_snapshot,status,fulfillment_method,shipping_address,buyer_note,shipping_method,shipping_note,shipping_fee_policy,checkout_quote_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,$12,$13,$14,$15,\'FYNX\',$12,$16,$17::jsonb,\'PAYMENT_PENDING\',$18,$19::jsonb,$20,$21,$22,$23,$24) RETURNING *', [orderId, req.user.sub, listing.seller_id, listing.id, item.quantity, unitPrice, shipping.fee, productSubtotal, totalFee, marketplaceFeeBuyer, marketplaceFeeSeller, lineBuyerTotal, sellerNetAmount, feeMode, feeVersion, currency, JSON.stringify(snapshot), item.method, shippingAddress ? JSON.stringify(shippingAddress) : null, buyerNote, shipping.provider, shipping.note, shipping.feePolicy, checkoutId])).rows[0];
         await client.query('UPDATE marketplace_listings SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE id=$2', [item.quantity, listing.id]);
         await client.query('INSERT INTO marketplace_checkout_group_items (checkout_id,order_id,listing_id,quantity,line_total) VALUES ($1,$2,$3,$4,$5)', [checkoutId, orderId, listing.id, item.quantity, lineBuyerTotal]);
-        await client.query('INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,\'CHECKOUT_CONFIRMED\',NULL,\'PAYMENT_PENDING\',$3::jsonb)', [orderId, req.user.sub, JSON.stringify({ quantity: item.quantity, fulfillmentMethod: item.method, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, protected: true, buyerTotal: lineBuyerTotal, currency, checkoutId })]);
+        await client.query('INSERT INTO marketplace_order_events (order_id,actor_id,event_type,from_status,to_status,metadata) VALUES ($1,$2,\'CHECKOUT_CONFIRMED\',NULL,\'PAYMENT_PENDING\',$3::jsonb)', [orderId, req.user.sub, JSON.stringify({ quantity: item.quantity, fulfillmentMethod: item.method, shippingProvider: shipping.provider, shippingFeePolicy: shipping.feePolicy, shippingOrigin: shipping.origin, shippingDestination: shipping.destination, checkoutQuoteId: checkoutId, protected: true, buyerTotal: lineBuyerTotal, currency, checkoutId })]);
         orders.push(publicCheckoutOrder(inserted));
       }
+      const quotedTotal = Number(acceptedQuote.total);
+      if (!Number.isFinite(quotedTotal) || Math.abs(quotedTotal - buyerTotal) > 0.02 ||
+          Math.abs(Number(acceptedQuote.subtotal) - subtotal) > 0.02 ||
+          Math.abs(Number(acceptedQuote.deliveryFee) - deliveryFee) > 0.02) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'the protected cart totals do not match the quote you reviewed', code: 'CHECKOUT_QUOTE_TOTAL_MISMATCH' });
+      }
+      await client.query('UPDATE marketplace_checkout_quotes SET consumed_at=NOW() WHERE id=$1 AND consumed_at IS NULL', [checkoutId]);
       await client.query('COMMIT');
       return res.status(201).json({ checkout: insertedGroup, orders });
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); console.error('[marketplace-multi-checkout-order]', error); return res.status(500).json({ error: 'could not create multi-product protected checkout' }); }
