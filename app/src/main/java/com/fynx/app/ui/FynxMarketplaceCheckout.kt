@@ -600,7 +600,10 @@ internal fun FynxMarketplaceCheckoutDialog(
                 quantityError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (listing.deliveryAvailable) FilterChip(selected = fulfillment == "DELIVERY", onClick = { fulfillment = "DELIVERY"; invalidateQuote() }, label = { Text("Delivery") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
-                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; invalidateQuote() }, label = { Text("Pickup") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
+                    if (listing.pickupAvailable) FilterChip(selected = fulfillment == "PICKUP", onClick = { fulfillment = "PICKUP"; invalidateQuote() }, label = { Text("Meet / collect") }, enabled = !busy, colors = fynxMarketplaceSelectedChipColors())
+                }
+                if (fulfillment == "PICKUP") {
+                    Text("No driver is needed. Agree on a safe nearby meeting point with the seller, or collect from the seller. No delivery fee is added.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (fulfillment == "DELIVERY") {
                     OutlinedTextField(name, { name = it; invalidateQuote() }, label = { Text("Full name") }, singleLine = true, enabled = !busy, modifier = Modifier.fillMaxWidth())

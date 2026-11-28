@@ -48,7 +48,15 @@ fun FynxMarketplaceOrderLifecycle(
     onChanged: () -> Unit,
     onClose: () -> Unit
 ) {
-    var showFulfillment by remember { mutableStateOf(order.status == "PAID") }
+    // Checkout already locks the buyer's fulfillment choice into the protected order.
+    // Only legacy orders without a saved method may need this recovery dialog.
+    var showFulfillment by remember(order.id) {
+        mutableStateOf(
+            order.status == "PAID" &&
+                (order.fulfillmentMethod.isBlank() ||
+                    (order.fulfillmentMethod == "DELIVERY" && order.shippingAddress == null))
+        )
+    }
     var showDispute by remember { mutableStateOf(false) }
     var disputeDetails by remember { mutableStateOf("") }
     var disputeReason by remember { mutableStateOf("OTHER") }
@@ -182,7 +190,7 @@ fun FynxMarketplaceOrderLifecycle(
                 } else {
                     Text(order.productTitle.ifBlank { "FYNX order" })
                     Text("${order.currency} ${"%.2f".format(order.totalAmount)}")
-                    Text("Fulfillment: ${order.fulfillmentMethod.ifBlank { "Not selected" }}")
+                    Text("Fulfillment: ${if (order.fulfillmentMethod == "PICKUP") "Meet nearby / self-collect (no driver)" else order.fulfillmentMethod.ifBlank { "Not selected" }}")
                     order.trackingReference?.takeIf { it.isNotBlank() }?.let { Text("Tracking: $it") }
                     if (deliveryDetailsLoading) {
                         Text("Loading delivery and driver details…", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
@@ -211,7 +219,7 @@ fun FynxMarketplaceOrderLifecycle(
                     MarketplaceHandoverPhotoPreview(context, order.id, handoverPhotoMediaId)
                     FynxMarketplaceOrderTimeline(context = context, orderId = order.id)
                     when (order.status) {
-                        "PAID" -> Text("Choose delivery or pickup so the seller can fulfill the order.")
+                        "PAID" -> Text(if (order.fulfillmentMethod == "PICKUP") "Your meet-up or collection choice is saved. Agree the safe handover point with the seller in FYNX." else "Your delivery choice is saved. The seller will confirm dispatch details in FYNX.")
                         "SHIPPED" -> Text("The seller marked this order as shipped. Confirm only after the order reaches you.")
                         "INSPECTION" -> {
                             Text("You have a 48-hour inspection window. Complete the order only when the product is correct and in acceptable condition.")
@@ -317,10 +325,10 @@ private fun MarketplaceFulfillmentDialog(
         title = { Text("Receive your order") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("Choose an available fulfillment method. Your protected order remains governed by the existing FYNX order lifecycle.")
+                Text("Choose an available fulfillment method. Meet nearby or collect directly when no driver is needed; your protected order remains governed by the existing FYNX order lifecycle.")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (order.deliveryAvailable) FilterChip(method == "DELIVERY", { method = "DELIVERY" }, label = { Text("Delivery") }, colors = fynxMarketplaceSelectedChipColors())
-                    if (order.pickupAvailable) FilterChip(method == "PICKUP", { method = "PICKUP" }, label = { Text("Pickup") }, colors = fynxMarketplaceSelectedChipColors())
+                    if (order.pickupAvailable) FilterChip(method == "PICKUP", { method = "PICKUP" }, label = { Text("Meet / collect") }, colors = fynxMarketplaceSelectedChipColors())
                 }
                 if (method == "DELIVERY") {
                     OutlinedTextField(name, { name = it.take(120) }, label = { Text("Full name") }, singleLine = true, enabled = !busy)

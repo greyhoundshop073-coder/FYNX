@@ -142,6 +142,8 @@ Buyer total
 
 The exact fee policy is configurable and must be snapshotted for a paid order so later fee-policy changes cannot rewrite an existing transaction.
 
+**No-driver fulfilment is a first-class choice.** The existing `PICKUP` order method also covers a buyer and seller agreeing to meet at a safe nearby public handover point. It carries zero delivery fee and does not create a driver assignment. The buyer must see this option whenever the seller enables pickup; do not force a driver or add a delivery charge for nearby orders. Keep the stored `PICKUP` contract stable for existing orders and clients.
+
 Every financial amount must be traceable through the financial ledger and operation records.
 
 ## 5. FYNX fee model
