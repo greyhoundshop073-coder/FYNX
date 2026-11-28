@@ -84,24 +84,18 @@ export function registerRealtimeAssistantRoutes({
       await attachCall({ reservation, callId, databasePool });
 
       let monitor;
-      try {
-        monitor = await connectSideband({
-          callId,
-          reservation,
-          model: FYNX_AI_VOICE_MODEL,
-          includeTranscriptionUsage: mode === "transcription",
-          databasePool,
-          onFinalized: () => {
-            if (activeRealtimeMonitors.get(callId)?.monitor === monitor) {
-              activeRealtimeMonitors.delete(callId);
-            }
+      monitor = await connectSideband({
+        callId,
+        reservation,
+        model: FYNX_AI_VOICE_MODEL,
+        includeTranscriptionUsage: mode === "transcription",
+        databasePool,
+        onFinalized: () => {
+          if (activeRealtimeMonitors.get(callId)?.monitor === monitor) {
+            activeRealtimeMonitors.delete(callId);
           }
-        });
-      } catch (monitorError) {
-        await hangupCall(callId).catch(() => {});
-        await settleUsage({ reservation, status: "failed", databasePool }).catch(() => {});
-        throw monitorError;
-      }
+        }
+      });
 
       activeRealtimeMonitors.set(callId, { monitor, reservation });
       res.type("application/sdp").send(realtimeCall.answer);
