@@ -1,3 +1,5 @@
+import { reserveFynxAiUsage, settleFynxAiUsage, estimateGeminiCostUsd } from "./fynxAiUsageBudget.js";
+
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 const MAX_HISTORY_ITEMS = 12;
 const MAX_IMAGES = 4;
@@ -96,6 +98,7 @@ async function readGeminiStreamResponse(response, onTextChunk) {
   const decoder = new TextDecoder();
   const accumulatedParts = [];
   let candidate = {};
+  let usageMetadata = null;
   let buffer = "";
 
   const consumeEvent = (block) => {
@@ -105,6 +108,7 @@ async function readGeminiStreamResponse(response, onTextChunk) {
       .join("\n");
     if (!data || data === "[DONE]") return;
     const payload = JSON.parse(data);
+    if (payload?.usageMetadata && typeof payload.usageMetadata === "object") usageMetadata = payload.usageMetadata;
     const incoming = payload?.candidates?.[0];
     if (!incoming) return;
     candidate = { ...candidate, ...incoming };
@@ -153,6 +157,7 @@ async function readGeminiStreamResponse(response, onTextChunk) {
   }
 
   return {
+    usageMetadata,
     candidates: [{
       ...candidate,
       content: { ...(candidate.content || {}), role: "model", parts: accumulatedParts }
@@ -205,6 +210,8 @@ export async function runGeminiAssistant({
   instructions,
   toolDefinitions = [],
   executeTool,
+  capability = "conversation",
+  usageBudget = null,
   fetchImpl = globalThis.fetch
 }) {
   const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
@@ -252,10 +259,20 @@ export async function runGeminiAssistant({
   const declarations = toGeminiFunctionDeclarations(toolDefinitions);
   const seenToolCalls = new Set();
   let pendingAction = null;
-  for (let turn = 0; turn < 4; turn += 1) {
-    const data = await requestGemini({
-      model, apiKey, contents, instructions: String(instructions || ""), declarations, fetchImpl, onTextChunk
-    });
+  const budget = usageBudget || { reserve: reserveFynxAiUsage, settle: settleFynxAiUsage };
+  const reservation = await budget.reserve({ userId, provider: "gemini", capability, model });
+  const usageTotals = { inputTokens: 0, outputTokens: 0 };
+  let usageSettled = false;
+  try {
+    for (let turn = 0; turn < 4; turn += 1) {
+      const data = await requestGemini({
+        model, apiKey, contents, instructions: String(instructions || ""), declarations, fetchImpl, onTextChunk
+      });
+      const metadata = data?.usageMetadata || {};
+      usageTotals.inputTokens += Math.max(0, Number(metadata.promptTokenCount) || 0)
+        + Math.max(0, Number(metadata.toolUsePromptTokenCount) || 0);
+      usageTotals.outputTokens += Math.max(0, Number(metadata.candidatesTokenCount) || 0)
+        + Math.max(0, Number(metadata.thoughtsTokenCount) || 0);
     const candidate = data?.candidates?.[0];
     const candidateContent = candidate?.content;
     const parts = Array.isArray(candidateContent?.parts) ? candidateContent.parts : [];
@@ -267,6 +284,14 @@ export async function runGeminiAssistant({
     if (!calls.length) {
       const reply = getCandidateText(parts);
       if (!reply) throw new Error("AI provider returned an empty response.");
+      await budget.settle({
+        reservation,
+        status: "completed",
+        inputTokens: usageTotals.inputTokens,
+        outputTokens: usageTotals.outputTokens,
+        estimatedCostUsd: estimateGeminiCostUsd(model, usageTotals.inputTokens, usageTotals.outputTokens)
+      });
+      usageSettled = true;
       return { reply, pendingAction };
     }
 
@@ -294,6 +319,22 @@ export async function runGeminiAssistant({
       functionResponses.push({ functionResponse });
     }
     contents.push({ role: "user", parts: functionResponses });
+    }
+    throw new Error("AI tool-processing limit reached.");
+  } catch (error) {
+    if (!usageSettled) {
+      try {
+        await budget.settle({
+          reservation,
+          status: "failed",
+          inputTokens: usageTotals.inputTokens,
+          outputTokens: usageTotals.outputTokens,
+          estimatedCostUsd: estimateGeminiCostUsd(model, usageTotals.inputTokens, usageTotals.outputTokens)
+        });
+      } catch (settlementError) {
+        console.error("[fynx-ai] usage settlement failed", String(settlementError?.message || "unknown").slice(0, 160));
+      }
+    }
+    throw error;
   }
-  throw new Error("AI tool-processing limit reached.");
 }
