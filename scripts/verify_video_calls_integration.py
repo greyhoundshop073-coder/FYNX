@@ -102,8 +102,8 @@ checks = {
         and "realtimeState != FynxRealtimeClient.State.CONNECTED" in app["calls"]
         and "sendCallInvite(current.id, peerId, video, callListingId)" in app["calls"],
     "Backend direct-call signaling errors are surfaced to the caller":
-        '"error" -> if (session?.id == event.callId)' in app["calls"]
-        and 'event.error ?: "The call could not be started."' in app["calls"],
+        '"error" -> session?.takeIf { event.callId.isBlank() || it.id == event.callId }?.let { current ->' in app["calls"]
+        and "failCallSignaling(current.id, event.error)" in app["calls"],
     "Shared one-to-one call uses authenticated direct signaling":
         "sendCallInvite" in app["calls"] and "sendCallOffer" in app["calls"]
         and "sendCallAnswer" in app["calls"] and "sendCallIce" in app["calls"],
