@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { confirmMarketplacePayment } from './marketplacePaymentState.js';
 import { handleBuyerWalletPaystackEvent, reconcileBuyerWalletTransferEvent } from './buyerWallet.js';
 import { settleBuyerWalletMarketplaceOrder } from './buyerWalletMarketplace.js';
+import { queueFynxNotification } from './notificationPush.js';
 
 function safeEqualHex(actual, expected) {
   if (!actual || !expected) return false;
@@ -198,6 +199,23 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
         const marketplaceMatched = await reconcileTransferEvent(client, eventName, eventData);
         const walletOutcome = await reconcileBuyerWalletTransferEvent(client, eventName, eventData);
         await client.query('COMMIT');
+        if (walletOutcome?.userId &&
+            ['SUCCEEDED','FAILED','REVERSED'].includes(String(walletOutcome.status || '').toUpperCase())) {
+          const status = String(walletOutcome.status).toUpperCase();
+          const amountLabel = `NGN ${Number(walletOutcome.amount || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const message = status === 'SUCCEEDED'
+            ? `${amountLabel} was sent from your FYNX Wallet to your bank.`
+            : status === 'REVERSED'
+              ? `${amountLabel} from a reversed withdrawal has been returned to your FYNX Wallet.`
+              : `${amountLabel} could not be withdrawn. The reserved amount was returned to your FYNX Wallet.`;
+          await queueFynxNotification(pool, {
+            userId: walletOutcome.userId, type: 'WALLET_ACTIVITY',
+            title: status === 'SUCCEEDED' ? 'Wallet withdrawal completed' : status === 'REVERSED' ? 'Wallet withdrawal reversed' : 'Wallet withdrawal failed',
+            message, targetId: String(walletOutcome.operationId || eventData?.reference || eventData?.transfer_code || 'wallet-withdrawal'),
+            route: 'fynx://wallet',
+            notificationId: `wallet-withdrawal-${walletOutcome.operationId || eventData?.reference || eventData?.transfer_code || 'wallet-withdrawal'}-${status.toLowerCase()}`
+          });
+        }
         return res.status(200).json({
           received: true,
           matched: marketplaceMatched || Boolean(walletOutcome?.matched),
@@ -219,6 +237,14 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       try {
         const outcome = await handleBuyerWalletPaystackEvent('charge.success', transaction);
         if (outcome.handled) {
+          if (outcome.userId && String(outcome.status || '').toUpperCase() === 'SUCCEEDED') {
+            await queueFynxNotification(pool, {
+              userId: outcome.userId, type: 'WALLET_ACTIVITY', title: 'Wallet top-up received',
+              message: `NGN ${Number(outcome.amount || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} has been added to your FYNX Wallet.`,
+              targetId: String(outcome.reference || reference), route: 'fynx://wallet',
+              notificationId: `wallet-funding-${outcome.reference || reference}`
+            });
+          }
           const statusCode = Number(outcome.statusCode) || 200;
           return res.status(statusCode).json({ received: true, ...outcome });
         }
@@ -239,13 +265,33 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
         await client.query('BEGIN');
         const group = (await client.query(`SELECT id,buyer_id,buyer_total,currency,status,payment_reference FROM marketplace_checkout_groups WHERE payment_reference=$1 FOR UPDATE`, [reference])).rows[0];
         if (!group) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
-        const children = (await client.query(`SELECT o.id,o.buyer_id,o.total_amount,o.currency,o.status,o.payment_provider_fee FROM marketplace_checkout_group_items gi JOIN marketplace_orders o ON o.id=gi.order_id WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o`, [group.id])).rows;
+        const children = (await client.query(`SELECT o.id,o.buyer_id,o.seller_id,o.product_snapshot,o.total_amount,o.currency,o.status,o.payment_provider_fee FROM marketplace_checkout_group_items gi JOIN marketplace_orders o ON o.id=gi.order_id WHERE gi.checkout_id=$1 ORDER BY o.id ASC FOR UPDATE OF o`, [group.id])).rows;
         const expectedAmount = amountSubunit(group.buyer_total, group.currency);
         const childTotal = children.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
         const childCurrencyValid = children.length > 0 && children.every((row) => String(row.currency || '').toUpperCase() === String(group.currency || '').toUpperCase());
         const valid = transaction.status === 'success' && String(transaction.reference) === reference && expectedAmount !== null && expectedAmount === paidAmount && paidCurrency === String(group.currency).toUpperCase() && metadataCheckoutId === String(group.id) && metadataBuyerId === String(group.buyer_id) && Math.round(childTotal * 100) / 100 === Number(group.buyer_total) && childCurrencyValid;
         if (!valid) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'checkout group payment data does not match' }); }
-        if (group.status === 'PAID' && children.every((row) => row.status === 'PAID')) { await client.query('COMMIT'); return res.status(200).json({ received: true, matched: true, idempotent: true, status: 'PAID', checkoutId: String(group.id) }); }
+        if (group.status === 'PAID' && children.every((row) => row.status === 'PAID')) {
+          await client.query('COMMIT');
+          for (const child of children) {
+            const orderTitle = String(child.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+            await Promise.all([
+              queueFynxNotification(pool, {
+                userId: child.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+                message: `Your payment for ${orderTitle} was confirmed. Open your order to follow its progress.`,
+                targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+                notificationId: `marketplace-payment-${child.id}-buyer`
+              }),
+              queueFynxNotification(pool, {
+                userId: child.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+                message: `Payment has been confirmed for ${orderTitle}. Open My Shop to manage this order.`,
+                targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+                notificationId: `marketplace-payment-${child.id}-seller`
+              })
+            ]);
+          }
+          return res.status(200).json({ received: true, matched: true, idempotent: true, status: 'PAID', checkoutId: String(group.id) });
+        }
         const providerFee = Number(transaction.fees);
         if (!Number.isFinite(providerFee) || providerFee < 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'checkout group payment provider fee is invalid' }); }
         const feeCents = Math.round(providerFee);
@@ -265,6 +311,25 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
         }
         await client.query(`UPDATE marketplace_checkout_groups SET status='PAID',updated_at=NOW() WHERE id=$1 AND status='PAYMENT_PENDING'`, [group.id]);
         await client.query('COMMIT');
+        for (const child of children) {
+          const orderTitle = String(child.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+          const buyerNotice = {
+            userId: child.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+            message: `Your payment for ${orderTitle} was confirmed. Open your order to follow its progress.`,
+            targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+            notificationId: `marketplace-payment-${child.id}-buyer`
+          };
+          const sellerNotice = {
+            userId: child.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+            message: `Payment has been confirmed for ${orderTitle}. Open My Shop to manage this order.`,
+            targetId: String(child.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(child.id))}`,
+            notificationId: `marketplace-payment-${child.id}-seller`
+          };
+          await Promise.all([
+            queueFynxNotification(pool, buyerNotice),
+            queueFynxNotification(pool, sellerNotice)
+          ]);
+        }
         return res.status(200).json({ received: true, matched: true, idempotent: false, status: 'PAID', checkoutId: String(group.id), childOrderCount: children.length });
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch {}
@@ -277,7 +342,7 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const orderResult = await client.query(`SELECT id,buyer_id,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
+      const orderResult = await client.query(`SELECT id,buyer_id,seller_id,product_snapshot,total_amount,currency,status,payment_reference FROM marketplace_orders WHERE payment_reference=$1`, [reference]);
       const order = orderResult.rows[0];
       if (!order) { await client.query('ROLLBACK'); return res.status(200).json({ received: true, matched: false }); }
       const metadataBuyerId = String(transaction.metadata?.buyerId || transaction.metadata?.buyer_id || '');
@@ -285,6 +350,23 @@ export function registerMarketplacePaystackWebhook({ app, pool }) {
       if (metadataOrderId !== String(order.id) || metadataBuyerId !== String(order.buyer_id) || String(transaction.reference) !== String(order.payment_reference) || orderExpectedAmount !== paidAmount || paidCurrency !== String(order.currency).toUpperCase()) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'payment data does not match order' }); }
       const result = await confirmMarketplacePayment(client, { orderId: order.id, reference, paidAmount, paidCurrency, providerFee: transaction.fees, source: 'webhook' });
       await client.query('COMMIT');
+      {
+        const orderTitle = String(order.product_snapshot?.title || 'Marketplace item').slice(0, 100);
+        await Promise.all([
+          queueFynxNotification(pool, {
+            userId: order.buyer_id, type: 'MARKETPLACE_ORDER', title: 'Marketplace payment confirmed',
+            message: `Your payment for ${orderTitle} was confirmed. Open your order to follow its progress.`,
+            targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+            notificationId: `marketplace-payment-${order.id}-buyer`
+          }),
+          queueFynxNotification(pool, {
+            userId: order.seller_id, type: 'MARKETPLACE_ORDER', title: 'You have a paid Marketplace order',
+            message: `Payment has been confirmed for ${orderTitle}. Open My Shop to manage this order.`,
+            targetId: String(order.id), route: `fynx://marketplace/orders/${encodeURIComponent(String(order.id))}`,
+            notificationId: `marketplace-payment-${order.id}-seller`
+          })
+        ]);
+      }
       return res.status(200).json({ received: true, matched: true, status: result.status, idempotent: result.idempotent });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}

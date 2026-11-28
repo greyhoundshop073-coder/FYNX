@@ -900,7 +900,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             "Advertising AI" -> { selected = "AI" }
             "Announcements" -> FynxAnnouncementsPanel(ownerAccess = adminRole == "OWNER")
             "Admin" -> if (adminRole != null) FynxAdminControlCenterPanel()
-            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSignOut = {
+            "Profile" -> ProfilePanel(session = authSession, openSettingsInitially = openProfileSettings, onSettingsClosed = { openProfileSettings = false; profileVersion++ }, onSettingsOpened = { openProfileSettings = true }, onSignOut = {
                 FynxAuthStore.clear(context)
                 authSession = AuthSession()
                 clearSessionScopedState()

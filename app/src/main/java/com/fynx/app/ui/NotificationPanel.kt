@@ -1,5 +1,13 @@
 package com.fynx.app.ui
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -7,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,9 +40,16 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     var remoteNotifications by remember { mutableStateOf<List<FynxNotification>>(emptyList()) }
     var remoteError by remember { mutableStateOf<String?>(null) }
     var notificationPreferences by remember { mutableStateOf(FynxNotificationPreferencesClient.cached(context)) }
+    var androidNotificationsAllowed by remember {
+        mutableStateOf(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+    }
+    var showPushPermissionExplanation by remember { mutableStateOf(false) }
     var preferenceSaveError by remember { mutableStateOf<String?>(null) }
     var preferenceSaveVersion by remember { mutableIntStateOf(0) }
     val preferenceSaveMutex = remember { Mutex() }
+    val preferencesLatest by rememberUpdatedState(notificationPreferences)
+    val pushEnabledLatest by rememberUpdatedState(notificationPreferences.pushEnabled)
     var remoteUnreadCount by remember { mutableIntStateOf(0) }
     var showOverflow by remember { mutableStateOf(false) }
     var showPreferences by remember(preferencesOnly) { mutableStateOf(preferencesOnly) }
@@ -58,7 +74,27 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
     }
     LaunchedEffect(Unit) { loadRemoteNotifications() }
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) loadRemoteNotifications() }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                androidNotificationsAllowed = granted
+                if (granted && pushEnabledLatest) {
+                    scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
+                } else if (!granted && pushEnabledLatest) {
+                    // Permission may have been revoked in Android settings while FYNX was backgrounded.
+                    // Disable server push for this account too; verified-email notices remain independent.
+                    scope.launch {
+                        FynxNotificationPreferencesClient.update(
+                            context,
+                            preferencesLatest.copy(pushEnabled = false)
+                        ).onSuccess { notificationPreferences = it }
+                            .onFailure { preferenceSaveError = "Android push permission is off. FYNX email notifications are unaffected." }
+                    }
+                }
+                loadRemoteNotifications()
+            }
+        }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -87,6 +123,36 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
             }
         }
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        androidNotificationsAllowed = granted
+        if (granted) {
+            savePreferences(notificationPreferences.copy(pushEnabled = true))
+            scope.launch {
+                FynxNotificationDeviceManager.registerCurrentToken(context)
+                    .onFailure { preferenceSaveError = "Push permission was granted, but this device could not register yet. Email alerts are unaffected." }
+            }
+        } else {
+            savePreferences(notificationPreferences.copy(pushEnabled = false))
+            preferenceSaveError = "Android notification permission was not granted. FYNX still works, and verified-email alerts are separate."
+        }
+    }
+
+    fun setPushAlertsEnabled(enabled: Boolean) {
+        if (!enabled) {
+            savePreferences(notificationPreferences.copy(pushEnabled = false))
+            return
+        }
+        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        androidNotificationsAllowed = granted
+        if (granted) {
+            savePreferences(notificationPreferences.copy(pushEnabled = true))
+            scope.launch { FynxNotificationDeviceManager.registerCurrentToken(context) }
+        } else {
+            showPushPermissionExplanation = true
+        }
+    }
+
     fun markAllRead() {
         FynxNotificationStore.markAllRead(context)
         localNotifications = FynxNotificationStore.load(context)
@@ -142,13 +208,46 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                 }
             }
         }
+        if (showPushPermissionExplanation) {
+            AlertDialog(
+                onDismissRequest = { showPushPermissionExplanation = false },
+                title = { Text("Allow FYNX push alerts?") },
+                text = { Text("FYNX can show alerts for messages, Marketplace order progress, wallet activity and reminders. Android notification permission is optional. You can keep using FYNX and receive verified-email updates without allowing push alerts.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showPushPermissionExplanation = false
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }) { Text("Continue") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPushPermissionExplanation = false }) { Text("Not now") }
+                }
+            )
+        }
         if (showPreferences) {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))) {
+            Card(
+                Modifier.fillMaxWidth().then(
+                    if (preferencesOnly) Modifier.weight(1f).verticalScroll(rememberScrollState()) else Modifier
+                ),
+                shape = FynxDesign.CardShape,
+                colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface),
+                border = BorderStroke(1.dp, FynxDesign.Outline.copy(alpha = .55f))
+            ) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     preferenceSaveError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     Text("GENERAL", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp, bottom = 3.dp))
                     NotificationPreferenceSwitch("Notifications", "Master switch for FYNX alerts", notificationPreferences.enabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, enabled = it)) }
-                    NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, pushEnabled = it)) }
+                    NotificationPreferenceSwitch("Push alerts", "Allow notification banners and sounds", notificationPreferences.pushEnabled && androidNotificationsAllowed, ::setPushAlertsEnabled)
+                    if (!androidNotificationsAllowed) {
+                        Text("Android notifications are currently off. Open Android settings to allow banners and sounds. Verified-email alerts can still arrive separately.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
+                        TextButton(onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                            }.onFailure {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null)))
+                            }
+                        }) { Text("Open Android notification settings") }
+                    }
                     NotificationPreferenceSwitch("Quiet mode", "Temporarily silence non-safety alerts", notificationPreferences.quietMode) { savePreferences(FynxNotificationControlsBatch3.update(notificationPreferences, quietMode = it)) }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
                     Text("COMMUNICATION", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -165,6 +264,12 @@ fun NotificationPanel(notifications: List<FynxNotification>, onBack: () -> Unit,
                     HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
                     Text("MARKETPLACE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     NotificationPreferenceSwitch("Marketplace", "Orders and marketplace activity", notificationPreferences.marketplaceEnabled) { savePreferences(notificationPreferences.copy(marketplaceEnabled = it)) }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
+                    Text("EMAIL UPDATES", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    NotificationPreferenceSwitch("Email notifications", "Send important FYNX activity to your verified email", notificationPreferences.emailEnabled) { savePreferences(notificationPreferences.copy(emailEnabled = it)) }
+                    NotificationPreferenceSwitch("Marketplace emails", "Order updates, protection cases and watched-price alerts", notificationPreferences.marketplaceEmailEnabled) { savePreferences(notificationPreferences.copy(marketplaceEmailEnabled = it)) }
+                    NotificationPreferenceSwitch("Wallet emails", "Important wallet activity and money updates", notificationPreferences.walletEmailEnabled) { savePreferences(notificationPreferences.copy(walletEmailEnabled = it)) }
+                    Text("Security and account-protection notices may still be sent when email updates are off.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 5.dp))
                     Text("MONEY ALERTS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     NotificationPreferenceSwitch("Money", "Wallet activity", notificationPreferences.walletEnabled) { savePreferences(notificationPreferences.copy(walletEnabled = it)) }

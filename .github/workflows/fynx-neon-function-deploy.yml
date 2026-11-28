@@ -87,6 +87,10 @@ jobs:
             echo "::error::Initial Neon deployment must keep wallet test mode and card funding disabled until provider/runtime safety checks pass."
             exit 1
           fi
+          if { [ -n "$FYNX_EMAIL_HOST" ] || [ -n "$FYNX_EMAIL_USER" ] || [ -n "$FYNX_EMAIL_PASSWORD" ] || [ -n "$FYNX_EMAIL_FROM" ]; } && { [ -z "$FYNX_EMAIL_HOST" ] || [ -z "$FYNX_EMAIL_USER" ] || [ -z "$FYNX_EMAIL_PASSWORD" ] || [ -z "$FYNX_EMAIL_FROM" ]; }; then
+            echo "::error::SMTP configuration is partial. Set host, user, password and sender together, or leave all four unset."
+            exit 1
+          fi
 
       - name: Deploy only to the existing populated fynx-testing branch
         env:
@@ -108,6 +112,7 @@ jobs:
           FYNX_WALLET_FUNDING_MAX_AMOUNT: ${{ vars.FYNX_WALLET_FUNDING_MAX_AMOUNT || '100000' }}
         run: |
           umask 077
+          trap 'rm -f .env.neon.deploy' EXIT
           cat > .env.neon.deploy <<EOF
           FYNX_JWT_SECRET=$FYNX_JWT_SECRET
           FYNX_GEMINI_API_KEY=$FYNX_GEMINI_API_KEY
