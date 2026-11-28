@@ -135,9 +135,11 @@ checks = {
         "for (const row of members.rows)" in backend["group_calls"]
         and "fynx_realtime_connections" not in backend["group_calls"],
     "Group mesh assigns one deterministic SDP offerer per peer pair":
-        "localUserId != null && localUserId!! < peer.userId" in app["group_call"]
-        and "if (created && createOffers" in app["group_call"]
-        and "engine.createOffer(peer.userId)" in app["group_call"],
+        "FynxGroupCallOfferPolicy.shouldCreateOffer(localUserId, peerId)" in app["group_call"]
+        and "if (initiateOffer &&" in app["group_call"]
+        and "offerStartedFor.add(peerId)" in app["group_call"]
+        and "engine.createOffer(peerId)" in app["group_call"]
+        and "ensurePeerAndNegotiate(peer.userId, initiateOffer = createOffers)" in app["group_call"],
     "Group engine uses independent peer connections":
         "linkedMapOf<String, PeerState>()" in app["group_engine"]
         and "createPeerConnection" in app["group_engine"]
