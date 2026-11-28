@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.webrtc.AudioTrack
 import org.webrtc.PeerConnection
@@ -47,6 +48,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
+    var mediaTransport by remember { mutableStateOf("pending") }
     var directCallIsInitiator by remember { mutableStateOf(initialIncomingCallId == null && initialOutgoing) }
     var relaySetupComplete by remember { mutableStateOf(false) }
     var relayRefreshSeconds by remember { mutableLongStateOf(0L) }
@@ -72,6 +74,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     val latestSession by rememberUpdatedState(session)
     val latestTargetUserId by rememberUpdatedState(targetUserId)
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
+    val sfuMediaForCleanup = remember { arrayOfNulls<FynxCloudflareSfuMediaEngine>(1) }
 
     fun failCallSignaling(callId: String, detail: String? = null) {
         scope.launch {
@@ -151,11 +154,49 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
     mediaEngineForCleanup[0] = mediaEngine
 
+    val sfuMedia = remember(mediaEngine) {
+        FynxCloudflareSfuMediaEngine(
+            context = context,
+            factory = mediaEngine.sfuPeerConnectionFactory(),
+            audioTrack = { mediaEngine.sfuLocalAudioTrack() },
+            videoTrack = { mediaEngine.sfuLocalVideoTrack() },
+            callbacks = FynxCloudflareSfuMediaEngine.Callbacks(
+                onRemoteVideoTrack = { track ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        remoteVideoTrack = track?.apply { setEnabled(true) }
+                    }
+                },
+                onRemoteAudioTrack = { _, track -> track.setEnabled(true) },
+                onConnectionState = { state ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        val connected = state == PeerConnection.IceConnectionState.CONNECTED ||
+                            state == PeerConnection.IceConnectionState.COMPLETED
+                        if (connected) {
+                            session?.let { current ->
+                                session = current.copy(state = FynxCallState.CONNECTED)
+                                FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false)
+                                calls = FynxCallsStore.load(context)
+                            }
+                            errorMessage = null
+                        } else if (state == PeerConnection.IceConnectionState.FAILED) {
+                            errorMessage = "The secure media relay connection failed. FYNX is attempting direct recovery."
+                        }
+                    }
+                },
+                onError = { message ->
+                    scope.launch(Dispatchers.Main.immediate) { errorMessage = message }
+                }
+            )
+        )
+    }
+    sfuMediaForCleanup[0] = sfuMedia
+
     suspend fun configureCallRelay(callId: String, restartOfferOwner: Boolean): Long {
         val configuration = FynxCallIceServerProvider.fetch(context, callId).getOrNull()
         if (session?.id != callId) return 0L
         return if (configuration != null) {
             mediaEngine.updateIceServers(configuration.servers, restartOfferOwner)
+            sfuMedia.updateIceServers(configuration.servers)
             configuration.refreshAfterSeconds
         } else {
             errorMessage = "Call relay is not available yet. FYNX is trying a direct connection and will retry."
