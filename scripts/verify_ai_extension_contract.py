@@ -29,6 +29,11 @@ realtime = read("backend/aiRealtimeRoutes.js")
 assistant_parser = read("backend/assistantJsonBodyParser.js")
 assistant_parser_test = read("backend/test-assistant-json-body-parser.mjs")
 voice = read("backend/aiVoiceSession.js")
+realtime_sideband = read("backend/aiRealtimeSideband.js")
+usage_budget = read("backend/fynxAiUsageBudget.js")
+realtime_voice_test = read("backend/test-ai-realtime-voice-routing.mjs")
+realtime_sideband_test = read("backend/test-ai-realtime-sideband.mjs")
+realtime_route_test = read("backend/test-ai-realtime-route-lifecycle.mjs")
 android_voice_engine = read("app/src/main/java/com/fynx/app/ui/FynxAiWebRtcEngine.kt")
 android_client = read("app/src/main/java/com/fynx/app/ui/FynxAiConversationClient.kt")
 android_voice = read("app/src/main/java/com/fynx/app/ui/FynxAiVoiceSession.kt")
@@ -102,7 +107,15 @@ checks = [
     ("voice provider credentials stay server-side", "process.env.OPENAI_API_KEY" in voice and "OPENAI_API_KEY" not in android_voice and "OPENAI_API_KEY" not in android_panel),
     ("Android text AI stays on FYNX backend transport", "FynxBackendClient.get" in android_client and "FynxBackendClient.postJson" in android_client),
     ("Android realtime session stays on FYNX backend transport", "FynxBackendClient.postJson" in android_voice),
-    ("central HTTPS transport remains the Android network boundary", "PRODUCTION_BASE_URL = \"https://fynx-backend-testing-testing.up.railway.app\"" in backend_client and "startsWith(\"https://\")" in backend_client),
+    ("central HTTPS transport defaults to the active Neon Function", "PRODUCTION_BASE_URL = \"https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech\"" in backend_client and "startsWith(\"https://\")" in backend_client),
+    ("Realtime call ID is validated from the OpenAI Location header", "parseFynxRealtimeCallId(response.headers?.get?.(\"Location\"))" in voice and "/v1/realtime/calls/" in voice),
+    ("Realtime usage sideband captures response.done and separates cached audio/text tokens", 'event.type === "response.done"' in realtime_sideband and "cached_tokens_details" in realtime_sideband and "outputAudioTokens" in realtime_sideband and "outputTextTokens" in realtime_sideband),
+    ("Realtime usage is persisted against the authenticated reservation and call ID", "attachFynxAiRealtimeCall" in usage_budget and "realtime_call_id" in usage_budget and "getActiveFynxAiRealtimeCall" in usage_budget),
+    ("Realtime cost is rejected when the selected model or usage breakdown is unknown", "isFynxRealtimeUsageModelSupported" in realtime_sideband and "totalInputAudio + totalInputText !== totalInput" in realtime_sideband and "estimatedCostUsd !== null" in realtime_sideband),
+    ("one FYNX AI voice session per user is enforced with stale reservation recovery", "FynxAiUsageSessionActiveError" in usage_budget and "capability LIKE 'voice_%'" in usage_budget and "INTERVAL '2 hours'" in usage_budget),
+    ("Realtime hangup is authenticated and scoped to the signed-in user", 'app.post("/api/assistant/realtime-session/hangup"' in realtime and "findActiveCall(userId, databasePool)" in realtime and "hangupCall(activeCall.callId)" in realtime),
+    ("Android engine closes the authenticated Realtime call when its media engine closes", "FynxAiVoiceSession.endSession(appContext)" in android_voice_engine and "remoteSessionActive = false" in android_voice_engine),
+    ("Realtime call-ID, billing, duplicate-event, route and failure cleanup regressions are tested", "parseFynxRealtimeCallId" in realtime_voice_test and "duplicate response usage" in realtime_sideband_test and "failedHangups, 1" in realtime_route_test),
     ("voice setup cancellation tears down the Android WebRTC handshake", "voiceConnectionJob?.cancel()" in android_panel and "catch (cancelled: CancellationException)" in android_voice_engine and "throw cancelled" in android_voice_engine),
     ("voice UI reports connected only after the realtime data channel is ready", android_voice_engine.index("dataChannelReady?.awaitWithTimeout()") < android_voice_engine.index("setState(State.CONNECTED, null)")),
     ("voice setup timeouts provide an actionable network error", "FYNX AI voice connection timed out" in android_voice_engine),
