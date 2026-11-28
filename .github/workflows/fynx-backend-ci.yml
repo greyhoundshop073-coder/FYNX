@@ -234,6 +234,8 @@ jobs:
         run: node test-group-content-routes.mjs && node test-group-membership-requests.mjs
       - name: Test unified call disconnect cleanup and Marketplace Live Proof authorization
         run: node test-group-call-disconnect.mjs && node test-marketplace-call-context.mjs && node test-cloudflare-sfu-routes.mjs && node test-cloudflare-turn-routes.mjs
+      - name: Verify Neon Function packaging includes authenticated calling routes
+        run: npm run verify:neon
       - name: Verify production Chat and Groups route registration
         run: python3 ../scripts/verify_group_permissions_contract.py
       - name: Run Chat Gate 2 message-actions certification
