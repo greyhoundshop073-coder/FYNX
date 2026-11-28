@@ -156,10 +156,11 @@ class FynxGroupWebRtcCallEngine(
             override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
             override fun onRenegotiationNeeded() = Unit
             override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out org.webrtc.MediaStream>) {
-                when (val track = receiver.track()) {
-                    is AudioTrack -> { track.setEnabled(true); callbacks.onRemoteAudioTrack(peerId, track) }
-                    is VideoTrack -> { track.setEnabled(true); callbacks.onRemoteVideoTrack(peerId, track) }
-                }
+                dispatchRemoteTrack(peerId, receiver.track())
+            }
+            // Unified Plan uses onTrack; onAddTrack remains for legacy compatibility.
+            override fun onTrack(transceiver: org.webrtc.RtpTransceiver) {
+                dispatchRemoteTrack(peerId, transceiver.receiver.track())
             }
         }) ?: run {
             callbacks.onError("A group media connection could not be created.")
@@ -246,6 +247,13 @@ class FynxGroupWebRtcCallEngine(
             return
         }
         if (!peer.connection.addIceCandidate(candidate)) callbacks.onError("A group network candidate could not be applied.")
+    }
+
+    private fun dispatchRemoteTrack(peerId: String, track: org.webrtc.MediaStreamTrack?) {
+        when (track) {
+            is AudioTrack -> { track.setEnabled(true); callbacks.onRemoteAudioTrack(peerId, track) }
+            is VideoTrack -> { track.setEnabled(true); callbacks.onRemoteVideoTrack(peerId, track) }
+        }
     }
 
     private fun flushRemoteCandidates(userId: String, peer: PeerState) {
