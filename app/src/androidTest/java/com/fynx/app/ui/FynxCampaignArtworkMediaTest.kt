@@ -10,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
@@ -82,10 +83,21 @@ class FynxCampaignArtworkMediaTest {
             // Thirteen 1x1 image patches on a 1,600x1,600 canvas. The compressed
             // fixture is tiny, but decoding every full-canvas frame would exceed
             // FYNX's bounded 32-million-pixel animation budget.
-            file.writeBytes(Base64.decode(
-                "R0lGODlhQAZABoAAAAAAAP///yH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAOw==",
-                Base64.DEFAULT
-            ))
+            val largeCanvasGif = ByteArrayOutputStream().apply {
+                write("GIF89a".toByteArray(Charsets.US_ASCII))
+                // Logical screen: 1,600 x 1,600 pixels with a two-colour global table.
+                write(byteArrayOf(0x40, 0x06, 0x40, 0x06, 0x80.toByte(), 0, 0))
+                write(byteArrayOf(0, 0, 0, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
+                repeat(13) {
+                    // Valid 100 ms graphic-control extension and a tiny 1x1 frame patch.
+                    write(byteArrayOf(0x21, 0xF9.toByte(), 0x04, 0, 10, 0, 0, 0))
+                    write(byteArrayOf(0x2C, 0, 0, 0, 0, 1, 0, 1, 0, 0))
+                    // LZW minimum code size, two-byte block and terminator.
+                    write(byteArrayOf(2, 2, 0x44, 0x01, 0))
+                }
+                write(0x3B)
+            }.toByteArray()
+            file.writeBytes(largeCanvasGif)
             val result = runCatching { FynxCampaignArtworkMedia.inspectFile(file) }
             assertTrue("A highly-compressed GIF must not exceed the decoded frame-memory budget", result.isFailure)
             assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("decoded animation pixels"))
