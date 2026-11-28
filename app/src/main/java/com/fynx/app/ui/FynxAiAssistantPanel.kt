@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.Manifest
+import com.fynx.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -58,6 +60,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.drawscope.drawImage
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -1600,12 +1608,18 @@ internal fun FynxAiFullScreenVoice(
                         Box(Modifier.size(orbDiameter * 0.92f * pulse).clip(CircleShape).background(
                             Brush.verticalGradient(listOf(Color(0xFF78A6FF), Color(0xFFB9CCFF), Color(0xFFEAF1FF), Color(0xFF9DB8F5)))
                         ))
-                        Box(Modifier.size(orbDiameter * 0.92f).clip(CircleShape).background(
-                            Brush.radialGradient(listOf(Color.White.copy(alpha = .30f), Color.Transparent, Color(0xFF7399EF).copy(alpha = .10f)))
-                        ))
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("FYNX", color = Color(0xFF244FAD), fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                            Text("AI", color = Color(0xFF244FAD), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        val portraitSheet = ImageBitmap.imageResource(id = R.drawable.fynx_ai_voice_portraits)
+                        val portraitColumn = if (speechVoice == "cedar" || speechVoice == "ash") 1 else 0
+                        val portraitRow = if (speechVoice == "coral" || speechVoice == "ash") 1 else 0
+                        val tileSize = portraitSheet.width / 2
+                        Canvas(Modifier.size(orbDiameter * 0.92f).clip(CircleShape)) {
+                            drawImage(
+                                image = portraitSheet,
+                                srcOffset = IntOffset(portraitColumn * tileSize, portraitRow * tileSize),
+                                srcSize = IntSize(tileSize, tileSize),
+                                dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                                filterQuality = FilterQuality.Medium
+                            )
                         }
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
