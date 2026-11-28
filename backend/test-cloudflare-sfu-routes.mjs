@@ -282,6 +282,9 @@ const unauthorized = await invoke("POST", "/api/calls/sfu/sessions", {
 });
 assert.equal(unauthorized.statusCode, 403);
 
+// Keep the test call active while exercising the additional owner sessions.
+callActive = true;
+
 // Cloudflare must acknowledge every publication exactly once; duplicate track names
 // are an ambiguous provider result and force session recovery instead of being accepted.
 sessions.set("session-d", {
