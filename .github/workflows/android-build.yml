@@ -398,7 +398,7 @@ jobs:
           cores: 4
           ram-size: 3072M
           heap-size: 512M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back environment -camera-front none
+          emulator-options: ${{ github.ref == 'refs/heads/feat/fynx-calls-canonical-20261128' && '-no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back environment -camera-front none' || '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back environment -camera-front none' }}
           pre-emulator-launch-script: bash scripts/configure_android_emulator_storage.sh
           script: |
             bash scripts/run_android_runtime_emulator_certification.sh
