@@ -47,6 +47,7 @@ class FynxAiWebRtcEngine(
     private val realtimeToolCallCount = AtomicInteger(0)
     private val maxRealtimeToolCalls = 8
     private var state: State = State.IDLE
+    @Volatile private var remoteSessionActive: Boolean = false
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
@@ -120,6 +121,7 @@ class FynxAiWebRtcEngine(
             val localSdp = connection.localDescription?.description
                 ?: error("FYNX AI local SDP is unavailable")
             val answerSdp = FynxAiVoiceSession.requestSession(appContext, localSdp, sessionMode, speechVoice).getOrThrow()
+            remoteSessionActive = true
             require(answerSdp.isNotBlank()) { "FYNX AI returned an empty SDP answer" }
             connection.setRemoteDescriptionAwait(
                 SessionDescription(SessionDescription.Type.ANSWER, answerSdp)
@@ -149,6 +151,15 @@ class FynxAiWebRtcEngine(
     }
     fun sendEvent(json: String): Boolean { val channel = eventsChannel ?: return false; if (channel.state() != DataChannel.State.OPEN) return false; return channel.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(json.toByteArray(StandardCharsets.UTF_8)), false)) }
     fun close() {
+        val shouldEndRemoteSession = remoteSessionActive
+        remoteSessionActive = false
+        if (shouldEndRemoteSession) {
+            // Local media is torn down immediately; the authenticated backend
+            // then hangs up the provider call and finalizes usage off the UI thread.
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                FynxAiVoiceSession.endSession(appContext)
+            }
+        }
         localDescriptionReady?.cancel(); localDescriptionReady = null; iceGatheringReady?.cancel(); iceGatheringReady = null; eventsChannel?.dispose(); eventsChannel = null; remoteAudioTrack?.setEnabled(false); remoteAudioTrack = null; peerConnection?.close(); peerConnection?.dispose(); peerConnection = null; audioTrack?.dispose(); audioTrack = null; audioSource?.dispose(); audioSource = null; toolJob.cancel(); if (state != State.FAILED) setState(State.CLOSED, null)
     }
     /** Release the native factory when this composable permanently leaves the screen. */
