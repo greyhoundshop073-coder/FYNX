@@ -44,8 +44,19 @@ const pool = {
     if (sql.startsWith("INSERT INTO fynx_call_sfu_publications")) {
       const [callId, userId, sessionId, trackName, mid] = params;
       const existing = publications.find((item) => item.session_id === sessionId && item.track_name === trackName);
-      if (existing) Object.assign(existing, { mid, active: true });
-      else publications.push({ call_id: callId, user_id: String(userId), session_id: sessionId, track_name: trackName, mid, active: true });
+      if (existing) Object.assign(existing, { mid, active: false });
+      else publications.push({ call_id: callId, user_id: String(userId), session_id: sessionId, track_name: trackName, mid, active: false });
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.startsWith("SELECT track_name,mid FROM fynx_call_sfu_publications")) {
+      const [sessionId, userId] = params;
+      const rows = publications.filter((item) => item.session_id === sessionId && item.user_id === String(userId))
+        .map(({ track_name, mid }) => ({ track_name, mid }));
+      return { rows, rowCount: rows.length };
+    }
+    if (sql.startsWith("UPDATE fynx_call_sfu_publications SET active=TRUE")) {
+      publications.filter((item) => item.session_id === params[0] && item.user_id === String(params[1]))
+        .forEach((item) => { item.active = true; });
       return { rows: [], rowCount: 1 };
     }
     if (sql.includes("JOIN fynx_call_sfu_publications p ON p.session_id=s.session_id")) {
@@ -158,6 +169,16 @@ const publish = await invoke("POST", publishPath, { params: { sessionId: "sessio
 assert.equal(publish.statusCode, 200);
 assert.equal(publish.body.mutationState, "READY");
 assert.equal(sessions.get("session-a").mutation_state, "READY");
+assert.equal(publications.find((item) => item.session_id === "session-a").active, false,
+  "a publication must stay hidden until its endpoint confirms ICE connectivity");
+const hiddenDiscovery = await invoke("GET", "/api/calls/sfu/sessions", { query: { callId: "call_liveproof_1" } });
+assert.equal(hiddenDiscovery.body.publishers.length, 0, "unconnected publications must not be discoverable");
+const ready = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/ready", {
+  params: { sessionId: "session-a" }, body: { callId: "call_liveproof_1" }
+});
+assert.equal(ready.statusCode, 200);
+assert.equal(ready.body.activeTracks, 1);
+assert.equal(publications.find((item) => item.session_id === "session-a").active, true);
 
 // Add a second user's publication and prove subscriber authorization is call-scoped.
 sessions.set("session-b", {

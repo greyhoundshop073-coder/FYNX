@@ -171,8 +171,8 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
         const source = tracks.find((item) => item.trackName === track.trackName);
         if (source) await pool.query(
           `INSERT INTO fynx_call_sfu_publications(call_id,user_id,session_id,track_name,mid,active)
-           VALUES($1,$2,$3,$4,$5,TRUE)
-           ON CONFLICT(session_id,track_name) DO UPDATE SET mid=EXCLUDED.mid,active=TRUE`,
+           VALUES($1,$2,$3,$4,$5,FALSE)
+           ON CONFLICT(session_id,track_name) DO UPDATE SET mid=EXCLUDED.mid,active=FALSE`,
           [callId, String(req.user.sub), sessionId, source.trackName, source.mid]
         );
       }
@@ -188,6 +188,38 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
     }
   }));
 
+  app.post("/api/calls/sfu/sessions/:sessionId/ready", auth, rateLimit, route(async (req, res) => {
+    const { sessionId } = req.params;
+    const { callId } = req.body || {};
+    if (!validId(sessionId) || !validId(callId, 80)) return res.status(400).json({ error: "valid session and call IDs are required" });
+    if (!await getOwnedSession(sessionId, req.user.sub, callId)) return res.status(403).json({ error: "call session access denied" });
+    if (!await claimMutation(sessionId, req.user.sub, callId, ["READY"])) return res.status(409).json({ error: "media session cannot be published while another operation is pending" });
+    try {
+      const expected = await pool.query(
+        "SELECT track_name,mid FROM fynx_call_sfu_publications WHERE session_id=$1 AND user_id=$2",
+        [sessionId, String(req.user.sub)]
+      );
+      if (!expected.rows.length || expected.rows.some((track) => !validId(String(track.mid || ""), 16))) {
+        await finishMutation(sessionId, "READY");
+        return res.status(409).json({ error: "no complete local media publication is ready to activate" });
+      }
+      const snapshot = await sfuRequest("/sessions/" + encodeURIComponent(sessionId), "GET");
+      const activeMids = new Set((Array.isArray(snapshot?.tracks) ? snapshot.tracks : [])
+        .filter((track) => track?.location === "local" && track.status === "active")
+        .map((track) => String(track.mid || "")));
+      if (expected.rows.some((track) => !activeMids.has(String(track.mid)))) {
+        await finishMutation(sessionId, "READY");
+        return res.status(409).json({ error: "Cloudflare has not activated every published media track yet" });
+      }
+      await pool.query("UPDATE fynx_call_sfu_publications SET active=TRUE WHERE session_id=$1 AND user_id=$2",
+        [sessionId, String(req.user.sub)]);
+      await finishMutation(sessionId, "READY");
+      return res.json({ ok: true, activeTracks: expected.rows.length });
+    } catch (error) {
+      await finishMutation(sessionId, "RECOVERY_REQUIRED");
+      throw error;
+    }
+  }));
   app.post("/api/calls/sfu/sessions/:sessionId/subscribe", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId, publisherSessionId, trackNames } = req.body || {};
