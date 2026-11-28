@@ -42,6 +42,7 @@ app = {
         "group_engine": "FynxGroupWebRtcCallEngine.kt",
         "group_offer_policy": "FynxGroupCallOfferPolicy.kt",
         "group_media_policy": "FynxGroupCallMediaPolicy.kt",
+        "sfu_media": "FynxCloudflareSfuMediaEngine.kt",
         "transport": "FynxCallTransportHardening.kt",
     }.items()
 }
@@ -248,6 +249,22 @@ checks["Disconnect recovery initializes group-call schema once per database pool
 checks["Marketplace Live Proof authorization has direct backend tests"] = (
     "test-marketplace-call-context.mjs" in read(".github/workflows/fynx-backend-ci.yml")
     and "resolveFynxMarketplaceCallContext" in backend["marketplace_context"]
+)
+
+# Cloudflare SFU remote-track lifecycle must clear individual track removal,
+# not wait for the participant roster to remove the whole user.
+remove_start = app["sfu_media"].find("override fun onRemoveTrack(receiver: org.webrtc.RtpReceiver)")
+remove_end = app["sfu_media"].find("\n                    }", remove_start)
+remove_handler = app["sfu_media"][remove_start:remove_end] if remove_start >= 0 and remove_end > remove_start else ""
+checks["Cloudflare SFU disables and removes an individual remote track by authenticated owner"] = (
+    "remoteTracksByUser.forEach" in remove_handler
+    and "tracks.remove(removedTrack.id(), removedTrack)" in remove_handler
+    and "removedTrack.setEnabled(false)" in remove_handler
+    and "transceivers()" not in remove_handler
+)
+checks["Cloudflare SFU clears or replaces the removed participant video surface"] = (
+    "filterIsInstance<VideoTrack>()" in remove_handler
+    and "callbacks.onRemoteVideoTrack(owner, replacementTrack)" in remove_handler
 )
 
 failed = [name for name, ok in checks.items() if not ok]
