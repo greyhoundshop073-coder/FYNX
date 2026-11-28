@@ -165,7 +165,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             audioTrack = { mediaEngine.sfuLocalAudioTrack() },
             videoTrack = { mediaEngine.sfuLocalVideoTrack() },
             callbacks = FynxCloudflareSfuMediaEngine.Callbacks(
-                onRemoteVideoTrack = { track ->
+                onRemoteVideoTrack = { _, track ->
                     scope.launch(Dispatchers.Main.immediate) {
                         remoteVideoTrack = track?.apply { setEnabled(true) }
                     }
