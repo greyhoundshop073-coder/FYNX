@@ -12,6 +12,8 @@ const publications = [];
 let callActive = true;
 let apiCalls = 0;
 let partialSubscribe = false;
+let duplicateSubscribeMids = false;
+let duplicatePublishTracks = false;
 const pool = {
   async query(sql, params = []) {
     if (/^\s*(CREATE|ALTER|CREATE INDEX)/i.test(sql)) return { rows: [], rowCount: 0 };
@@ -105,7 +107,9 @@ const fetchImpl = async (url, options = {}) => {
   } else if (path.endsWith("/tracks/new") && options.method === "POST" && JSON.parse(options.body || "{}").tracks?.[0]?.location === "local") {
     payload = {
       sessionDescription: { type: "answer", sdp: "sfu-publish-answer" },
-      tracks: [{ trackName: "microphone" }]
+      tracks: duplicatePublishTracks
+        ? [{ trackName: "microphone" }, { trackName: "microphone" }]
+        : [{ trackName: "microphone" }]
     };
   } else if (path.endsWith("/tracks/new") && options.method === "POST") {
     payload = {
@@ -113,7 +117,9 @@ const fetchImpl = async (url, options = {}) => {
       sessionDescription: { type: "offer", sdp: "sfu-subscribe-offer" },
       tracks: partialSubscribe
         ? [{ mid: "1" }, { errorCode: "track_unavailable", errorDescription: "test partial allocation" }]
-        : [{ mid: "1" }]
+        : duplicateSubscribeMids
+          ? [{ mid: "1" }, { mid: "1" }]
+          : [{ mid: "1" }]
     };
   } else if (path.endsWith("/renegotiate")) {
     payload = { success: true };
@@ -275,6 +281,41 @@ const unauthorized = await invoke("POST", "/api/calls/sfu/sessions", {
   userId: "99", body: { callId: "call_liveproof_1" }
 });
 assert.equal(unauthorized.statusCode, 403);
+
+// Cloudflare must acknowledge every publication exactly once; duplicate track names
+// are an ambiguous provider result and force session recovery instead of being accepted.
+sessions.set("session-d", {
+  session_id: "session-d", call_id: "call_liveproof_1", user_id: "42",
+  mutation_state: "READY", ended_at: null
+});
+duplicatePublishTracks = true;
+const duplicatePublish = await invoke("POST", publishPath, {
+  params: { sessionId: "session-d" },
+  body: {
+    callId: "call_liveproof_1",
+    sessionDescription: { type: "offer", sdp: "publisher-offer" },
+    tracks: [{ mid: "0", trackName: "microphone" }, { mid: "1", trackName: "camera" }]
+  }
+});
+assert.equal(duplicatePublish.statusCode, 502,
+  "duplicate or missing provider publication acknowledgements must not be accepted");
+assert.equal(sessions.get("session-d").mutation_state, "RECOVERY_REQUIRED");
+
+// Remote subscription results must also contain exactly one unique MID per requested
+// track; otherwise the endpoint cannot safely map the received media to its publisher.
+sessions.set("session-e", {
+  session_id: "session-e", call_id: "call_liveproof_1", user_id: "42",
+  mutation_state: "READY", ended_at: null
+});
+duplicateSubscribeMids = true;
+const duplicateSubscribe = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
+  params: { sessionId: "session-e" },
+  body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera", "microphone"] }
+});
+assert.equal(duplicateSubscribe.statusCode, 502,
+  "duplicate remote media MIDs must trigger session recovery");
+assert.equal(sessions.get("session-e").mutation_state, "RECOVERY_REQUIRED");
+
 assert.ok(!JSON.stringify([create.body, publish.body, answerSubscribe.body, close.body]).includes("test-secret"));
 
 console.log("Cloudflare SFU lifecycle tests passed (call authorization, mutation fencing, renegotiation, subscription, end-of-call cleanup).");
