@@ -26,12 +26,13 @@ function seconds(value) {
   return Number.isFinite(result) && result > 0 ? result : 0;
 }
 
-export function createFynxRealtimeUsageAccumulator() {
+export function createFynxRealtimeUsageAccumulator({ includeTranscriptionUsage = false } = {}) {
   const responseIds = new Set();
   const transcriptionIds = new Set();
   const totals = {
     inputTokens: 0, outputTokens: 0,
     inputAudioTokens: 0, inputTextTokens: 0,
+    cachedInputAudioTokens: 0, cachedInputTextTokens: 0,
     outputAudioTokens: 0, outputTextTokens: 0,
     inputAudioSeconds: 0, responseCount: 0, transcriptionCount: 0
   };
@@ -46,35 +47,34 @@ export function createFynxRealtimeUsageAccumulator() {
       if (responseId) responseIds.add(responseId);
       const usage = response.usage;
       if (!usage || typeof usage !== "object") return false;
-      const inputDetails = usage.input_token_details || {};
-      const outputDetails = usage.output_token_details || {};
+      const input = usage.input_token_details || {};
+      const cached = input.cached_tokens_details || {};
+      const output = usage.output_token_details || {};
       totals.inputTokens += count(usage.input_tokens);
       totals.outputTokens += count(usage.output_tokens);
-      totals.inputAudioTokens += count(inputDetails.audio_tokens);
-      totals.inputTextTokens += count(inputDetails.text_tokens);
-      totals.outputAudioTokens += count(outputDetails.audio_tokens);
-      totals.outputTextTokens += count(outputDetails.text_tokens);
+      totals.inputAudioTokens += count(input.audio_tokens);
+      totals.inputTextTokens += count(input.text_tokens);
+      totals.cachedInputAudioTokens += count(cached.audio_tokens);
+      totals.cachedInputTextTokens += count(cached.text_tokens);
+      totals.outputAudioTokens += count(output.audio_tokens);
+      totals.outputTextTokens += count(output.text_tokens);
       totals.responseCount += 1;
       return true;
     }
 
-    if (event.type === "conversation.item.input_audio_transcription.completed") {
+    // Realtime transcription-only sessions do not create assistant Responses.
+    // Their completed transcript event is the authoritative usage event.
+    if (includeTranscriptionUsage && event.type === "conversation.item.input_audio_transcription.completed") {
       const transcriptionId = String(event.event_id || event.item_id || "");
       if (transcriptionId && transcriptionIds.has(transcriptionId)) return false;
       if (transcriptionId) transcriptionIds.add(transcriptionId);
       const usage = event.usage;
-      if (!usage || typeof usage !== "object") return false;
-      if (usage.type === "duration") {
-        totals.inputAudioSeconds += seconds(usage.seconds);
-      } else if (usage.type === "tokens") {
-        const inputDetails = usage.input_token_details || {};
-        totals.inputTokens += count(usage.input_tokens);
-        totals.outputTokens += count(usage.output_tokens);
-        totals.inputAudioTokens += count(inputDetails.audio_tokens);
-        totals.inputTextTokens += count(inputDetails.text_tokens);
-      } else {
-        return false;
-      }
+      if (!usage || typeof usage !== "object" || usage.type !== "tokens") return false;
+      const input = usage.input_token_details || {};
+      totals.inputTokens += count(usage.input_tokens);
+      totals.outputTokens += count(usage.output_tokens);
+      totals.inputAudioTokens += count(input.audio_tokens);
+      totals.inputTextTokens += count(input.text_tokens);
       totals.transcriptionCount += 1;
       return true;
     }
@@ -120,7 +120,7 @@ export function connectFynxRealtimeSideband({
   apiKey = process.env.OPENAI_API_KEY || "",
   reservation,
   model = "gpt-realtime-2.1",
-  transcriptionModel = process.env.OPENAI_TRANSCRIPTION_MODEL || "gpt-live-transcribe",
+  includeTranscriptionUsage = false,
   databasePool,
   WebSocketImpl = WebSocket,
   connectTimeoutMs = 8_000,
@@ -134,7 +134,7 @@ export function connectFynxRealtimeSideband({
   if (!reservation?.id) return Promise.reject(new Error("A FYNX AI usage reservation is required."));
   if (typeof WebSocketImpl !== "function") return Promise.reject(new Error("Realtime usage monitor is unavailable."));
 
-  const accumulator = createFynxRealtimeUsageAccumulator();
+  const accumulator = createFynxRealtimeUsageAccumulator({ includeTranscriptionUsage });
   const url = "wss://api.openai.com/v1/realtime?call_id=" + encodeURIComponent(callId);
   const socket = new WebSocketImpl(url, {
     headers: { Authorization: "Bearer " + apiKey },
@@ -143,33 +143,35 @@ export function connectFynxRealtimeSideband({
   });
 
   let opened = false;
-  let sessionClosed = false;
   let finalized = false;
   let finalizationPromise = null;
   let connectTimer = null;
+  let requestedFinalStatus = "failed";
 
   const finalize = status => {
-    if (finalized) return finalizationPromise || Promise.resolve();
+    if (finalizationPromise) return finalizationPromise;
+    if (finalized) return Promise.resolve();
     finalized = true;
+    requestedFinalStatus = status === "completed" ? "completed" : "failed";
     if (connectTimer) clearTimeout(connectTimer);
     const usage = accumulator.snapshot();
-    const estimatedCostUsd = estimateFynxRealtimeUsageCostUsd({
-      model, transcriptionModel, usage
-    });
+    const estimatedCostUsd = estimateFynxRealtimeUsageCostUsd({ model, usage });
     finalizationPromise = Promise.resolve(settle({
       reservation,
-      status: status === "completed" && sessionClosed ? "completed" : "failed",
+      status: requestedFinalStatus,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       inputAudioTokens: usage.inputAudioTokens,
       inputTextTokens: usage.inputTextTokens,
+      cachedInputAudioTokens: usage.cachedInputAudioTokens,
+      cachedInputTextTokens: usage.cachedInputTextTokens,
       outputAudioTokens: usage.outputAudioTokens,
       outputTextTokens: usage.outputTextTokens,
       inputAudioSeconds: usage.inputAudioSeconds,
       estimatedCostUsd,
       databasePool
     })).then(() => {
-      onFinalized({ status: status === "completed" && sessionClosed ? "completed" : "failed", usage, estimatedCostUsd });
+      onFinalized({ status: requestedFinalStatus, usage, estimatedCostUsd });
     }).catch(error => {
       console.error("[fynx-ai] realtime usage settlement failed", String(error?.message || "unknown").slice(0, 160));
       onFinalized({ status: "failed", usage, estimatedCostUsd, settlementFailed: true });
@@ -178,21 +180,32 @@ export function connectFynxRealtimeSideband({
   };
 
   return new Promise((resolve, reject) => {
+    let settledConnection = false;
+    const rejectConnection = error => {
+      if (settledConnection) return;
+      settledConnection = true;
+      if (connectTimer) clearTimeout(connectTimer);
+      void finalize("failed").finally(() => reject(error));
+    };
+
     connectTimer = setTimeout(() => {
       if (!opened) {
         try { socket.terminate(); } catch {}
-        reject(new Error("OpenAI Realtime usage sideband did not connect in time."));
+        rejectConnection(new Error("OpenAI Realtime usage sideband did not connect in time."));
       }
     }, connectTimeoutMs);
 
     socket.on("open", () => {
       opened = true;
       if (connectTimer) clearTimeout(connectTimer);
+      if (settledConnection) return;
+      settledConnection = true;
       resolve({
         callId,
-        close() {
-          try { socket.close(1000, "FYNX voice session closed"); } catch {}
-          return finalize("failed");
+        finish(status = "completed") {
+          const finalization = finalize(status);
+          try { socket.close(1000, "FYNX Realtime call ended"); } catch {}
+          return finalization;
         },
         settled() { return finalizationPromise || Promise.resolve(); }
       });
@@ -206,24 +219,18 @@ export function connectFynxRealtimeSideband({
       } catch {
         return;
       }
-      if (event?.type === "session.closed" || event?.type === "session.expired") {
-        sessionClosed = true;
-        try { socket.close(1000, "Realtime session finished"); } catch {}
-        void finalize("completed");
-        return;
-      }
       accumulator.consume(event);
     });
 
     socket.on("close", () => {
-      void finalize(sessionClosed ? "completed" : "failed");
+      void finalize(requestedFinalStatus);
     });
 
     socket.on("error", error => {
       if (!opened) {
-        if (connectTimer) clearTimeout(connectTimer);
-        reject(new Error("OpenAI Realtime usage sideband could not connect: " + String(error?.message || "connection error")));
+        rejectConnection(new Error("OpenAI Realtime usage sideband could not connect: " + String(error?.message || "connection error")));
       } else {
+        void finalize("failed");
         console.error("[fynx-ai] realtime sideband connection error", String(error?.message || "unknown").slice(0, 160));
       }
     });
