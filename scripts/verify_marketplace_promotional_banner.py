@@ -123,11 +123,14 @@ checks = [
      "FynxCampaignArtworkMedia.inspectUri(context, uri)" in SEASONAL_CLIENT
      and 'detectedMimeType == "image/gif"' in PRODUCTION_MESSAGING
      and "readMediaBytes(context, uri) to detectedMimeType" in PRODUCTION_MESSAGING),
-    ("GIF validation limits file bytes, dimensions, animation frames and duration",
+    ("GIF validation limits file bytes, dimensions, animation frames, duration and decoded frame memory",
      "MAX_GIF_BYTES = 8 * 1024 * 1024" in ARTWORK_MEDIA
      and "MAX_GIF_DIMENSION = 1600" in ARTWORK_MEDIA
      and "MAX_GIF_FRAMES = 60" in ARTWORK_MEDIA
-     and "MAX_GIF_DURATION_MS = 15_000L" in ARTWORK_MEDIA),
+     and "MAX_GIF_DURATION_MS = 15_000L" in ARTWORK_MEDIA
+     and "MAX_GIF_TOTAL_FRAME_PIXELS = 32_000_000L" in ARTWORK_MEDIA
+     and "totalCanvasFramePixels <= MAX_GIF_TOTAL_FRAME_PIXELS" in ARTWORK_MEDIA
+     and "oversizedDecodedGifFrameBudgetIsRejectedBeforeDecoding" in ARTWORK_MEDIA_TEST),
     ("The remote media renderer detects cached GIFs from file signatures, not only HTTP headers",
      "FynxCampaignArtworkMedia.isGifFile(target)" in REMOTE_MEDIA
      and "fun isGifFile(file: File)" in ARTWORK_MEDIA),
