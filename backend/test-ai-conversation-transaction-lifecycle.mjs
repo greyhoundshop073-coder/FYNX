@@ -14,6 +14,7 @@ assert.ok(userCommit >= 0 && geminiCall > userCommit, "user turn must commit bef
 assert.ok(assistantBegin > geminiCall && assistantCommit > assistantBegin, "assistant persistence must use a separate short transaction");
 assert.match(route, /DELETE FROM ai_messages WHERE id=\$1 AND user_id=\$2/, "failed Gemini turns must roll back their persisted user message");
 assert.doesNotMatch(build, /genai-speech-recognition/, "Google on-device GenAI speech recognition must not be packaged");
+assert.doesNotMatch(route, /OPENAI_API_KEY|OPENAI_MODEL/, "Gemini conversation route must not retain unused OpenAI assistant configuration");
 assert.match(engine, /fun dispose\(\) \{ close\(\); factory\.dispose\(\) \}/, "WebRTC factory must expose final native disposal");
 assert.match(panel, /readAloudEngine\.dispose\(\)/, "read-aloud engine must be disposed on screen teardown");
 assert.match(panel, /voiceEngine\.dispose\(\)/, "microphone engine must be disposed on screen teardown");

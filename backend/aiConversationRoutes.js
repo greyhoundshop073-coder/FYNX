@@ -1,5 +1,4 @@
 import { getFynxDatabasePool } from "./databasePool.js";
-import pg from "pg";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { randomUUID } from "node:crypto";
@@ -8,11 +7,7 @@ import { runAssistantAgent } from "./fynxAiToolRegistry.js";
 import { FynxAiUsageLimitError } from "./fynxAiUsageBudget.js";
 import { buildAiConversationContext, loadPersistedAiConversationHistory } from "./aiConversationContext.js";
 
-const { Pool } = pg;
-const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const pool = getFynxDatabasePool();
 
 function authenticate(req) {
