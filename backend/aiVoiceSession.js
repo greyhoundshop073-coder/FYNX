@@ -113,24 +113,71 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
   };
 }
 
-export async function createRealtimeAnswer(sdpOffer, mode = "assistant", voice = FYNX_AI_VOICE) {
-  const apiKey = process.env.OPENAI_API_KEY || "";
+export function parseFynxRealtimeCallId(location) {
+  if (typeof location !== "string" || !location.trim()) {
+    throw new Error("OpenAI did not return a Realtime call location.");
+  }
+  let parsed;
+  try {
+    parsed = new URL(location, "https://api.openai.com");
+  } catch {
+    throw new Error("OpenAI returned an invalid Realtime call location.");
+  }
+  if (parsed.origin !== "https://api.openai.com") {
+    throw new Error("OpenAI returned an unexpected Realtime call host.");
+  }
+  const match = parsed.pathname.match(/^\/v1\/realtime\/calls\/(rtc_[A-Za-z0-9_-]{4,128})\/?$/);
+  if (!match) throw new Error("OpenAI returned an invalid Realtime call ID.");
+  return match[1];
+}
+
+export async function createRealtimeCall(
+  sdpOffer,
+  mode = "assistant",
+  voice = FYNX_AI_VOICE,
+  { apiKey = process.env.OPENAI_API_KEY || "", fetchImpl = globalThis.fetch } = {}
+) {
   if (!isValidRealtimeSessionMode(mode)) throw new Error("Unsupported FYNX realtime session mode.");
   if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
   if (typeof sdpOffer !== "string" || !sdpOffer.trim() || sdpOffer.length > 200_000) {
     throw new Error("A valid WebRTC SDP offer is required.");
   }
+  if (typeof fetchImpl !== "function") throw new Error("Realtime provider HTTP transport is unavailable.");
 
   const form = new FormData();
   form.append("sdp", sdpOffer);
   form.append("session", new Blob([JSON.stringify(buildRealtimeSessionConfig(mode, voice))], { type: "application/json" }));
 
-  const response = await fetch("https://api.openai.com/v1/realtime/calls", {
+  const response = await fetchImpl("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form
   });
   const answer = await response.text();
   if (!response.ok) throw new Error(`Realtime session failed (${response.status})`);
-  return answer;
+  const callId = parseFynxRealtimeCallId(response.headers?.get?.("Location"));
+  return { answer, callId };
+}
+
+export async function createRealtimeAnswer(sdpOffer, mode = "assistant", voice = FYNX_AI_VOICE) {
+  const result = await createRealtimeCall(sdpOffer, mode, voice);
+  return result.answer;
+}
+
+export async function hangupFynxRealtimeCall(
+  callId,
+  { apiKey = process.env.OPENAI_API_KEY || "", fetchImpl = globalThis.fetch } = {}
+) {
+  if (!/^rtc_[A-Za-z0-9_-]{4,128}$/.test(String(callId || ""))) {
+    throw new Error("A valid FYNX Realtime call ID is required.");
+  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
+  const response = await fetchImpl(
+    "https://api.openai.com/v1/realtime/calls/" + encodeURIComponent(callId) + "/hangup",
+    { method: "POST", headers: { Authorization: `Bearer ${apiKey}` } }
+  );
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Realtime call hangup failed (${response.status})`);
+  }
+  return { ended: response.ok, alreadyEnded: response.status === 404 };
 }
