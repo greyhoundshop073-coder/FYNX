@@ -134,6 +134,7 @@ checks = [
     ("GIF animation uses lifecycle and visible-viewport gating with Android 8 fallback decoding",
      "FynxCampaignArtworkImageView(ctx)" in REMOTE_MEDIA
      and "getGlobalVisibleRect(rect)" in ARTWORK_MEDIA
+     and "ValueAnimator.areAnimatorsEnabled()" in ARTWORK_MEDIA
      and "Movie.decodeByteArray" in ARTWORK_MEDIA
      and "AnimatedImageDrawable" in ARTWORK_MEDIA),
     ("Backend signed upload path already accepts image/gif without a new campaign-specific backend dependency",
