@@ -25,10 +25,12 @@ function responseRecorder() {
 
 const voiceSession = handlers.get("/api/assistant/realtime-session");
 const voiceTool = handlers.get("/api/assistant/realtime-tool");
+const voiceHangup = handlers.get("/api/assistant/realtime-session/hangup");
 assert.equal(typeof voiceSession, "function");
 assert.equal(typeof voiceTool, "function");
+assert.equal(typeof voiceHangup, "function");
 
-for (const [label, handler] of [["voice session", voiceSession], ["voice tool", voiceTool]]) {
+for (const [label, handler] of [["voice session", voiceSession], ["voice tool", voiceTool], ["voice hangup", voiceHangup]]) {
   const res = responseRecorder();
   const tokenWithoutSubject = jwt.sign({ role: "authenticated" }, process.env.JWT_SECRET);
   await handler({ headers: { authorization: `Bearer ${tokenWithoutSubject}` }, body: { sdp: "offer", name: "search_users", arguments: "{}" } }, res);
