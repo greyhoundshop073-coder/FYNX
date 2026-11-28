@@ -249,6 +249,28 @@ internal class FynxCloudflareSfuMediaEngine(
         }
     }
 
+    suspend fun refreshIceServers(servers: List<PeerConnection.IceServer>) {
+        require(servers.any { server ->
+            server.urls.any { it.startsWith("turn:", true) || it.startsWith("turns:", true) }
+        }) { "The refreshed relay configuration did not contain a TURN server." }
+
+        val reconnectCallId = mutex.withLock {
+            iceServers = servers.toList()
+            val activeCallId = callId
+            val activeSessionId = sessionId
+            if (activeCallId != null && activeSessionId != null) {
+                FynxCloudflareSfuClient.close(appContext, activeCallId, activeSessionId)
+                closeLocalConnection()
+                callId = null
+                sessionId = null
+            }
+            activeCallId
+        }
+        if (reconnectCallId != null) connect(reconnectCallId)
+    }
+
+    fun hasRemotePublisher(): Boolean = ownerByPublisherSession.isNotEmpty()
+
     suspend fun stop() = mutex.withLock {
         val activeCallId = callId
         val activeSessionId = sessionId

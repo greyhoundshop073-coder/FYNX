@@ -242,6 +242,10 @@ class FynxWebRtcCallEngine(
         runCatching { videoSource?.dispose() }
         videoSource = null
     }
+    internal fun sfuPeerConnectionFactory(): PeerConnectionFactory = factory
+    internal fun sfuLocalAudioTrack(): AudioTrack? = audioTrack
+    internal fun sfuLocalVideoTrack(): VideoTrack? = videoTrack
+
     override fun setMicrophoneEnabled(enabled: Boolean) { audioTrack?.setEnabled(enabled) }
     override fun setCameraEnabled(enabled: Boolean) { videoTrack?.setEnabled(enabled) }
     override fun switchCamera() { cameraCapturer?.switchCamera(null) }
