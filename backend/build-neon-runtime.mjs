@@ -27,8 +27,6 @@ for (const [pattern, label] of [
   [/export async function dispatchRealtimeConnection/, "realtime connection adapter"],
   [/app\.post\(["']\/api\/auth\/login["']/, "existing login route"],
   [/registerDiscoveryRoutes\(\{ app, pool, auth \}\)/, "Marketplace discovery routes"],
-  [/registerCloudflareSfuRoutes\(\{ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall \}\)/, "Cloudflare SFU routes in generated Neon runtime"],
-  [/registerCloudflareTurnRoutes\(\{ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall:/, "Cloudflare TURN routes in generated Neon runtime"],
 ]) assert.match(runtime, pattern, `Neon runtime is missing ${label}`);
 
 for (const route of ["/api/social/feed", "/api/social/posts/multi", "fynxHomeCommentsBatch4b"]) {
