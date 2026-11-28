@@ -50,7 +50,23 @@ class FynxAiWebRtcEngine(
     private var onStateChanged: ((State, String?) -> Unit)? = null
     private var onEvent: ((String) -> Unit)? = null
     private var onToolResult: ((String, String) -> Unit)? = null
-    init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
+    init {
+        initializeWebRtcRuntime(appContext)
+        factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
+    }
+
+    private companion object {
+        @Volatile private var webRtcRuntimeInitialized = false
+
+        @Synchronized
+        private fun initializeWebRtcRuntime(context: Context) {
+            if (webRtcRuntimeInitialized) return
+            PeerConnectionFactory.initialize(
+                PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions()
+            )
+            webRtcRuntimeInitialized = true
+        }
+    }
     suspend fun connect(
         onStateChanged: (State, String?) -> Unit = { _, _ -> },
         onEvent: (String) -> Unit = {},

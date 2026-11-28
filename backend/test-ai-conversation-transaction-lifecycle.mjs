@@ -16,6 +16,7 @@ assert.match(route, /DELETE FROM ai_messages WHERE id=\$1 AND user_id=\$2/, "fai
 assert.doesNotMatch(build, /genai-speech-recognition/, "Google on-device GenAI speech recognition must not be packaged");
 assert.doesNotMatch(route, /OPENAI_API_KEY|OPENAI_MODEL/, "Gemini conversation route must not retain unused OpenAI assistant configuration");
 assert.match(engine, /fun dispose\(\) \{ close\(\); factory\.dispose\(\) \}/, "WebRTC factory must expose final native disposal");
+assert.match(engine, /initializeWebRtcRuntime\(appContext\)[\s\S]*private companion object[\s\S]*@Synchronized[\s\S]*webRtcRuntimeInitialized/, "WebRTC native runtime must be initialized once for both voice engines");
 assert.match(panel, /readAloudEngine\.dispose\(\)/, "read-aloud engine must be disposed on screen teardown");
 assert.match(panel, /voiceEngine\.dispose\(\)/, "microphone engine must be disposed on screen teardown");
 console.log("FYNX AI lifecycle checks GREEN: short DB transactions, provider rollback, no local Google speech package, native WebRTC disposal");
