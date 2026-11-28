@@ -86,7 +86,14 @@ class FynxWebRtcCallEngine(
             override fun onRemoveStream(stream: MediaStream) { if (stream.videoTracks.isNotEmpty()) callbacks.onRemoteVideoTrack(null) }
             override fun onDataChannel(channel: org.webrtc.DataChannel) = Unit
             override fun onRenegotiationNeeded() = Unit
-            override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) { when (val track = receiver.track()) { is AudioTrack -> callbacks.onRemoteAudioTrack(track); is VideoTrack -> callbacks.onRemoteVideoTrack(track) } }
+            override fun onAddTrack(receiver: org.webrtc.RtpReceiver, mediaStreams: Array<out MediaStream>) {
+                dispatchRemoteTrack(receiver.track())
+            }
+            // Modern Unified Plan WebRTC delivers remote tracks through onTrack.
+            // Keep onAddTrack as a compatibility path for legacy Plan B callbacks.
+            override fun onTrack(transceiver: org.webrtc.RtpTransceiver) {
+                dispatchRemoteTrack(transceiver.receiver.track())
+            }
         })
         if (peerConnection == null) {
             callbacks.onError("Could not establish the call connection. Please try again.")
@@ -163,6 +170,13 @@ class FynxWebRtcCallEngine(
     fun applyAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc); restartWithUpdatedIceIfReady() }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
     fun addRemoteIceCandidate(candidate: IceCandidate) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); if (!remoteDescriptionSet) { pendingRemoteCandidates += candidate; return }; if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate") }
     private fun flushRemoteCandidates(pc: PeerConnection) { val pending = pendingRemoteCandidates.toList(); pendingRemoteCandidates.clear(); pending.forEach { if (!pc.addIceCandidate(it)) callbacks.onError("failed to add remote ICE candidate") } }
+    private fun dispatchRemoteTrack(track: org.webrtc.MediaStreamTrack?) {
+        when (track) {
+            is AudioTrack -> callbacks.onRemoteAudioTrack(track)
+            is VideoTrack -> callbacks.onRemoteVideoTrack(track)
+        }
+    }
+
     private fun createLocalAudio() {
         try {
             audioSource = factory.createAudioSource(MediaConstraints())
