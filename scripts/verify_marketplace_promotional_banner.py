@@ -166,6 +166,12 @@ checks = [
      and "Browse the current listings instead." not in PRODUCT_LINK_HANDLER),
 
 
+    ("Android instrumentation verifies a static campaign photo can be copied and previewed without network access",
+     "staticPhotoCanBeCopiedAndPreviewedWithoutNetworkAccess" in ARTWORK_MEDIA_TEST
+     and "FynxMarketplaceLocalCampaignStore.importArtwork(context, Uri.fromFile(source))" in ARTWORK_MEDIA_TEST
+     and "FynxCampaignArtworkMedia.decodePreview(context, Uri.fromFile(storedArtwork!!))" in ARTWORK_MEDIA_TEST
+     and "A static photo preview must remain a bitmap drawable" in ARTWORK_MEDIA_TEST),
+
     ("Android instrumentation includes a real two-frame GIF decode test with no network dependency",
      "twoFrameGifIsValidatedAndDecodedWithoutNetworkAccess" in ARTWORK_MEDIA_TEST
      and 'assertEquals(2, info.frameCount)' in ARTWORK_MEDIA_TEST
