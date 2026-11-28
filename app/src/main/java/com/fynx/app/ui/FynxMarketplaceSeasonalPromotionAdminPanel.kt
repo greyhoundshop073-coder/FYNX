@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -531,7 +532,7 @@ fun FynxMarketplaceSeasonalPromotionAdminPanel(
             enabled = !saving && occasionKey.isNotBlank() && headline.trim().length >= 3 &&
                 (!destinationLinkEnabled || isValidMarketplaceCampaignDestination(destinationType, destinationValue)) &&
                 marketplaceSeasonalWindowIsValid(startsAt, endsAt),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag("fynx-campaign-save-button")
         ) {
             if (saving) CircularProgressIndicator() else Text(
                 when {
