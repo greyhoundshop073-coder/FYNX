@@ -264,8 +264,8 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                             }
                         }
                     }.getOrDefault(emptyMap())
-                    FynxOnlinePresenceStore.replaceLastActiveSnapshot(lastActiveAt)
                     FynxOnlinePresenceStore.replaceSnapshot(ids)
+                    FynxOnlinePresenceStore.replaceLastActiveSnapshot(lastActiveAt)
                 }.onFailure {
                     // Fail closed for green dots while retaining last confirmed activity history.
                     FynxOnlinePresenceStore.clearOnline()

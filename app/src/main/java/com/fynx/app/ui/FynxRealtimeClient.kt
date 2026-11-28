@@ -35,15 +35,16 @@ object FynxOnlinePresenceStore {
             lastActiveAtByUserId.remove(id)
         } else {
             onlineUserIds.remove(id)
-            lastActiveAtByUserId[id] = System.currentTimeMillis()
+            // A realtime disconnect has no authoritative activity timestamp.
+            // Wait for the privacy-filtered server heartbeat snapshot instead of guessing.
+            lastActiveAtByUserId.remove(id)
         }
     }
 
     fun replaceSnapshot(userIds: Set<String>) {
         val normalized = userIds.map { it.trim() }.filter { it.isNotBlank() }.toSet()
-        val newlyOffline = onlineUserIds.keys - normalized
-        val now = System.currentTimeMillis()
-        newlyOffline.forEach { lastActiveAtByUserId[it] = now }
+        // Presence snapshots describe online state only. Last-active times come solely
+        // from the separate, privacy-filtered server activity snapshot.
         onlineUserIds.clear()
         normalized.forEach {
             onlineUserIds[it] = true
@@ -52,12 +53,13 @@ object FynxOnlinePresenceStore {
     }
 
     fun replaceLastActiveSnapshot(lastActiveAt: Map<String, Long>) {
-        val previouslyKnown = lastActiveAtByUserId.toMap()
+        // This map is already filtered for the current viewer. Replace, rather than
+        // merge, because omitted accounts may have hidden presence or blocked this viewer.
         lastActiveAtByUserId.clear()
         lastActiveAt.forEach { (rawId, timestamp) ->
             val id = rawId.trim()
             if (id.isNotBlank() && timestamp > 0L && !isOnline(id)) {
-                lastActiveAtByUserId[id] = maxOf(timestamp, previouslyKnown[id] ?: 0L)
+                lastActiveAtByUserId[id] = timestamp
             }
         }
     }

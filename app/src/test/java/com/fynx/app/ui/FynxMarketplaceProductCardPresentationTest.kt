@@ -89,6 +89,18 @@ class FynxMarketplaceProductCardPresentationTest {
     }
 
     @Test
+    fun sellerActivityAndListingAgeUseIndependentServerTimestamps() {
+        val now = 2_000_000_000_000L
+        val listingCreatedAt = now - 3L * 24L * 60L * 60L * 1000L
+        val sellerLastActiveAt = now - 2L * 60L * 60L * 1000L
+
+        assertEquals("Posted 3 days ago", marketplacePostedTimeLabel(listingCreatedAt, now))
+        assertEquals("Active 2 hours ago", marketplaceSellerActivityLabel(sellerLastActiveAt, now))
+        assertNull(marketplaceSellerActivityLabel(null, now))
+        assertNull(marketplaceSellerActivityLabel(now + 1L, now))
+    }
+
+    @Test
     fun trendingRequiresTopFiveDiscoveryRankAndARealPositiveBackendScore() {
         assertEquals(true, marketplaceIsTrendingDiscoveryRank(1, 72.0))
         assertEquals(true, marketplaceIsTrendingDiscoveryRank(5, 8.0))

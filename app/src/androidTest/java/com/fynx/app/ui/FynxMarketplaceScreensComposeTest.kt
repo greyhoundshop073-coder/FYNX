@@ -125,6 +125,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
+        scrollMarketplaceToRecommendedProducts()
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -171,6 +172,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
+        scrollMarketplaceToRecommendedProducts()
         compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
@@ -455,6 +457,15 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
+    }
+
+    private fun scrollMarketplaceToRecommendedProducts() {
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("fynx-marketplace-scroll-container")
+            .performScrollToNode(hasText("Recommended for you"))
     }
 
     private fun saveScreenshot(name: String) {

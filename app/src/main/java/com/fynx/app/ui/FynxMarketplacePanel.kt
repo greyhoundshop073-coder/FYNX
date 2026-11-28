@@ -75,6 +75,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1701,7 +1702,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         }
                     }
                 } else LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag("fynx-marketplace-scroll-container"),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {

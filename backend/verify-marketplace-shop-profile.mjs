@@ -18,6 +18,9 @@ const marketplacePanel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketpl
 const remoteSocial = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const appNavigation = read('../app/src/main/java/com/fynx/app/ui/FynxApp.kt');
 const featuresPanel = read('../app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt');
+const presencePrivacy = read('./presencePrivacy.js');
+const lastActivePrivacySql = presencePrivacy.split('export async function visibleLastActiveAtByUserId', 2)[1] || '';
+const livePresencePrivacySql = presencePrivacy.split('export async function visiblePresenceUserIds', 2)[1] || '';
 
 const checks = [
   ['shop profile table is idempotent and keyed to the seller account', shop.includes('CREATE TABLE IF NOT EXISTS marketplace_shop_profiles') && shop.includes('seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE')],
@@ -72,6 +75,24 @@ checks.push(
   ['public Marketplace profile loads the seller\'s live published products independently of the current Marketplace feed', storefront.includes('FynxRemoteSocialClient.marketplaceSellerListingsPage(context, username, limit = 24, offset = 0)') && storefront.includes('storefrontListings = page.listings.filter { it.active && it.quantity > 0 }') && storefront.includes('storefrontHasMore = page.hasMore') && storefront.includes('val sellerListings = remember(storefrontListings)')],
   ['public storefront is explicitly titled Marketplace profile and displays shop identity, profile avatar, product count, follow state and contact action', storefront.includes('Text("Marketplace profile"') && /MarketplaceSellerPresenceAvatar\(\s*sellerUserId,\s*photoId/.test(storefront) && presenceAvatar.includes('FynxRemoteProfileAvatar(') && storefront.includes('Text("Products"') && storefront.includes('followedByViewer == false -> "Follow"') && storefront.includes('Text("Message seller"')],
   ['Marketplace feed recovers only the signed-in seller\'s own active products when general discovery is empty', marketplacePanel.includes('items.isEmpty()') && marketplacePanel.includes('seller = currentUsername.removePrefix("@").trim()') && marketplacePanel.includes('FynxRemoteSocialClient.listings(') && marketplacePanel.includes('Showing your published products while Marketplace discovery refreshes.')],
+);
+checks.push(
+  ['foreground heartbeat persists database-generated activity timestamps',
+    presencePrivacy.includes('export async function recordPresenceActivity(userId)')
+    && presencePrivacy.includes('VALUES ($1, NOW())')
+    && presencePrivacy.includes('last_active_at = EXCLUDED.last_active_at')
+    && presencePrivacy.includes('last_active_at_epoch_ms')],
+  ['live online presence defaults to friends-only and rejects blocks in either direction',
+    livePresencePrivacySql.includes("COALESCE(p.online_visibility, 'My friends')")
+    && livePresencePrivacySql.includes("f.status = 'accepted'")
+    && livePresencePrivacySql.includes('(b.blocker_id = $1 AND b.blocked_id = target.user_id)')
+    && livePresencePrivacySql.includes('(b.blocker_id = target.user_id AND b.blocked_id = $1)')],
+  ['offline activity timestamps enforce the same viewer visibility and two-way block rules',
+    lastActivePrivacySql.includes("COALESCE(p.online_visibility, 'My friends')")
+    && lastActivePrivacySql.includes("f.status = 'accepted'")
+    && lastActivePrivacySql.includes('(b.blocker_id = $1 AND b.blocked_id = presence.user_id)')
+    && lastActivePrivacySql.includes('(b.blocker_id = presence.user_id AND b.blocked_id = $1)')
+    && lastActivePrivacySql.includes('LIMIT 5000')],
 );
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);

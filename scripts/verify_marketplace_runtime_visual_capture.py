@@ -52,6 +52,14 @@ checks = [
         and 'dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")' in navigation,
     ),
     (
+        "Wallet title and lower balance buckets are verified at separate scroll positions with real screenshot evidence",
+        'def wallet_balance_details_ready(xml_text: str) -> bool:' in navigation
+        and 'has_accessibility_label(xml_text, ["FYNX Wallet"])' in navigation
+        and 'wallet_balance_details_ready(probe_xml)' in navigation
+        and 'screenshot(name + "-balance-details.png")' in navigation
+        and 'balance-detail labels were not found in the scrolled Wallet content.' in navigation,
+    ),
+    (
         "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",
         '["Connect your FYNX account", "Your dedicated FYNX funding account", "Dedicated account not ready"]' in navigation
         and "No account request has been sent." in wallet_source,
