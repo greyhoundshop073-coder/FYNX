@@ -132,9 +132,26 @@ internal class FynxCloudflareSfuMediaEngine(
                         }
                     }
                     override fun onRemoveTrack(receiver: org.webrtc.RtpReceiver) {
-                        // Remote ownership is reconciled from the authenticated group roster.
-                        // Avoid relying on transceiver enumeration, which is not exposed by
-                        // every bundled Android WebRTC API version.
+                        // Match by the receiver's track ID against tracks learned from the
+                        // authenticated publisher-to-user mapping. This avoids transceiver
+                        // enumeration while still clearing individual tracks before the
+                        // participant itself leaves the group.
+                        val removedTrack = receiver.track() ?: return
+                        var removedOwner: String? = null
+                        remoteTracksByUser.forEach { (owner, tracks) ->
+                            if (tracks.remove(removedTrack.id(), removedTrack)) {
+                                removedOwner = owner
+                                if (tracks.isEmpty()) remoteTracksByUser.remove(owner, tracks)
+                            }
+                        }
+                        removedTrack.setEnabled(false)
+                        val owner = removedOwner ?: return
+                        if (removedTrack is VideoTrack) {
+                            val replacementTrack = remoteTracksByUser[owner]?.values
+                                ?.filterIsInstance<VideoTrack>()
+                                ?.firstOrNull()
+                            callbacks.onRemoteVideoTrack(owner, replacementTrack)
+                        }
                     }
                 }
             ) ?: throw IllegalStateException("Cloudflare media connection could not be created.")
