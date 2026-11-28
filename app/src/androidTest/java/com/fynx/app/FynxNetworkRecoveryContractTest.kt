@@ -62,8 +62,9 @@ class FynxNetworkRecoveryContractTest {
         try {
             prefs.edit().putString("base_url", "https://example.invalid")
                 .putBoolean("base_url_explicit", true).commit()
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", FynxBackendClient.baseUrl(context))
-            assertEquals("https://fynx-backend-testing-testing.up.railway.app", prefs.getString("base_url", null))
+            assertEquals("https://example.invalid", FynxBackendClient.baseUrl(context))
+            assertEquals("https://example.invalid", prefs.getString("base_url", null))
+            assertTrue(prefs.getBoolean("base_url_explicit", false))
         } finally {
             val edit = prefs.edit().putBoolean("base_url_explicit", originalExplicit)
             if (originalUrl == null) edit.remove("base_url") else edit.putString("base_url", originalUrl)
