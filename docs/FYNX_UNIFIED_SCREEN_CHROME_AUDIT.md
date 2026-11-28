@@ -32,7 +32,7 @@ The following compact-screen source changes from PR #602 were selectively applie
 The earlier PR #602 is behind the current canonical branch and its latest Android runtime job failed when the emulator/ADB connection was unavailable. Its changes are being selectively ported; the stale branch is not being merged wholesale.
 
 ## System-bar correction
-`FynxTheme` derives status/navigation bar icon appearance from FYNX's effective Light/Dark appearance and applies it on recomposition through `WindowInsetsControllerCompat`. This covers a user selecting Light while Android itself remains in Dark mode. A focused JUnit test guards the light/dark mapping. Runtime verification is still required to prove actual window flags and readability on a device/emulator.
+`FynxTheme` derives status/navigation bar icon appearance from FYNX's effective Light/Dark appearance and applies it on recomposition through `WindowInsetsControllerCompat`. This covers a user selecting Light while Android itself remains in Dark mode. Focused JUnit tests now cover the actual mismatch reported by the owner: FYNX Appearance = Light while Android system theme = Dark (and the inverse), plus System/Scheduled and branded dark modes. Runtime verification is still required to prove actual window flags and clock/signal/battery readability on a device/emulator.
 
 ## Protected workstreams
 - **Profile / Settings / Notifications — PR #586:** do not overwrite `ProfilePanel.kt`, `NotificationPanel.kt`, account/email settings, or its Settings shell-state work. Preserve Settings → Profile → Home; re-audit after integration.
