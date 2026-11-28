@@ -202,3 +202,10 @@ A second Android-only group-media defect was found: the engine used one boolean 
 The engine now retains a separate video-call mode flag, while the camera control only toggles the existing VideoTrack enabled state. New peer connections attach the track whenever the call is a video call and a local track is available—even if it is currently disabled. The track therefore becomes visible when the user unmutes, without requiring another SDP track negotiation.
 
 Added JVM policy tests for muted-camera late join, voice-call no-video, and missing-camera behavior. This is a local media attachment correction; remote video still requires working signaling/connectivity and must be separately verified.
+
+
+## 12. 2026-11-28 direct-call remote media receive-path verification
+
+Rechecked the exact unified calling branch after comparing it with the camera/signaling branch #589. The current #599 head already contains both the legacy `onAddStream` callback and the Unified Plan `onAddTrack` callback in `FynxWebRtcCallEngine`; the latter forwards both remote AudioTrack and VideoTrack to the existing active-call callbacks. No duplicate callback was added.
+
+The dedicated video-call source verifier now explicitly guards this receive path so a future branch reconciliation cannot silently drop it. The callback's presence is source evidence only; remote-track delivery still needs real authenticated two-account runtime verification.

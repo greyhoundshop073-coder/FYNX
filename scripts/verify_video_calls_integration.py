@@ -38,6 +38,7 @@ app = {
         "private_chat": "ConversationPanel.kt",
         "groups": "FynxGroupsPanel.kt",
         "group_call": "FynxGroupCallPanel.kt",
+        "direct_engine": "FynxWebRtcCallEngine.kt",
         "group_engine": "FynxGroupWebRtcCallEngine.kt",
         "group_offer_policy": "FynxGroupCallOfferPolicy.kt",
         "group_media_policy": "FynxGroupCallMediaPolicy.kt",
@@ -106,6 +107,11 @@ checks = {
     "Shared one-to-one call uses authenticated direct signaling":
         "sendCallInvite" in app["calls"] and "sendCallOffer" in app["calls"]
         and "sendCallAnswer" in app["calls"] and "sendCallIce" in app["calls"],
+    "Direct-call engine receives Unified Plan remote audio and video tracks":
+        "override fun onAddTrack(receiver: org.webrtc.RtpReceiver" in app["direct_engine"]
+        and "is AudioTrack -> callbacks.onRemoteAudioTrack(track)" in app["direct_engine"]
+        and "is VideoTrack -> callbacks.onRemoteVideoTrack(track)" in app["direct_engine"]
+        and "override fun onAddStream(stream: MediaStream)" in app["direct_engine"],
 
     # Group Chat has a separate group signaling contract and per-peer media.
     "Current Group Chat exposes a group video-call action":
