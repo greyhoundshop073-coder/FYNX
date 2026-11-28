@@ -262,15 +262,16 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 pendingIncomingAccept = false
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
                 val peerId = targetUserId ?: current.callerUsername
-                if (!realtimeClient.sendCallAccept(current.id, peerId, video)) {
-                    failCallSignaling(current.id)
-                    return@rememberLauncherForActivityResult
+                // Pre-fetch while this invitation is RINGING, before the caller sends its first offer.
+                beginCallRelaySetup(current.id, restartOfferOwner = false) {
+                    if (!realtimeClient.sendCallAccept(current.id, peerId, video)) {
+                        failCallSignaling(current.id)
+                        return@beginCallRelaySetup
+                    }
+                    session = current.copy(state = FynxCallState.CONNECTING)
+                    FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
+                    calls = FynxCallsStore.load(context)
                 }
-                // The server marks the call active on acceptance; now it can issue TURN credentials.
-                beginCallRelaySetup(current.id, restartOfferOwner = false)
-                session = current.copy(state = FynxCallState.CONNECTING)
-                FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
-                calls = FynxCallsStore.load(context)
             } else {
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
                 val inviteSent = targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) } == true
@@ -400,15 +401,16 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
                     if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
                     val peerId = targetUserId ?: current.callerUsername
-                    if (!realtimeClient.sendCallAccept(current.id, peerId, video)) {
-                        failCallSignaling(current.id)
-                        return@FynxActiveCallPanel
+                    // Pre-fetch while this invitation is RINGING, before the caller sends its first offer.
+                    beginCallRelaySetup(current.id, restartOfferOwner = false) {
+                        if (!realtimeClient.sendCallAccept(current.id, peerId, video)) {
+                            failCallSignaling(current.id)
+                            return@beginCallRelaySetup
+                        }
+                        session = current.copy(state = FynxCallState.CONNECTING)
+                        FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
+                        calls = FynxCallsStore.load(context)
                     }
-                    // The server marks the call active on acceptance; now it can issue TURN credentials.
-                    beginCallRelaySetup(current.id, restartOfferOwner = false)
-                    session = current.copy(state = FynxCallState.CONNECTING)
-                    FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
-                    calls = FynxCallsStore.load(context)
                 } else {
                     pendingIncomingAccept = true
                     permissionLauncher.launch(required)
