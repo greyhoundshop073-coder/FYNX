@@ -55,6 +55,7 @@ fun FynxGroupCallPanel(
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     val groupEvents = remember(groupId) { Channel<FynxRealtimeClient.Event.GroupCall>(Channel.UNLIMITED) }
     var callId by remember(groupId, initialInvite?.callId) { mutableStateOf(initialInvite?.callId) }
+    var mediaTransport by remember(callId) { mutableStateOf("pending") }
     var creatorId by remember { mutableStateOf(initialInvite?.creatorId.orEmpty()) }
     var callType by remember { mutableStateOf(initialInvite?.callType ?: "video") }
     var isStarter by remember { mutableStateOf(false) }
@@ -83,6 +84,8 @@ fun FynxGroupCallPanel(
     val latestIsIncoming by rememberUpdatedState(isIncoming)
     val latestIsJoined by rememberUpdatedState(isJoined)
     val latestCallEnded by rememberUpdatedState(callEnded)
+    val latestParticipants by rememberUpdatedState(participants)
+    val latestLocalUserId by rememberUpdatedState(localUserId)
 
     val realtimeClient = remember(groupId) {
         FynxRealtimeClient(
@@ -147,10 +150,41 @@ fun FynxGroupCallPanel(
         )
     }
 
+    val sfuMedia = remember(groupId, engine) {
+        FynxCloudflareSfuMediaEngine(
+            context = context,
+            factory = engine.sfuPeerConnectionFactory(),
+            audioTrack = { engine.sfuLocalAudioTrack() },
+            videoTrack = { engine.sfuLocalVideoTrack() },
+            callbacks = FynxCloudflareSfuMediaEngine.Callbacks(
+                onRemoteVideoTrack = { userId, track ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        if (track == null) remoteVideoTracks.remove(userId) else remoteVideoTracks[userId] = track
+                    }
+                },
+                onRemoteAudioTrack = { _, track -> track.setEnabled(true) },
+                onConnectionState = { state ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        val connected = state == PeerConnection.IceConnectionState.CONNECTED ||
+                            state == PeerConnection.IceConnectionState.COMPLETED
+                        peerConnected["sfu"] = connected
+                        if (state == PeerConnection.IceConnectionState.FAILED) {
+                            statusText = "Media relay connection failed"
+                        }
+                    }
+                },
+                onError = { message ->
+                    scope.launch(Dispatchers.Main.immediate) { errorMessage = message }
+                }
+            )
+        )
+    }
+
     fun participantForCurrentUser(list: List<FynxRealtimeClient.Event.GroupCallParticipant>): FynxRealtimeClient.Event.GroupCallParticipant? =
         list.firstOrNull { it.username.trim().removePrefix("@").equals(normalizedUsername, true) }
 
     fun ensurePeerAndNegotiate(peerId: String, initiateOffer: Boolean) {
+        if (mediaTransport != "fallback") return
         if (!engine.hasPeer(peerId)) engine.ensurePeer(peerId)
         if (!engine.hasPeer(peerId)) return
         if (initiateOffer &&
@@ -215,11 +249,12 @@ fun FynxGroupCallPanel(
             "group_participant_left" -> {
                 val participant = event.participant ?: return
                 participants = participants.filterNot { it.userId == participant.userId }
-                engine.removePeer(participant.userId)
+                if (mediaTransport == "fallback") engine.removePeer(participant.userId)
+                sfuMedia.removeParticipant(participant.userId)
                 offerStartedFor.remove(participant.userId)
                 peerConnected.remove(participant.userId)
             }
-            "group_offer" -> {
+            "group_offer" -> if (mediaTransport == "fallback") {
                 val peerId = event.fromUserId
                 if (peerId.isNotBlank() && !event.sdp.isNullOrBlank()) {
                     ensurePeerAndNegotiate(peerId, initiateOffer = false)
@@ -227,11 +262,11 @@ fun FynxGroupCallPanel(
                     engine.acceptOfferAndCreateAnswer(peerId, event.sdp)
                 }
             }
-            "group_answer" -> {
+            "group_answer" -> if (mediaTransport == "fallback") {
                 val peerId = event.fromUserId
                 if (peerId.isNotBlank() && !event.sdp.isNullOrBlank()) engine.applyAnswer(peerId, event.sdp)
             }
-            "group_ice" -> {
+            "group_ice" -> if (mediaTransport == "fallback") {
                 val peerId = event.fromUserId
                 val candidate = event.candidate
                 if (peerId.isNotBlank() && candidate != null) engine.addRemoteIceCandidate(peerId, candidate.toWebRtcCandidate())
@@ -239,6 +274,7 @@ fun FynxGroupCallPanel(
             "group_full", "group_busy", "error" -> {
                 errorMessage = event.error ?: "This group call is unavailable."
                 statusText = "Call unavailable"
+                sfuMedia.disconnect()
                 engine.disconnect()
                 isJoined = false
                 isIncoming = false
@@ -247,12 +283,14 @@ fun FynxGroupCallPanel(
                 callEnded = true
                 isJoined = false
                 statusText = "The group call has ended."
+                sfuMedia.disconnect()
                 engine.disconnect()
             }
             "group_left" -> {
                 callEnded = true
                 isJoined = false
                 statusText = "You left the group call."
+                sfuMedia.disconnect()
                 engine.disconnect()
             }
         }
@@ -273,10 +311,62 @@ fun FynxGroupCallPanel(
             val configuration = FynxCallIceServerProvider.fetch(context, activeCallId).getOrNull()
             if (configuration != null) {
                 engine.updateIceServers(configuration.servers, localUserId)
+                sfuMedia.updateIceServers(configuration.servers)
                 delay(configuration.refreshAfterSeconds.coerceIn(60L, 86_400L) * 1_000L)
             } else {
                 errorMessage = "Relay setup is unavailable right now. FYNX will keep trying a direct connection."
                 delay(120_000L)
+            }
+        }
+    }
+
+    LaunchedEffect(callId, isJoined, callEnded) {
+        val activeCallId = callId ?: return@LaunchedEffect
+        if (!isJoined || callEnded) return@LaunchedEffect
+
+        mediaTransport = "pending"
+        // Get relay settings only after the group backend has confirmed this user joined.
+        val setup = runCatching {
+            FynxCallIceServerProvider.fetch(context, activeCallId).getOrNull()?.let { relay ->
+                engine.updateIceServers(relay.servers, localUserId)
+                sfuMedia.updateIceServers(relay.servers)
+            }
+            sfuMedia.connect(activeCallId)
+        }
+        if (callId != activeCallId || !isJoined || callEnded) {
+            sfuMedia.disconnect()
+            return@LaunchedEffect
+        }
+
+        if (setup.isSuccess) {
+            mediaTransport = "sfu"
+            statusText = "Connected through Cloudflare media relay"
+            try {
+                while (true) {
+                    sfuMedia.syncPublications(activeCallId)
+                    delay(2_500L)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                statusText = "Media relay interrupted; switching to direct connections"
+                errorMessage = error.message?.take(160)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { "The media relay needs recovery: $it" }
+                runCatching { sfuMedia.stop() }
+                if (callId == activeCallId && isJoined && !callEnded) {
+                    mediaTransport = "fallback"
+                    latestParticipants.filterNot { it.userId == latestLocalUserId }.forEach { member ->
+                        ensurePeerAndNegotiate(member.userId, initiateOffer = true)
+                    }
+                }
+            }
+        } else {
+            sfuMedia.disconnect()
+            mediaTransport = "fallback"
+            statusText = "Cloudflare relay unavailable; using direct connections"
+            latestParticipants.filterNot { it.userId == latestLocalUserId }.forEach { member ->
+                ensurePeerAndNegotiate(member.userId, initiateOffer = true)
             }
         }
     }
@@ -294,6 +384,7 @@ fun FynxGroupCallPanel(
             } else if (activeId != null && latestIsIncoming && !latestIsJoined) {
                 realtimeClient.sendGroupCallReject(groupId, activeId)
             }
+            sfuMedia.disconnect()
             engine.disconnect()
             realtimeClient.close()
             groupEvents.close()
@@ -371,6 +462,7 @@ fun FynxGroupCallPanel(
         }
         callEnded = true
         isJoined = false
+        sfuMedia.disconnect()
         engine.disconnect()
         onDismiss()
     }
@@ -427,7 +519,7 @@ fun FynxGroupCallPanel(
             } else if (!isJoined && !callEnded) {
                 Spacer(Modifier.weight(1f))
                 Text("Start a video call with the members of $groupName.", style = MaterialTheme.typography.titleMedium)
-                Text("Up to four participants can join at the same time on this peer-to-peer call.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("FYNX uses its secure media relay when available, with direct participant connections as a fallback.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (realtimeState != FynxRealtimeClient.State.CONNECTED) {
                     Text("Connecting to FYNX call service…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

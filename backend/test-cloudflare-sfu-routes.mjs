@@ -187,6 +187,7 @@ const subscribe = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subsc
 });
 assert.equal(subscribe.statusCode, 200);
 assert.equal(subscribe.body.mutationState, "AWAITING_RENEGOTIATION");
+assert.equal(subscribe.body.tracks[0].trackName, "camera", "subscribed track mids must be returned with the publisher track identity");
 
 const callsBeforeFence = apiCalls;
 const fenced = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
