@@ -159,8 +159,8 @@ export async function createRealtimeCall(
   return { answer, callId };
 }
 
-export async function createRealtimeAnswer(sdpOffer, mode = "assistant", voice = FYNX_AI_VOICE) {
-  const result = await createRealtimeCall(sdpOffer, mode, voice);
+export async function createRealtimeAnswer(sdpOffer, mode = "assistant", voice = FYNX_AI_VOICE, options = {}) {
+  const result = await createRealtimeCall(sdpOffer, mode, voice, options);
   return result.answer;
 }
 
