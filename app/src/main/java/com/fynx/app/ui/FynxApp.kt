@@ -107,7 +107,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
     var postOpenCommentId by remember { mutableStateOf<String?>(null) }
     var callTarget by remember { mutableStateOf<String?>(null) }
     var callVideo by remember { mutableStateOf(false) }
+    var callListingId by remember { mutableStateOf<String?>(null) }
+    var callProductTitle by remember { mutableStateOf<String?>(null) }
+    var callSellerUsername by remember { mutableStateOf<String?>(null) }
     var pendingIncomingCall by remember { mutableStateOf<FynxRealtimeClient.Event.Call?>(null) }
+    var pendingIncomingGroupCall by remember { mutableStateOf<FynxRealtimeClient.Event.GroupCall?>(null) }
     var marketplaceListingId by remember { mutableStateOf<String?>(null) }
     var marketplaceProfileUsername by remember { mutableStateOf<String?>(null) }
     var marketplaceStatusDraft by remember { mutableStateOf<String?>(null) }
@@ -148,7 +152,11 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         postOpenCommentId = null
         callTarget = null
         callVideo = false
+        callListingId = null
+        callProductTitle = null
+        callSellerUsername = null
         pendingIncomingCall = null
+        pendingIncomingGroupCall = null
         marketplaceListingId = null
         marketplaceProfileUsername = null
         marketplaceStatusDraft = null
@@ -197,7 +205,17 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 context = context,
                 onMessage = {},
                 onEvent = { event ->
-                    if (event is FynxRealtimeClient.Event.Call &&
+                    if (event is FynxRealtimeClient.Event.GroupCall &&
+                        event.signalType == "group_invite" &&
+                        pendingIncomingGroupCall == null &&
+                        event.groupId.isNotBlank()
+                    ) {
+                        pendingIncomingGroupCall = event
+                        openChat = null
+                        openGroup = event.groupId
+                        profileUser = null
+                        selected = "Groups"
+                    } else if (event is FynxRealtimeClient.Event.Call &&
                         FynxIncomingCallRouting.shouldRouteInvite(
                             signalType = event.signalType,
                             currentScreen = currentSelected,
@@ -207,6 +225,9 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                         pendingIncomingCall = event
                         callTarget = null
                         callVideo = event.callType.equals("video", true)
+                        callListingId = event.listingId
+                        callProductTitle = event.productTitle
+                        callSellerUsername = event.sellerUsername
                         openChat = null
                         openGroup = null
                         profileUser = null
@@ -412,7 +433,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
         }
     }) }; return }
     if (openChat != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { ConversationPanel(chat = openChat!!, marketplaceListingId = openChatMarketplaceListingId, onBack = { openChat = null; openChatMarketplaceListingId = null }, onOpenProfile = { profileUser = it; openChat = null }, onVoiceCall = { callTarget = openChat!!.username; callVideo = false; openChat = null; selected = "Calls" }, onVideoCall = { callTarget = openChat!!.username; callVideo = true; openChat = null; selected = "Calls" }) } }; return }
-    if (openGroup != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", onBack = { openGroup = null }) } }; return }
+    if (openGroup != null) { key(authSession.username) { FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) { FynxGroupConversationPanel(groupId = openGroup!!, currentUsername = authSession.username?.let { if (it.startsWith("@")) it else "@$it" } ?: "@preview", initialIncomingGroupCall = pendingIncomingGroupCall?.takeIf { it.groupId == openGroup }, onIncomingGroupCallConsumed = { callId -> if (pendingIncomingGroupCall?.callId == callId) pendingIncomingGroupCall = null }, onBack = { openGroup = null }) } }; return }
     FynxTheme(accent = accent, darkMode = when (appearance) { "Light" -> false; "Dark", "Charcoal Black" -> true; else -> isSystemInDarkTheme() }) {
         val mainIndex = mainNav.indexOfFirst { it.key == selected }.coerceAtLeast(0)
         // Home uses one LazyColumn for the real feed. Observe its nested-scroll deltas
@@ -770,7 +791,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
                 onBack = { selected = "Marketplace" },
                 onOpenListing = { listingId -> marketplaceListingId = listingId; selected = "Marketplace" }
             )
-            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { username -> callTarget = username; callVideo = true; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
+            "Marketplace" -> key(marketplaceAccountKey) { FynxMarketplacePanel(currentUsername = authSession.username ?: "preview", onOpenProfile = { profileUser = it }, onOpenAi = { listingId -> marketplaceAiListingId = listingId; selected = "AI" }, onLiveProof = { listingId, productTitle, username -> callTarget = username; callVideo = true; callListingId = listingId; callProductTitle = productTitle; callSellerUsername = username; selected = "Calls" }, onOpenMyShop = { selected = "Seller Center" }, onOpenBusinesses = { selected = "Local Businesses" }, onOpenWallet = { selected = "Wallet" }, onOpenSavedProducts = { selected = "Saved Products" }, initialSellerUsername = marketplaceProfileUsername, onInitialSellerOpened = { marketplaceProfileUsername = null }, onShareListingToStatus = { listingId, title ->
                 val draft = FynxDeepLinkParser.marketplaceStatusDraftText(listingId, title)
                 if (draft.isNotBlank()) {
                     marketplaceStatusDraft = draft
@@ -878,7 +899,7 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             )
             "Share" -> FynxSharePanel()
             "Invite" -> FynxInvitePanel(code = inviteCode, onShare = { FynxShareActions.share(context, FynxShareActions.defaultPayload()) }, onBack = { selected = "Features" })
-            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null })
+            "Calls" -> FynxCallsPanel(initialName = pendingIncomingCall?.fromUsername?.removePrefix("@")?.takeIf { it.isNotBlank() } ?: pendingIncomingCall?.fromUserId ?: callTarget, initialVideo = pendingIncomingCall?.callType?.equals("video", true) ?: callVideo, initialOutgoing = callTarget != null && pendingIncomingCall == null, initialIncomingCallId = pendingIncomingCall?.callId, initialIncomingUserId = pendingIncomingCall?.fromUserId, initialListingId = pendingIncomingCall?.listingId ?: callListingId, initialProductTitle = pendingIncomingCall?.productTitle ?: callProductTitle, initialSellerUsername = pendingIncomingCall?.sellerUsername ?: callSellerUsername, currentUsername = authSession.username?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }, onIncomingCallConsumed = { callId -> if (pendingIncomingCall?.callId == callId) pendingIncomingCall = null }, onOutgoingCallConsumed = { callTarget = null; callListingId = null; callProductTitle = null; callSellerUsername = null })
             "To-Do" -> TodoPanel()
             "Privacy" -> FynxPrivacySettingsPanel(onBack = { selected = "Profile" })
             "Saved Posts" -> FynxSavedPostsPanel(onOpenAuthorProfile = { profileUser = it })
