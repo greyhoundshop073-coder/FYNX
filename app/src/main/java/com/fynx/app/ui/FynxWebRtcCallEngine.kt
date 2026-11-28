@@ -23,7 +23,7 @@ import org.webrtc.VideoTrack
 
 class FynxWebRtcCallEngine(
     context: Context,
-    private val iceServers: List<PeerConnection.IceServer> = listOf(
+    private var iceServers: List<PeerConnection.IceServer> = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
         PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
         PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
@@ -58,9 +58,10 @@ class FynxWebRtcCallEngine(
     private var eglBase: org.webrtc.EglBase? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
     private var remoteDescriptionSet = false
+    private var iceRestartPending = false
     init { PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(appContext).createInitializationOptions()); factory = PeerConnectionFactory.builder().createPeerConnectionFactory() }
     override fun connect(session: FynxCallSession) {
-        disconnect(); remoteDescriptionSet = false; pendingRemoteCandidates.clear(); iceRestartInFlight = false; iceRecoveryAttempts = 0; audioRouter.start(session.type == FynxCallType.VIDEO)
+        disconnect(); remoteDescriptionSet = false; pendingRemoteCandidates.clear(); iceRestartInFlight = false; iceRestartPending = false; iceRecoveryAttempts = 0; audioRouter.start(session.type == FynxCallType.VIDEO)
         peerConnection = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
@@ -121,13 +122,43 @@ class FynxWebRtcCallEngine(
             }
         }
     }
+    /**
+     * Apply backend-issued short-lived TURN servers to this call. The designated
+     * offer owner triggers the ICE restart; the other side only updates its ICE config.
+     */
+    fun updateIceServers(servers: List<PeerConnection.IceServer>, restartOfferOwner: Boolean) {
+        if (servers.none { server -> server.urls.any { it.startsWith("turn:", true) || it.startsWith("turns:", true) } }) {
+            callbacks.onError("The call relay configuration did not contain a TURN server.")
+            return
+        }
+        iceServers = servers.toList()
+        val pc = peerConnection ?: return
+        if (!pc.setConfiguration(PeerConnection.RTCConfiguration(iceServers))) {
+            callbacks.onError("The relay configuration could not be applied to this call.")
+            return
+        }
+        if (restartOfferOwner) {
+            iceRestartPending = true
+            restartWithUpdatedIceIfReady()
+        }
+    }
+
+    private fun restartWithUpdatedIceIfReady() {
+        val pc = peerConnection ?: return
+        if (!iceRestartPending || !remoteDescriptionSet || iceRestartInFlight) return
+        if (pc.signalingState() != PeerConnection.SignalingState.STABLE) return
+        iceRestartPending = false
+        iceRestartInFlight = true
+        createOfferInternal(pc, iceRestart = true)
+    }
+
     fun createOffer() { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); createOfferInternal(pc, iceRestart = false) }
     private fun createOfferInternal(pc: PeerConnection, iceRestart: Boolean) {
         val constraints = if (iceRestart) MediaConstraints().apply { mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true")) } else MediaConstraints()
         pc.createOffer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { pc.setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { callbacks.onOffer(description.description) }; override fun onSetFailure(error: String) { iceRestartInFlight = false; callbacks.onError(error) } }, description) }; override fun onCreateFailure(error: String) { iceRestartInFlight = false; callbacks.onError(error) } }, constraints)
     }
-    fun acceptOfferAndCreateAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc); pc.createAnswer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { pc.setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { callbacks.onAnswer(description.description) }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, description) }; override fun onCreateFailure(error: String) { callbacks.onError(error) } }, MediaConstraints()) }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.OFFER, sdp)) }
-    fun applyAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc) }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
+    fun acceptOfferAndCreateAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc); pc.createAnswer(object : SdpObserverAdapter() { override fun onCreateSuccess(description: SessionDescription) { pc.setLocalDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { callbacks.onAnswer(description.description); restartWithUpdatedIceIfReady() }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, description) }; override fun onCreateFailure(error: String) { callbacks.onError(error) } }, MediaConstraints()) }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.OFFER, sdp)) }
+    fun applyAnswer(sdp: String) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); pc.setRemoteDescription(object : SdpObserverAdapter() { override fun onSetSuccess() { remoteDescriptionSet = true; iceRestartInFlight = false; flushRemoteCandidates(pc); restartWithUpdatedIceIfReady() }; override fun onSetFailure(error: String) { callbacks.onError(error) } }, SessionDescription(SessionDescription.Type.ANSWER, sdp)) }
     fun addRemoteIceCandidate(candidate: IceCandidate) { val pc = peerConnection ?: return callbacks.onError("call media is not connected"); if (!remoteDescriptionSet) { pendingRemoteCandidates += candidate; return }; if (!pc.addIceCandidate(candidate)) callbacks.onError("failed to add remote ICE candidate") }
     private fun flushRemoteCandidates(pc: PeerConnection) { val pending = pendingRemoteCandidates.toList(); pendingRemoteCandidates.clear(); pending.forEach { if (!pc.addIceCandidate(it)) callbacks.onError("failed to add remote ICE candidate") } }
     private fun createLocalAudio() {
@@ -224,6 +255,7 @@ class FynxWebRtcCallEngine(
         peerConnection = null
         pendingRemoteCandidates.clear()
         remoteDescriptionSet = false
+        iceRestartPending = false
         runCatching { audioTrack?.dispose() }
         audioTrack = null
         runCatching { audioSource?.dispose() }
