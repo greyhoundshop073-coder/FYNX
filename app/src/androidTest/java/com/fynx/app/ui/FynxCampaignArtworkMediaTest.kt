@@ -73,6 +73,27 @@ class FynxCampaignArtworkMediaTest {
         }
     }
 
+
+    @Test
+    fun oversizedDecodedGifFrameBudgetIsRejectedBeforeDecoding() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val file = File.createTempFile("fynx-campaign-heavy-gif-", ".gif", context.cacheDir)
+        try {
+            // Thirteen 1x1 image patches on a 1,600x1,600 canvas. The compressed
+            // fixture is tiny, but decoding every full-canvas frame would exceed
+            // FYNX's bounded 32-million-pixel animation budget.
+            file.writeBytes(Base64.decode(
+                "R0lGODlhQAZABoAAAAAAAP///yH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAEAAQAAAgJEAQAh+QQACgAAACwAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAIfkEAAoAAAAsAAAAAAQABAAACAkQBACH5BAAKAAAALAAAAAABAAEAAAICRAEAOw==",
+                Base64.DEFAULT
+            ))
+            val result = runCatching { FynxCampaignArtworkMedia.inspectFile(file) }
+            assertTrue("A highly-compressed GIF must not exceed the decoded frame-memory budget", result.isFailure)
+            assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("decoded animation pixels"))
+        } finally {
+            file.delete()
+        }
+    }
+
     @Test
     fun invalidGifSignatureIsRejectedBeforeDecoding() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
