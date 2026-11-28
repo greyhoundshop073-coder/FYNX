@@ -699,8 +699,8 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
             if (activeSection == "Marketplace") {
-            FynxMarketplaceSeasonalPromotionAdminPanel()
-            Spacer(Modifier.height(20.dp))
+                FynxMarketplaceSeasonalPromotionAdminPanel()
+                Spacer(Modifier.height(20.dp))
             Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {

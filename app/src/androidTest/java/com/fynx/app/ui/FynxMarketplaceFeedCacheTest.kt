@@ -80,19 +80,26 @@ class FynxMarketplaceFeedCacheTest {
         val context = accountContext("buyer-one")
         val validCache = """{"promotions":[]}"""
         FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", validCache)
-        FynxBackendClient.requestExecutorForTests = { _, method, path, _, _ ->
-            assertEquals("GET", method)
-            assertEquals("/api/marketplace/seasonal-feed", path)
-            """{"promotions":"""
-        }
+        val invalidBodies = listOf(
+            """{"promotions":""",
+            """{"promotions":[null]}""",
+            """{}"""
+        )
         try {
-            val result = FynxMarketplaceSeasonalPromotionClient.load(context)
-            assertTrue("Malformed HTTP 200 campaign data must be rejected", result.isFailure)
-            assertEquals(
-                "A malformed successful response must not overwrite the last-known-good offline campaign cache",
-                validCache,
-                FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 60_000L)
-            )
+            invalidBodies.forEach { invalidBody ->
+                FynxBackendClient.requestExecutorForTests = { _, method, path, _, _ ->
+                    assertEquals("GET", method)
+                    assertEquals("/api/marketplace/seasonal-feed", path)
+                    invalidBody
+                }
+                val result = FynxMarketplaceSeasonalPromotionClient.load(context)
+                assertTrue("Malformed HTTP 200 campaign data must be rejected: $invalidBody", result.isFailure)
+                assertEquals(
+                    "Malformed successful responses must not overwrite the last-known-good offline campaign cache",
+                    validCache,
+                    FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 60_000L)
+                )
+            }
         } finally {
             FynxBackendClient.requestExecutorForTests = null
         }

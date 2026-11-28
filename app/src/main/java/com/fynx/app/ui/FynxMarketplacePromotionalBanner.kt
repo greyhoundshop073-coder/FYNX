@@ -252,11 +252,11 @@ fun MarketplacePromotionalBanner(
             slide.listing != null -> onOpenListing(slide.listing)
             !slide.sellerUsername.isNullOrBlank() -> onOpenSeller(slide.sellerUsername)
             slide.destinationType == "PRODUCT" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
-                onOpenProduct(slide.destinationValue)
+                onOpenProduct(slide.destinationValue.trim())
             slide.destinationType == "CATEGORY" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
-                onOpenCategory(slide.destinationValue)
+                onOpenCategory(MARKETPLACE_CAMPAIGN_CATEGORIES.firstOrNull { it.equals(slide.destinationValue.trim(), ignoreCase = true) } ?: slide.destinationValue.trim())
             slide.destinationType == "SHOP" && isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) ->
-                onOpenSeller(slide.destinationValue)
+                onOpenSeller(slide.destinationValue.trim().removePrefix("@"))
             slide.destinationType == "MARKETPLACE" &&
                 isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue) -> onShopNow()
             slide.destinationType == "NONE" -> Unit

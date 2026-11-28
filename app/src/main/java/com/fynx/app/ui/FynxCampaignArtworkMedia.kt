@@ -277,7 +277,7 @@ internal object FynxCampaignArtworkMedia {
             } catch (_: Exception) {
                 null
             }
-            if (decoded is AnimatedImageDrawable || (decoded != null && artworkInfo.frameCount <= 1)) {
+            if (decoded != null && (decoded is AnimatedImageDrawable || artworkInfo.frameCount <= 1)) {
                 return configureInfiniteGifLoop(decoded)
             }
         }
@@ -318,7 +318,7 @@ internal object FynxCampaignArtworkMedia {
                 } catch (_: Exception) {
                     null
                 }
-                if (decoded is AnimatedImageDrawable || (decoded != null && info.frameCount <= 1)) {
+                if (decoded != null && (decoded is AnimatedImageDrawable || info.frameCount <= 1)) {
                     return configureInfiniteGifLoop(decoded)
                 }
             }

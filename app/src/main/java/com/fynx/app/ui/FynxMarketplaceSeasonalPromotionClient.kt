@@ -45,13 +45,17 @@ object FynxMarketplaceSeasonalPromotionClient {
     private fun parsePromotions(raw: String): List<FynxMarketplaceSeasonalPromotion> {
         val rows = JSONObject(raw).optJSONArray("promotions")
             ?: throw IllegalStateException("Seasonal promotion response was incomplete.")
-        return buildList {
+        val promotions = buildList {
             for (index in 0 until rows.length()) {
                 val row = rows.optJSONObject(index) ?: continue
                 val promotion = parsePromotion(row)
                 if (promotion.id.isNotBlank() && promotion.occasionKey.isNotBlank()) add(promotion)
             }
         }
+        if (rows.length() > 0 && promotions.isEmpty()) {
+            throw IllegalStateException("Seasonal promotion response contained no valid campaigns.")
+        }
+        return promotions
     }
 
     suspend fun load(context: Context): Result<List<FynxMarketplaceSeasonalPromotion>> {

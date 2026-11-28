@@ -185,6 +185,14 @@ checks = [
     ("invalid and unknown campaign destinations never fall back to generic Marketplace",
      "else -> Unit // Invalid or unknown campaign destinations must never fall back to the generic feed." in BANNER
      and "slide.destinationType == \\"MARKETPLACE\\" &&" in BANNER),
+    ("campaign CTA click-through routes exact product/category/shop targets and normalizes them",
+     "onOpenProduct(slide.destinationValue.trim())" in BANNER
+     and "MARKETPLACE_CAMPAIGN_CATEGORIES.firstOrNull" in BANNER
+     and 'onOpenSeller(slide.destinationValue.trim().removePrefix("@"))' in BANNER
+     and "seasonalCampaignCtasOpenExactProductCategoryAndShopTargets" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceCampaignNavigationTest.kt").read_text(encoding="utf-8")),
+    ("malformed campaign responses with no valid rows cannot replace a good buyer cache",
+     "rows.length() > 0 && promotions.isEmpty()" in SEASONAL_CLIENT
+     and '"promotions":[null]' in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceFeedCacheTest.kt").read_text(encoding="utf-8")),
     ("an unavailable promoted product leaves the campaign banner in place instead of opening unrelated listings",
      "The Marketplace banner was left in place." in PRODUCT_LINK_HANDLER
      and "showAllProducts = true" not in PRODUCT_LINK_HANDLER

@@ -5,7 +5,6 @@ import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.widget.ImageView
 import android.net.Uri
-import android.os.Build
 import android.util.Base64
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
