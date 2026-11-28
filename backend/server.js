@@ -1534,19 +1534,19 @@ export async function dispatchRealtimeConnection(socket, req) {
 
 emailAuth.registerRoutes(app, auth);
 if (pool) {
-  const resolveActiveCall = async (callId, userId) => {
+  const resolveActiveCall = async (callId, userId, { allowRinging = false } = {}) => {
     // Railway/Node direct calls are live in this process's authenticated call map.
     // Neon direct calls use the durable table; group calls use the joined roster in either runtime.
     if (process.env.FYNX_NEON_FUNCTION !== "1") {
       const call = activeCalls.get(callId);
-      if (call && call.status === "ACTIVE" && [call.callerId, call.calleeId].includes(String(userId))) {
+      if (call && (call.status === "ACTIVE" || (allowRinging && call.status === "RINGING")) && [call.callerId, call.calleeId].includes(String(userId))) {
         return { id: call.id, kind: "direct" };
       }
     }
     const direct = await pool.query(
       `SELECT id FROM fynx_realtime_calls
-       WHERE id=$1 AND status='ACTIVE' AND (caller_id=$2 OR callee_id=$2) LIMIT 1`,
-      [callId, String(userId)]
+       WHERE id=$1 AND status=ANY($3::text[]) AND (caller_id=$2 OR callee_id=$2) LIMIT 1`,
+      [callId, String(userId), allowRinging ? ["RINGING", "ACTIVE"] : ["ACTIVE"]]
     ).catch((error) => {
       if (error?.code === "42P01") return { rows: [] };
       throw error;
@@ -1566,7 +1566,7 @@ if (pool) {
   };
   const callRateLimit = rateLimit("calls", RATE_LIMITS.calls);
   registerCloudflareSfuRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall });
-  registerCloudflareTurnRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall });
+  registerCloudflareTurnRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall: (callId, userId) => resolveActiveCall(callId, userId, { allowRinging: true }) });
 }
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
