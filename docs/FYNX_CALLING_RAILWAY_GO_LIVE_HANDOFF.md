@@ -1,6 +1,22 @@
-# FYNX Calling — Railway Go-Live Handoff
+# FYNX Calling — Cloudflare SFU and TURN Go-Live Handoff
 
-> **Purpose:** This is the handover checklist for any ChatGPT session or engineer who resumes FYNX unified calling after Railway billing/service access is restored. Read this file before changing code, Railway, Cloudflare, or the canonical Android branch.
+> **Purpose:** This is the handover checklist for any ChatGPT session or engineer who resumes FYNX unified calling. Read this file before changing Cloudflare, Neon, or the canonical Android branch.
+
+## Current canonical status — 28 November 2026
+
+- The active app/backend integration target is `integration/fynx-single-apk-20261013`. PR [#621](https://github.com/greyhoundshop073-coder/FYNX/pull/621) merged the Android transport cutover to the active Neon Function at `50f42b8d97486530f218ca4f7b7096a5750a4017`.
+- The current unified Calls port is [PR #623](https://github.com/greyhoundshop073-coder/FYNX/pull/623), based directly on that canonical head. It includes private calls, Marketplace Live Proof, group calls, Cloudflare SFU, TURN credential retrieval and lifecycle cleanup. Do not merge the older diverged PR #599 wholesale.
+- PR #599's previous exact run passed Backend CI, Chat Final Closure, Group Parity/Layout and Android full-runtime instrumentation. Runtime screenshots/UI hierarchies were uploaded, and exact-checkout debug APK provenance passed. This was a PR validation artifact on its older synthetic test-merge commit, not the official canonical APK. PR #623 must pass its own exact-head workflows and runtime capture.
+- Read-only Neon `/health` and `/ready` probes previously returned HTTP 200 with the database ready. The Railway testing service is historical/failed and is not the active Android endpoint.
+- The active Neon Function's non-secret environment-name inventory does not include `CLOUDFLARE_TURN_KEY_ID` or `CLOUDFLARE_TURN_KEY_SECRET`. Until those are configured securely, the client may use public STUN; restrictive NAT/firewall traversal and relay quality are not certified.
+- Keep Cloudflare SFU/ TURN credentials server-side only. Never put them in Android, source control, logs, screenshots or chat. Do not deploy unrelated staged infrastructure changes.
+- Live acceptance still requires separate authenticated devices/accounts: private voice/video, buyer↔seller Live Proof, three-account group calls, permission denial, reconnect, hangup, restrictive-network TURN relay and offline invitee/FCM behavior. Emulator screenshots do not replace these tests.
+- Preserve login and existing user data. Do not publish a competing APK. Only the canonical integration branch produces the official FYNX APK.
+
+## Historical Railway notes
+
+The Railway-specific deployment notes below describe the previous test setup. They are retained for audit history only and must not be treated as the current app/backend routing instructions.
+
 
 ## 1. Project identity and non-negotiable rules
 
