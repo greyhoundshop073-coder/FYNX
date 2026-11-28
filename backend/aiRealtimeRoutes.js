@@ -129,8 +129,15 @@ export function registerRealtimeAssistantRoutes({
     try {
       const activeCall = await findActiveCall(userId, databasePool);
       if (!activeCall) return res.json({ ok: true, active: false });
-      const providerResult = await hangupCall(activeCall.callId);
       const activeMonitor = activeRealtimeMonitors.get(activeCall.callId)?.monitor;
+      activeMonitor?.expectFinish?.();
+      let providerResult;
+      try {
+        providerResult = await hangupCall(activeCall.callId);
+      } catch (error) {
+        activeMonitor?.expectFailure?.();
+        throw error;
+      }
       if (activeMonitor) {
         await activeMonitor.finish("completed");
       } else {
