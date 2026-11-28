@@ -21,6 +21,10 @@ function count(value) {
   return Number.isFinite(result) && result > 0 ? Math.trunc(result) : 0;
 }
 
+export function isFynxRealtimeUsageModelSupported(model) {
+  return Object.prototype.hasOwnProperty.call(OPENAI_REALTIME_PRICING, String(model || ""));
+}
+
 function seconds(value) {
   const result = Number(value);
   return Number.isFinite(result) && result > 0 ? result : 0;
@@ -96,10 +100,19 @@ export function estimateFynxRealtimeUsageCostUsd({
   if (!rates) return null;
   const cachedAudio = count(usage.cachedInputAudioTokens);
   const cachedText = count(usage.cachedInputTextTokens);
-  const inputAudio = Math.max(0, count(usage.inputAudioTokens) - cachedAudio);
-  const inputText = Math.max(0, count(usage.inputTextTokens) - cachedText);
+  const totalInput = count(usage.inputTokens);
+  const totalOutput = count(usage.outputTokens);
+  const totalInputAudio = count(usage.inputAudioTokens);
+  const totalInputText = count(usage.inputTextTokens);
   const outputAudio = count(usage.outputAudioTokens);
   const outputText = count(usage.outputTextTokens);
+  // Do not silently record zero cost when the provider omitted modality detail.
+  // The billing summary is only considered reliable when all token classes reconcile.
+  if (totalInput > 0 && totalInputAudio + totalInputText !== totalInput) return null;
+  if (totalOutput > 0 && outputAudio + outputText !== totalOutput) return null;
+  if (cachedAudio > totalInputAudio || cachedText > totalInputText) return null;
+  const inputAudio = Math.max(0, totalInputAudio - cachedAudio);
+  const inputText = Math.max(0, totalInputText - cachedText);
   const audioSeconds = seconds(usage.inputAudioSeconds);
   const transcriptionRate = TRANSCRIPTION_USD_PER_MINUTE[String(transcriptionModel)];
   if (audioSeconds > 0 && transcriptionRate === undefined) return null;
@@ -156,9 +169,12 @@ export function connectFynxRealtimeSideband({
     if (connectTimer) clearTimeout(connectTimer);
     const usage = accumulator.snapshot();
     const estimatedCostUsd = estimateFynxRealtimeUsageCostUsd({ model, usage });
+    const finalStatus = requestedFinalStatus === "completed" && estimatedCostUsd !== null
+      ? "completed"
+      : "failed";
     finalizationPromise = Promise.resolve(settle({
       reservation,
-      status: requestedFinalStatus,
+      status: finalStatus,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       inputAudioTokens: usage.inputAudioTokens,
@@ -171,7 +187,7 @@ export function connectFynxRealtimeSideband({
       estimatedCostUsd,
       databasePool
     })).then(() => {
-      onFinalized({ status: requestedFinalStatus, usage, estimatedCostUsd });
+      onFinalized({ status: finalStatus, usage, estimatedCostUsd, pricingUnavailable: estimatedCostUsd === null });
     }).catch(error => {
       console.error("[fynx-ai] realtime usage settlement failed", String(error?.message || "unknown").slice(0, 160));
       onFinalized({ status: "failed", usage, estimatedCostUsd, settlementFailed: true });
