@@ -220,7 +220,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     suspend fun connectSfuOrFallback(current: FynxCallSession, sendOfferOnFailure: Boolean) {
         val setup = runCatching { sfuMedia.connect(current.id) }
         if (session?.id != current.id || mediaTransport == "fallback") {
-            if (setup.isSuccess) sfuMedia.disconnect()
+            if (setup.isSuccess) runCatching { sfuMedia.stop() }
             return
         }
         if (setup.isSuccess) {
@@ -336,7 +336,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                     context, active.id, if (isRinging) "Declined" else "Ended", missed = false
                 )
             }
-            sfuMediaForCleanup[0]?.disconnect()
             sfuMediaForCleanup[0]?.disconnect()
             mediaEngine.disconnect()
             realtimeClient.close()
