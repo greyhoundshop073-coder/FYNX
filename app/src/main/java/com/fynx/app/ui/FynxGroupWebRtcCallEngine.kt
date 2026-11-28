@@ -41,7 +41,8 @@ class FynxGroupWebRtcCallEngine(
     private data class PeerState(
         val connection: PeerConnection,
         val pendingCandidates: MutableList<IceCandidate> = mutableListOf(),
-        var remoteDescriptionReady: Boolean = false
+        var remoteDescriptionReady: Boolean = false,
+        var iceRestartPending: Boolean = false
     )
 
     private val appContext = context.applicationContext
@@ -63,7 +64,7 @@ class FynxGroupWebRtcCallEngine(
     private var microphoneEnabled = true
     private var speakerEnabled = true
 
-    private val iceServers = listOf(
+    private var iceServers: List<PeerConnection.IceServer> = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
         PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
         PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
@@ -91,6 +92,30 @@ class FynxGroupWebRtcCallEngine(
     }
 
     fun isReadyForCall(): Boolean = started && audioTrack != null && (!videoEnabled || videoTrack != null)
+
+    /**
+     * Replace the initial STUN-only configuration with server-issued short-lived TURN
+     * credentials. A deterministic offer owner restarts each mesh edge to avoid glare.
+     */
+    fun updateIceServers(servers: List<PeerConnection.IceServer>, localUserId: String?) {
+        if (servers.none { server ->
+                server.urls.any { it.startsWith("turn:", true) || it.startsWith("turns:", true) }
+            }) {
+            callbacks.onError("The call relay configuration did not contain a TURN server.")
+            return
+        }
+        iceServers = servers.toList()
+        peers.forEach { (peerId, peer) ->
+            if (!peer.connection.setConfiguration(PeerConnection.RTCConfiguration(iceServers))) {
+                callbacks.onError("The relay configuration could not be applied to one group connection.")
+                return@forEach
+            }
+            if (!localUserId.isNullOrBlank() && localUserId < peerId) {
+                peer.iceRestartPending = true
+                restartPeerForUpdatedIce(peerId, peer)
+            }
+        }
+    }
 
     fun hasPeer(userId: String): Boolean = peers.containsKey(userId)
 
@@ -180,7 +205,10 @@ class FynxGroupWebRtcCallEngine(
                 pc.createAnswer(object : SdpObserverAdapter() {
                     override fun onCreateSuccess(description: SessionDescription) {
                         pc.setLocalDescription(object : SdpObserverAdapter() {
-                            override fun onSetSuccess() { callbacks.onAnswer(peerId, description.description) }
+                            override fun onSetSuccess() {
+                                callbacks.onAnswer(peerId, description.description)
+                                if (peer.iceRestartPending) handler.post { restartPeerForUpdatedIce(peerId, peer) }
+                            }
                             override fun onSetFailure(error: String) { callbacks.onError("Group answer could not be prepared: $error") }
                         }, description)
                     }
@@ -198,6 +226,7 @@ class FynxGroupWebRtcCallEngine(
             override fun onSetSuccess() {
                 peer.remoteDescriptionReady = true
                 flushRemoteCandidates(peerId, peer)
+                if (peer.iceRestartPending) restartPeerForUpdatedIce(peerId, peer)
             }
             override fun onSetFailure(error: String) { callbacks.onError("Group answer could not be applied: $error") }
         }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
@@ -247,6 +276,27 @@ class FynxGroupWebRtcCallEngine(
     fun setSpeakerEnabled(enabled: Boolean) {
         speakerEnabled = enabled
         audioRouter.setSpeakerEnabled(enabled)
+    }
+
+    private fun restartPeerForUpdatedIce(userId: String, peer: PeerState) {
+        if (!started || peers[userId] !== peer || !peer.remoteDescriptionReady) return
+        if (peer.connection.signalingState() != PeerConnection.SignalingState.STABLE) {
+            peer.iceRestartPending = true
+            return
+        }
+        peer.iceRestartPending = false
+        val constraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("IceRestart", "true"))
+        }
+        peer.connection.createOffer(object : SdpObserverAdapter() {
+            override fun onCreateSuccess(description: SessionDescription) {
+                peer.connection.setLocalDescription(object : SdpObserverAdapter() {
+                    override fun onSetSuccess() { callbacks.onOffer(userId, description.description) }
+                    override fun onSetFailure(error: String) { callbacks.onError("Group relay restart offer failed: $error") }
+                }, description)
+            }
+            override fun onCreateFailure(error: String) { callbacks.onError("Group relay restart could not start: $error") }
+        }, constraints)
     }
 
     private fun scheduleIceRecovery(userId: String) {
