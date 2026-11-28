@@ -42,7 +42,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -76,12 +75,15 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -1319,6 +1321,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                 value = query,
                 onValueChange = { query = it.take(80) },
                 onCart = { showCart = true },
+                onWallet = onOpenWallet,
                 cartCount = cartQuantities.values.sum().coerceAtLeast(0),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)
             )
@@ -1332,11 +1335,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = onOpenWallet, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
-                        Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Wallet", maxLines = 1)
-                    }
                     OutlinedButton(onClick = onOpenMyShop, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
@@ -1346,15 +1344,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(5.dp))
                         Text("Local businesses", maxLines = 1)
-                    }
-                    OutlinedButton(
-                        onClick = { sellerStoreUsername = currentUsername.removePrefix("@").trim() },
-                        enabled = currentUsername.isNotBlank() && !currentUsername.trim().equals("preview", ignoreCase = true),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Icon(Icons.Default.Storefront, contentDescription = null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text("Marketplace profile", maxLines = 1)
                     }
                     OutlinedButton(onClick = { showOrders = true; reloadOrders() }, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)) {
                         Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(17.dp))
@@ -1712,7 +1701,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                         }
                     }
                 } else LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().testTag("fynx-marketplace-scroll-container"),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = LocalFynxBottomBarSpace.current + 8.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
                 ) {
@@ -1967,6 +1956,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             testOnlyReviews = testOnlyReviews,
             canPurchase = !isOwnListing,
             sellerReputation = sellerReputations[sellerKey],
+            sellerPhotoId = sellerPhotoIds[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
@@ -2181,7 +2171,7 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
     val username = l.sellerUsername.removePrefix("@").trim()
     var photoId by remember(username) { mutableStateOf<String?>(null) }
     LaunchedEffect(username) { if (username.isNotBlank()) FynxProfileRemoteClient.get(context, username).onSuccess { photoId = it.profilePhotoMediaId } }
-    Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
+    Surface(onClick = onOpen, modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "Shop this product: ${l.title}" }, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 IconButton(onClick = onProfile, modifier = Modifier.size(34.dp)) { FynxRemoteProfileAvatar(photoId, l.sellerDisplayName.ifBlank { l.sellerUsername }, Modifier.size(30.dp).clip(RoundedCornerShape(50)), ownerUsername = l.sellerUsername) }
@@ -2230,11 +2220,12 @@ private fun MarketplaceCard(l: FynxRemoteSocialClient.MarketplaceListing, onProf
 private fun MarketplaceSellerCard(listing: FynxRemoteSocialClient.MarketplaceListing, reputation: FynxMarketplaceClient.SellerReputation?, photoId: String?, onProfile: () -> Unit) {
     Surface(Modifier.width(190.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surface) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            FynxRemoteProfileAvatar(photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, Modifier.size(42.dp).clip(RoundedCornerShape(50)), ownerUsername = listing.sellerUsername)
+            MarketplaceSellerPresenceAvatar(listing.sellerId, photoId, listing.sellerDisplayName.ifBlank { listing.sellerUsername }, listing.sellerUsername, Modifier.size(42.dp), onlineDotSize = 10.dp)
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                 Text(listing.category + " • " + (reputation?.let { it.successfulSales.toString() + " sales" } ?: "New seller"), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                MarketplaceSellerOnlineLabel(listing.sellerId)
                 reputation?.let { MarketplaceSellerTierBadge(it.tier) }
                 if (reputation != null && reputation.reviewCount > 0) { Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary); Text(" " + String.format(Locale.US, "%.1f", reputation.averageRating), style = MaterialTheme.typography.labelSmall) } }
                 TextButton(onClick = onProfile, contentPadding = PaddingValues(0.dp)) { Text("View Store") }
@@ -2266,7 +2257,8 @@ private fun MarketplaceDetails(
     onOpenAssistant: (String) -> Unit,
     onReport: () -> Unit,
     onClose: () -> Unit,
-    testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null
+    testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null,
+    sellerPhotoId: String? = null
 ) {
     val context = LocalContext.current
     val reviewScope = rememberCoroutineScope()
@@ -2325,16 +2317,31 @@ private fun MarketplaceDetails(
                 Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                marketplacePostedTimeLabel(l.createdAtEpochMs, System.currentTimeMillis())?.let { posted ->
+                    Text(posted, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
-                        sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
-                        if (l.location.isNotBlank()) {
-                            Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        MarketplaceSellerPresenceAvatar(
+                            l.sellerId,
+                            sellerPhotoId,
+                            l.sellerDisplayName.ifBlank { l.sellerUsername },
+                            l.sellerUsername,
+                            Modifier.size(40.dp),
+                            onlineDotSize = 10.dp
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
+                            MarketplaceSellerOnlineLabel(l.sellerId)
+                            sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
+                            if (l.location.isNotBlank()) {
+                                Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                     TextButton(onClick = onProfile) { Text("View shop") }

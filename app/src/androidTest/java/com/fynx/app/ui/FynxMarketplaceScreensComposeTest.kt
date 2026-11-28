@@ -96,7 +96,7 @@ class FynxMarketplaceScreensComposeTest {
         compose.onNodeWithText("My Shop").performClick()
         compose.runOnIdle { assertEquals(1, shopOpened) }
 
-        compose.onNodeWithText("Wallet").performClick()
+        compose.onNodeWithContentDescription("Wallet").performClick()
         compose.runOnIdle { assertEquals(1, walletOpened) }
 
         compose.onNodeWithText("Local businesses").performClick()
@@ -125,7 +125,8 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.waitUntil(timeoutMillis = 3_000) {
+        scrollMarketplaceToRecommendedProducts()
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -171,7 +172,8 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
+        scrollMarketplaceToRecommendedProducts()
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -455,6 +457,15 @@ class FynxMarketplaceScreensComposeTest {
             .performScrollToNode(hasText("FYNX-TEST-USD-001", substring = true))
         compose.onNodeWithText("FYNX-TEST-USD-001", substring = true).assertIsDisplayed()
         saveScreenshot("wallet-usd-simulated-test-screen.png")
+    }
+
+    private fun scrollMarketplaceToRecommendedProducts() {
+        compose.waitUntil(timeoutMillis = 10_000) {
+            compose.onAllNodesWithText("FYNX TEST DATA — isolated instrumentation only; no live listings or account data are changed.")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("fynx-marketplace-scroll-container")
+            .performScrollToNode(hasText("Recommended for you"))
     }
 
     private fun saveScreenshot(name: String) {

@@ -9,8 +9,36 @@ workflow = Path(".github/workflows/android-build.yml").read_text(encoding="utf-8
 wallet_source = Path("app/src/main/java/com/fynx/app/ui/FynxWalletActionPanels.kt").read_text(encoding="utf-8")
 emulator_storage = Path("scripts/configure_android_emulator_storage.sh").read_text(encoding="utf-8")
 marketplace_source = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt").read_text(encoding="utf-8")
+app_shell = Path("app/src/main/java/com/fynx/app/ui/FynxApp.kt").read_text(encoding="utf-8")
+reference_components = Path("app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceComponents.kt").read_text(encoding="utf-8")
 
 checks = [
+    (
+        "Marketplace header avatar uses the shared profile-photo path and opens the signed-in user's public Marketplace storefront",
+        'contentDescription = "Open your Marketplace profile"' in app_shell
+        and "FynxRemoteProfileAvatar(" in app_shell
+        and "FynxProfileImage(" in app_shell
+        and "marketplaceProfileUsername = marketplaceAvatarUsername" in app_shell
+        and "initialSellerUsername = marketplaceProfileUsername" in app_shell
+        and "onInitialSellerOpened = { marketplaceProfileUsername = null }" in app_shell
+        and "FynxDesign.AzureBlue" in app_shell,
+    ),
+    (
+        "Marketplace Wallet is a compact accessible Azure icon beside Cart, not a shortcut-rail button",
+        "onWallet: () -> Unit" in reference_components
+        and 'contentDescription = "Wallet"' in reference_components
+        and "Icons.Default.AccountBalanceWallet" in reference_components
+        and "onWallet = onOpenWallet" in marketplace_source
+        and 'Text("Wallet", maxLines = 1)' not in marketplace_source
+        and 'Text("Marketplace profile", maxLines = 1)' not in marketplace_source,
+    ),
+    (
+        "The focused Marketplace visual workflow captures this header from the Android emulator",
+        "fix/marketplace-header-avatar-wallet-20261127" in workflow
+        and "FYNX_MARKETPLACE_VISUALS_ONLY" in workflow
+        and "FYNX_LOCAL_VISUALS_ONLY" in workflow
+        and "FYNX-runtime-visual-check-" in workflow,
+    ),
     (
         "Marketplace feed states reserve measured floating navigation space instead of a fixed 132dp gap",
         marketplace_source.count("bottom = LocalFynxBottomBarSpace.current + 8.dp") == 5
@@ -22,6 +50,14 @@ checks = [
         and 'dumpsys", "input_method"' in navigation
         and 'KEYCODE_BACK' in navigation
         and 'dismiss_ime_if_visible("marketplace-visual-keyboard-dismissed.xml")' in navigation,
+    ),
+    (
+        "Wallet title and lower balance buckets are verified at separate scroll positions with real screenshot evidence",
+        'def wallet_balance_details_ready(xml_text: str) -> bool:' in navigation
+        and 'has_accessibility_label(xml_text, ["FYNX Wallet"])' in navigation
+        and 'wallet_balance_details_ready(probe_xml)' in navigation
+        and 'screenshot(name + "-balance-details.png")' in navigation
+        and 'balance-detail labels were not found in the scrolled Wallet content.' in navigation,
     ),
     (
         "Wallet bank-transfer capture recognizes the current account sign-in safety gate without claiming account issuance",

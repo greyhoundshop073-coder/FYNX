@@ -6245,36 +6245,45 @@ def find_wallet_feature_entry(xml_text:str):
     return None
 
 
-def wallet_destination_ready(xml_text: str) -> bool:
-    """Require the Wallet page and its visible balance buckets, not below-fold copy."""
+def wallet_balance_details_ready(xml_text: str) -> bool:
+    """Require the balance-detail heading and both metric labels on the same viewport."""
     return bool(
-        find_control(xml_text, ["FYNX Wallet"])
-        and find_control(xml_text, ["Balance details"])
-        and find_control(xml_text, ["Reserved"])
-        and find_control(xml_text, ["Withdrawal pending"])
+        has_accessibility_label(xml_text, ["Balance details"])
+        and has_accessibility_label(xml_text, ["Reserved"])
+        and has_accessibility_label(xml_text, ["Withdrawal pending"])
+    )
+
+
+def wallet_destination_ready(xml_text: str) -> bool:
+    """Require title and balance buckets when they genuinely share one viewport."""
+    return bool(
+        has_accessibility_label(xml_text, ["FYNX Wallet"])
+        and wallet_balance_details_ready(xml_text)
     )
 
 
 def wallet_destination_ready_scrolling(xml_text: str, name: str) -> bool:
-    """Find the Wallet title and real balance buckets even when they start below the fold."""
-    if not xml_text:
-        return False
-    if wallet_destination_ready(xml_text):
-        return True
-    if not find_control(xml_text, ["FYNX Wallet"]):
+    """Verify Wallet title first, then exact balance labels at their real scroll position."""
+    # These are vertically separated sections in the Wallet LazyColumn. Requiring them
+    # together made the old three-swipe probe pass the metrics and land on copy below,
+    # then incorrectly report that the title itself was missing.
+    if not has_accessibility_label(xml_text, ["FYNX Wallet"]):
         return False
     probe_xml = xml_text
     swipes = 0
-    ready = False
-    for _ in range(3):
+    ready = wallet_balance_details_ready(probe_xml)
+    while not ready and swipes < 5:
         next_xml = swipe_vertical_scroll_container(probe_xml, name + ".xml")
         if not next_xml:
             break
         swipes += 1
         probe_xml = next_xml
-        if wallet_destination_ready(probe_xml):
-            ready = True
-            break
+        ready = wallet_balance_details_ready(probe_xml)
+    if ready:
+        screenshot(name + "-balance-details.png")
+        (ROOT / (name + "-balance-details.xml")).write_text(
+            probe_xml + chr(10), encoding="utf-8"
+        )
     for _ in range(swipes):
         probe_xml = swipe_vertical_scroll_container(
             probe_xml, name + "-return.xml", reverse=True
@@ -6318,7 +6327,7 @@ def capture_wallet_root_from_marketplace(marketplace_xml:str, prefix:str)->tuple
     run("adb","shell","input","keyevent","KEYCODE_BACK")
     time.sleep(0.7)
     back_xml=dump_ui(prefix+"-marketplace-return-after-timeout.xml")
-    return False, "Marketplace Wallet shortcut opened, but Wallet summary sections did not settle within 20 seconds.", back_xml or marketplace_xml
+    return False, "Marketplace Wallet opened, but the Balance details, Reserved and Withdrawal pending labels were not found during a bounded scroll.", back_xml or marketplace_xml
 
 
 def capture_wallet_from_features(prefix:str):
@@ -6412,7 +6421,7 @@ def capture_wallet_from_features(prefix:str):
         if wallet_shell_opened:
             result_message="Wallet sections rendered, but summary or activity was still loading after 30 seconds."
         else:
-            result_message="Wallet result opened, but its title and visible balance-detail cards did not appear."
+            result_message="Wallet title opened, but its balance-detail labels were not found in the scrolled Wallet content."
 
     action_screens_captured = False
     if wallet_opened:

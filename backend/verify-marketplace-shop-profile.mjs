@@ -5,6 +5,7 @@ const shop = read('./marketplaceShopProfiles.js');
 const server = read('./server.js');
 const seller = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerCenterPanel.kt');
 const storefront = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceSellerStoreDialog.kt');
+const presenceAvatar = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceReferenceProductComponents.kt');
 const client = read('../app/src/main/java/com/fynx/app/ui/FynxMarketplaceClient.kt');
 const social = read('./socialRoutes.js');
 const discovery = read('./discoveryRoutes.js');
@@ -17,6 +18,9 @@ const marketplacePanel = read('../app/src/main/java/com/fynx/app/ui/FynxMarketpl
 const remoteSocial = read('../app/src/main/java/com/fynx/app/ui/FynxRemoteSocialClient.kt');
 const appNavigation = read('../app/src/main/java/com/fynx/app/ui/FynxApp.kt');
 const featuresPanel = read('../app/src/main/java/com/fynx/app/ui/FynxFeaturesPanel.kt');
+const presencePrivacy = read('./presencePrivacy.js');
+const lastActivePrivacySql = presencePrivacy.split('export async function visibleLastActiveAtByUserId', 2)[1] || '';
+const livePresencePrivacySql = presencePrivacy.split('export async function visiblePresenceUserIds', 2)[1] || '';
 
 const checks = [
   ['shop profile table is idempotent and keyed to the seller account', shop.includes('CREATE TABLE IF NOT EXISTS marketplace_shop_profiles') && shop.includes('seller_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE')],
@@ -31,7 +35,7 @@ const checks = [
   ['shop logo and cover are selected as image-only assets and uploaded through the existing authenticated media path', seller.includes('shopLogoPicker') && seller.includes('shopCoverPicker') && seller.includes('PickVisualMedia.ImageOnly') && seller.includes('uploadFynxShopBrandImage(context, shopLogoUri!!)') && seller.includes('FynxProductionMessaging.uploadMedia(context, uri, mimeType)')],
   ['Seller Center explicitly keeps shop logo and cover separate from the personal profile photo', seller.includes('Your shop logo and cover are separate from your personal profile photo.') && seller.includes('logoMediaId ?: JSONObject.NULL') && seller.includes('coverMediaId ?: JSONObject.NULL')],
   ['shop profile PATCH preserves existing logo and cover when either field is omitted but permits explicit removal', shop.includes("Object.prototype.hasOwnProperty.call(req.body || {}, 'logoMediaId')") && shop.includes("Object.prototype.hasOwnProperty.call(req.body || {}, 'coverMediaId')") && shop.includes('CASE WHEN $8 THEN EXCLUDED.logo_media_id ELSE marketplace_shop_profiles.logo_media_id END') && shop.includes('CASE WHEN $9 THEN EXCLUDED.cover_media_id ELSE marketplace_shop_profiles.cover_media_id END')],
-  ['public storefront uses shop-specific artwork when no shop logo exists and shows the personal avatar separately', storefront.includes('contentDescription = "Shop logo not set"') && storefront.includes('Icons.Default.Storefront') && storefront.includes('FynxRemoteProfileAvatar(') && storefront.includes('Text("Seller account"')],
+  ['public storefront uses shop-specific artwork when no shop logo exists and shows the personal avatar separately', storefront.includes('contentDescription = "Shop logo not set"') && storefront.includes('Icons.Default.Storefront') && storefront.includes('MarketplaceSellerPresenceAvatar(') && presenceAvatar.includes('FynxRemoteProfileAvatar(') && storefront.includes('Text("Seller account"')],
   ['public storefront prefers persistent shop name and falls back to existing listing name', storefront.includes('/api/marketplace/shops/') && storefront.includes('shop.optString("shopName").ifBlank { storeName }')],
   ['shop profile module does not create duplicate listings or orders', !shop.includes('CREATE TABLE IF NOT EXISTS marketplace_listings') && !shop.includes('CREATE TABLE IF NOT EXISTS marketplace_orders')],
   ['Seller Center exposes an edit action for each existing listing', seller.includes('Icons.Default.Edit') && seller.includes('Icon(Icons.Default.Edit, "Edit listing")') && seller.includes('Text("Save changes")')],
@@ -57,14 +61,38 @@ checks.push(
   ['Marketplace cards distinguish the public shop name from the seller account name', productCard.includes('listing.storeName.ifBlank { sellerLabel }') && productCard.includes('"by " + sellerLabel') && productDetail.includes('listing.storeName.ifBlank { listing.sellerDisplayName.ifBlank { listing.sellerUsername.removePrefix("@") } }') && productDetail.includes('"Seller account: " + listing.sellerDisplayName')],
   ['public shop identity and contact details are hidden when either account blocks the other', shop.includes('AND NOT EXISTS (') && shop.includes('SELECT 1 FROM blocks b') && shop.includes('b.blocker_id = $2 AND b.blocked_id = u.id') && shop.includes('b.blocker_id = u.id AND b.blocked_id = $2') && shop.includes('[username, req.user.sub]')],
   ['My Shop overview provides a direct route to the public Marketplace profile', seller.includes('onViewPublicShop: () -> Unit = {}') && seller.includes('Text("View public Marketplace profile")')],
-  ['Marketplace shortcut row makes the signed-in seller profile visible and disables the guest preview placeholder', marketplacePanel.includes('Text("Marketplace profile", maxLines = 1)') && marketplacePanel.includes('sellerStoreUsername = currentUsername.removePrefix("@").trim()') && marketplacePanel.includes('enabled = currentUsername.isNotBlank() && !currentUsername.trim().equals("preview", ignoreCase = true)')],
+  ['Marketplace header avatar uses the signed-in seller photo and opens the existing public storefront without the old rail button',
+    appNavigation.includes('contentDescription = "Open your Marketplace profile"')
+    && appNavigation.includes('marketplaceProfileUsername = marketplaceAvatarUsername')
+    && appNavigation.includes('initialSellerUsername = marketplaceProfileUsername')
+    && appNavigation.includes('onInitialSellerOpened = { marketplaceProfileUsername = null }')
+    && appNavigation.includes('!marketplaceAvatarUsername.equals("preview", ignoreCase = true)')
+    && !marketplacePanel.includes('Text("Marketplace profile", maxLines = 1)')],
   ['public storefront renders each active product as a photo-backed, price-labelled, tappable product post', storefront.includes('items(sellerListings.chunked(3), key =') && storefront.includes('FynxRemoteMedia(FynxMarketplaceClient.mediaUrl(context, listing.mediaIds.first())') && storefront.includes('Text(listing.title') && storefront.includes('"Available: " + listing.quantity') && storefront.includes('Surface(onClick = onOpen') && storefront.includes('onOpen = { onOpenListing(listing) }')],
   ['Shop profile form previews only the latest successfully saved public profile details', seller.includes('Text("Preview public Marketplace profile")') && seller.includes('onClick = onViewPublicShop') && seller.includes('shopProfileSavedSignature') && seller.includes('currentShopProfileSignature == shopProfileSavedSignature') && seller.includes('shopProfilePreviewReady') && seller.includes('Save your latest shop details before previewing the public profile.')],
   ['Seller Center opens the signed-in seller public storefront in Marketplace', appNavigation.includes('FynxMarketplaceSellerCenterPanel(onViewPublicShop = { marketplaceProfileUsername = authSession.username; selected = "Marketplace" })')],
   ['Marketplace consumes the one-shot seller profile navigation and opens the existing public storefront dialog', marketplacePanel.includes('initialSellerUsername: String? = null') && marketplacePanel.includes('sellerStoreUsername = seller') && marketplacePanel.includes('onInitialSellerOpened()') && marketplacePanel.includes('FynxMarketplaceSellerStoreDialog(')],
   ['public Marketplace profile loads the seller\'s live published products independently of the current Marketplace feed', storefront.includes('FynxRemoteSocialClient.marketplaceSellerListingsPage(context, username, limit = 24, offset = 0)') && storefront.includes('storefrontListings = page.listings.filter { it.active && it.quantity > 0 }') && storefront.includes('storefrontHasMore = page.hasMore') && storefront.includes('val sellerListings = remember(storefrontListings)')],
-  ['public storefront is explicitly titled Marketplace profile and displays shop identity, profile avatar, product count, follow state and contact action', storefront.includes('Text("Marketplace profile"') && /FynxRemoteProfileAvatar\(\s*photoId/.test(storefront) && storefront.includes('Text("Products"') && storefront.includes('followedByViewer == false -> "Follow"') && storefront.includes('Text("Message seller"')],
+  ['public storefront is explicitly titled Marketplace profile and displays shop identity, profile avatar, product count, follow state and contact action', storefront.includes('Text("Marketplace profile"') && /MarketplaceSellerPresenceAvatar\(\s*sellerUserId,\s*photoId/.test(storefront) && presenceAvatar.includes('FynxRemoteProfileAvatar(') && storefront.includes('Text("Products"') && storefront.includes('followedByViewer == false -> "Follow"') && storefront.includes('Text("Message seller"')],
   ['Marketplace feed recovers only the signed-in seller\'s own active products when general discovery is empty', marketplacePanel.includes('items.isEmpty()') && marketplacePanel.includes('seller = currentUsername.removePrefix("@").trim()') && marketplacePanel.includes('FynxRemoteSocialClient.listings(') && marketplacePanel.includes('Showing your published products while Marketplace discovery refreshes.')],
+);
+checks.push(
+  ['foreground heartbeat persists database-generated activity timestamps',
+    presencePrivacy.includes('export async function recordPresenceActivity(userId)')
+    && presencePrivacy.includes('VALUES ($1, NOW())')
+    && presencePrivacy.includes('last_active_at = EXCLUDED.last_active_at')
+    && presencePrivacy.includes('last_active_at_epoch_ms')],
+  ['live online presence defaults to friends-only and rejects blocks in either direction',
+    livePresencePrivacySql.includes("COALESCE(p.online_visibility, 'My friends')")
+    && livePresencePrivacySql.includes("f.status = 'accepted'")
+    && livePresencePrivacySql.includes('(b.blocker_id = $1 AND b.blocked_id = target.user_id)')
+    && livePresencePrivacySql.includes('(b.blocker_id = target.user_id AND b.blocked_id = $1)')],
+  ['offline activity timestamps enforce the same viewer visibility and two-way block rules',
+    lastActivePrivacySql.includes("COALESCE(p.online_visibility, 'My friends')")
+    && lastActivePrivacySql.includes("f.status = 'accepted'")
+    && lastActivePrivacySql.includes('(b.blocker_id = $1 AND b.blocked_id = presence.user_id)')
+    && lastActivePrivacySql.includes('(b.blocker_id = presence.user_id AND b.blocked_id = $1)')
+    && lastActivePrivacySql.includes('LIMIT 5000')],
 );
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
 for (const [name, ok] of checks) console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`);

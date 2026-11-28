@@ -81,6 +81,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
     val isOwnStore = username.removePrefix("@").trim().equals(viewerUsername.removePrefix("@").trim(), ignoreCase = true)
     var tab by remember { mutableStateOf("Products") }
     var profileName by remember(username) { mutableStateOf("") }
+    var sellerUserId by remember(username) { mutableStateOf<String?>(null) }
     var storeName by remember(username) { mutableStateOf("") }
     var profileBio by remember(username) { mutableStateOf("") }
     var shopDescription by remember(username) { mutableStateOf("") }
@@ -164,6 +165,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                 FynxProfileRemoteClient.get(context, username.removePrefix("@").trim())
                     .onSuccess { profile ->
                         profileName = profile.displayName.orEmpty()
+                        sellerUserId = profile.id.takeIf { it.isNotBlank() }
                         profileBio = profile.bio.orEmpty()
                         followedByViewer = profile.followedByCurrentUser
                         followerCount = profile.followerCount
@@ -304,11 +306,13 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                 horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                FynxRemoteProfileAvatar(
+                                MarketplaceSellerPresenceAvatar(
+                                    sellerUserId,
                                     photoId,
                                     profileName.ifBlank { username },
-                                    Modifier.size(36.dp).clip(CircleShape),
-                                    ownerUsername = username
+                                    username,
+                                    Modifier.size(36.dp),
+                                    onlineDotSize = 9.dp
                                 )
                                 Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text("Seller account", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -317,6 +321,7 @@ internal fun FynxMarketplaceSellerStoreDialog(
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Medium
                                     )
+                                    MarketplaceSellerOnlineLabel(sellerUserId)
                                 }
                             }
                             Row(

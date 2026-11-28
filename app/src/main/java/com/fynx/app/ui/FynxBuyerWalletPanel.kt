@@ -453,6 +453,27 @@ internal fun FynxBuyerWalletPanel(
                 }
             }
         }
+        item {
+            Text("Balance details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FynxWalletMetric(
+                    label = "Reserved",
+                    amount = wallet?.reservedBalance,
+                    explanation = "Held for an order or an active review.",
+                    visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
+                    modifier = Modifier.weight(1f)
+                )
+                FynxWalletMetric(
+                    label = "Withdrawal pending",
+                    amount = wallet?.withdrawalPendingBalance,
+                    explanation = "Sent for withdrawal and awaiting final confirmation.",
+                    visible = balanceVisible,
+                    currency = wallet?.currency ?: "NGN",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
         if (summaryLoading || activityLoading) {
             item {
                 Row(
@@ -523,27 +544,6 @@ internal fun FynxBuyerWalletPanel(
                 Icon(Icons.Default.Info, contentDescription = null, tint = FynxDesign.AzureBlue)
                 Spacer(Modifier.size(8.dp))
                 Text("Wallet security & PIN")
-            }
-        }
-        item {
-            Text("Balance details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FynxWalletMetric(
-                    label = "Reserved",
-                    amount = wallet?.reservedBalance,
-                    explanation = "Held for an order or an active review.",
-                    visible = balanceVisible,
-                    currency = wallet?.currency ?: "NGN",
-                    modifier = Modifier.weight(1f)
-                )
-                FynxWalletMetric(
-                    label = "Withdrawal pending",
-                    amount = wallet?.withdrawalPendingBalance,
-                    explanation = "Sent for withdrawal and awaiting final confirmation.",
-                    visible = balanceVisible,
-                    currency = wallet?.currency ?: "NGN",
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
         if (sellerSummaryLoading) {

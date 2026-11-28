@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -97,6 +100,41 @@ internal fun marketplaceIsNewArrival(
     createdAtEpochMs <= nowEpochMs &&
     nowEpochMs - createdAtEpochMs <= windowMillis
 
+/** Formats only a real server-created timestamp; missing or future values stay hidden. */
+internal fun marketplacePostedTimeLabel(createdAtEpochMs: Long, nowEpochMs: Long): String? {
+    if (createdAtEpochMs <= 0L || nowEpochMs < createdAtEpochMs) return null
+    val elapsed = nowEpochMs - createdAtEpochMs
+    val minute = 60_000L
+    val hour = 60L * minute
+    val day = 24L * hour
+    val days = elapsed / day
+    return when {
+        elapsed < minute -> "Posted just now"
+        elapsed < hour -> {
+            val minutes = elapsed / minute
+            "Posted $minutes " + if (minutes == 1L) "minute ago" else "minutes ago"
+        }
+        elapsed < day -> {
+            val hours = elapsed / hour
+            "Posted $hours " + if (hours == 1L) "hour ago" else "hours ago"
+        }
+        days == 1L -> "Posted yesterday"
+        days < 7L -> "Posted $days days ago"
+        days < 30L -> {
+            val weeks = days / 7L
+            "Posted $weeks " + if (weeks == 1L) "week ago" else "weeks ago"
+        }
+        days < 365L -> {
+            val months = (days / 30L).coerceAtLeast(1L)
+            "Posted $months " + if (months == 1L) "month ago" else "months ago"
+        }
+        else -> {
+            val years = (days / 365L).coerceAtLeast(1L)
+            "Posted $years " + if (years == 1L) "year ago" else "years ago"
+        }
+    }
+}
+
 /** Discovery rank is meaningful only when the backend supplied a positive activity/recency score. */
 internal fun marketplaceIsTrendingDiscoveryRank(rank: Int, discoveryScore: Double): Boolean =
     rank in 1..5 && discoveryScore.isFinite() && discoveryScore > 0.0
@@ -140,6 +178,89 @@ private fun MarketplaceProductCardBadge(label: String, fill: Color) {
     }
 }
 
+
+/** Personal seller avatar with a privacy-filtered live indicator; shop logos never use this. */
+@Composable
+internal fun MarketplaceSellerPresenceAvatar(
+    userId: String?,
+    photoId: String?,
+    displayName: String,
+    username: String,
+    modifier: Modifier = Modifier.size(24.dp),
+    onlineDotSize: androidx.compose.ui.unit.Dp = 8.dp
+) {
+    val online = FynxOnlinePresenceStore.isOnline(userId)
+    Box(modifier) {
+        FynxRemoteProfileAvatar(
+            photoId,
+            displayName,
+            Modifier.fillMaxSize().clip(CircleShape),
+            ownerUsername = username
+        )
+        if (online) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(onlineDotSize)
+                    .background(FynxDesign.ClassicGreen, CircleShape)
+                    .border(1.5.dp, androidx.compose.material3.MaterialTheme.colorScheme.surface, CircleShape)
+            )
+        }
+    }
+}
+
+internal fun marketplaceSellerActivityLabel(lastActiveAtEpochMs: Long?, nowEpochMs: Long): String? {
+    val lastActive = lastActiveAtEpochMs ?: return null
+    if (lastActive <= 0L || nowEpochMs < lastActive) return null
+    val elapsed = nowEpochMs - lastActive
+    val minute = 60_000L
+    val hour = 60L * minute
+    val day = 24L * hour
+    return when {
+        elapsed < minute -> "Active just now"
+        elapsed < hour -> {
+            val minutes = (elapsed / minute).coerceAtLeast(1L)
+            "Active $minutes minute${if (minutes == 1L) "" else "s"} ago"
+        }
+        elapsed < day -> {
+            val hours = (elapsed / hour).coerceAtLeast(1L)
+            "Active $hours hour${if (hours == 1L) "" else "s"} ago"
+        }
+        elapsed < 2L * day -> "Active yesterday"
+        elapsed < 7L * day -> "Active ${elapsed / day} days ago"
+        elapsed < 30L * day -> {
+            val weeks = (elapsed / (7L * day)).coerceAtLeast(1L)
+            "Active $weeks week${if (weeks == 1L) "" else "s"} ago"
+        }
+        elapsed < 365L * day -> {
+            val months = (elapsed / (30L * day)).coerceAtLeast(1L)
+            "Active $months month${if (months == 1L) "" else "s"} ago"
+        }
+        else -> {
+            val years = (elapsed / (365L * day)).coerceAtLeast(1L)
+            "Active $years year${if (years == 1L) "" else "s"} ago"
+        }
+    }
+}
+
+@Composable
+internal fun MarketplaceSellerOnlineLabel(userId: String?) {
+    val online = FynxOnlinePresenceStore.isOnline(userId)
+    val label = if (online) "Active now" else marketplaceSellerActivityLabel(
+        FynxOnlinePresenceStore.lastActiveAt(userId),
+        System.currentTimeMillis()
+    )
+    label?.let {
+        Text(
+            it,
+            color = if (online) FynxDesign.ClassicGreen
+            else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            maxLines = 1
+        )
+    }
+}
+
 /** Reference-board product presentation. All displayed values and actions come from real FYNX data. */
 @Composable
 internal fun MarketplaceReferenceProductCard(
@@ -170,6 +291,7 @@ internal fun MarketplaceReferenceProductCard(
     val discountPercent = marketplaceDiscountPercent(listing.price, listing.originalPrice)
     val hasProductRating = listing.productReviewCount > 0 && listing.productAverageRating > 0.0
     val isTopRatedProduct = listing.productReviewCount >= 5 && listing.productAverageRating >= 4.5
+    val postedTimeLabel = marketplacePostedTimeLabel(listing.createdAtEpochMs, System.currentTimeMillis())
     val prominentBadges = buildList {
         if (listing.quantity <= 0) {
             add("Out of stock" to Color(0xFFDC143C))
@@ -194,7 +316,9 @@ internal fun MarketplaceReferenceProductCard(
 
     Surface(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().semantics {
+            contentDescription = "Shop this product: ${listing.title}"
+        },
         shape = RoundedCornerShape(16.dp),
         color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp
@@ -276,6 +400,14 @@ internal fun MarketplaceReferenceProductCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                postedTimeLabel?.let { label ->
+                    Text(
+                        label,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                }
 
                 if (hasProductRating) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -311,11 +443,12 @@ internal fun MarketplaceReferenceProductCard(
                         color = Color.Transparent
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            FynxRemoteProfileAvatar(
+                            MarketplaceSellerPresenceAvatar(
+                                listing.sellerId,
                                 sellerPhotoId,
                                 listing.sellerDisplayName.ifBlank { listing.sellerUsername },
-                                Modifier.size(24.dp).clip(CircleShape),
-                                ownerUsername = listing.sellerUsername
+                                listing.sellerUsername,
+                                Modifier.size(24.dp)
                             )
                             Spacer(Modifier.width(6.dp))
                             Column(
@@ -344,6 +477,7 @@ internal fun MarketplaceReferenceProductCard(
                                         style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                                     )
                                 }
+                                MarketplaceSellerOnlineLabel(listing.sellerId)
                                 sellerRating?.let { MarketplaceSellerTierBadge(it.tier) }
                                 sellerRating?.takeIf { it.reviewCount > 0 }?.let { reputation ->
                                     Text(

@@ -478,7 +478,7 @@ private fun MarketplacePromotionalSlide(
 }
 
 /** Local fixed-date fallback. Lunar/religious dates must come from explicitly scheduled campaign records. */
-private fun marketplaceCelebrationFor(date: LocalDate): Pair<String, Pair<String, String>>? {
+internal fun marketplaceCelebrationFor(date: LocalDate): Pair<String, Pair<String, String>>? {
     fun between(start: LocalDate, end: LocalDate) = !date.isBefore(start) && !date.isAfter(end)
     val year = date.year
     val christmasStart = LocalDate.of(year, 12, 18)

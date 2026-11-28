@@ -25,20 +25,55 @@ import kotlin.random.Random
  */
 object FynxOnlinePresenceStore {
     private val onlineUserIds = mutableStateMapOf<String, Boolean>()
+    private val lastActiveAtByUserId = mutableStateMapOf<String, Long>()
 
     fun setOnline(userId: String, online: Boolean) {
         val id = userId.trim()
         if (id.isBlank()) return
-        if (online) onlineUserIds[id] = true else onlineUserIds.remove(id)
+        if (online) {
+            onlineUserIds[id] = true
+            lastActiveAtByUserId.remove(id)
+        } else {
+            onlineUserIds.remove(id)
+            // A realtime disconnect has no authoritative activity timestamp.
+            // Wait for the privacy-filtered server heartbeat snapshot instead of guessing.
+            lastActiveAtByUserId.remove(id)
+        }
     }
 
     fun replaceSnapshot(userIds: Set<String>) {
+        val normalized = userIds.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        // Presence snapshots describe online state only. Last-active times come solely
+        // from the separate, privacy-filtered server activity snapshot.
         onlineUserIds.clear()
-        userIds.map { it.trim() }.filter { it.isNotBlank() }.forEach { onlineUserIds[it] = true }
+        normalized.forEach {
+            onlineUserIds[it] = true
+            lastActiveAtByUserId.remove(it)
+        }
+    }
+
+    fun replaceLastActiveSnapshot(lastActiveAt: Map<String, Long>) {
+        // This map is already filtered for the current viewer. Replace, rather than
+        // merge, because omitted accounts may have hidden presence or blocked this viewer.
+        lastActiveAtByUserId.clear()
+        lastActiveAt.forEach { (rawId, timestamp) ->
+            val id = rawId.trim()
+            if (id.isNotBlank() && timestamp > 0L && !isOnline(id)) {
+                lastActiveAtByUserId[id] = timestamp
+            }
+        }
     }
 
     fun isOnline(userId: String?): Boolean = !userId.isNullOrBlank() && onlineUserIds[userId.trim()] == true
-    fun clear() = onlineUserIds.clear()
+    fun lastActiveAt(userId: String?): Long? =
+        if (userId.isNullOrBlank()) null else lastActiveAtByUserId[userId.trim()]
+
+    fun clearOnline() = onlineUserIds.clear()
+
+    fun clear() {
+        onlineUserIds.clear()
+        lastActiveAtByUserId.clear()
+    }
 }
 
 /** Authenticated realtime transport for messages and ephemeral chat/call signals. */
