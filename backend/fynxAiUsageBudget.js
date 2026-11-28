@@ -13,10 +13,25 @@ const SCHEMA_SQL = [
   "  status TEXT NOT NULL CHECK (status IN ('reserved','completed','failed')),",
   "  input_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),",
   "  output_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),",
+  "  input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0),",
+  "  input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_text_tokens >= 0),",
+  "  output_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_audio_tokens >= 0),",
+  "  output_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_text_tokens >= 0),",
+  "  input_audio_seconds NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK (input_audio_seconds >= 0),",
   "  estimated_cost_usd NUMERIC(18,8),",
   "  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
   "  finished_at TIMESTAMPTZ",
   ")",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_text_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS output_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_audio_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS output_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_text_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_audio_seconds NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK (input_audio_seconds >= 0)",
   ";",
   "CREATE INDEX IF NOT EXISTS idx_fynx_ai_usage_user_created ON fynx_ai_usage_events(user_id, created_at DESC)",
   ";",
@@ -159,6 +174,11 @@ export async function settleFynxAiUsage({
   status = "completed",
   inputTokens = 0,
   outputTokens = 0,
+  inputAudioTokens = 0,
+  inputTextTokens = 0,
+  outputAudioTokens = 0,
+  outputTextTokens = 0,
+  inputAudioSeconds = 0,
   estimatedCostUsd = null,
   databasePool = getFynxDatabasePool()
 } = {}) {
@@ -167,13 +187,22 @@ export async function settleFynxAiUsage({
   const safeStatus = status === "failed" ? "failed" : "completed";
   const input = Math.max(0, Math.trunc(Number(inputTokens) || 0));
   const output = Math.max(0, Math.trunc(Number(outputTokens) || 0));
+  const safeCount = value => Math.max(0, Math.trunc(Number(value) || 0));
+  const audioSeconds = Number(inputAudioSeconds);
+  const safeAudioSeconds = Number.isFinite(audioSeconds) ? Math.max(0, audioSeconds) : 0;
   const cost = estimatedCostUsd === null || estimatedCostUsd === undefined || estimatedCostUsd === ""
     ? null
     : (Number.isFinite(Number(estimatedCostUsd)) ? Math.max(0, Number(estimatedCostUsd)) : null);
   await databasePool.query(
-    "UPDATE fynx_ai_usage_events SET status=$2,input_tokens=$3,output_tokens=$4,estimated_cost_usd=$5,finished_at=NOW() " +
-    "WHERE id=$1 AND status='reserved'",
-    [reservation.id, safeStatus, input, output, cost]
+    "UPDATE fynx_ai_usage_events SET status=$2,input_tokens=$3,output_tokens=$4," +
+    "input_audio_tokens=$5,input_text_tokens=$6,output_audio_tokens=$7,output_text_tokens=$8,input_audio_seconds=$9," +
+    "estimated_cost_usd=$10,finished_at=NOW() WHERE id=$1 AND status='reserved'",
+    [
+      reservation.id, safeStatus, input, output,
+      safeCount(inputAudioTokens), safeCount(inputTextTokens),
+      safeCount(outputAudioTokens), safeCount(outputTextTokens),
+      safeAudioSeconds, cost
+    ]
   );
 }
 
@@ -188,11 +217,30 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     "COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW()) AND capability='marketplace_photo_review')::int AS daily_photo_reviews, " +
     "COALESCE(SUM(input_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_input_tokens, " +
     "COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_tokens, " +
+    "COALESCE(SUM(input_audio_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_input_audio_tokens, " +
+    "COALESCE(SUM(input_text_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_input_text_tokens, " +
+    "COALESCE(SUM(output_audio_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_audio_tokens, " +
+    "COALESCE(SUM(output_text_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_text_tokens, " +
+    "COALESCE(SUM(input_audio_seconds) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::numeric AS monthly_input_audio_seconds, " +
     "COALESCE(SUM(estimated_cost_usd) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::numeric AS monthly_estimated_cost_usd " +
     "FROM fynx_ai_usage_events WHERE user_id=$1 AND created_at >= date_trunc('month', NOW())",
     [String(userId)]
   );
   const row = result.rows?.[0] || {};
+  const byProvider = await databasePool.query(
+    "SELECT provider,capability,model,COUNT(*)::int AS requests," +
+    "COALESCE(SUM(input_tokens),0)::bigint AS input_tokens," +
+    "COALESCE(SUM(output_tokens),0)::bigint AS output_tokens," +
+    "COALESCE(SUM(input_audio_tokens),0)::bigint AS input_audio_tokens," +
+    "COALESCE(SUM(input_text_tokens),0)::bigint AS input_text_tokens," +
+    "COALESCE(SUM(output_audio_tokens),0)::bigint AS output_audio_tokens," +
+    "COALESCE(SUM(output_text_tokens),0)::bigint AS output_text_tokens," +
+    "COALESCE(SUM(input_audio_seconds),0)::numeric AS input_audio_seconds," +
+    "COALESCE(SUM(estimated_cost_usd),0)::numeric AS estimated_cost_usd " +
+    "FROM fynx_ai_usage_events WHERE user_id=$1 AND created_at >= date_trunc('month', NOW()) " +
+    "GROUP BY provider,capability,model ORDER BY provider,capability,model",
+    [String(userId)]
+  );
   const limits = getFynxAiUsageLimits();
   const dailyRequests = Number(row.daily_requests || 0);
   const dailyPhotoReviews = Number(row.daily_photo_reviews || 0);
@@ -205,7 +253,26 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     remainingDailyPhotoReviews: Math.max(0, limits.dailyPhotoReviews - dailyPhotoReviews),
     monthlyInputTokens: Number(row.monthly_input_tokens || 0),
     monthlyOutputTokens: Number(row.monthly_output_tokens || 0),
+    monthlyInputAudioTokens: Number(row.monthly_input_audio_tokens || 0),
+    monthlyInputTextTokens: Number(row.monthly_input_text_tokens || 0),
+    monthlyOutputAudioTokens: Number(row.monthly_output_audio_tokens || 0),
+    monthlyOutputTextTokens: Number(row.monthly_output_text_tokens || 0),
+    monthlyInputAudioSeconds: Number(row.monthly_input_audio_seconds || 0),
     monthlyEstimatedCostUsd: Number(row.monthly_estimated_cost_usd || 0),
+    providerUsage: (byProvider.rows || []).map(item => ({
+      provider: String(item.provider || ""),
+      capability: String(item.capability || ""),
+      model: String(item.model || ""),
+      requests: Number(item.requests || 0),
+      inputTokens: Number(item.input_tokens || 0),
+      outputTokens: Number(item.output_tokens || 0),
+      inputAudioTokens: Number(item.input_audio_tokens || 0),
+      inputTextTokens: Number(item.input_text_tokens || 0),
+      outputAudioTokens: Number(item.output_audio_tokens || 0),
+      outputTextTokens: Number(item.output_text_tokens || 0),
+      inputAudioSeconds: Number(item.input_audio_seconds || 0),
+      estimatedCostUsd: Number(item.estimated_cost_usd || 0)
+    })),
     monthlyUserBudgetUsd: readOptionalBudget("FYNX_AI_USER_MONTHLY_BUDGET_USD")
   };
 }
