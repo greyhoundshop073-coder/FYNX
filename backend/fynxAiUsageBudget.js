@@ -15,6 +15,8 @@ const SCHEMA_SQL = [
   "  output_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),",
   "  input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0),",
   "  input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_text_tokens >= 0),",
+  "  cached_input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cached_input_audio_tokens >= 0),",
+  "  cached_input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cached_input_text_tokens >= 0),",
   "  output_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_audio_tokens >= 0),",
   "  output_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_text_tokens >= 0),",
   "  input_audio_seconds NUMERIC(18,3) NOT NULL DEFAULT 0 CHECK (input_audio_seconds >= 0),",
@@ -26,6 +28,10 @@ const SCHEMA_SQL = [
   "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_audio_tokens >= 0)",
   ";",
   "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_text_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS cached_input_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cached_input_audio_tokens >= 0)",
+  ";",
+  "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS cached_input_text_tokens BIGINT NOT NULL DEFAULT 0 CHECK (cached_input_text_tokens >= 0)",
   ";",
   "ALTER TABLE fynx_ai_usage_events ADD COLUMN IF NOT EXISTS output_audio_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_audio_tokens >= 0)",
   ";",
@@ -176,6 +182,8 @@ export async function settleFynxAiUsage({
   outputTokens = 0,
   inputAudioTokens = 0,
   inputTextTokens = 0,
+  cachedInputAudioTokens = 0,
+  cachedInputTextTokens = 0,
   outputAudioTokens = 0,
   outputTextTokens = 0,
   inputAudioSeconds = 0,
@@ -195,11 +203,13 @@ export async function settleFynxAiUsage({
     : (Number.isFinite(Number(estimatedCostUsd)) ? Math.max(0, Number(estimatedCostUsd)) : null);
   await databasePool.query(
     "UPDATE fynx_ai_usage_events SET status=$2,input_tokens=$3,output_tokens=$4," +
-    "input_audio_tokens=$5,input_text_tokens=$6,output_audio_tokens=$7,output_text_tokens=$8,input_audio_seconds=$9," +
-    "estimated_cost_usd=$10,finished_at=NOW() WHERE id=$1 AND status='reserved'",
+    "input_audio_tokens=$5,input_text_tokens=$6,cached_input_audio_tokens=$7,cached_input_text_tokens=$8," +
+    "output_audio_tokens=$9,output_text_tokens=$10,input_audio_seconds=$11," +
+    "estimated_cost_usd=$12,finished_at=NOW() WHERE id=$1 AND status='reserved'",
     [
       reservation.id, safeStatus, input, output,
       safeCount(inputAudioTokens), safeCount(inputTextTokens),
+      safeCount(cachedInputAudioTokens), safeCount(cachedInputTextTokens),
       safeCount(outputAudioTokens), safeCount(outputTextTokens),
       safeAudioSeconds, cost
     ]
@@ -219,6 +229,8 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     "COALESCE(SUM(output_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_tokens, " +
     "COALESCE(SUM(input_audio_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_input_audio_tokens, " +
     "COALESCE(SUM(input_text_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_input_text_tokens, " +
+    "COALESCE(SUM(cached_input_audio_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_cached_input_audio_tokens, " +
+    "COALESCE(SUM(cached_input_text_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_cached_input_text_tokens, " +
     "COALESCE(SUM(output_audio_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_audio_tokens, " +
     "COALESCE(SUM(output_text_tokens) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::bigint AS monthly_output_text_tokens, " +
     "COALESCE(SUM(input_audio_seconds) FILTER (WHERE created_at >= date_trunc('month', NOW())),0)::numeric AS monthly_input_audio_seconds, " +
@@ -233,6 +245,8 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     "COALESCE(SUM(output_tokens),0)::bigint AS output_tokens," +
     "COALESCE(SUM(input_audio_tokens),0)::bigint AS input_audio_tokens," +
     "COALESCE(SUM(input_text_tokens),0)::bigint AS input_text_tokens," +
+    "COALESCE(SUM(cached_input_audio_tokens),0)::bigint AS cached_input_audio_tokens," +
+    "COALESCE(SUM(cached_input_text_tokens),0)::bigint AS cached_input_text_tokens," +
     "COALESCE(SUM(output_audio_tokens),0)::bigint AS output_audio_tokens," +
     "COALESCE(SUM(output_text_tokens),0)::bigint AS output_text_tokens," +
     "COALESCE(SUM(input_audio_seconds),0)::numeric AS input_audio_seconds," +
@@ -255,6 +269,8 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
     monthlyOutputTokens: Number(row.monthly_output_tokens || 0),
     monthlyInputAudioTokens: Number(row.monthly_input_audio_tokens || 0),
     monthlyInputTextTokens: Number(row.monthly_input_text_tokens || 0),
+    monthlyCachedInputAudioTokens: Number(row.monthly_cached_input_audio_tokens || 0),
+    monthlyCachedInputTextTokens: Number(row.monthly_cached_input_text_tokens || 0),
     monthlyOutputAudioTokens: Number(row.monthly_output_audio_tokens || 0),
     monthlyOutputTextTokens: Number(row.monthly_output_text_tokens || 0),
     monthlyInputAudioSeconds: Number(row.monthly_input_audio_seconds || 0),
@@ -268,6 +284,8 @@ export async function getFynxAiUsageSummary(userId, databasePool = getFynxDataba
       outputTokens: Number(item.output_tokens || 0),
       inputAudioTokens: Number(item.input_audio_tokens || 0),
       inputTextTokens: Number(item.input_text_tokens || 0),
+      cachedInputAudioTokens: Number(item.cached_input_audio_tokens || 0),
+      cachedInputTextTokens: Number(item.cached_input_text_tokens || 0),
       outputAudioTokens: Number(item.output_audio_tokens || 0),
       outputTextTokens: Number(item.output_text_tokens || 0),
       inputAudioSeconds: Number(item.input_audio_seconds || 0),
