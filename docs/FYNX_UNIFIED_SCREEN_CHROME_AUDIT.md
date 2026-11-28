@@ -42,6 +42,15 @@ The earlier PR #602 is behind the current canonical branch and its latest Androi
 
 Coordination comments were posted on PRs #602 and #586 before implementation. Chat/Groups source remains untouched.
 
+
+## Additional confirmed nested-header findings (owner coordination required)
+
+- **Stories / Status:** the app shell currently renders the primary Stories header. `FynxStatusTimelinePanel` independently renders a “Status” header and calls `statusBarsPadding()`; the archive screen also has its own header/back action and status-bar inset. This can create stacked titles and duplicated top inset depending on the active child state. PR #603 owns the Status/Stories restore work and PR #586 also owns shared `FynxApp.kt` Settings state; comments were posted to both owners. Do not edit those files from this branch until the shell-state change is coordinated.
+- **Money Center child tools:** the app shell shows “Money Center” with Back → More/Features. Inside `MoneyCenterPanel`, selecting a child tool renders an in-panel “← Money Center” action and Android Back → Money Center. These are different route levels, so deleting either is incorrect. The shell must receive the active child title/back state: child title with Back → Money Center; Money Center title with Back → More. `FynxApp.kt` is owned by PR #586 and this route-state coordination has been raised there. Do not silently change the route in this PR.
+- **Nested feature screens generally:** audit whether a visible child Back is an identical duplicate or the only action that reaches an immediate parent. Keep the child action when it serves a different level, but collapse/replace the shell toolbar so only the active level is visible.
+
+These findings are source-confirmed, but their app-shell fixes are pending the owning workstream coordination and must be runtime-tested after integration.
+
 ## Remaining app-wide audit
 - [ ] Profile → Settings: verify one visible Settings header on both entry routes; Settings Back returns to Profile; Profile Back returns Home.
 - [ ] Notifications: verify Home-bell and Profile-settings entry paths independently.
