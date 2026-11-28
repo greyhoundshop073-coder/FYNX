@@ -13,7 +13,7 @@ checks = {
     "incoming call identity and type are handed into the existing Calls panel": all(x in app for x in ["initialIncomingCallId = pendingIncomingCall?.callId", "initialIncomingUserId = pendingIncomingCall?.fromUserId", "pendingIncomingCall?.callType"]),
     "Calls panel seeds a ringing session from a routed invite": "initialIncomingCallId?.let { callId ->" in calls and "state = FynxCallState.RINGING" in calls,
     "incoming invite is recorded once and consumed after panel initialization": "LaunchedEffect(initialIncomingCallId)" in calls and "onIncomingCallConsumed(callId)" in calls,
-    "active Calls panel retains its existing realtime and WebRTC handler": "realtimeClient.connect()" in calls and '"offer" -> if (session?.id == event.callId' in calls and "mediaEngine.acceptOfferAndCreateAnswer(event.sdp)" in calls,
+    "active Calls panel retains its existing realtime and WebRTC handler": "realtimeClient.connect()" in calls and '"offer" -> if (session?.id == event.callId' in calls and ("mediaEngine.acceptOfferAndCreateAnswer(event.sdp)" in calls or ("val offerSdp = event.sdp" in calls and "mediaEngine.acceptOfferAndCreateAnswer(offerSdp)" in calls)),
     "routing helper only routes invites outside Calls when no invite is pending": 'signalType.equals("invite", ignoreCase = true)' in routing and 'currentScreen != "Calls"' in routing and "!hasPendingIncomingCall" in routing,
     "unit tests cover screen routing, duplicate pending invites, and other signals": all(x in tests for x in ["routesAnInviteFromAnyNonCallsScreen", "leavesInvitesToTheActiveCallsScreen", "doesNotReplaceAnAlreadyPendingInvite", "ignoresNonInviteCallSignals"]),
 }
