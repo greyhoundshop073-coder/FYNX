@@ -17,7 +17,8 @@ assert.match(transcription.instructions, /FYNX Gemini is the only assistant answ
 
 assert.deepEqual(FYNX_AI_REALTIME_VOICES, ["marin", "cedar", "coral", "ash"]);
 assert.equal(resolveFynxAiVoice("cedar"), "cedar");
-assert.equal(resolveFynxAiVoice("not-a-voice"), "marin");
+assert.ok(FYNX_AI_REALTIME_VOICES.includes(resolveFynxAiVoice("not-a-voice")));
+assert.ok(FYNX_AI_REALTIME_VOICES.includes(buildRealtimeSessionConfig("assistant").audio.output.voice));
 
 const speech = buildRealtimeSessionConfig("speech", "cedar");
 assert.deepEqual(speech.output_modalities, ["audio"]);

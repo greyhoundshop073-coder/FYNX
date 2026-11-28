@@ -15,8 +15,12 @@ export const FYNX_AI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
 export const FYNX_AI_REALTIME_VOICES = Object.freeze([
   "marin", "cedar", "coral", "ash"
 ]);
+const CONFIGURED_DEFAULT_VOICE = FYNX_AI_REALTIME_VOICES.includes(FYNX_AI_VOICE)
+  ? FYNX_AI_VOICE
+  : "marin";
+
 export function resolveFynxAiVoice(voice) {
-  return FYNX_AI_REALTIME_VOICES.includes(voice) ? voice : FYNX_AI_VOICE;
+  return FYNX_AI_REALTIME_VOICES.includes(voice) ? voice : CONFIGURED_DEFAULT_VOICE;
 }
 
 export const FYNX_AI_VOICE_INSTRUCTIONS = [
@@ -104,7 +108,7 @@ export function buildRealtimeSessionConfig(mode = "assistant", requestedVoice = 
         ...inputAudio,
         turn_detection: { type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }
       },
-      output: { voice: FYNX_AI_VOICE }
+      output: { voice: resolveFynxAiVoice(FYNX_AI_VOICE) }
     }
   };
 }
