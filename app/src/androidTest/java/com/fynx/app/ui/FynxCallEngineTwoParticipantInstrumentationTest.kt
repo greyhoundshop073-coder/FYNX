@@ -50,6 +50,7 @@ class FynxCallEngineTwoParticipantInstrumentationTest {
         val buyerReceivedSellerAudio = CompletableDeferred<Unit>()
         val sellerReceivedBuyerAudio = CompletableDeferred<Unit>()
         val errors = ConcurrentLinkedQueue<String>()
+        val mediaEvents = ConcurrentLinkedQueue<String>()
         lateinit var buyer: FynxWebRtcCallEngine
         lateinit var seller: FynxWebRtcCallEngine
 
@@ -72,9 +73,13 @@ class FynxCallEngineTwoParticipantInstrumentationTest {
                 onIceCandidate = { seller.addRemoteIceCandidate(it) },
                 onRemoteAudioTrack = { track ->
                     track.setEnabled(true)
+                    mediaEvents.add("buyer received seller audio track")
                     buyerReceivedSellerAudio.complete(Unit)
                 },
-                onConnectionState = { connected(buyerConnected, it) },
+                onConnectionState = {
+                    mediaEvents.add("buyer ICE=$it")
+                    connected(buyerConnected, it)
+                },
                 onError = { errors.add("buyer: $it") }
             )
         )
@@ -87,9 +92,13 @@ class FynxCallEngineTwoParticipantInstrumentationTest {
                 onIceCandidate = { buyer.addRemoteIceCandidate(it) },
                 onRemoteAudioTrack = { track ->
                     track.setEnabled(true)
+                    mediaEvents.add("seller received buyer audio track")
                     sellerReceivedBuyerAudio.complete(Unit)
                 },
-                onConnectionState = { connected(sellerConnected, it) },
+                onConnectionState = {
+                    mediaEvents.add("seller ICE=$it")
+                    connected(sellerConnected, it)
+                },
                 onError = { errors.add("seller: $it") }
             )
         )
@@ -119,11 +128,29 @@ class FynxCallEngineTwoParticipantInstrumentationTest {
             // but in memory so no hosted backend is needed for this transport test.
             buyer.createOffer()
 
-            withTimeout(45_000) {
-                buyerConnected.await()
-                sellerConnected.await()
-                buyerReceivedSellerAudio.await()
-                sellerReceivedBuyerAudio.await()
+            try {
+                withTimeout(45_000) {
+                    buyerConnected.await()
+                    sellerConnected.await()
+                }
+            } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+                throw AssertionError(
+                    "FYNX call ICE did not connect within 45s. errors=${errors.joinToString()}, " +
+                        "events=${mediaEvents.joinToString()}",
+                    error
+                )
+            }
+            try {
+                withTimeout(15_000) {
+                    buyerReceivedSellerAudio.await()
+                    sellerReceivedBuyerAudio.await()
+                }
+            } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
+                throw AssertionError(
+                    "FYNX ICE connected but remote audio tracks did not arrive. " +
+                        "errors=${errors.joinToString()}, events=${mediaEvents.joinToString()}",
+                    error
+                )
             }
 
             buyer.setMicrophoneEnabled(false)
