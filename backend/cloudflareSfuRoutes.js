@@ -253,7 +253,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       trackNames: [...new Set((Array.isArray(row.track_names) ? row.track_names : [])
         .filter((name) => name === "microphone" || name === "camera"))]
     })).filter((publisher) => validId(publisher.sessionId) &&
-      /^\\d{1,19}$/.test(publisher.userId) && publisher.trackNames.length > 0);
+      /^\d{1,19}$/.test(publisher.userId) && publisher.trackNames.length > 0);
     return res.json({ publishers });
   }));
 
