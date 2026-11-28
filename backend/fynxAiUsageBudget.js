@@ -154,9 +154,18 @@ export async function reserveFynxAiUsage({
     }
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["fynx-ai-usage:" + user]);
     if (String(provider) === "openai" && String(capability).startsWith("voice_")) {
+      // A process crash must not lock the account forever. Realtime calls are
+      // bounded; after two hours, an orphaned reservation is an incomplete run.
+      await client.query(
+        "UPDATE fynx_ai_usage_events SET status='failed',finished_at=NOW() " +
+        "WHERE user_id=$1 AND provider='openai' AND capability LIKE 'voice_%' " +
+        "AND status='reserved' AND created_at < NOW() - INTERVAL '2 hours'",
+        [user]
+      );
       const active = await client.query(
         "SELECT 1 FROM fynx_ai_usage_events WHERE user_id=$1 AND provider='openai' " +
-        "AND capability LIKE 'voice_%' AND status='reserved' LIMIT 1",
+        "AND capability LIKE 'voice_%' AND status='reserved' " +
+        "AND created_at >= NOW() - INTERVAL '2 hours' LIMIT 1",
         [user]
       );
       if (active.rows?.length) throw new FynxAiUsageSessionActiveError();
@@ -222,7 +231,8 @@ export async function getActiveFynxAiRealtimeCall(userId, databasePool = getFynx
   const result = await databasePool.query(
     "SELECT id,realtime_call_id,model,capability FROM fynx_ai_usage_events " +
     "WHERE user_id=$1 AND provider='openai' AND capability LIKE 'voice_%' " +
-    "AND status='reserved' AND realtime_call_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+    "AND status='reserved' AND realtime_call_id IS NOT NULL " +
+    "AND created_at >= NOW() - INTERVAL '2 hours' ORDER BY created_at DESC LIMIT 1",
     [String(userId)]
   );
   const row = result.rows?.[0];
