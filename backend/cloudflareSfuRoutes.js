@@ -169,11 +169,9 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       const returnedTracks = Array.isArray(result?.tracks) ? result.tracks : [];
       const successful = returnedTracks.filter((track) => !track.errorCode && !track.errorDescription);
       const returnedNames = successful.map((track) => String(track.trackName || ""));
-      const returnedMids = successful.map((track) => String(track.mid || ""));
       const publicationIsExact = returnedTracks.length === tracks.length &&
         successful.length === tracks.length &&
         new Set(returnedNames).size === tracks.length &&
-        new Set(returnedMids).size === tracks.length &&
         tracks.every((track) => returnedNames.includes(track.trackName));
       for (const track of successful) {
         const source = tracks.find((item) => item.trackName === track.trackName);
