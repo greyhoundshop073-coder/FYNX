@@ -40,6 +40,7 @@ app = {
         "group_call": "FynxGroupCallPanel.kt",
         "group_engine": "FynxGroupWebRtcCallEngine.kt",
         "group_offer_policy": "FynxGroupCallOfferPolicy.kt",
+        "group_media_policy": "FynxGroupCallMediaPolicy.kt",
         "transport": "FynxCallTransportHardening.kt",
     }.items()
 }
@@ -157,6 +158,11 @@ checks = {
     "Group peer creation is idempotent for repeated roster events":
         "peers.containsKey(peerId) || peers.size >= 3) return false" in app["group_engine"]
         and "offerStartedFor.add(peerId)" in app["group_call"],
+    "Group camera mute preserves video for peers joining later":
+        "private var videoCallEnabled = false" in app["group_engine"]
+        and "FynxGroupCallMediaPolicy.shouldAttachVideoTrack(videoCallEnabled, video != null)" in app["group_engine"]
+        and "fun setCameraEnabled(enabled: Boolean) {\n        // Camera mute controls the existing track only." in app["group_engine"]
+        and "mutedCameraDoesNotRemoveVideoTrackFromFuturePeerConnections" in read("app/src/test/java/com/fynx/app/ui/FynxGroupCallMediaPolicyTest.kt"),
     "Backend checks group membership, participant limit and peer targets":
         all(token in backend["group_calls"] for token in (
             "fynx_group_members", "MAX_GROUP_CALL_PARTICIPANTS = 4",

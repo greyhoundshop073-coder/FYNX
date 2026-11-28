@@ -193,3 +193,12 @@ The coordinated call branch now handles that event through the same offer-electi
 Added JVM tests cover one-offer-per-pair election, opaque string ordering, blank IDs, and self-pairs. The source verifier also checks that the participant-joined path calls the shared negotiation helper.
 
 This corrects the Android mesh edge setup only. It does not prove live two-way audio/video, TURN relay, Cloudflare SFU publishing, offline invite delivery, or physical-device network behavior. Those remain separate live acceptance gates.
+
+
+## 10. 2026-11-28 Group camera-mute / late-join correction
+
+A second Android-only group-media defect was found: the engine used one boolean both for the call's video mode and the camera's mute state. Muting the camera set that boolean to false, so a peer created afterward could skip adding the existing video track. Unmuting then would not give that late participant a video stream.
+
+The engine now retains a separate video-call mode flag, while the camera control only toggles the existing VideoTrack enabled state. New peer connections attach the track whenever the call is a video call and a local track is available—even if it is currently disabled. The track therefore becomes visible when the user unmutes, without requiring another SDP track negotiation.
+
+Added JVM policy tests for muted-camera late join, voice-call no-video, and missing-camera behavior. This is a local media attachment correction; remote video still requires working signaling/connectivity and must be separately verified.

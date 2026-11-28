@@ -60,7 +60,7 @@ class FynxGroupWebRtcCallEngine(
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var eglBase: org.webrtc.EglBase? = null
     private var started = false
-    private var videoEnabled = false
+    private var videoCallEnabled = false
     private var microphoneEnabled = true
     private var speakerEnabled = true
 
@@ -81,7 +81,7 @@ class FynxGroupWebRtcCallEngine(
     fun start(video: Boolean) {
         disconnect()
         started = true
-        videoEnabled = video
+        videoCallEnabled = video
         audioRouter.start(speakerEnabled)
         createLocalAudio()
         if (video) createLocalVideo()
@@ -91,7 +91,7 @@ class FynxGroupWebRtcCallEngine(
         }
     }
 
-    fun isReadyForCall(): Boolean = started && audioTrack != null && (!videoEnabled || videoTrack != null)
+    fun isReadyForCall(): Boolean = started && audioTrack != null && (!videoCallEnabled || videoTrack != null)
 
     /**
      * Replace the initial STUN-only configuration with server-issued short-lived TURN
@@ -171,7 +171,7 @@ class FynxGroupWebRtcCallEngine(
             callbacks.onError("Group-call audio could not be attached to a participant.")
             return false
         }
-        if (videoEnabled && video != null && pc.addTrack(video, streamIds) == null) {
+        if (FynxGroupCallMediaPolicy.shouldAttachVideoTrack(videoCallEnabled, video != null) && pc.addTrack(video!!, streamIds) == null) {
             pc.close()
             pc.dispose()
             callbacks.onError("Group-call video could not be attached to a participant.")
@@ -269,7 +269,8 @@ class FynxGroupWebRtcCallEngine(
     }
 
     fun setCameraEnabled(enabled: Boolean) {
-        videoEnabled = enabled
+        // Camera mute controls the existing track only. The call remains a video
+        // call so peer connections created later still receive this track.
         videoTrack?.setEnabled(enabled)
     }
 
@@ -391,6 +392,7 @@ class FynxGroupWebRtcCallEngine(
         peers.keys.toList().forEach(::removePeer)
         peers.clear()
         releaseLocalVideo()
+        videoCallEnabled = false
         runCatching { audioTrack?.setEnabled(false) }
         runCatching { audioTrack?.dispose() }
         audioTrack = null
