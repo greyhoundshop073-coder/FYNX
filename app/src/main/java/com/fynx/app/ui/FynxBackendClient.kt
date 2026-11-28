@@ -110,6 +110,7 @@ object FynxBackendClient {
     suspend fun health(context: Context): Result<String> = get(context, "/health")
     suspend fun get(context: Context, path: String): Result<String> = request(context, "GET", path, null)
     suspend fun postJson(context: Context, path: String, body: String): Result<String> = request(context, "POST", path, body)
+    suspend fun putJson(context: Context, path: String, body: String): Result<String> = request(context, "PUT", path, body)
     internal suspend fun postJsonForSession(context: Context, path: String, body: String, sessionToken: String?): Result<String> =
         request(context, "POST", path, body, sessionToken, useRequestTokenOverride = true)
     internal suspend fun postJsonIdempotentForSession(context: Context, path: String, body: String, sessionToken: String?): Result<String> =
