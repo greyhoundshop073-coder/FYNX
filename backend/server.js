@@ -1462,7 +1462,7 @@ if (wss) {
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
-            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
+            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, status: "RINGING", createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
             let marketplaceContext = null;
@@ -1481,6 +1481,7 @@ if (wss) {
           const call = activeCalls.get(callId);
           if (!call || ![call.callerId, call.calleeId].includes(userId) || ![call.callerId, call.calleeId].includes(targetUserId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
           if (signalType === "accept" || signalType === "reject" || signalType === "end") {
+            if (signalType === "accept") call.status = "ACTIVE";
             relayCallSignal(call, userId, signalType);
             if (signalType !== "accept") closeCall(callId, signalType, false);
             return;
@@ -1489,6 +1490,7 @@ if (wss) {
         const callId = validCallId(body?.callId) ? body.callId : "";
         const call = activeCalls.get(callId);
         if (!call || ![call.callerId, call.calleeId].includes(userId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
+        if (call.status !== "ACTIVE") return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call must be accepted before media can start" });
         if (!["offer", "answer", "ice"].includes(signalType)) return;
         const payload = validateSignalPayload(signalType, body);
         if (!payload) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "invalid signaling payload" });
@@ -1530,7 +1532,41 @@ export async function dispatchRealtimeConnection(socket, req) {
 }
 
 emailAuth.registerRoutes(app, auth);
-if (pool) registerCloudflareSfuRoutes({ app, pool, auth });
+if (pool) registerCloudflareSfuRoutes({
+  app,
+  pool,
+  auth,
+  resolveActiveCall: async (callId, userId) => {
+    // Railway/Node direct calls are live in this process's authenticated call map.
+    // Neon direct calls use the durable table; group calls use the joined roster in either runtime.
+    if (process.env.FYNX_NEON_FUNCTION !== "1") {
+      const call = activeCalls.get(callId);
+      if (call && call.status === "ACTIVE" && [call.callerId, call.calleeId].includes(String(userId))) {
+        return { id: call.id, kind: "direct" };
+      }
+    }
+    const direct = await pool.query(
+      `SELECT id FROM fynx_realtime_calls
+       WHERE id=$1 AND status='ACTIVE' AND (caller_id=$2 OR callee_id=$2) LIMIT 1`,
+      [callId, String(userId)]
+    ).catch((error) => {
+      if (error?.code === "42P01") return { rows: [] };
+      throw error;
+    });
+    if (direct.rows[0]) return { id: direct.rows[0].id, kind: "direct" };
+    const group = await pool.query(
+      `SELECT c.id FROM fynx_realtime_group_calls c
+       JOIN fynx_realtime_group_call_participants p ON p.call_id=c.id
+       WHERE c.id=$1 AND c.status='ACTIVE'
+         AND p.user_id=$2 AND p.status='JOINED' LIMIT 1`,
+      [callId, String(userId)]
+    ).catch((error) => {
+      if (error?.code === "42P01") return { rows: [] };
+      throw error;
+    });
+    return group.rows[0] ? { id: group.rows[0].id, kind: "group" } : null;
+  }
+});
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
