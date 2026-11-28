@@ -52,6 +52,7 @@ internal class FynxCloudflareSfuMediaEngine(
     private var callId: String? = null
     private var sessionId: String? = null
     @Volatile private var gatheringSignal: CompletableDeferred<Unit>? = null
+    @Volatile private var connectedSignal: CompletableDeferred<Unit>? = null
     private val ownerByMid = ConcurrentHashMap<String, String>()
     private val ownerByPublisherSession = ConcurrentHashMap<String, String>()
     private val remoteTracksByUser = ConcurrentHashMap<String, ConcurrentHashMap<String, org.webrtc.MediaStreamTrack>>()
@@ -93,12 +94,19 @@ internal class FynxCloudflareSfuMediaEngine(
         callId = activeCallId
         sessionId = createdSessionId
         var createdConnection: PeerConnection? = null
+        val connected = CompletableDeferred<Unit>()
+        connectedSignal = connected
         try {
             createdConnection = factory.createPeerConnection(
                 PeerConnection.RTCConfiguration(iceServers),
                 object : PeerConnection.Observer {
                     override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
                     override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                        if (state == PeerConnection.IceConnectionState.CONNECTED ||
+                            state == PeerConnection.IceConnectionState.COMPLETED) connectedSignal?.complete(Unit)
+                        if (state == PeerConnection.IceConnectionState.FAILED) {
+                            connectedSignal?.completeExceptionally(IllegalStateException("Cloudflare SFU ICE connection failed."))
+                        }
                         callbacks.onConnectionState(state)
                     }
                     override fun onIceConnectionReceivingChange(receiving: Boolean) = Unit
@@ -192,8 +200,13 @@ internal class FynxCloudflareSfuMediaEngine(
                 createdConnection,
                 SessionDescription(SessionDescription.Type.ANSWER, publication.sessionDescriptionSdp!!)
             )
+            // Cloudflare requires endpoint ICE connectivity before a publication is
+            // advertised to other authenticated FYNX participants.
+            withTimeout(25_000L) { connected.await() }
+            FynxCloudflareSfuClient.markReady(appContext, activeCallId, createdSessionId)
             peerConnection = createdConnection
             active = true
+            connectedSignal = null
         } catch (error: Exception) {
             runCatching { createdConnection?.close() }
             runCatching { createdConnection?.dispose() }
@@ -394,6 +407,8 @@ internal class FynxCloudflareSfuMediaEngine(
         peerConnection = null
         gatheringSignal?.cancel()
         gatheringSignal = null
+        connectedSignal?.cancel()
+        connectedSignal = null
     }
 
     private open class SdpObserverAdapter : SdpObserver {

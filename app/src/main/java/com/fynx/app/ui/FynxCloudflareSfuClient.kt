@@ -72,6 +72,15 @@ internal object FynxCloudflareSfuClient {
         return parseOperation(raw)
     }
 
+    suspend fun markReady(context: Context, callId: String, sessionId: String) {
+        requireValidIdentity(callId, sessionId)
+        val body = JSONObject().put("callId", callId).toString()
+        FynxBackendClient.postJson(
+            context,
+            "/api/calls/sfu/sessions/" + Uri.encode(sessionId) + "/ready",
+            body
+        ).getOrThrow()
+    }
     suspend fun discover(context: Context, callId: String): List<Publication> {
         require(callIdPattern.matches(callId)) { "A valid active call is required for SFU discovery." }
         val raw = FynxBackendClient.get(
