@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import {
   createFynxRealtimeUsageAccumulator,
   estimateFynxRealtimeUsageCostUsd,
-  connectFynxRealtimeSideband
+  connectFynxRealtimeSideband,
+  isFynxRealtimeUsageModelSupported
 } from "./aiRealtimeSideband.js";
 
 const responseEvent = {
@@ -72,6 +73,16 @@ const expected = (
 ) / 1_000_000;
 assert.equal(priced, Number(expected.toFixed(8)));
 assert.equal(estimateFynxRealtimeUsageCostUsd({ model: "unknown", usage: {} }), null);
+assert.equal(isFynxRealtimeUsageModelSupported("gpt-realtime-2.1"), true);
+assert.equal(isFynxRealtimeUsageModelSupported("unknown"), false);
+assert.equal(
+  estimateFynxRealtimeUsageCostUsd({
+    model: "gpt-realtime-2.1",
+    usage: { inputTokens: 250, outputTokens: 100, inputAudioTokens: 0, inputTextTokens: 0, outputAudioTokens: 0, outputTextTokens: 0 }
+  }),
+  null,
+  "missing modality details must never be represented as zero provider cost"
+);
 
 class FakeWebSocket {
   static instances = [];
