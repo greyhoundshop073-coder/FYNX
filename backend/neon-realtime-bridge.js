@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
+import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
+import { isFynxCallBlocked } from "./callSafety.js";
 
 function callIdIsValid(value) {
   return typeof value === "string" && /^call_[a-z0-9_]+$/i.test(value) && value.length <= 80;
@@ -133,6 +136,7 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
     if (!remaining.rowCount) {
       await emitGlobal({ type: "presence", userId: String(userId), online: false });
       await endCallsForUser(userId);
+      await disconnectFynxGroupCallsForUser({ pool, userId, emitToUser, logger });
     }
   };
 
@@ -210,6 +214,9 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
       }
       const mediaType = body?.callType === "video" ? "video" : "voice";
       const callId = callIdIsValid(body?.callId) ? body.callId : `call_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
+      if (await isFynxCallBlocked(pool, userId, targetUserId)) {
+        return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: String(userId), toUserId: targetUserId, signalType: "unavailable" });
+      }
       const created = await createCall({ callerId: userId, calleeId: targetUserId, callId, mediaType });
       if (created.busy) {
         return sendSocket(socket, {
@@ -223,9 +230,19 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
           fromUserId: targetUserId, toUserId: String(userId)
         });
       }
+      let marketplaceContext = null;
+      if (body?.listingId != null) {
+        try {
+          marketplaceContext = await resolveFynxMarketplaceCallContext(pool, userId, targetUserId, body.listingId);
+        } catch (error) {
+          await pool.query("UPDATE fynx_realtime_calls SET status='ENDED',updated_at=NOW() WHERE id=$1 AND status='RINGING'", [callId]);
+          return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: String(userId), toUserId: targetUserId, signalType: "error", error: error?.message || "Marketplace product is unavailable." });
+        }
+      }
       await emitToUser(targetUserId, {
         type: "call", callId, callType: mediaType, fromUserId: String(userId),
-        toUserId: targetUserId, signalType: "invite", fromUsername: user?.username || null
+        toUserId: targetUserId, signalType: "invite", fromUsername: user?.username || null,
+        ...(marketplaceContext || {})
       });
       return;
     }
@@ -303,6 +320,8 @@ export async function installNeonRealtimeBridge({ pool, dispatchLocal, getLocalC
   globalThis.__fynxNeonRegisterConnection = registerConnection;
   globalThis.__fynxNeonDisconnect = disconnect;
   globalThis.__fynxNeonHandleCall = handleCall;
+  const handleGroupCallSignal = createFynxGroupCallSignalHandler({ pool, emitToUser, logger });
+  globalThis.__fynxNeonHandleGroupCall = handleGroupCallSignal;
 
   const timer = setInterval(() => { void poll(); }, 1_000);
   timer.unref?.();
