@@ -23,6 +23,7 @@ import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } fro
 import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
 import { isFynxCallBlocked } from "./callSafety.js";
 import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
+import { registerCloudflareTurnRoutes } from "./cloudflareTurnRoutes.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -90,7 +91,7 @@ export function getRealtimeLocalUserIds() {
 // rate limits at the edge/load-balancer so limits remain effective across instances.
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60_000;
-const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, general: 240 };
+const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, calls: 30, general: 240 };
 const MAX_RATE_BUCKETS = 20_000;
 const responseCache = new Map();
 const CACHE_TTL_MS = 15_000;
@@ -1532,11 +1533,8 @@ export async function dispatchRealtimeConnection(socket, req) {
 }
 
 emailAuth.registerRoutes(app, auth);
-if (pool) registerCloudflareSfuRoutes({
-  app,
-  pool,
-  auth,
-  resolveActiveCall: async (callId, userId) => {
+if (pool) {
+  const resolveActiveCall = async (callId, userId) => {
     // Railway/Node direct calls are live in this process's authenticated call map.
     // Neon direct calls use the durable table; group calls use the joined roster in either runtime.
     if (process.env.FYNX_NEON_FUNCTION !== "1") {
@@ -1565,8 +1563,11 @@ if (pool) registerCloudflareSfuRoutes({
       throw error;
     });
     return group.rows[0] ? { id: group.rows[0].id, kind: "group" } : null;
-  }
-});
+  };
+  const callRateLimit = rateLimit("calls", RATE_LIMITS.calls);
+  registerCloudflareSfuRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall });
+  registerCloudflareTurnRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall });
+}
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
