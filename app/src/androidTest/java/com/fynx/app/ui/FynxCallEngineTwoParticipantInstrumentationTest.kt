@@ -178,5 +178,6 @@ class FynxCallEngineTwoParticipantInstrumentationTest {
             buyer.disconnect()
             seller.disconnect()
         }
+        Unit
     }
 }
