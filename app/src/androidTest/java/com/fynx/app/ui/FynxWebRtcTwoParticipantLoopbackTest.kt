@@ -1,8 +1,8 @@
 package com.fynx.app.ui
 
 import android.Manifest
-import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
+import android.content.pm.PackageManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -53,11 +53,9 @@ class FynxWebRtcTwoParticipantLoopbackTest {
     fun twoParticipantsExchangeLiveMediaWithoutBackend() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        runCatching {
-            instrumentation.uiAutomation.grantRuntimePermission(
-                context.packageName,
-                Manifest.permission.RECORD_AUDIO
-            )
+        instrumentation.uiAutomation.grantRuntimePermission(context.packageName, Manifest.permission.RECORD_AUDIO)
+        check(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            "The emulator must grant microphone permission for the real audio-track loopback test."
         }
 
         PeerConnectionFactory.initialize(
@@ -75,22 +73,28 @@ class FynxWebRtcTwoParticipantLoopbackTest {
         var frameThread: Thread? = null
 
         try {
-            audioSource = factory.createAudioSource(MediaConstraints())
-            audioTrack = factory.createAudioTrack("fynx-loopback-microphone", audioSource)
-            audioTrack.setEnabled(true)
+            val localAudioSource = factory.createAudioSource(MediaConstraints())
+            val localAudioTrack = factory.createAudioTrack("fynx-loopback-microphone", localAudioSource)
+            localAudioTrack.setEnabled(true)
+            audioSource = localAudioSource
+            audioTrack = localAudioTrack
 
-            videoSource = factory.createVideoSource(false)
-            videoTrack = factory.createVideoTrack("fynx-loopback-camera", videoSource)
-            videoTrack.setEnabled(true)
+            val localVideoSource = factory.createVideoSource(false)
+            val localVideoTrack = factory.createVideoTrack("fynx-loopback-camera", localVideoSource)
+            localVideoTrack.setEnabled(true)
+            videoSource = localVideoSource
+            videoTrack = localVideoTrack
 
-            peerA = createPeer(factory, participantA)
-            peerB = createPeer(factory, participantB)
+            val localPeerA = createPeer(factory, participantA)
+            val localPeerB = createPeer(factory, participantB)
+            peerA = localPeerA
+            peerB = localPeerB
 
-            check(peerA.addTrack(audioTrack, listOf("fynx-loopback")))
-            check(peerA.addTrack(videoTrack, listOf("fynx-loopback")))
+            requireNotNull(localPeerA.addTrack(localAudioTrack, listOf("fynx-loopback")))
+            requireNotNull(localPeerA.addTrack(localVideoTrack, listOf("fynx-loopback")))
 
             // Feed deterministic I420 frames into the real WebRTC video source.
-            val capturerObserver = videoSource.capturerObserver
+            val capturerObserver = localVideoSource.capturerObserver
             capturerObserver.onCapturerStarted(true)
             frameThread = Thread {
                 val width = 320
@@ -118,17 +122,17 @@ class FynxWebRtcTwoParticipantLoopbackTest {
                 start()
             }
 
-            val offer = createDescription(peerA, offer = true)
-            setLocalDescription(peerA, offer)
+            val offer = createDescription(localPeerA, offer = true)
+            setLocalDescription(localPeerA, offer)
             withTimeout(15_000) { participantA.iceGathered.await() }
-            val gatheredOffer = requireNotNull(peerA.localDescription)
-            setRemoteDescription(peerB, gatheredOffer)
+            val gatheredOffer = requireNotNull(localPeerA.localDescription)
+            setRemoteDescription(localPeerB, gatheredOffer)
 
-            val answer = createDescription(peerB, offer = false)
-            setLocalDescription(peerB, answer)
+            val answer = createDescription(localPeerB, offer = false)
+            setLocalDescription(localPeerB, answer)
             withTimeout(15_000) { participantB.iceGathered.await() }
-            val gatheredAnswer = requireNotNull(peerB.localDescription)
-            setRemoteDescription(peerA, gatheredAnswer)
+            val gatheredAnswer = requireNotNull(localPeerB.localDescription)
+            setRemoteDescription(localPeerA, gatheredAnswer)
 
             // Candidate gathering is complete before SDP exchange, so the gathered
             // candidates are embedded in each localDescription (non-trickle test).
@@ -140,8 +144,8 @@ class FynxWebRtcTwoParticipantLoopbackTest {
             withTimeout(15_000) { participantB.remoteVideo.await() }
             withTimeout(15_000) { participantB.remoteVideoFrame.await() }
 
-            assertTrue("Participant A must have reached ICE CONNECTED", peerA.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || peerA.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED)
-            assertTrue("Participant B must have reached ICE CONNECTED", peerB.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || peerB.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED)
+            assertTrue("Participant A must have reached ICE CONNECTED", localPeerA.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || localPeerA.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED)
+            assertTrue("Participant B must have reached ICE CONNECTED", localPeerB.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED || localPeerB.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED)
             android.util.Log.i(
                 "FYNX_CALL_LOOPBACK",
                 "PASS: two local participants connected; remote audio and video tracks arrived; remote video frames rendered"
