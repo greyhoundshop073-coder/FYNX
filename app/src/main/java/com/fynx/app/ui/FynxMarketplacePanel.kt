@@ -752,7 +752,7 @@ private fun MarketplaceSmartDealsHero(
 }
 
 @Composable
-fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (String) -> Unit = {}, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}, testOnlyListings: List<FynxRemoteSocialClient.MarketplaceListing>? = null, testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null) {
+fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (String) -> Unit = {}, onOpenAi: (String) -> Unit = {}, onLiveProof: (listingId: String, productTitle: String, sellerUsername: String) -> Unit = { _, _, _ -> }, onOpenMyShop: () -> Unit = {}, onOpenWallet: () -> Unit = {}, initialListingId: String? = null, onOpenSavedProducts: () -> Unit = {}, onShareListingToStatus: (String, String) -> Unit = { _, _ -> }, initialSellerUsername: String? = null, onInitialSellerOpened: () -> Unit = {}, onOpenBusinesses: () -> Unit = {}, testOnlyListings: List<FynxRemoteSocialClient.MarketplaceListing>? = null, testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var marketplaceChromeProgress by remember { mutableFloatStateOf(0f) }
@@ -1462,7 +1462,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
-                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1490,6 +1489,8 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             onShopNow = { showAllProducts = true },
                             onOpenOrders = { showOrders = true; reloadOrders() },
                             onRefresh = { reload(); reloadWeeklySeller(); reloadSponsoredPromotions(); reloadSeasonalPromotions() },
+                            autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1532,7 +1533,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
-                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1597,7 +1597,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
-                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1724,7 +1723,6 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             weeklySellerListing = weeklySellerListing,
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
-                            autoRotate = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1973,7 +1971,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             onAddToCart = { addMarketplaceListingToCart(listing); selected = null },
             onBuyTogether = { FynxShareActions.share(context, FynxShareActions.marketplacePayload(listing.id, listing.title), onShareToStatus = onShareListingToStatus) },
             onShareToStatus = onShareListingToStatus,
-            onLiveProof = { onLiveProof(listing.sellerUsername) },
+            onLiveProof = onLiveProof,
             watchedPrice = priceWatchListingId == listing.id,
             priceWatchBusy = priceWatchBusy,
             productSaved = listing.id in savedProductIds,
@@ -2256,7 +2254,7 @@ private fun MarketplaceDetails(
     onAddToCart: () -> Unit,
     onBuyTogether: () -> Unit,
     onShareToStatus: (String, String) -> Unit,
-    onLiveProof: () -> Unit,
+    onLiveProof: (listingId: String, productTitle: String, sellerUsername: String) -> Unit,
     watchedPrice: Boolean,
     priceWatchBusy: Boolean,
     productSaved: Boolean,
@@ -2440,7 +2438,7 @@ private fun MarketplaceDetails(
         )
         FynxMarketplaceLiveProof(
             listing = l,
-            onRequestProof = { _, _ -> onLiveProof() }
+            onRequestProof = { listingId, productTitle, sellerUsername -> onLiveProof(listingId, productTitle, sellerUsername) }
         )
         FynxMarketplacePriceWatch(
             listing = l,
