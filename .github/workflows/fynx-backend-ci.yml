@@ -171,6 +171,15 @@ jobs:
           node test-gemini-assistant-provider.mjs
           node --check fynxAiUsageBudget.js
           node test-fynx-ai-usage-budget.mjs
+      - name: Verify Realtime voice call metering and authenticated hangup
+        run: |
+          node --check aiVoiceSession.js
+          node --check aiRealtimeRoutes.js
+          node --check aiRealtimeSideband.js
+          node test-ai-realtime-auth.mjs
+          node test-ai-realtime-voice-routing.mjs
+          node test-ai-realtime-sideband.mjs
+          node test-fynx-ai-usage-budget.mjs
       - name: Run FYNX AI security and extension contracts
         working-directory: .
         run: |
