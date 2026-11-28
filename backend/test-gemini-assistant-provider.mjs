@@ -3,6 +3,11 @@ import { runGeminiAssistant, toGeminiFunctionDeclarations, toGeminiSchema } from
 
 const originalKey = process.env.GEMINI_API_KEY;
 const originalModel = process.env.GEMINI_MODEL;
+const recordedUsage = [];
+const noOpUsageBudget = {
+  reserve: async options => ({ id: "unit-test-reservation", ...options }),
+  settle: async options => { recordedUsage.push(options); }
+};
 process.env.GEMINI_API_KEY = "unit-test-only-key";
 delete process.env.GEMINI_MODEL;
 
@@ -24,6 +29,7 @@ function fakeStreamResponse(payloads, status = 200) {
 async function testTextImageHistoryAndToolSchema() {
   const calls = [];
   const result = await runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
     message: "Describe this image",
     userId: "17",
     history: [{ role: "user", text: "What is in this picture?" }, { role: "assistant", text: "I can help." }],
@@ -37,7 +43,7 @@ async function testTextImageHistoryAndToolSchema() {
     executeTool: async () => ({ ok: true }),
     fetchImpl: async (url, options) => {
       calls.push({ url, options, body: JSON.parse(options.body) });
-      return fakeResponse({ candidates: [{ content: { role: "model", parts: [{ text: "This is a test image description." }] } }] });
+      return fakeResponse({ usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 4, thoughtsTokenCount: 2 }, candidates: [{ content: { role: "model", parts: [{ text: "This is a test image description." }] } }] });
     }
   });
   assert.equal(result.reply, "This is a test image description.");
@@ -60,12 +66,15 @@ async function testTextImageHistoryAndToolSchema() {
   assert.equal(calls[0].body.tools[0].functionDeclarations[0].name, "get_my_profile");
   assert.equal("additionalProperties" in calls[0].body.tools[0].functionDeclarations[0].parameters, false);
   assert.equal(calls[0].body.toolConfig.functionCallingConfig.mode, "AUTO");
+  assert.equal(recordedUsage[0].inputTokens, 12);
+  assert.equal(recordedUsage[0].outputTokens, 6, "thinking tokens are billable output");
 }
 
 async function testStreamingTextResponse() {
   const chunks = [];
   let requestedUrl = "";
   const result = await runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
     message: "Give me a short greeting",
     userId: "19",
     instructions: "FYNX streaming test instructions",
@@ -76,7 +85,7 @@ async function testStreamingTextResponse() {
       assert.equal(options.headers["x-goog-api-key"], "unit-test-only-key");
       return fakeStreamResponse([
         { candidates: [{ content: { role: "model", parts: [{ text: "internal thought", thought: true }, { text: "Hello " }] } }] },
-        { candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
+        { usageMetadata: { promptTokenCount: 21, candidatesTokenCount: 7, thoughtsTokenCount: 3 }, candidates: [{ content: { role: "model", parts: [{ text: "from FYNX." }] }, finishReason: "STOP" }] }
       ]);
     }
   });
@@ -86,12 +95,15 @@ async function testStreamingTextResponse() {
   assert.equal(result.reply, "Hello from FYNX.");
   assert.equal(chunks.join("").includes("internal thought"), false, "thought-only parts must never reach the user");
   assert.equal(result.pendingAction, null);
+  assert.equal(recordedUsage.at(-1).inputTokens, 21);
+  assert.equal(recordedUsage.at(-1).outputTokens, 10, "stream usage must include thinking tokens");
 }
 
 async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool() {
   const calls = [];
   let executed = 0;
   const result = await runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
     message: "Show my profile",
     userId: "42",
     instructions: "FYNX instructions",
@@ -108,6 +120,7 @@ async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool(
       calls.push({ url, body });
       if (calls.length === 1) {
         return fakeResponse({
+          usageMetadata: { promptTokenCount: 5, toolUsePromptTokenCount: 2, candidatesTokenCount: 0, thoughtsTokenCount: 1 },
           candidates: [{
             content: {
               role: "model",
@@ -116,7 +129,7 @@ async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool(
           }]
         });
       }
-      return fakeResponse({ candidates: [{ content: { role: "model", parts: [{ text: "Your profile is ready." }] } }] });
+      return fakeResponse({ usageMetadata: { promptTokenCount: 11, toolUsePromptTokenCount: 3, candidatesTokenCount: 6, thoughtsTokenCount: 2 }, candidates: [{ content: { role: "model", parts: [{ text: "Your profile is ready." }] } }] });
     }
   });
   assert.equal(result.reply, "Your profile is ready.");
@@ -129,11 +142,14 @@ async function testFunctionCallingPreservesModelTurnAndExecutesOnlyApprovedTool(
   assert.equal(responsePart.name, "get_my_profile");
   assert.equal(responsePart.id, "profile-call-1");
   assert.deepEqual(responsePart.response.result, { username: "test_user", postCount: 3 });
+  assert.equal(recordedUsage.at(-1).inputTokens, 21, "prompt and tool-result tokens across turns are billed input");
+  assert.equal(recordedUsage.at(-1).outputTokens, 9, "candidate and thinking tokens across turns are billed output");
 }
 
 async function testPreparedMessageConfirmationActionIsPreserved() {
   let calls = 0;
   const result = await runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
     message: "Prepare a message",
     userId: "7",
     instructions: "FYNX instructions",
@@ -166,6 +182,7 @@ async function testMissingKeyFailsClosed() {
   let requested = false;
   await assert.rejects(
     runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
       message: "Hello", userId: "1", instructions: "test",
       executeTool: async () => ({}),
       fetchImpl: async () => { requested = true; return fakeResponse({}); }
@@ -179,6 +196,7 @@ async function testMissingKeyFailsClosed() {
 async function testEmptyAndFailedProviderResponsesAreRejected() {
   await assert.rejects(
     runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
       message: "Hello", userId: "1", instructions: "test", executeTool: async () => ({}),
       fetchImpl: async () => fakeResponse({ candidates: [{ content: { role: "model", parts: [] } }] })
     }),
@@ -186,6 +204,7 @@ async function testEmptyAndFailedProviderResponsesAreRejected() {
   );
   await assert.rejects(
     runGeminiAssistant({
+    usageBudget: noOpUsageBudget,
       message: "Hello", userId: "1", instructions: "test", executeTool: async () => ({}),
       fetchImpl: async () => fakeResponse({ error: { message: "hidden detail" } }, 401)
     }),
