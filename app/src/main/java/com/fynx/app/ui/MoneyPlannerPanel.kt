@@ -65,8 +65,8 @@ fun MoneyPlannerPanel() {
     val primarySummary=currencySummaries.firstOrNull{it.currency=="NGN"} ?: currencySummaries.firstOrNull()
     val filteredTx=transactions.filter{query.isBlank()||it.title.contains(query,true)||it.category.contains(query,true)}
 
-    Column(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){ Column{Text("Money Planner 💰",style=MaterialTheme.typography.headlineSmall);Text("Plan, track and understand your money",color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(onClick={refresh()}){Text("Refresh")}}
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){ Column{Text("Money Planner 💰",style=MaterialTheme.typography.titleLarge)};TextButton(onClick={refresh()}){Text("Refresh")}}
         if(!FynxBackendClient.hasAccessToken(context)) Text("Sign in to sync your personal Money Planner securely.",color=MaterialTheme.colorScheme.error)
         error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("Overview","Transactions","Budgets","Savings","Recurring").forEach{v->FilterChip(selected=tab==v,onClick={tab=v},label={Text(v)})}}

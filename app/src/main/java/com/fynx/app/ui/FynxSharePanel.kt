@@ -25,19 +25,6 @@ fun FynxSharePanel() {
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item {
-            Text(
-                "Share & Invite",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Invite friends to FYNX or share the app using your phone's secure share sheet.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface)

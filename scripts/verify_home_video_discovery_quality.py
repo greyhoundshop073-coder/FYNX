@@ -225,9 +225,11 @@ checks = [
         and "MAX_CONCURRENT_REQUESTS = 4" in photo_limiter,
     ),
     (
-        "Discovery close affordance is an explicitly clickable accessible button",
+        "Discovery exit is a top-left accessible Back arrow, not a duplicate Close/X control",
         '.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onDismiss)' in discovery
-        and 'contentDescription = "Close Discovery"' in discovery
+        and '.align(Alignment.TopStart)' in discovery
+        and 'contentDescription = "Back"' in discovery
+        and 'Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)' in discovery
         and 'role = androidx.compose.ui.semantics.Role.Button' in discovery,
     ),
     (

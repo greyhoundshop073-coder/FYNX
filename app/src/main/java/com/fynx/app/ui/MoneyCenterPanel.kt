@@ -69,21 +69,7 @@ fun MoneyCenterPanel() {
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(16.dp)) {
-        item {
-            Text("Money Center 💰", style = MaterialTheme.typography.headlineSmall)
-            Text("Everything related to your money is organized here instead of being scattered across the FYNX menu.", color = FynxDesign.TextSecondary)
-            Spacer(Modifier.height(4.dp))
-        }
-        item {
-            Card(Modifier.fillMaxWidth(), shape = FynxDesign.LargeCardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("One place for your money", style = MaterialTheme.typography.titleLarge)
-                    Text("Planner • accounts • transfers • bills • transactions • budgets • savings • subscriptions • insights", color = FynxDesign.TextSecondary)
-                    Text("Money Planner syncs your personal planning records to the authenticated FYNX backend; existing tracking tools remain available.", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
-                }
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
         items(sections, key = { it.key }) { section ->
             Card(onClick = { selectedTool = section.key }, modifier = Modifier.fillMaxWidth(), shape = FynxDesign.CardShape, colors = CardDefaults.cardColors(containerColor = FynxDesign.Surface), border = BorderStroke(1.dp, FynxDesign.Outline)) {
                 Row(Modifier.fillMaxWidth().padding(16.dp)) {

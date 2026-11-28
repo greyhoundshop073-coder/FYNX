@@ -211,13 +211,13 @@ fun FynxFeaturesPanel(
     Column(
         Modifier.fillMaxSize().padding(horizontal = 12.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         FynxFeatureSearchField(
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.testTag("fynx-features-search")
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
 
         if (visibleSections.isEmpty()) {
             Box(

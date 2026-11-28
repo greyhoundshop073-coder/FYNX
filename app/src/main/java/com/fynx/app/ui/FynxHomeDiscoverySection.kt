@@ -19,7 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
@@ -364,18 +364,18 @@ fun FynxHomeDiscoveryViewer(
             }
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .statusBarsPadding()
                     .padding(12.dp)
                     .size(48.dp)
                     .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onDismiss)
                     .semantics {
-                        contentDescription = "Close Discovery"
+                        contentDescription = "Back"
                         role = androidx.compose.ui.semantics.Role.Button
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White)
+                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.White)
             }
             currentVideo?.let { video ->
                 Column(

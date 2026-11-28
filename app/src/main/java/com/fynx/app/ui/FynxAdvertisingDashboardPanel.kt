@@ -36,8 +36,6 @@ fun FynxAdvertisingDashboardPanel() {
 
     LaunchedEffect(Unit) { refresh() }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Advertising dashboard", style = MaterialTheme.typography.headlineSmall)
-        Text("Track campaigns, spending and results in one place.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

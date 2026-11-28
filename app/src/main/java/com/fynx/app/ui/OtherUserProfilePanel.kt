@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.BackHandler
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material3.*
@@ -501,6 +502,7 @@ private fun ProfilePostSwipeViewer(
     initialIndex: Int,
     onClose: () -> Unit
 ) {
+    BackHandler(onBack = onClose)
     var index by remember(posts, initialIndex) { mutableIntStateOf(initialIndex) }
     var dragDistance by remember { mutableFloatStateOf(0f) }
     val post = posts[index]
@@ -529,7 +531,7 @@ private fun ProfilePostSwipeViewer(
                 Modifier.fillMaxWidth().padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close post") }
+                IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
                 Column(Modifier.weight(1f)) {
                     Text("Post ${index + 1} of ${posts.size}", style = MaterialTheme.typography.titleMedium)
                     Text("Swipe left or right to browse", color = FynxDesign.TextSecondary, style = MaterialTheme.typography.labelSmall)
