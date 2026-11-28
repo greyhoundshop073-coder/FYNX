@@ -301,3 +301,11 @@ This entry supersedes the historical campaign descriptions in sections 233–253
 - Backend CI validates the existing authenticated Admin, media and campaign route contracts. A live production Owner/Admin upload-and-publish session is still a separate backend/auth gate; a skipped or unavailable production probe must never be described as a successful live-publish test.
 - The user has now explicitly directed this work to be finished, placed on the canonical integration branch, and closed when verified. The historical “wait for user merge approval” wording above is superseded. Merge only after latest-head CI and emulator evidence pass, then verify the post-merge canonical integration build and report the exact result.
 - Keep login behavior unchanged. Do not absorb, overwrite or restart unrelated Home, Avatar/Profile, Chat/Groups, Status, Wallet or My Shop work.
+
+
+### 2026-11-28 — private draft account isolation
+
+- Local campaign metadata and artwork now use a stable SHA-256 namespace derived from the currently signed-in FYNX username. Usernames are not written directly into directory names or preference keys.
+- A second account on the same phone cannot list, overwrite or delete another account's local campaign drafts or artwork. Returning to the original account restores that account's own drafts.
+- The Android instrumentation suite now verifies account A / account B isolation and restores the pre-test auth username after the fixture completes.
+- The buyer feed remains server-only; account-scoped drafts remain visible only in the authorised Admin editor for their owning account.
