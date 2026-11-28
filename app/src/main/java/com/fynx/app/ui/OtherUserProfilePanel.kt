@@ -1,5 +1,7 @@
 package com.fynx.app.ui
 
+import androidx.activity.compose.BackHandler
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -500,6 +502,7 @@ private fun ProfilePostSwipeViewer(
     initialIndex: Int,
     onClose: () -> Unit
 ) {
+    BackHandler(onBack = onClose)
     var index by remember(posts, initialIndex) { mutableIntStateOf(initialIndex) }
     var dragDistance by remember { mutableFloatStateOf(0f) }
     val post = posts[index]
