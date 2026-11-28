@@ -18,10 +18,8 @@ fun MoneyInsightsPanel() {
     val net = income - expenses
     val savingsRate = if (income > 0) ((net / income) * 100).coerceIn(0.0, 100.0) else 0.0
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Money Insights & Reports", style = MaterialTheme.typography.headlineSmall)
-        Text("Insights are calculated from your saved FYNX money activity.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Money Insights", style = MaterialTheme.typography.titleLarge)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Financial Summary", style = MaterialTheme.typography.titleMedium)
@@ -70,7 +68,7 @@ fun MoneyInsightsPanel() {
             )
         }
 
-        Text("FYNX only analyzes locally saved activity here. It does not access bank accounts or move real money.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Based on activity saved in FYNX; no bank account access or money movement.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

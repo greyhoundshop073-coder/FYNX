@@ -52,10 +52,9 @@ fun BudgetPlannerPanel() {
 
 
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Budget Planner 💸", style = MaterialTheme.typography.headlineSmall)
-        Text("Set limits and see how much remains in each category.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Budget Planner 💸", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(6.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("${period} Budget", style = MaterialTheme.typography.titleMedium)
             Text("Budget: ${money(totalLimit)}")

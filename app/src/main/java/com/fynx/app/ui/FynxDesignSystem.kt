@@ -1,5 +1,11 @@
 package com.fynx.app.ui
 
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.SideEffect
+import android.content.ContextWrapper
+import android.content.Context
+import android.app.Activity
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -157,6 +163,32 @@ private fun Typography.scaled(scale: Float): Typography = copy(
     labelSmall = labelSmall.copy(fontSize = labelSmall.fontSize * scale)
 )
 
+
+/**
+ * System-bar icon contrast follows FYNX's effective appearance, not only the
+ * device theme. This keeps clock, signal and battery icons readable when FYNX
+ * is set to Light while Android itself is in Dark mode.
+ */
+internal data class FynxSystemBarIconAppearance(
+    val useDarkStatusBarIcons: Boolean,
+    val useDarkNavigationBarIcons: Boolean
+)
+
+internal fun fynxSystemBarIconAppearance(darkMode: Boolean): FynxSystemBarIconAppearance =
+    FynxSystemBarIconAppearance(
+        useDarkStatusBarIcons = !darkMode,
+        useDarkNavigationBarIcons = !darkMode
+    )
+
+private fun Context.findFynxActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return current as? Activity
+}
+
 private fun scheduledNightModeActive(context: android.content.Context): Boolean {
     if (FynxPreferencesStore.loadNightMode(context) != "Scheduled") return false
     val start = runCatching { LocalTime.parse(FynxPreferencesStore.loadNightModeStart(context)) }.getOrDefault(LocalTime.of(22, 0))
@@ -200,6 +232,15 @@ fun FynxTheme(
         "System" -> darkMode || scheduledNight
         else -> darkMode || scheduledNight
     }
+    val view = LocalView.current
+    val systemBarAppearance = fynxSystemBarIconAppearance(effectiveDarkMode)
+    SideEffect {
+        val window = view.context.findFynxActivity()?.window ?: return@SideEffect
+        val insetsController = WindowCompat.getInsetsController(window, view)
+        insetsController.isAppearanceLightStatusBars = systemBarAppearance.useDarkStatusBarIcons
+        insetsController.isAppearanceLightNavigationBars = systemBarAppearance.useDarkNavigationBarIcons
+    }
+
     // Choose the higher-contrast black/white foreground; Azure Blue needs black text/icons for WCAG AA contrast.
     val onAccent = if (effectiveAccent.primary.luminance() > 0.179f) Color.Black else Color.White
     val scheme = if (effectiveDarkMode) {

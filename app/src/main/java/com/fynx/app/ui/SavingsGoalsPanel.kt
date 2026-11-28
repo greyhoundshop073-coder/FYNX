@@ -45,10 +45,10 @@ fun SavingsGoalsPanel() {
     var goals by remember(context) { mutableStateOf(loadSavingsGoals(context)) }
     var nextId by remember(context) { mutableLongStateOf((goals.maxOfOrNull { it.id } ?: 0L) + 1L) }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Savings Goals 🎯", style = MaterialTheme.typography.headlineSmall)
-        Text("Set targets and track your savings progress locally.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Savings Goals 🎯", style = MaterialTheme.typography.titleLarge)
+        Text("Saved on this device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         OutlinedTextField(name, { name = it }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(targetText, { targetText = it }, label = { Text("Target amount") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(savedText, { savedText = it }, label = { Text("Currently saved") }, singleLine = true, modifier = Modifier.fillMaxWidth())

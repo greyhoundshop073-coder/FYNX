@@ -22,10 +22,10 @@ fun AccountsWalletsPanel() {
 
     val total = accounts.sumOf { it.balance }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Accounts & Wallets 🏦", style = MaterialTheme.typography.headlineSmall)
-        Text("Track balances locally without connecting to a real bank.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Accounts & Wallets 🏦", style = MaterialTheme.typography.titleLarge)
+        Text("Local records only; no bank is connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
             Text("Combined balance", style = MaterialTheme.typography.titleMedium)
             Text(money(total), style = MaterialTheme.typography.headlineMedium)

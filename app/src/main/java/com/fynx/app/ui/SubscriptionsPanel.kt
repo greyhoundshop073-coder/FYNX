@@ -47,10 +47,10 @@ fun SubscriptionsPanel() {
 
     val monthlyEstimate = payments.sumOf { payment -> when (payment.frequency) { "Daily" -> payment.amount * 30.0; "Weekly" -> payment.amount * 4.33; "Yearly" -> payment.amount / 12.0; else -> payment.amount } }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Subscriptions & Recurring Payments 🔄", style = MaterialTheme.typography.headlineSmall)
-        Text("Track recurring costs without making payments automatically.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp)) {
+        Text("Subscriptions & Recurring Payments 🔄", style = MaterialTheme.typography.titleLarge)
+        Text("FYNX does not make recurring payments.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
         Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
             Text("Estimated monthly recurring cost", style = MaterialTheme.typography.titleMedium)
             Text(money(monthlyEstimate), style = MaterialTheme.typography.headlineMedium)

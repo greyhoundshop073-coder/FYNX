@@ -5,8 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -138,38 +136,8 @@ fun FynxPrivacySettingsPanel(onBack: () -> Unit = {}) {
     Column(
         Modifier.fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    Icons.Default.ArrowBack,
-                    contentDescription = "Back to Settings",
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Surface(
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                color = androidx.compose.ui.graphics.Color(0xFF8B5CF6).copy(alpha = 0.13f)
-            ) {
-                Icon(
-                    Icons.Default.Security,
-                    contentDescription = null,
-                    tint = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
-                    modifier = Modifier.padding(10.dp).size(24.dp)
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Privacy & Security", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("Choose what others can see and how your account is protected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         notice?.let { message -> Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 10.dp)) }
         LazyColumn(contentPadding = PaddingValues(top = 14.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item { FynxSupportHubPanel() }
