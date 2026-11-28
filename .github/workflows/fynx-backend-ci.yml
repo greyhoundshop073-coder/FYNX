@@ -177,6 +177,8 @@ jobs:
           python3 scripts/verify_large_badge8_ai_intelligence.py
       - name: Run buyer wallet backend verification
         run: node verify-buyer-wallet-foundation.mjs
+      - name: Verify Railway and Neon use one Buyer Wallet route owner
+        run: node verify-wallet-route-registration.mjs
       - name: Run buyer wallet PostgreSQL schema and ledger tests
         run: node test-buyer-wallet-schema.mjs
       - name: Run buyer wallet hosted-funding recovery unit tests
