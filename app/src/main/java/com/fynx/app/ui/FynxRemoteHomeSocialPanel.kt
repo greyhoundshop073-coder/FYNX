@@ -857,7 +857,7 @@ private fun VideoDiscoveryDialog(context: Context, sourcePostId: String?, onDism
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close video discovery") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Back") }
                     Column(Modifier.weight(1f)) {
                         Text("Discover videos", style = MaterialTheme.typography.titleLarge)
                         Text("Real FYNX videos ranked by the existing discovery service", style = MaterialTheme.typography.bodySmall, color = FynxDesign.TextSecondary)
@@ -1626,7 +1626,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { FynxBitmapSampling.decodeFileSampled(file!!, FynxBitmapSampling.FEED_MAX_DIMENSION) }.getOrNull() } }
                     bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                 }
-                IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.Close, "Close media viewer", tint = Color.White) }
+                IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
             }
         }
     }
