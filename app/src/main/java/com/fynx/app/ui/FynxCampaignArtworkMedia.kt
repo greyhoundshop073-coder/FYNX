@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.annotation.SuppressLint
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -403,7 +404,7 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
 
     private fun syncPlayback() {
         val rect = Rect()
-        val visible = playbackAllowed && isShown && hasWindowFocus() && windowVisibility == View.VISIBLE && getGlobalVisibleRect(rect)
+        val visible = playbackAllowed && ValueAnimator.areAnimatorsEnabled() && isShown && hasWindowFocus() && windowVisibility == View.VISIBLE && getGlobalVisibleRect(rect)
         val drawable = artwork ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && drawable is AnimatedImageDrawable) {
             if (visible && !drawable.isRunning) drawable.start()
