@@ -1,6 +1,15 @@
 import jwt from "jsonwebtoken";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
-import { createRealtimeAnswer, isValidRealtimeSessionMode, FYNX_AI_REALTIME_VOICES } from "./aiVoiceSession.js";
+import {
+  createRealtimeCall, hangupFynxRealtimeCall, isValidRealtimeSessionMode,
+  FYNX_AI_REALTIME_VOICES, FYNX_AI_VOICE_MODEL
+} from "./aiVoiceSession.js";
+import { connectFynxRealtimeSideband } from "./aiRealtimeSideband.js";
+import { getFynxDatabasePool } from "./databasePool.js";
+import {
+  reserveFynxAiUsage, settleFynxAiUsage, attachFynxAiRealtimeCall,
+  getActiveFynxAiRealtimeCall, FynxAiUsageLimitError, FynxAiUsageSessionActiveError
+} from "./fynxAiUsageBudget.js";
 import { executeFynxAiTool, getFynxAiTools } from "./fynxAiToolRegistry.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "";
@@ -31,6 +40,8 @@ function authenticate(req, res) {
   }
 }
 
+const activeRealtimeMonitors = new Map();
+
 export function registerRealtimeAssistantRoutes({ app }) {
   app.post("/api/assistant/realtime-session", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req, res);
@@ -46,13 +57,86 @@ export function registerRealtimeAssistantRoutes({ app }) {
       return res.status(400).json({ error: "valid WebRTC SDP offer is required" });
     }
 
+    const databasePool = getFynxDatabasePool();
+    let reservation = null;
+    let callId = null;
     try {
+      reservation = await reserveFynxAiUsage({
+        userId,
+        provider: "openai",
+        capability: "voice_" + mode,
+        model: FYNX_AI_VOICE_MODEL,
+        databasePool
+      });
       const voice = mode === "speech" && FYNX_AI_REALTIME_VOICES.includes(requestedVoice) ? requestedVoice : undefined;
-      const answer = await createRealtimeAnswer(sdp, mode, voice);
-      res.type("application/sdp").send(answer);
+      const realtimeCall = await createRealtimeCall(sdp, mode, voice);
+      callId = realtimeCall.callId;
+      await attachFynxAiRealtimeCall({ reservation, callId, databasePool });
+
+      let monitor;
+      try {
+        monitor = await connectFynxRealtimeSideband({
+          callId,
+          reservation,
+          model: FYNX_AI_VOICE_MODEL,
+          includeTranscriptionUsage: mode === "transcription",
+          databasePool,
+          onFinalized: () => {
+            if (activeRealtimeMonitors.get(callId)?.monitor === monitor) {
+              activeRealtimeMonitors.delete(callId);
+            }
+          }
+        });
+      } catch (monitorError) {
+        await hangupFynxRealtimeCall(callId).catch(() => {});
+        await settleFynxAiUsage({ reservation, status: "failed", databasePool }).catch(() => {});
+        throw monitorError;
+      }
+
+      activeRealtimeMonitors.set(callId, { monitor, reservation });
+      res.type("application/sdp").send(realtimeCall.answer);
     } catch (error) {
+      if (reservation) {
+        if (callId) await hangupFynxRealtimeCall(callId).catch(() => {});
+        await settleFynxAiUsage({ reservation, status: "failed", databasePool }).catch(() => {});
+      }
+      if (error instanceof FynxAiUsageLimitError) {
+        if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
+        return res.status(429).json({ error: error.message, retryAfterSeconds: error.retryAfterSeconds });
+      }
+      if (error instanceof FynxAiUsageSessionActiveError) {
+        return res.status(409).json({ error: error.message });
+      }
       console.error("realtime voice session", error?.message || error);
       return res.status(502).json({ error: "FYNX realtime voice session unavailable" });
+    }
+  });
+
+  app.post("/api/assistant/realtime-session/hangup", assistantJsonBodyParser, async (req, res) => {
+    const userId = authenticate(req, res);
+    if (!userId) return;
+    const databasePool = getFynxDatabasePool();
+    try {
+      const activeCall = await getActiveFynxAiRealtimeCall(userId, databasePool);
+      if (!activeCall) return res.json({ ok: true, active: false });
+      const providerResult = await hangupFynxRealtimeCall(activeCall.callId);
+      const activeMonitor = activeRealtimeMonitors.get(activeCall.callId)?.monitor;
+      if (activeMonitor) {
+        await activeMonitor.finish("completed");
+      } else {
+        // A cold/serverless instance may not own the original WebSocket. Do not
+        // mark usage complete without the provider usage stream that prices it.
+        await settleFynxAiUsage({
+          reservation: activeCall,
+          status: "failed",
+          databasePool
+        });
+      }
+      activeRealtimeMonitors.delete(activeCall.callId);
+      return res.json({ ok: true, active: true, alreadyEnded: providerResult.alreadyEnded === true });
+    } catch (error) {
+      console.error("realtime voice hangup", error?.message || error);
+      return res.status(502).json({ error: "FYNX realtime voice session could not be closed cleanly" });
     }
   });
 
