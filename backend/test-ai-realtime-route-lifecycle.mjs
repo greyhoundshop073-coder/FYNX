@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
-import {
-  registerRealtimeAssistantRoutes
-} from "./aiRealtimeRoutes.js";
 import { FynxAiUsageSessionActiveError } from "./fynxAiUsageBudget.js";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || "fynx-ai-realtime-route-test-secret";
+const { registerRealtimeAssistantRoutes } = await import("./aiRealtimeRoutes.js");
 
 const handlers = new Map();
 const app = {
