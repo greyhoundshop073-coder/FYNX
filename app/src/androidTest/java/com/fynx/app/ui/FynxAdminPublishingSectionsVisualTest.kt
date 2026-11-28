@@ -112,7 +112,14 @@ class FynxAdminPublishingSectionsVisualTest {
                     true
                 }.getOrDefault(false)
             }
-            compose.onNodeWithContentDescription("FYNX campaign artwork preview").assertIsDisplayed()
+            val previewNode = compose.onNodeWithContentDescription("FYNX campaign artwork preview")
+            previewNode.performScrollTo().assertIsDisplayed()
+            val decodedPickerPreview = FynxCampaignArtworkMedia.decodePreview(compose.activity, artworkUri)
+            assertTrue(
+                "A valid selected GIF must produce a real animated preview drawable",
+                decodedPickerPreview is android.graphics.drawable.AnimatedImageDrawable ||
+                    decodedPickerPreview is FynxLegacyGifDrawable
+            )
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
@@ -233,7 +240,7 @@ class FynxAdminPublishingSectionsVisualTest {
         compose.onNodeWithText("Marketplace").performScrollTo().performClick()
         compose.onNodeWithText("Marketplace campaigns").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign type").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Announcement").assertIsDisplayed()
+        compose.onNodeWithText("Announcement").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Special offer").assertIsDisplayed()
         compose.onNodeWithText("Banner headline").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("fynx-campaign-save-button").performScrollTo().assertIsDisplayed()
