@@ -54,6 +54,9 @@ class FynxAdminPublishingSectionsVisualTest {
     @Test
     fun adminCampaignEditorSavesAnimatedGifDraftOfflineWithoutPublishingItToBuyerFeed() {
         val resolver = compose.activity.contentResolver
+        val authPrefs = compose.activity.getSharedPreferences("fynx_auth", android.content.Context.MODE_PRIVATE)
+        val previousUsername = authPrefs.getString("username", null)
+        authPrefs.edit().putString("username", "fynx-admin-campaign-" + System.currentTimeMillis()).apply()
         val artworkUri = createFixtureArtworkUri(animatedGif = true)
         val occasionKey = "admin-ui-" + System.currentTimeMillis()
         val headline = "Admin UI saved offline campaign"
@@ -167,6 +170,9 @@ class FynxAdminPublishingSectionsVisualTest {
                 .filter { it.occasionKey == occasionKey }
                 .forEach { FynxMarketplaceLocalCampaignStore.delete(compose.activity, it.id).getOrThrow() }
             resolver.delete(artworkUri, null, null)
+            val restore = authPrefs.edit()
+            if (previousUsername == null) restore.remove("username") else restore.putString("username", previousUsername)
+            restore.apply()
         }
     }
 
