@@ -122,7 +122,7 @@ registerRealtimeAssistantRoutes({
   reserveUsage: async () => { throw new FynxAiUsageSessionActiveError(); }
 });
 const conflict = responseRecorder();
-await conflictApp.handler({ headers, body: { sdp: "v=0 offer", mode: "assistant" } }, conflict);
+await conflictApp.handler({ headers, body: { sdp: "v=0 offer", mode: "transcription" } }, conflict);
 assert.equal(conflict.statusCode, 409);
 assert.match(conflict.payload.error, /already active/);
 
