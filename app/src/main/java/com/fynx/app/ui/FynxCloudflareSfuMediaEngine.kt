@@ -54,6 +54,7 @@ internal class FynxCloudflareSfuMediaEngine(
     @Volatile private var gatheringSignal: CompletableDeferred<Unit>? = null
     private val ownerByMid = ConcurrentHashMap<String, String>()
     private val ownerByPublisherSession = ConcurrentHashMap<String, String>()
+    private val remoteTracksByUser = ConcurrentHashMap<String, ConcurrentHashMap<String, org.webrtc.MediaStreamTrack>>()
     private val subscribedTracks = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var active = false
 
@@ -120,20 +121,20 @@ internal class FynxCloudflareSfuMediaEngine(
                         when (val remoteTrack = transceiver.receiver.track()) {
                             is AudioTrack -> {
                                 remoteTrack.setEnabled(true)
+                                remoteTracksByUser.computeIfAbsent(owner) { ConcurrentHashMap() }[remoteTrack.id()] = remoteTrack
                                 callbacks.onRemoteAudioTrack(owner, remoteTrack)
                             }
                             is VideoTrack -> {
                                 remoteTrack.setEnabled(true)
+                                remoteTracksByUser.computeIfAbsent(owner) { ConcurrentHashMap() }[remoteTrack.id()] = remoteTrack
                                 callbacks.onRemoteVideoTrack(owner, remoteTrack)
                             }
                         }
                     }
                     override fun onRemoveTrack(receiver: org.webrtc.RtpReceiver) {
-                        val transceiver = peerConnection?.transceivers()
-                            ?.firstOrNull { it.receiver.id() == receiver.id() } ?: return
-                        val mid = transceiver.mid ?: return
-                        val owner = ownerByMid.remove(mid) ?: return
-                        if (receiver.track() is VideoTrack) callbacks.onRemoteVideoTrack(owner, null)
+                        // Remote ownership is reconciled from the authenticated group roster.
+                        // Avoid relying on transceiver enumeration, which is not exposed by
+                        // every bundled Android WebRTC API version.
                     }
                 }
             ) ?: throw IllegalStateException("Cloudflare media connection could not be created.")
@@ -241,17 +242,10 @@ internal class FynxCloudflareSfuMediaEngine(
             subscribedTracks.removeIf { it.startsWith(publisherSessionId + ":") }
         }
         val mids = ownerByMid.entries.filter { it.value == userId }.map { it.key }
-        mids.forEach { mid ->
-            ownerByMid.remove(mid, userId)
-            val receiver = peerConnection?.transceivers()
-                ?.firstOrNull { it.mid == mid }?.receiver
-            when (val remoteTrack = receiver?.track()) {
-                is AudioTrack -> remoteTrack.setEnabled(false)
-                is VideoTrack -> {
-                    remoteTrack.setEnabled(false)
-                    callbacks.onRemoteVideoTrack(userId, null)
-                }
-            }
+        mids.forEach { mid -> ownerByMid.remove(mid, userId) }
+        remoteTracksByUser.remove(userId)?.values?.forEach { remoteTrack ->
+            remoteTrack.setEnabled(false)
+            if (remoteTrack is VideoTrack) callbacks.onRemoteVideoTrack(userId, null)
         }
     }
 
@@ -354,6 +348,7 @@ internal class FynxCloudflareSfuMediaEngine(
         active = false
         ownerByMid.clear()
         ownerByPublisherSession.clear()
+        remoteTracksByUser.clear()
         subscribedTracks.clear()
         runCatching { peerConnection?.close() }
         runCatching { peerConnection?.dispose() }
