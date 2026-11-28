@@ -11,6 +11,7 @@ import android.view.PixelCopy
 import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.fillMaxWidth
