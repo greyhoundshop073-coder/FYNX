@@ -78,8 +78,7 @@ const fetchImpl = async (url, options = {}) => {
     payload = { sessionId: "session-a" };
   } else if (path.endsWith("/tracks/new") && options.method === "POST" && JSON.parse(options.body || "{}").tracks?.[0]?.location === "local") {
     payload = {
-      requiresImmediateRenegotiation: true,
-      sessionDescription: { type: "offer", sdp: "sfu-offer" },
+      sessionDescription: { type: "answer", sdp: "sfu-publish-answer" },
       tracks: [{ trackName: "microphone" }]
     };
   } else if (path.endsWith("/tracks/new") && options.method === "POST") {
@@ -140,19 +139,7 @@ const publishBody = {
 };
 const publish = await invoke("POST", publishPath, { params: { sessionId: "session-a" }, body: publishBody });
 assert.equal(publish.statusCode, 200);
-assert.equal(publish.body.mutationState, "AWAITING_RENEGOTIATION");
-assert.equal(sessions.get("session-a").mutation_state, "AWAITING_RENEGOTIATION");
-
-const callsBeforeFence = apiCalls;
-const fenced = await invoke("POST", publishPath, { params: { sessionId: "session-a" }, body: publishBody });
-assert.equal(fenced.statusCode, 409);
-assert.equal(apiCalls, callsBeforeFence, "a second mutation must not reach Cloudflare before renegotiation finishes");
-
-const answer = await invoke("PUT", "/api/calls/sfu/sessions/:sessionId/renegotiate", {
-  params: { sessionId: "session-a" },
-  body: { callId: "call_liveproof_1", sessionDescription: { type: "answer", sdp: "native-answer" } }
-});
-assert.equal(answer.statusCode, 200);
+assert.equal(publish.body.mutationState, "READY");
 assert.equal(sessions.get("session-a").mutation_state, "READY");
 
 // Add a second user's publication and prove subscriber authorization is call-scoped.
@@ -170,6 +157,14 @@ const subscribe = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subsc
 });
 assert.equal(subscribe.statusCode, 200);
 assert.equal(subscribe.body.mutationState, "AWAITING_RENEGOTIATION");
+
+const callsBeforeFence = apiCalls;
+const fenced = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
+  params: { sessionId: "session-a" },
+  body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera"] }
+});
+assert.equal(fenced.statusCode, 409);
+assert.equal(apiCalls, callsBeforeFence, "another subscription must not reach Cloudflare before the SFU offer is answered");
 
 const answerSubscribe = await invoke("PUT", "/api/calls/sfu/sessions/:sessionId/renegotiate", {
   params: { sessionId: "session-a" },
