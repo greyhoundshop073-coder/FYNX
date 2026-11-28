@@ -21,6 +21,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Cloudflare SFU transport for one authenticated group participant. Local capture
@@ -47,12 +48,13 @@ internal class FynxCloudflareSfuMediaEngine(
     private var iceServers: List<PeerConnection.IceServer> = listOf(
         PeerConnection.IceServer.builder("stun:stun.cloudflare.com:3478").createIceServer()
     )
-    private var peerConnection: PeerConnection? = null
+    @Volatile private var peerConnection: PeerConnection? = null
     private var callId: String? = null
     private var sessionId: String? = null
-    private var gatheringSignal: CompletableDeferred<Unit>? = null
-    private val ownerByMid = mutableMapOf<String, String>()
-    private val subscribedTracks = mutableSetOf<String>()
+    @Volatile private var gatheringSignal: CompletableDeferred<Unit>? = null
+    private val ownerByMid = ConcurrentHashMap<String, String>()
+    private val ownerByPublisherSession = ConcurrentHashMap<String, String>()
+    private val subscribedTracks = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var active = false
 
     fun isActive(): Boolean = active
@@ -208,6 +210,7 @@ internal class FynxCloudflareSfuMediaEngine(
                 operation.tracks.all { it.trackName in pending }) {
                 "Cloudflare did not confirm every requested remote media track."
             }
+            ownerByPublisherSession[publisher.sessionId] = publisher.userId
             operation.tracks.forEach { ownerByMid[it.mid] = publisher.userId }
 
             if (operation.requiresImmediateRenegotiation || operation.sessionDescriptionType == "offer") {
@@ -230,16 +233,25 @@ internal class FynxCloudflareSfuMediaEngine(
     }
 
     fun removeParticipant(userId: String) {
-        val mids = ownerByMid.filterValues { it == userId }.keys.toList()
-        mids.forEach { mid ->
-            ownerByMid.remove(mid)
-            callbacks.onRemoteVideoTrack(userId, null)
+        val sessions = ownerByPublisherSession.entries
+            .filter { it.value == userId }
+            .map { it.key }
+        sessions.forEach { publisherSessionId ->
+            ownerByPublisherSession.remove(publisherSessionId, userId)
+            subscribedTracks.removeIf { it.startsWith(publisherSessionId + ":") }
         }
-        subscribedTracks.removeAll { key ->
-            val publisher = key.substringBefore(':')
-            // Subscription session IDs are provider-generated and distinct from FYNX user IDs;
-            // active remote subscriptions are refreshed on the next discovery pass.
-            publisher.isBlank()
+        val mids = ownerByMid.entries.filter { it.value == userId }.map { it.key }
+        mids.forEach { mid ->
+            ownerByMid.remove(mid, userId)
+            val receiver = peerConnection?.transceivers()
+                ?.firstOrNull { it.mid == mid }?.receiver
+            when (val remoteTrack = receiver?.track()) {
+                is AudioTrack -> remoteTrack.setEnabled(false)
+                is VideoTrack -> {
+                    remoteTrack.setEnabled(false)
+                    callbacks.onRemoteVideoTrack(userId, null)
+                }
+            }
         }
     }
 
@@ -274,7 +286,8 @@ internal class FynxCloudflareSfuMediaEngine(
     private suspend fun createDescription(
         connection: PeerConnection,
         offer: Boolean
-    ): SessionDescription = suspendCancellableCoroutine { continuation ->
+    ): SessionDescription = withTimeout(15_000L) {
+        suspendCancellableCoroutine { continuation ->
         val observer = object : SdpObserverAdapter() {
             override fun onCreateSuccess(description: SessionDescription) {
                 if (continuation.isActive) continuation.resume(description)
@@ -287,6 +300,7 @@ internal class FynxCloudflareSfuMediaEngine(
         }
         if (offer) connection.createOffer(observer, MediaConstraints())
         else connection.createAnswer(observer, MediaConstraints())
+        }
     }
 
     private suspend fun setLocalDescriptionAndGather(
@@ -295,7 +309,7 @@ internal class FynxCloudflareSfuMediaEngine(
     ): String {
         val signal = CompletableDeferred<Unit>()
         gatheringSignal = signal
-        suspendCancellableCoroutine<Unit> { continuation ->
+        withTimeout(15_000L) { suspendCancellableCoroutine<Unit> { continuation ->
             connection.setLocalDescription(object : SdpObserverAdapter() {
                 override fun onSetSuccess() {
                     if (continuation.isActive) continuation.resume(Unit)
@@ -306,7 +320,7 @@ internal class FynxCloudflareSfuMediaEngine(
                     )
                 }
             }, description)
-        }
+        } }
         try {
             if (connection.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
                 withTimeout(12_000L) { signal.await() }
@@ -322,7 +336,7 @@ internal class FynxCloudflareSfuMediaEngine(
         connection: PeerConnection,
         description: SessionDescription
     ) {
-        suspendCancellableCoroutine<Unit> { continuation ->
+        withTimeout(15_000L) { suspendCancellableCoroutine<Unit> { continuation ->
             connection.setRemoteDescription(object : SdpObserverAdapter() {
                 override fun onSetSuccess() {
                     if (continuation.isActive) continuation.resume(Unit)
@@ -333,12 +347,13 @@ internal class FynxCloudflareSfuMediaEngine(
                     )
                 }
             }, description)
-        }
+        } }
     }
 
     private fun closeLocalConnection() {
         active = false
         ownerByMid.clear()
+        ownerByPublisherSession.clear()
         subscribedTracks.clear()
         runCatching { peerConnection?.close() }
         runCatching { peerConnection?.dispose() }

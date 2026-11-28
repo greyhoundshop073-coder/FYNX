@@ -284,12 +284,17 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
 
   app.post("/api/calls/sfu/sessions/:sessionId/close", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
-    const { callId } = req.body || {};
-    if (!validId(sessionId) || !validId(callId, 80)) return res.status(400).json({ error: "valid session and call IDs are required" });
+    const { callId, force = false } = req.body || {};
+    if (!validId(sessionId) || !validId(callId, 80) || typeof force !== "boolean") {
+      return res.status(400).json({ error: "valid session and call IDs are required" });
+    }
     // Cleanup remains authorized by original session ownership even after a call has ended.
     if (!await getOwnedSession(sessionId, req.user.sub, callId, false)) return res.status(403).json({ error: "call session access denied" });
-    if (!await claimMutation(sessionId, req.user.sub, callId, ["READY", "RECOVERY_REQUIRED"])) {
-      return res.status(409).json({ error: "media session cleanup is already running; retry after it finishes" });
+    const closableStates = force
+      ? ["READY", "RECOVERY_REQUIRED", "AWAITING_RENEGOTIATION"]
+      : ["READY", "RECOVERY_REQUIRED"];
+    if (!await claimMutation(sessionId, req.user.sub, callId, closableStates)) {
+      return res.status(409).json({ error: "media session cleanup is already running or awaiting an active negotiation; retry after it finishes" });
     }
     try {
       const snapshot = await sfuRequest(`/sessions/${encodeURIComponent(sessionId)}`, "GET");

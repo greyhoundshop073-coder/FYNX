@@ -235,6 +235,21 @@ assert.equal(close.body.tracksClosed, 1);
 assert.equal(sessions.get("session-a").mutation_state, "ENDED");
 assert.equal(publications.filter((item) => item.session_id === "session-a" && item.active).length, 0);
 
+// Owner-only teardown can recover a session after the client has abandoned an SDP offer.
+sessions.set("session-c", {
+  session_id: "session-c", call_id: "call_liveproof_1", user_id: "42",
+  mutation_state: "AWAITING_RENEGOTIATION", ended_at: null
+});
+const pendingClose = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/close", {
+  params: { sessionId: "session-c" }, body: { callId: "call_liveproof_1" }
+});
+assert.equal(pendingClose.statusCode, 409, "ordinary cleanup must not interrupt a pending SDP exchange");
+const forcedClose = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/close", {
+  params: { sessionId: "session-c" }, body: { callId: "call_liveproof_1", force: true }
+});
+assert.equal(forcedClose.statusCode, 200, "the owner must be able to tear down an abandoned negotiation");
+assert.equal(sessions.get("session-c").mutation_state, "ENDED");
+
 const unauthorized = await invoke("POST", "/api/calls/sfu/sessions", {
   userId: "99", body: { callId: "call_liveproof_1" }
 });

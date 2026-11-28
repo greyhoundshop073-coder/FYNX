@@ -126,7 +126,7 @@ internal object FynxCloudflareSfuClient {
 
     suspend fun close(context: Context, callId: String, sessionId: String) {
         requireValidIdentity(callId, sessionId)
-        val body = JSONObject().put("callId", callId).toString()
+        val body = JSONObject().put("callId", callId).put("force", true).toString()
         FynxBackendClient.postJson(
             context,
             "/api/calls/sfu/sessions/${Uri.encode(sessionId)}/close",
