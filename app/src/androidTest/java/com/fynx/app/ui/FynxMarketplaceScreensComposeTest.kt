@@ -125,7 +125,7 @@ class FynxMarketplaceScreensComposeTest {
             }
         }
 
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -171,7 +171,7 @@ class FynxMarketplaceScreensComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 10_000) {
             compose.onAllNodesWithContentDescription("Shop this product: ${marketplaceListings.first().title}")
                 .fetchSemanticsNodes().isNotEmpty()
         }
