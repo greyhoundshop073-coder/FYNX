@@ -102,13 +102,14 @@ class FynxAdminPublishingSectionsVisualTest {
                 }
             }
             compose.onNodeWithText("Choose photo or GIF").performScrollTo().performClick()
+            compose.onNodeWithText("Selected artwork preview").performScrollTo()
             compose.waitUntil(timeoutMillis = 10_000) {
                 runCatching {
-                    compose.onNodeWithContentDescription("FYNX campaign artwork preview").assertIsDisplayed()
+                    compose.onNodeWithContentDescription("FYNX campaign artwork preview").fetchSemanticsNode()
                     true
                 }.getOrDefault(false)
             }
-            compose.onNodeWithContentDescription("FYNX campaign artwork preview").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithContentDescription("FYNX campaign artwork preview").assertIsDisplayed()
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
             compose.onNodeWithText("Celebration write-up")
