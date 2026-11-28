@@ -537,7 +537,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 errorMessage = "The call timed out, but the other person may not have received the end signal."
             }
             sfuMediaForCleanup[0]?.disconnect()
-            sfuMediaForCleanup[0]?.disconnect()
             mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null
             val incoming = current.state == FynxCallState.RINGING
             FynxCallsStore.updateStatus(context, current.id, if (incoming) "Missed" else "No answer", missed = incoming)
