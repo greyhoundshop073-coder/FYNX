@@ -10,6 +10,7 @@ const sessions = new Map();
 const publications = [];
 let callActive = true;
 let apiCalls = 0;
+let partialSubscribe = false;
 const pool = {
   async query(sql, params = []) {
     if (/^\s*(CREATE|ALTER|CREATE INDEX)/i.test(sql)) return { rows: [], rowCount: 0 };
@@ -85,7 +86,9 @@ const fetchImpl = async (url, options = {}) => {
     payload = {
       requiresImmediateRenegotiation: true,
       sessionDescription: { type: "offer", sdp: "sfu-subscribe-offer" },
-      tracks: [{ mid: "1" }]
+      tracks: partialSubscribe
+        ? [{ mid: "1" }, { errorCode: "track_unavailable", errorDescription: "test partial allocation" }]
+        : [{ mid: "1" }]
     };
   } else if (path.endsWith("/renegotiate")) {
     payload = { success: true };
@@ -147,10 +150,10 @@ sessions.set("session-b", {
   session_id: "session-b", call_id: "call_liveproof_1", user_id: "77",
   mutation_state: "READY", ended_at: null
 });
-publications.push({
-  call_id: "call_liveproof_1", user_id: "77", session_id: "session-b",
-  track_name: "camera", mid: "0", active: true
-});
+publications.push(
+  { call_id: "call_liveproof_1", user_id: "77", session_id: "session-b", track_name: "camera", mid: "0", active: true },
+  { call_id: "call_liveproof_1", user_id: "77", session_id: "session-b", track_name: "microphone", mid: "1", active: true }
+);
 const subscribe = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
   params: { sessionId: "session-a" },
   body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera"] }
@@ -166,12 +169,32 @@ const fenced = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscrib
 assert.equal(fenced.statusCode, 409);
 assert.equal(apiCalls, callsBeforeFence, "another subscription must not reach Cloudflare before the SFU offer is answered");
 
+const closeWhileNegotiating = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/close", {
+  params: { sessionId: "session-a" }, body: { callId: "call_liveproof_1" }
+});
+assert.equal(closeWhileNegotiating.statusCode, 409, "cleanup must not mutate a session with an unanswered SFU offer");
+
 const answerSubscribe = await invoke("PUT", "/api/calls/sfu/sessions/:sessionId/renegotiate", {
   params: { sessionId: "session-a" },
   body: { callId: "call_liveproof_1", sessionDescription: { type: "answer", sdp: "subscriber-answer" } }
 });
 assert.equal(answerSubscribe.statusCode, 200);
 assert.equal(sessions.get("session-a").mutation_state, "READY");
+
+const duplicateTracks = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
+  params: { sessionId: "session-a" },
+  body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera", "camera"] }
+});
+assert.equal(duplicateTracks.statusCode, 400, "duplicate subscription names must be rejected before reaching Cloudflare");
+
+partialSubscribe = true;
+const partial = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
+  params: { sessionId: "session-a" },
+  body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera", "microphone"] }
+});
+assert.equal(partial.statusCode, 502, "partial track allocation must not be reported as a successful subscription");
+assert.equal(sessions.get("session-a").mutation_state, "RECOVERY_REQUIRED");
+partialSubscribe = false;
 
 // After the call ends, original session ownership must still permit upstream teardown.
 callActive = false;
