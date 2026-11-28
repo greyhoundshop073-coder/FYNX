@@ -182,3 +182,14 @@ A future takeover chat may mark calling complete only when all are true:
 - [ ] Owner approves merge/release and receives the final evidence and remaining limitations.
 
 **Current status:** this handoff is a plan and record of known state, not a certification. Do not claim live calling works until the checklist has been completed with evidence.
+
+
+## 9. 2026-11-28 Android group-call mesh negotiation correction
+
+A source-level review of the group-call join event sequence found an Android-side gap independent of Railway availability: the backend sends the updated roster to the joining user, but sends existing participants a group_participant_joined event. The existing Android handler created a peer connection for that event but did not start the deterministic SDP offer. The newcomer could therefore appear in the participant roster without the existing participant initiating media negotiation.
+
+The coordinated call branch now handles that event through the same offer-election policy used for roster reconciliation. The lower opaque user ID initiates the offer, the opposite side answers, and a per-call set prevents duplicate offers when a roster and participant event describe the same peer. Peer creation now returns false for an already-existing peer, so its return value means a newly created connection.
+
+Added JVM tests cover one-offer-per-pair election, opaque string ordering, blank IDs, and self-pairs. The source verifier also checks that the participant-joined path calls the shared negotiation helper.
+
+This corrects the Android mesh edge setup only. It does not prove live two-way audio/video, TURN relay, Cloudflare SFU publishing, offline invite delivery, or physical-device network behavior. Those remain separate live acceptance gates.

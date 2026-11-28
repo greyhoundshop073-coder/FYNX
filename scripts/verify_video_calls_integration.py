@@ -39,6 +39,7 @@ app = {
         "groups": "FynxGroupsPanel.kt",
         "group_call": "FynxGroupCallPanel.kt",
         "group_engine": "FynxGroupWebRtcCallEngine.kt",
+        "group_offer_policy": "FynxGroupCallOfferPolicy.kt",
         "transport": "FynxCallTransportHardening.kt",
     }.items()
 }
@@ -144,6 +145,16 @@ checks = {
         and "acceptOfferAndCreateAnswer" in app["group_engine"]
         and "addRemoteIceCandidate" in app["group_engine"]
         and "disconnect()" in app["group_engine"],
+    "Existing participants initiate the new member's mesh offer":
+        "ensurePeerAndNegotiate(participant.userId, initiateOffer = true)" in app["group_call"]
+        and "FynxGroupCallOfferPolicy.shouldCreateOffer(localUserId, peerId)" in app["group_call"]
+        and "engine.createOffer(peerId)" in app["group_call"],
+    "Group-call offer ownership is deterministic and tested":
+        "local < remote" in app["group_offer_policy"]
+        and "exactlyOneEndpointOwnsTheInitialOfferForEachPair" in read("app/src/test/java/com/fynx/app/ui/FynxGroupCallOfferPolicyTest.kt"),
+    "Group peer creation is idempotent for repeated roster events":
+        "peers.containsKey(peerId) || peers.size >= 3) return false" in app["group_engine"]
+        and "offerStartedFor.add(peerId)" in app["group_call"],
     "Backend checks group membership, participant limit and peer targets":
         all(token in backend["group_calls"] for token in (
             "fynx_group_members", "MAX_GROUP_CALL_PARTICIPANTS = 4",

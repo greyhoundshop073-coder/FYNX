@@ -72,6 +72,10 @@ fun FynxGroupCallPanel(
     var speakerEnabled by remember { mutableStateOf(true) }
     val remoteVideoTracks = remember { mutableStateMapOf<String, VideoTrack>() }
     val peerConnected = remember { mutableStateMapOf<String, Boolean>() }
+    // Remember which mesh edges have already sent their local offer. This protects
+    // against duplicate roster notifications and allows roster reconciliation to
+    // complete an edge that was created by an earlier participant-joined event.
+    val offerStartedFor = remember(callId) { mutableSetOf<String>() }
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     val latestCallId by rememberUpdatedState(callId)
     val latestCallType by rememberUpdatedState(callType)
@@ -146,18 +150,24 @@ fun FynxGroupCallPanel(
     fun participantForCurrentUser(list: List<FynxRealtimeClient.Event.GroupCallParticipant>): FynxRealtimeClient.Event.GroupCallParticipant? =
         list.firstOrNull { it.username.trim().removePrefix("@").equals(normalizedUsername, true) }
 
+    fun ensurePeerAndNegotiate(peerId: String, initiateOffer: Boolean) {
+        if (!engine.hasPeer(peerId)) engine.ensurePeer(peerId)
+        if (!engine.hasPeer(peerId)) return
+        if (initiateOffer &&
+            FynxGroupCallOfferPolicy.shouldCreateOffer(localUserId, peerId) &&
+            offerStartedFor.add(peerId)
+        ) {
+            engine.createOffer(peerId)
+        }
+    }
+
     fun syncRoster(list: List<FynxRealtimeClient.Event.GroupCallParticipant>, createOffers: Boolean) {
         participants = list.distinctBy { it.userId }.take(4)
         val self = participantForCurrentUser(participants)
         if (self != null) localUserId = self.userId
         if (creatorId.isNotBlank() && self != null) isStarter = creatorId == self.userId
         participants.filterNot { it.userId == localUserId }.forEach { peer ->
-            val created = engine.ensurePeer(peer.userId)
-            // Deterministic offer ownership prevents both sides of a new mesh edge
-            // from creating an offer simultaneously (WebRTC offer glare).
-            if (created && createOffers && localUserId != null && localUserId!! < peer.userId) {
-                engine.createOffer(peer.userId)
-            }
+            ensurePeerAndNegotiate(peer.userId, initiateOffer = createOffers)
         }
         isJoined = true
         isIncoming = false
@@ -196,20 +206,24 @@ fun FynxGroupCallPanel(
                 val participant = event.participant ?: return
                 if (participants.none { it.userId == participant.userId }) {
                     participants = (participants + participant).take(4)
-                    engine.ensurePeer(participant.userId)
                 }
+                // Existing members receive this event, not a refreshed roster. They
+                // must create the deterministic offer for the newly joined mesh edge.
+                ensurePeerAndNegotiate(participant.userId, initiateOffer = true)
                 statusText = "Connecting to group members…"
             }
             "group_participant_left" -> {
                 val participant = event.participant ?: return
                 participants = participants.filterNot { it.userId == participant.userId }
                 engine.removePeer(participant.userId)
+                offerStartedFor.remove(participant.userId)
                 peerConnected.remove(participant.userId)
             }
             "group_offer" -> {
                 val peerId = event.fromUserId
                 if (peerId.isNotBlank() && !event.sdp.isNullOrBlank()) {
-                    engine.ensurePeer(peerId)
+                    ensurePeerAndNegotiate(peerId, initiateOffer = false)
+                    offerStartedFor.add(peerId)
                     engine.acceptOfferAndCreateAnswer(peerId, event.sdp)
                 }
             }

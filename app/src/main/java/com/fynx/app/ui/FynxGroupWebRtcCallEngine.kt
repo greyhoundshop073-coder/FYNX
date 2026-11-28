@@ -121,7 +121,9 @@ class FynxGroupWebRtcCallEngine(
 
     fun ensurePeer(userId: String): Boolean {
         val peerId = userId.trim()
-        if (!started || peerId.isBlank() || peers.containsKey(peerId) || peers.size >= 3) return peers.containsKey(peerId)
+        // This return value means a new peer was created, not merely that it exists.
+        // Repeated roster/join events must not restart SDP negotiation on the same edge.
+        if (!started || peerId.isBlank() || peers.containsKey(peerId) || peers.size >= 3) return false
         val pc = factory.createPeerConnection(PeerConnection.RTCConfiguration(iceServers), object : PeerConnection.Observer {
             override fun onSignalingChange(state: PeerConnection.SignalingState) = Unit
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
