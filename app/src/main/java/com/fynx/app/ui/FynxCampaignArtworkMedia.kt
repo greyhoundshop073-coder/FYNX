@@ -1,5 +1,6 @@
 package com.fynx.app.ui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -359,6 +360,7 @@ internal class FynxLegacyGifDrawable(private val movie: Movie) : Drawable(), Run
     override fun getIntrinsicHeight(): Int = movie.height()
 }
 
+@SuppressLint("AppCompatCustomView") // Internal Compose artwork host; no AppCompat widgets or theme APIs are used.
 internal class FynxCampaignArtworkImageView(context: Context) : ImageView(context), View.OnAttachStateChangeListener,
     android.view.ViewTreeObserver.OnPreDrawListener {
     private var artwork: Drawable? = null
@@ -401,7 +403,7 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
 
     private fun syncPlayback() {
         val rect = Rect()
-        val visible = playbackAllowed && isShown && windowVisibility == View.VISIBLE && getGlobalVisibleRect(rect)
+        val visible = playbackAllowed && isShown && hasWindowFocus() && windowVisibility == View.VISIBLE && getGlobalVisibleRect(rect)
         val drawable = artwork ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && drawable is AnimatedImageDrawable) {
             if (visible && !drawable.isRunning) drawable.start()
@@ -437,6 +439,11 @@ internal class FynxCampaignArtworkImageView(context: Context) : ImageView(contex
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
+        syncPlayback()
+    }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
         syncPlayback()
     }
 }
