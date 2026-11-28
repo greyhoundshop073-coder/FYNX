@@ -1626,7 +1626,7 @@ internal fun RemoteSocialMedia(path: String, type: String?, onOpenMarketplace: (
                     LaunchedEffect(file) { bitmap = withContext(Dispatchers.IO) { runCatching { FynxBitmapSampling.decodeFileSampled(file!!, FynxBitmapSampling.FEED_MAX_DIMENSION) }.getOrNull() } }
                     bitmap?.let { Image(it.asImageBitmap(), "Full screen post media", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                 }
-                IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = { fullscreen = false }, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(12.dp)) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
             }
         }
     }
