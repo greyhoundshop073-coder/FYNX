@@ -7,6 +7,7 @@ Before editing code, every contributor/chat/agent MUST read:
 2. [the mandatory development and platform compliance rules](docs/DEVELOPMENT_POLICY_COMPLIANCE.md)
 3. [the Google Play launch readiness plan](docs/GOOGLE_PLAY_READINESS.md)
 4. [the backend-ready development and reconnection policy](docs/BACKEND_READY_DEVELOPMENT_POLICY.md)
+5. [the FYNX Marketplace promotional campaign and banner specification](docs/marketplace/FYNX_PROMOTIONAL_CAMPAIGN_AND_BANNER_SPEC.md) whenever Marketplace, ads, campaigns, media or banner work is involved.
 
 **Backend-ready requirement:** Every contributor MUST follow `docs/BACKEND_READY_DEVELOPMENT_POLICY.md`. Build features so UI, typed API contracts, backend logic, storage/realtime/payment adapters, configuration, failure states and tests are ready even when production services are offline. Connect every safe/local capability now; document exact live-only blockers and reconnection steps. No fake production success, inert controls or undocumented disconnected features.
 
@@ -37,3 +38,16 @@ Every ChatGPT conversation, coding agent, and human contributor MUST follow [doc
 - Keep the register and feature handoff current at each meaningful checkpoint and before a chat is abandoned, becomes slow, or hands work to another chat. A replacement chat must resume from recorded branch/PR/commit and verify current state rather than restart.
 - The register is a coordination aid, not proof of completion. Only recorded test evidence and current GitHub/CI/runtime results establish status. Never infer that a workstream is active, merged, green, or complete from an old entry.
 - Do not edit the canonical branch directly for feature work. Documentation coordination changes also use a branch and PR unless the repository owner explicitly directs otherwise.
+
+
+## Product-quality and industry-standard requirement — mandatory
+
+Every workstream MUST compare its user-facing behavior with mature, widely used apps in the same product category before implementation. This is a product-quality review, not permission to copy proprietary UI or blindly add features.
+
+- Identify relevant standard patterns for the exact journey (for example, Marketplace discovery, seller storefront, campaign ads, media upload, checkout, chat or video calls).
+- Record the expected user journey, visual hierarchy, accessibility, loading/error/empty/offline states, security/privacy controls and performance expectations.
+- Compare the current FYNX implementation with those patterns; identify gaps and implement only improvements within the agreed scope.
+- Read the relevant feature specification and prior decisions first. Do not ask the owner to re-design or re-explain an already documented feature.
+- For media-led features, verify real media rendering, persistence, lifecycle, playback/animation behavior and the action triggered by tapping. A text-only fixture is never proof of a media feature.
+- Document new decisions and acceptance criteria in the repository before or alongside implementation, then update the feature handoff and workstream register.
+- Do not claim "industry standard" without stating the observable behavior and evidence used to verify it.
