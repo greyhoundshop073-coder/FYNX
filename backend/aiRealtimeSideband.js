@@ -202,8 +202,11 @@ export function connectFynxRealtimeSideband({
       settledConnection = true;
       resolve({
         callId,
+        expectFinish() { requestedFinalStatus = "completed"; },
+        expectFailure() { requestedFinalStatus = "failed"; },
         finish(status = "completed") {
-          const finalization = finalize(status);
+          requestedFinalStatus = status === "completed" ? "completed" : "failed";
+          const finalization = finalize(requestedFinalStatus);
           try { socket.close(1000, "FYNX Realtime call ended"); } catch {}
           return finalization;
         },
