@@ -113,9 +113,11 @@ checks = [
      and "MessageDigest.getInstance(\"SHA-256\")" in LOCAL_CAMPAIGNS
      and "marketplace-campaign-artwork_" in LOCAL_CAMPAIGNS
      and "privateCampaignDraftsAreIsolatedBetweenSignedInAccounts" in ARTWORK_MEDIA_TEST),
-    ("Device-local drafts never enter the shared Marketplace buyer campaign feed",
+    ("Device-local drafts never enter the shared Marketplace buyer campaign feed, and uncached refresh failures preserve the last displayed campaigns",
      "FynxMarketplaceLocalCampaignStore" not in SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")]
-     and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT),
+     and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT
+     and "cached ?: return Result.failure(" in SEASONAL_CLIENT
+     and "getOrElse { return Result.failure(it) }" in SEASONAL_CLIENT),
     ("Offline drafts are explicitly labelled as drafts rather than locally published campaigns",
      'Text("Save offline draft"' in SEASONAL_ADMIN
      and 'saveOfflineDraft -> "Save offline draft"' in SEASONAL_ADMIN
