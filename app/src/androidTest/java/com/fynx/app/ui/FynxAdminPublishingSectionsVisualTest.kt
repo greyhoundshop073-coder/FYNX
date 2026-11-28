@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -107,7 +108,7 @@ class FynxAdminPublishingSectionsVisualTest {
             compose.onNodeWithText("Celebration write-up")
                 .performTextInput("A real Admin form save, stored locally with selected artwork.")
             capture("FYNX-marketplace-offline-campaign-draft.png")
-            compose.onNodeWithText("Save offline draft").performScrollTo().performClick()
+            compose.onNodeWithTag("fynx-campaign-save-button").performScrollTo().performClick()
 
             compose.waitUntil(timeoutMillis = 10_000) {
                 compose.onAllNodesWithText(
@@ -221,7 +222,7 @@ class FynxAdminPublishingSectionsVisualTest {
         compose.onNodeWithText("Announcement").assertIsDisplayed()
         compose.onNodeWithText("Special offer").assertIsDisplayed()
         compose.onNodeWithText("Banner headline").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-campaign-save-button").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Marketplace campaigns").performScrollTo()
