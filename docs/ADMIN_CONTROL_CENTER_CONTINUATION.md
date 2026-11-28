@@ -280,3 +280,24 @@ This section supersedes the historical PR #527 / November 12 continuation pointe
 2. Preserve the current distinction between device-local offline campaign previews and server-published campaigns.
 3. Obtain a healthy configured backend and real OWNER, ADMIN and ordinary-user sessions before claiming live publishing/authorization certification.
 4. Keep PR #582 open and unmerged pending the user's approval. The canonical APK branch is unchanged.
+
+
+## 2026-11-28 — campaign behavior correction and takeover handoff
+
+This entry supersedes the historical campaign descriptions in sections 233–253 and the stale continuation/merge instructions in sections 256–283. Use the current PR code and this entry as the source of truth.
+
+- Active PR: [#582 — Owner music and Marketplace campaign publishing](https://github.com/greyhoundshop073-coder/FYNX/pull/582).
+- Working branch: `workstream4/admin-trust-support-music-20261123`.
+- Required destination: `integration/fynx-single-apk-20261013`. No second APK target is being created.
+- The Admin editor action is **Save offline draft**, not “Offline test mode” and not a local publish action.
+- Offline campaign records and copied artwork remain in app-private storage on this phone. They are listed and editable in the authorised Admin campaign manager. They are deliberately excluded from the buyer campaign feed, including on the same device.
+- Buyer banners load only server-published, in-window campaigns (or their short-lived server response cache). Local drafts cannot create public campaign records, upload media, or become buyer-visible promotions.
+- The old synthetic `local-sample-fynx-marketplace` campaign is ignored on existing installs; automatic sample seeding was removed. Do not reintroduce demo campaigns into buyer content.
+- Static artwork and GIFs can be selected, previewed and saved as local drafts. The shared upload route remains the authenticated path for campaigns intended for other users.
+- Artwork guards: static photos up to 12 MB; GIFs up to 8 MB, 1,600 px per side / 2.56 MP canvas, 60 frames, 15 seconds, and a 32-million decoded canvas-pixel budget. Frame rectangles must remain inside the GIF canvas. GIF decoding is downsampled and animation pauses when the view is not visible, detached or the window loses focus.
+- Device-local campaign storage is bounded to 20 drafts and 48 MB of copied artwork. Replacing or deleting a draft removes artwork owned by the FYNX campaign store.
+- The offline campaign instrumentation uses a unique save-button test tag, waits for the selected artwork preview to decode and become visible, verifies the buyer feed remains empty for local drafts, reopens the Admin editor and captures the offline-draft screenshot only after the saved draft is reloaded.
+- Admin evidence remains GET-only and must not perform live publishing writes. The expected emulator artifact contains the 14 named PNG captures enforced by `run_android_runtime_emulator_certification.sh`. The offline draft screenshot must depict the persisted draft, not an unsaved editor form.
+- Backend CI validates the existing authenticated Admin, media and campaign route contracts. A live production Owner/Admin upload-and-publish session is still a separate backend/auth gate; a skipped or unavailable production probe must never be described as a successful live-publish test.
+- The user has now explicitly directed this work to be finished, placed on the canonical integration branch, and closed when verified. The historical “wait for user merge approval” wording above is superseded. Merge only after latest-head CI and emulator evidence pass, then verify the post-merge canonical integration build and report the exact result.
+- Keep login behavior unchanged. Do not absorb, overwrite or restart unrelated Home, Avatar/Profile, Chat/Groups, Status, Wallet or My Shop work.
