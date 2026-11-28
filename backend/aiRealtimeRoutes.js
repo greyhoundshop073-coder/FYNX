@@ -42,7 +42,17 @@ function authenticate(req, res) {
 
 const activeRealtimeMonitors = new Map();
 
-export function registerRealtimeAssistantRoutes({ app }) {
+export function registerRealtimeAssistantRoutes({
+  app,
+  databasePoolProvider = getFynxDatabasePool,
+  createCall = createRealtimeCall,
+  hangupCall = hangupFynxRealtimeCall,
+  connectSideband = connectFynxRealtimeSideband,
+  reserveUsage = reserveFynxAiUsage,
+  settleUsage = settleFynxAiUsage,
+  attachCall = attachFynxAiRealtimeCall,
+  findActiveCall = getActiveFynxAiRealtimeCall
+}) {
   app.post("/api/assistant/realtime-session", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req, res);
     if (!userId) return;
@@ -57,11 +67,11 @@ export function registerRealtimeAssistantRoutes({ app }) {
       return res.status(400).json({ error: "valid WebRTC SDP offer is required" });
     }
 
-    const databasePool = getFynxDatabasePool();
+    const databasePool = databasePoolProvider();
     let reservation = null;
     let callId = null;
     try {
-      reservation = await reserveFynxAiUsage({
+      reservation = await reserveUsage({
         userId,
         provider: "openai",
         capability: "voice_" + mode,
@@ -69,13 +79,13 @@ export function registerRealtimeAssistantRoutes({ app }) {
         databasePool
       });
       const voice = mode === "speech" && FYNX_AI_REALTIME_VOICES.includes(requestedVoice) ? requestedVoice : undefined;
-      const realtimeCall = await createRealtimeCall(sdp, mode, voice);
+      const realtimeCall = await createCall(sdp, mode, voice);
       callId = realtimeCall.callId;
-      await attachFynxAiRealtimeCall({ reservation, callId, databasePool });
+      await attachCall({ reservation, callId, databasePool });
 
       let monitor;
       try {
-        monitor = await connectFynxRealtimeSideband({
+        monitor = await connectSideband({
           callId,
           reservation,
           model: FYNX_AI_VOICE_MODEL,
@@ -88,8 +98,8 @@ export function registerRealtimeAssistantRoutes({ app }) {
           }
         });
       } catch (monitorError) {
-        await hangupFynxRealtimeCall(callId).catch(() => {});
-        await settleFynxAiUsage({ reservation, status: "failed", databasePool }).catch(() => {});
+        await hangupCall(callId).catch(() => {});
+        await settleUsage({ reservation, status: "failed", databasePool }).catch(() => {});
         throw monitorError;
       }
 
@@ -97,8 +107,8 @@ export function registerRealtimeAssistantRoutes({ app }) {
       res.type("application/sdp").send(realtimeCall.answer);
     } catch (error) {
       if (reservation) {
-        if (callId) await hangupFynxRealtimeCall(callId).catch(() => {});
-        await settleFynxAiUsage({ reservation, status: "failed", databasePool }).catch(() => {});
+        if (callId) await hangupCall(callId).catch(() => {});
+        await settleUsage({ reservation, status: "failed", databasePool }).catch(() => {});
       }
       if (error instanceof FynxAiUsageLimitError) {
         if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
@@ -117,16 +127,16 @@ export function registerRealtimeAssistantRoutes({ app }) {
     if (!userId) return;
     const databasePool = getFynxDatabasePool();
     try {
-      const activeCall = await getActiveFynxAiRealtimeCall(userId, databasePool);
+      const activeCall = await findActiveCall(userId, databasePool);
       if (!activeCall) return res.json({ ok: true, active: false });
-      const providerResult = await hangupFynxRealtimeCall(activeCall.callId);
+      const providerResult = await hangupCall(activeCall.callId);
       const activeMonitor = activeRealtimeMonitors.get(activeCall.callId)?.monitor;
       if (activeMonitor) {
         await activeMonitor.finish("completed");
       } else {
         // A cold/serverless instance may not own the original WebSocket. Do not
         // mark usage complete without the provider usage stream that prices it.
-        await settleFynxAiUsage({
+        await settleUsage({
           reservation: activeCall,
           status: "failed",
           databasePool
