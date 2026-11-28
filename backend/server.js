@@ -26,6 +26,7 @@ import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
 import { registerCloudflareTurnRoutes } from "./cloudflareTurnRoutes.js";
 
 const { Pool } = pg;
+const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, calls: 30, general: 240 };
 export const app = express();
 export const server = http.createServer(app);
 const wss = process.env.FYNX_NEON_FUNCTION === "1" ? new WebSocketServer({ noServer: true }) : new WebSocketServer({ server, path: "/realtime" });
@@ -91,7 +92,6 @@ export function getRealtimeLocalUserIds() {
 // rate limits at the edge/load-balancer so limits remain effective across instances.
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60_000;
-const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, calls: 30, general: 240 };
 const MAX_RATE_BUCKETS = 20_000;
 const responseCache = new Map();
 const CACHE_TTL_MS = 15_000;
