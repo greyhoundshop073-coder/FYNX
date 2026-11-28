@@ -40,7 +40,7 @@ internal object FynxMarketplaceLocalCampaignStore {
         return MessageDigest.getInstance("SHA-256")
             .digest(account.toByteArray(Charsets.UTF_8))
             .take(16)
-            .joinToString("") { "%02x".format(it) }
+            .joinToString("") { "%02x".format(it.toInt() and 0xFF) }
     }
 
     private fun preferencesName(context: Context): String? =
