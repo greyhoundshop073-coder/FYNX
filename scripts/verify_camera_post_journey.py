@@ -343,7 +343,7 @@ checks = [
     ("Camera preview supports retake or cancel-edit before handoff", 'Text(if (initialMediaUri != null) "Cancel edit" else "Retake")' in camera and "fun retake()" in camera),
     ("Camera preview sends the captured asset to the composer", 'Text("Next")' in camera and 'onClick = { finishCameraMedia(toStatus = false) }' in camera and "onCaptured(finalUri, mediaType)" in camera),
     ("Captured media uses the authoritative media type resolver", "FynxMultiMediaPostClient.mediaKind(context, it)" in home),
-    ("Gallery media is deduplicated and capped at four", "uris.distinct().take(4)" in home and ".take(4)" in home),
+    ("Gallery selection preserves existing media, deduplicates new picks and enforces the four-item cap", "uris.distinct().filterNot { it in capturedUris }" in home and "selected.take(availableSlots)" in home and "val nextUris = (capturedUris + accepted).take(4)" in home and "capturedTypes = nextUris.map" in home),
     ("Combined camera and gallery media remains capped at four", "(capturedUris + uri).distinct().take(4)" in home),
     ("Composer camera returns to the same draft when cancelled", "cameraOpenedFromComposer = true" in home and "showComposer = true" in home),
     ("Publish button is locked while a post is being submitted", "enabled = !posting" in home and "posting = true" in home),
