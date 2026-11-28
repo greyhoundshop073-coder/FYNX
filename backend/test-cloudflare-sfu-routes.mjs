@@ -3,8 +3,8 @@ import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
 
 const routes = new Map();
 const app = {
-  post(path, _auth, handler) { routes.set(\`POST \${path}\`, handler); },
-  put(path, _auth, handler) { routes.set(\`PUT \${path}\`, handler); }
+  post(path, _auth, handler) { routes.set(`POST ${path}`, handler); },
+  put(path, _auth, handler) { routes.set(`PUT ${path}`, handler); }
 };
 const sessions = new Map();
 const publications = [];
@@ -66,7 +66,7 @@ const pool = {
       }
       return { rows: [], rowCount: row ? 1 : 0 };
     }
-    throw new Error(\`Unexpected SQL in SFU route test: \${sql.slice(0, 120)}\`);
+    throw new Error(`Unexpected SQL in SFU route test: ${sql.slice(0, 120)}`);
   }
 };
 
@@ -95,7 +95,7 @@ const fetchImpl = async (url, options = {}) => {
   } else if (path.endsWith("/tracks/close") && options.method === "PUT") {
     payload = { tracks: [{ mid: "0", status: "inactive" }] };
   } else {
-    throw new Error(\`Unexpected Cloudflare API request: \${options.method} \${path}\`);
+    throw new Error(`Unexpected Cloudflare API request: ${options.method} ${path}`);
   }
   return { ok: true, status: 200, async json() { return payload; } };
 };
@@ -120,8 +120,8 @@ function response() {
   };
 }
 async function invoke(method, path, { userId = "42", params = {}, body = {} } = {}) {
-  const handler = routes.get(\`\${method} \${path}\`);
-  assert.ok(handler, \`route is registered: \${method} \${path}\`);
+  const handler = routes.get(`${method} ${path}`);
+  assert.ok(handler, `route is registered: ${method} ${path}`);
   const res = response();
   await handler({ user: { sub: userId }, params, body }, res);
   return res;
