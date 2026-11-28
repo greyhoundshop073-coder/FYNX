@@ -82,6 +82,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             val safeDetail = detail?.trim()?.take(160)?.takeIf { it.isNotBlank() }
             errorMessage = safeDetail?.let { "The call could not be completed: $it" }
                 ?: "FYNX couldn't reach the call service. Check your connection and try again."
+            sfuMediaForCleanup[0]?.disconnect()
             mediaEngineForCleanup[0]?.disconnect()
             mediaConnected = false
             localVideoTrack = null
@@ -213,6 +214,26 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             onReady?.invoke()
         }
     }
+    suspend fun connectSfuOrFallback(current: FynxCallSession, sendOfferOnFailure: Boolean) {
+        val setup = runCatching { sfuMedia.connect(current.id) }
+        if (session?.id != current.id) {
+            sfuMedia.disconnect()
+            return
+        }
+        if (setup.isSuccess) {
+            mediaTransport = "sfu"
+            errorMessage = null
+            return
+        }
+        mediaTransport = "fallback"
+        val detail = setup.exceptionOrNull()?.message?.take(160)?.takeIf { it.isNotBlank() }
+        errorMessage = if (detail == null) {
+            "Cloudflare media relay is unavailable. FYNX is using direct calling."
+        } else {
+            "Cloudflare media relay is unavailable: " + detail
+        }
+        if (sendOfferOnFailure) mediaEngine.createOffer()
+    }
 
     realtimeClient = remember {
         FynxRealtimeClient(
@@ -247,23 +268,30 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                                 calls = FynxCallsStore.load(context)
                                 // Do not send the first offer until the relay configuration is applied.
                                 beginCallRelaySetup(current.id, restartOfferOwner = true) {
-                                    if (session?.id == current.id) mediaEngine.createOffer()
+                                    scope.launch { connectSfuOrFallback(current, sendOfferOnFailure = true) }
                                 }
                             }
                         }
                         "offer" -> if (session?.id == event.callId && !event.sdp.isNullOrBlank()) {
-                            session?.let { current ->
-                            if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                            mediaEngine.acceptOfferAndCreateAnswer(event.sdp)
-                            session = current.copy(state = FynxCallState.CONNECTING)
+                            val offerSdp = event.sdp
+                            val current = session
+                            if (current != null) scope.launch {
+                                if (mediaTransport == "sfu") runCatching { sfuMedia.stop() }
+                                if (session?.id == current.id) {
+                                    mediaTransport = "fallback"
+                                    if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
+                                    mediaEngine.acceptOfferAndCreateAnswer(offerSdp)
+                                    session = current.copy(state = FynxCallState.CONNECTING)
+                                }
                             }
                         }
-                        "answer" -> if (session?.id == event.callId && !event.sdp.isNullOrBlank()) mediaEngine.applyAnswer(event.sdp)
-                        "ice" -> if (session?.id == event.callId && event.candidate != null) mediaEngine.addRemoteIceCandidate(event.candidate.toWebRtcCandidate())
+                        "answer" -> if (mediaTransport == "fallback" && session?.id == event.callId && !event.sdp.isNullOrBlank()) mediaEngine.applyAnswer(event.sdp)
+                        "ice" -> if (mediaTransport == "fallback" && session?.id == event.callId && event.candidate != null) mediaEngine.addRemoteIceCandidate(event.candidate.toWebRtcCandidate())
                         "reject", "end" -> if (session?.id == event.callId) {
                             FynxCallsStore.updateStatus(context, event.callId, if (event.signalType == "reject") "Declined" else "Ended", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
+                            sfuMedia.disconnect()
+                            sfuMedia.disconnect(); mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
                         }
                         "busy" -> if (session?.id == event.callId) {
                             errorMessage = "@$targetUsername is already on another call."
@@ -345,6 +373,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             errorMessage = "You cannot call your own account."
             return
         }
+        sfuMedia.disconnect()
+        mediaTransport = "pending"
         mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
         directCallIsInitiator = true
         relaySetupComplete = false
@@ -411,6 +441,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
                 calls = FynxCallsStore.load(context)
                 errorMessage = null
+                scope.launch { connectSfuOrFallback(current, sendOfferOnFailure = false) }
             } else {
                 errorMessage = "The secure call connection is reconnecting. Your answer will retry automatically."
             }
@@ -430,6 +461,39 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         }
     }
 
+    LaunchedEffect(session?.id, mediaTransport) {
+        val activeId = session?.id ?: return@LaunchedEffect
+        if (mediaTransport != "sfu") return@LaunchedEffect
+        var waitedWithoutRemote = 0L
+        try {
+            while (session?.id == activeId && mediaTransport == "sfu") {
+                sfuMedia.syncPublications(activeId)
+                if (sfuMedia.hasRemotePublisher()) waitedWithoutRemote = 0L
+                else waitedWithoutRemote += 2_500L
+                if (waitedWithoutRemote >= 10_000L && directCallIsInitiator) {
+                    sfuMedia.stop()
+                    if (session?.id == activeId) {
+                        mediaTransport = "fallback"
+                        errorMessage = "The other device is not on the media relay. Switching to direct calling."
+                        mediaEngine.createOffer()
+                    }
+                    return@LaunchedEffect
+                }
+                delay(2_500L)
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (session?.id == activeId && mediaTransport == "sfu") {
+                runCatching { sfuMedia.stop() }
+                mediaTransport = "fallback"
+                val detail = error.message?.take(160)?.takeIf { it.isNotBlank() }
+                errorMessage = if (detail == null) "The secure media relay needs recovery."
+                    else "The secure media relay needs recovery: " + detail
+                if (directCallIsInitiator) mediaEngine.createOffer()
+            }
+        }
+    }
     LaunchedEffect(session?.id, relaySetupComplete) {
         val activeId = session?.id ?: return@LaunchedEffect
         if (!relaySetupComplete || relayRefreshSeconds <= 0L) return@LaunchedEffect
@@ -440,6 +504,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             if (session?.id != activeId) return@LaunchedEffect
             if (refreshed != null) {
                 mediaEngine.updateIceServers(refreshed.servers, restartOfferOwner = directCallIsInitiator)
+                if (mediaTransport == "sfu") {
+                    runCatching { sfuMedia.refreshIceServers(refreshed.servers) }
+                        .onFailure { errorMessage = "The secure media relay could not refresh. FYNX will retry." }
+                } else {
+                    sfuMedia.updateIceServers(refreshed.servers)
+                }
                 refreshAfter = refreshed.refreshAfterSeconds
             } else {
                 errorMessage = "Call relay refresh failed. The current connection will be kept and FYNX will retry."
