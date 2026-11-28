@@ -35,6 +35,18 @@ checks = [
         and "PASS Status Take photo opens the shared live CameraX preview in Photo mode." in runtime,
     ),
     (
+        "Status camera runtime verification honors the app rationale and Android runtime permission before expecting CameraX controls",
+        'Allow camera' in runtime and 'While using the app' in runtime
+        and 'px, py = permission' in runtime and '_, px, py = permission' not in runtime
+        and 'permission_handled = True' in runtime
+        and 'after permission handling' in runtime,
+    ),
+    (
+        "Status camera dismissal closes both the CameraX dialog and enclosing Add status hub",
+        'Close Add status' in runtime and 'for attempt in range(3)' in runtime
+        and 'CameraX/Add status dismissal did not return cleanly to Home' in runtime,
+    ),
+    (
         "Status Record video opens the shared camera in Video mode without starting a recording",
         re.search(r'tap\(\s*"Record video"\s*,\s*"video-camera-entry"\s*,\s*\("Record video"\s*,\s*"Switch front/back camera"\)\s*\)', runtime)
         and 'find_click_target(video_camera, "Record video")' in runtime
