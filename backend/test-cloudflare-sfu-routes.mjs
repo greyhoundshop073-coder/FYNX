@@ -3,6 +3,7 @@ import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
 
 const routes = new Map();
 const app = {
+  get(path, ...handlers) { routes.set(`GET ${path}`, handlers.at(-1)); },
   post(path, ...handlers) { routes.set(`POST ${path}`, handlers.at(-1)); },
   put(path, ...handlers) { routes.set(`PUT ${path}`, handlers.at(-1)); }
 };
@@ -46,6 +47,19 @@ const pool = {
       if (existing) Object.assign(existing, { mid, active: true });
       else publications.push({ call_id: callId, user_id: String(userId), session_id: sessionId, track_name: trackName, mid, active: true });
       return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes("JOIN fynx_call_sfu_publications p ON p.session_id=s.session_id")) {
+      const [callId, subscriberId] = params;
+      const grouped = new Map();
+      for (const item of publications) {
+        const session = sessions.get(item.session_id);
+        if (item.call_id !== callId || item.user_id === String(subscriberId) || !item.active ||
+            !session || session.ended_at || session.mutation_state !== "READY") continue;
+        const entry = grouped.get(item.session_id) || { session_id: item.session_id, user_id: item.user_id, track_names: [] };
+        entry.track_names.push(item.track_name);
+        grouped.set(item.session_id, entry);
+      }
+      return { rows: [...grouped.values()], rowCount: grouped.size };
     }
     if (sql.trimStart().startsWith("SELECT p.session_id,p.track_name")) {
       const [callId, publisherSessionId, subscriberId, trackNames] = params;
@@ -121,11 +135,11 @@ function response() {
     json(body) { this.body = body; return this; }
   };
 }
-async function invoke(method, path, { userId = "42", params = {}, body = {} } = {}) {
+async function invoke(method, path, { userId = "42", params = {}, body = {}, query = {} } = {}) {
   const handler = routes.get(`${method} ${path}`);
   assert.ok(handler, `route is registered: ${method} ${path}`);
   const res = response();
-  await handler({ user: { sub: userId }, params, body }, res);
+  await handler({ user: { sub: userId }, params, body, query }, res);
   return res;
 }
 
@@ -154,6 +168,19 @@ publications.push(
   { call_id: "call_liveproof_1", user_id: "77", session_id: "session-b", track_name: "camera", mid: "0", active: true },
   { call_id: "call_liveproof_1", user_id: "77", session_id: "session-b", track_name: "microphone", mid: "1", active: true }
 );
+const discovery = await invoke("GET", "/api/calls/sfu/sessions", {
+  query: { callId: "call_liveproof_1" }
+});
+assert.equal(discovery.statusCode, 200);
+assert.equal(discovery.body.publishers.length, 1);
+assert.equal(discovery.body.publishers[0].sessionId, "session-b");
+assert.equal(discovery.body.publishers[0].userId, "77");
+assert.deepEqual(new Set(discovery.body.publishers[0].trackNames), new Set(["camera", "microphone"]));
+const deniedDiscovery = await invoke("GET", "/api/calls/sfu/sessions", {
+  userId: "99", query: { callId: "call_liveproof_1" }
+});
+assert.equal(deniedDiscovery.statusCode, 403, "publication discovery must require an active call participant");
+
 const subscribe = await invoke("POST", "/api/calls/sfu/sessions/:sessionId/subscribe", {
   params: { sessionId: "session-a" },
   body: { callId: "call_liveproof_1", publisherSessionId: "session-b", trackNames: ["camera"] }

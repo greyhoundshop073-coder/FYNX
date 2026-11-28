@@ -231,6 +231,32 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
     }
   }));
 
+  // Authorized subscribers need a server-owned view of the publications in this call.
+  // Publisher identity and track names come from the database, never client input.
+  app.get("/api/calls/sfu/sessions", auth, rateLimit, route(async (req, res) => {
+    const callId = String(req.query?.callId || "").trim();
+    if (!validId(callId, 80)) return res.status(400).json({ error: "valid callId is required" });
+    if (!await getActiveCall(callId, req.user.sub)) return res.status(403).json({ error: "active call access required" });
+    const result = await pool.query(
+      `SELECT s.session_id, s.user_id, ARRAY_AGG(p.track_name ORDER BY p.track_name) AS track_names
+         FROM fynx_call_sfu_sessions s
+         JOIN fynx_call_sfu_publications p ON p.session_id=s.session_id
+        WHERE s.call_id=$1 AND s.user_id<>$2 AND s.ended_at IS NULL
+          AND s.mutation_state='READY' AND p.active=TRUE
+        GROUP BY s.session_id, s.user_id, s.created_at
+        ORDER BY s.created_at ASC`,
+      [callId, String(req.user.sub)]
+    );
+    const publishers = result.rows.map((row) => ({
+      sessionId: String(row.session_id),
+      userId: String(row.user_id),
+      trackNames: [...new Set((Array.isArray(row.track_names) ? row.track_names : [])
+        .filter((name) => name === "microphone" || name === "camera"))]
+    })).filter((publisher) => validId(publisher.sessionId) &&
+      /^\\d{1,19}$/.test(publisher.userId) && publisher.trackNames.length > 0);
+    return res.json({ publishers });
+  }));
+
   app.put("/api/calls/sfu/sessions/:sessionId/renegotiate", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId, sessionDescription } = req.body || {};
