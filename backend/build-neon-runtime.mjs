@@ -27,6 +27,8 @@ for (const [pattern, label] of [
   [/export async function dispatchRealtimeConnection/, "realtime connection adapter"],
   [/app\.post\(["']\/api\/auth\/login["']/, "existing login route"],
   [/registerDiscoveryRoutes\(\{ app, pool, auth \}\)/, "Marketplace discovery routes"],
+  [/registerCloudflareSfuRoutes\(\{ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall \}\)/, "Cloudflare SFU routes in generated Neon runtime"],
+  [/registerCloudflareTurnRoutes\(\{ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall:/, "Cloudflare TURN routes in generated Neon runtime"],
 ]) assert.match(runtime, pattern, `Neon runtime is missing ${label}`);
 
 for (const route of ["/api/social/feed", "/api/social/posts/multi", "fynxHomeCommentsBatch4b"]) {
@@ -50,6 +52,8 @@ for (const [source, pattern, label] of [
   [batch2Source, /export async function runMarketplaceBatch2RecoveryOnce/, "scheduled payment recovery"],
   [scalabilitySource, /registerBuyerWalletRoutes\(\{ app \}\)/, "single Buyer Wallet route owner"],
   [scalabilitySource, /registerBuyerWalletMarketplaceRoutes\(\{ app \}\)/, "single Marketplace Wallet route owner"],
+  [scalabilitySource, /registerRealtimeAssistantRoutes\(\{ app \}\)/, "OpenAI Realtime assistant routes"],
+  [scalabilitySource, /registerFynxAiConversationRoutes\(\{ app \}\)/, "Gemini conversation routes"],
   [functionSource, /await import\("\.\/scalability\.js"\)/, "shared Wallet route registration layer"],
   [scalabilitySource, /FYNX_NEON_FUNCTION/, "request-runtime background timer guard"]
 ]) assert.match(source, pattern, `Neon runtime is missing ${label}`);
