@@ -21,4 +21,5 @@ assert.match(engine, /fun dispose\(\) \{ close\(\); factory\.dispose\(\) \}/, "W
 assert.match(engine, /initializeWebRtcRuntime\(appContext\)[\s\S]*private companion object[\s\S]*@Synchronized[\s\S]*webRtcRuntimeInitialized/, "WebRTC native runtime must be initialized once for both voice engines");
 assert.match(panel, /readAloudEngine\.dispose\(\)/, "read-aloud engine must be disposed on screen teardown");
 assert.match(panel, /voiceEngine\.dispose\(\)/, "microphone engine must be disposed on screen teardown");
+assert.match(panel, /Icons\.Default\.ArrowBack[\s\S]*"FYNX AI"[\s\S]*Icons\.Default\.MoreVert/, "voice screen header must follow the approved back-title-options layout");
 console.log("FYNX AI lifecycle checks GREEN: short DB transactions, provider rollback, no local Google speech package, native WebRTC disposal");

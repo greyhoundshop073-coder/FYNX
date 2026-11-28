@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
@@ -1564,20 +1565,33 @@ internal fun FynxAiFullScreenVoice(
     }
     Box(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().imePadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp)
             ) {
-                Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable(onClick = onMenu)) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF292929),
+                    modifier = Modifier.align(Alignment.CenterStart).size(58.dp).clickable(onClick = onMenu)
+                ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Return to AI chat", tint = Color.White, modifier = Modifier.size(27.dp))
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Return to AI chat", tint = Color.White, modifier = Modifier.size(27.dp))
                     }
                 }
-                Box {
-                    Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable { showSettings = true }) {
+                Text(
+                    "FYNX AI",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(Modifier.align(Alignment.CenterEnd)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF292929),
+                        modifier = Modifier.size(58.dp).clickable { showSettings = true }
+                    ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Tune, contentDescription = "Voice settings", tint = Color.White, modifier = Modifier.size(27.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = "FYNX AI voice settings", tint = Color.White, modifier = Modifier.size(27.dp))
                         }
                     }
                     DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
