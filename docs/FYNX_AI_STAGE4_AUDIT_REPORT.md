@@ -7,6 +7,21 @@
 **PR:** #611 — https://github.com/greyhoundshop073-coder/FYNX/pull/611 (open, unmerged)  
 **Tested code commit:** 8856ea4584c0437298082be1353796b2e16ea50d  
 **Stage status:** CONDITIONAL — BLOCKED
+ 
+## Current verification update — 28 November 2026
+
+This update supersedes the older endpoint and Realtime lifecycle notes below where they conflict.
+
+- **Canonical endpoint:** PR [#621](https://github.com/greyhoundshop073-coder/FYNX/pull/621) was merged into `integration/fynx-single-apk-20261013` at merge commit `50f42b8d97486530f218ca4f7b7096a5750a4017`. Android production/debug defaults and legacy Railway/Render migration now target the active Neon Function. Explicit custom HTTPS configuration remains supported. Exact-head Android Build, Backend CI, Chat Final Closure and Chat Group Parity all passed before merge. This is not proof that every authenticated API journey or media transfer is live-certified.
+- **Realtime call identity and lifecycle:** PR #611 now parses the provider call ID from the OpenAI response `Location` header, binds it to an authenticated PostgreSQL usage reservation, opens the server-side sideband stream before returning the SDP answer, and uses `response.done` usage events. The ledger records input/output and audio/text/cached token classes, provider/model summaries, and estimated cost. It enforces one active voice session per user, expires orphaned reservations older than two hours, rejects unsupported Realtime pricing models and refuses to treat incomplete token detail as zero-cost success.
+- **Authenticated hangup:** the backend exposes an account-scoped Realtime hangup endpoint. The Android WebRTC engine invokes it when closing the voice engine, while local media is released immediately. The Android close flag is atomic to avoid duplicate provider hangup requests. A cold serverless instance leaves the reservation pending for the instance owning the usage sideband rather than falsely settling zero usage.
+- **Regression coverage:** the feature branch adds tests for provider call-ID parsing, endpoint authorization, Realtime event aggregation/deduplication, cached token pricing, active-session conflicts, call-to-reservation binding, cross-instance hangup behavior, and single-run failure cleanup. The AI extension contract now asserts the active Neon endpoint and the new voice metering lifecycle.
+- **Exact-head CI boundary:** latest reviewed PR #611 source head is `0dd7077679e1390919a07d7f5727e3fbc391ad89`. The prior successful AI Backend CI result predates these latest Realtime lifecycle additions; no exact-head workflow result had appeared for this newest head at the time this update was written. The current Android/calls emulator run is separate and does not certify AI voice.
+- **Live-provider boundary:** the active Neon Function's environment-name inventory includes `GEMINI_API_KEY` but not `OPENAI_API_KEY`. Secret values were not read or modified. Gemini project validity/quota and an authenticated Gemini request remain unverified. OpenAI voice cannot be live-certified until the owner configures a valid server-side `OPENAI_API_KEY`. Optional user/owner monthly spending thresholds remain configurable; no owner budget amount has been assumed.
+- **Remaining certification:** exact-head PR #611 CI; authenticated Gemini conversation/attachment flow against Neon; real OpenAI Realtime WebRTC plus sideband metering/hangup on the deployed Function; Android microphone permission, reconnect, screen-close and repeated-call testing; actual screenshots from the canonical app build; and owner acceptance.
+
+The Stage 4 status remains **CONDITIONAL — BLOCKED**. Neither PR #611 source changes nor the AI feature are marked deployed or certified by this code update.
+
 
 ## 1. Executive finding
 
