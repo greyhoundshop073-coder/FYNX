@@ -267,6 +267,33 @@ checks["Cloudflare SFU clears or replaces the removed participant video surface"
     and "callbacks.onRemoteVideoTrack(owner, replacementTrack)" in remove_handler
 )
 
+# The same authenticated SFU transport serves private calls and the Marketplace
+# Live Proof flow, which is hosted by the existing Calls panel.
+checks["Private and Marketplace calls publish and subscribe through Cloudflare SFU"] = (
+    "FynxCloudflareSfuMediaEngine(" in app["calls"]
+    and "sfuMedia.connect(current.id)" in app["calls"]
+    and "sfuMedia.syncPublications(activeId)" in app["calls"]
+    and "sendCallAccept(current.id, peerId, video)" in app["calls"]
+    and "sendCallInvite(current.id, peerId, video, callListingId)" in app["calls"]
+)
+checks["Private SFU failures converge on the existing direct-call fallback"] = (
+    'val needsSfuCleanup = mediaTransport != "fallback"' in app["calls"]
+    and 'mediaTransport = "fallback"' in app["calls"]
+    and "mediaEngine.acceptOfferAndCreateAnswer(offerSdp)" in app["calls"]
+    and "waitedWithoutRemote >= 10_000L" in app["calls"]
+)
+checks["Group SFU peers switch to mesh when a remote peer sends a fallback offer"] = (
+    '"group_offer" -> {' in app["group_call"]
+    and 'mediaTransport = "fallback"' in app["group_call"]
+    and "engine.acceptOfferAndCreateAnswer(peerId, offerSdp)" in app["group_call"]
+)
+checks["TURN expiry recreates active SFU sessions using fresh credentials"] = (
+    "suspend fun refreshIceServers(servers: List<PeerConnection.IceServer>)" in app["sfu_media"]
+    and 'if (mediaTransport == "sfu")' in app["calls"]
+    and "sfuMedia.refreshIceServers(refreshed.servers)" in app["calls"]
+    and "sfuMedia.refreshIceServers(configuration.servers)" in app["group_call"]
+)
+
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(f"{'PASS' if ok else 'FAIL'}  {name}")
