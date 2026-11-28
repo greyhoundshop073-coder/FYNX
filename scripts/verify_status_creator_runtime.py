@@ -104,26 +104,58 @@ def find_click_target(xml_text: str, label: str) -> tuple[int, int] | None:
     return x, y
 
 
-def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 12.0) -> str:
+def tap(label: str, stage: str, expected: tuple[str, ...], timeout: float = 25.0) -> str:
+    """Tap a Status action, honor the app rationale and Android permission prompt, then verify CameraX."""
     latest = dump_ui(f"status-{stage}-before.xml")
     point = find_click_target(latest, label)
     if point is None:
         FAILURES.append(f"{stage}: visible clickable control '{label}' was not found")
         screenshot(f"status-{stage}-control-missing.png")
         return ""
+
     adb("shell", "input", "tap", str(point[0]), str(point[1]))
     deadline = time.monotonic() + timeout
+    permission_handled = False
+    action_replayed = False
+
     while time.monotonic() < deadline:
         time.sleep(0.45)
         latest = dump_ui(f"status-{stage}-wait.xml") or latest
+
+        # Status camera entry intentionally explains why camera access is needed
+        # before opening Android's runtime permission dialog. Accept only the
+        # explicit user-consent controls in this disposable CI emulator.
+        rationale = find_click_target(latest, "Allow camera") if "camera" in stage.lower() else None
+        system_permission = (
+            find_click_target(latest, "While using the app")
+            or find_click_target(latest, "While using app")
+            or find_click_target(latest, "Only this time")
+            or find_click_target(latest, "Allow")
+        )
+        permission = rationale or system_permission
+        if permission:
+            px, py = permission
+            adb("shell", "input", "tap", str(px), str(py))
+            permission_handled = True
+            screenshot(f"status-{stage}-permission-consent.png")
+            continue
+
         if all(find_click_target(latest, marker) is not None for marker in expected):
             screenshot(f"authenticated-status-{stage}.png")
-            (ROOT / f"authenticated-status-{stage}.xml").write_text(latest + "\n", encoding="utf-8")
+            (ROOT / f"authenticated-status-{stage}.xml").write_text(latest + "\\n", encoding="utf-8")
             return latest
-    FAILURES.append(f"{stage}: destination did not expose all required controls: {', '.join(expected)}")
+
+        # Some Android builds recreate the camera panel after the permission
+        # callback. Replay the original entry once only if it is visibly present.
+        if permission_handled and not action_replayed:
+            retry = find_click_target(latest, label)
+            if retry:
+                adb("shell", "input", "tap", str(retry[0]), str(retry[1]))
+                action_replayed = True
+
+    FAILURES.append(f"{stage}: destination did not expose all required controls after permission handling: {', '.join(expected)}")
     screenshot(f"status-{stage}-timeout.png")
     return latest
-
 
 def has_visible_label(xml_text: str, label: str) -> bool:
     if not xml_text:
@@ -151,18 +183,30 @@ def is_home(xml_text: str) -> bool:
 
 
 def return_to_home(stage: str) -> str:
-    adb("shell", "input", "keyevent", "4")
-    deadline = time.monotonic() + 12.0
+    """Dismiss CameraX and the enclosing Add status hub, then verify Home."""
     returned = ""
-    while time.monotonic() < deadline:
-        time.sleep(0.4)
-        returned = dump_ui(f"status-{stage}-return-home.xml") or returned
-        if is_home(returned):
-            return returned
-    FAILURES.append(f"{stage}: camera Back did not return cleanly to the Home surface.")
+    for attempt in range(3):
+        adb("shell", "input", "keyevent", "4")
+        deadline = time.monotonic() + 6.0
+        while time.monotonic() < deadline:
+            time.sleep(0.4)
+            returned = dump_ui(f"status-{stage}-return-home-{attempt + 1}.xml") or returned
+            if is_home(returned):
+                return returned
+
+        # CameraX is hosted in a dialog inside Add status. Back first dismisses
+        # CameraX; explicitly close the still-visible Add status hub next.
+        close_creator = find_click_target(returned, "Close Add status")
+        if close_creator:
+            adb("shell", "input", "tap", str(close_creator[0]), str(close_creator[1]))
+            time.sleep(0.6)
+            returned = dump_ui(f"status-{stage}-close-creator.xml") or returned
+            if is_home(returned):
+                return returned
+
+    FAILURES.append(f"{stage}: CameraX/Add status dismissal did not return cleanly to Home.")
     screenshot(f"status-{stage}-return-home-failed.png")
     return returned
-
 
 def main() -> int:
     report = [
