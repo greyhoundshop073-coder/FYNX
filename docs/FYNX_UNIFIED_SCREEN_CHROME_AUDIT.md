@@ -67,3 +67,20 @@ These findings are source-confirmed, but their app-shell fixes are pending the o
 
 ## Acceptance evidence required
 A successful compile alone is not completion. Final acceptance requires Android unit/lint/build results, full Android instrumentation and real screenshot/UI-hierarchy artifacts, explicit Light/Dark system-bar evidence, immediate-parent toolbar/system Back route checks, and confirmation that no protected workstream was overwritten.
+
+## Exit-control rule: Back arrow versus X
+
+A navigation destination must expose one visible exit affordance for one navigation level:
+- If the screen is a pushed/nested destination and the visible action returns to its immediate parent, use the standard Back arrow.
+- Do not show a second X/Close control in the same screen when it invokes the same callback or returns to the same destination as the Back arrow.
+- A true modal, sheet, media viewer or editor that has no Back toolbar may use one Close/X control; Android system Back and swipe dismissal (where supported) must map to the same dismissal behavior.
+- X controls that remove an attachment, clear a search query, cancel a reply, remove a selected location/music item, or dismiss a child chip are content-editing actions, not navigation exits; preserve them.
+- Do not remove distinct-level navigation. If the outer shell Back and child Back lead to different parents, collapse the outer header while the child route is active rather than deleting either route.
+
+### Source-confirmed duplicate sent for owner correction
+
+- Private Conversation, new-conversation relationship card (ConversationPanel.kt): the primary top toolbar already has a Back arrow wired to onBack; the relationship card also had an X button wired to the exact same onBack callback. This is a genuine duplicate exit affordance. A minimal remove-X request was posted to Chat/Groups owner PR #588; preserve the main Back arrow, Android Back, and all relationship actions.
+- Notifications (NotificationPanel.kt): its child header has a Back arrow while the app shell also renders a Back action for the destination. The two entry paths must be traced separately before removing one, preserving immediate-parent destinations. A coordination request was posted to PR #586.
+- Status Add Status / creator: the Add Status surface has an X close action and a parent Stories/Status shell header may still be present depending on route state. PR #603 and PR #586 were asked to coordinate the visible active-level header and preserve Android Back.
+
+Do not apply a repository-wide replacement of Close icons with Back arrows: many X icons intentionally remove media, clear a field, cancel a reply, or close a true modal where no Back toolbar exists.
