@@ -5,7 +5,7 @@
 **Audit base commit:** 50f42b8d97486530f218ca4f7b7096a5750a4017 (canonical head after PR #621)  
 **Feature branch:** feat/fynx-ai-stage4-canonical-20261128  
 **PR:** #622 — https://github.com/greyhoundshop073-coder/FYNX/pull/622 (open; exact-head CI pending)  
-**Ported implementation head:** b6657288e7673ed793f8af658f30deddbc1e4b06  
+**Ported implementation head:** tracked by the exact current head of PR #622  
 **Stage status:** CONDITIONAL — BLOCKED
  
 ## Current verification update — 28 November 2026
