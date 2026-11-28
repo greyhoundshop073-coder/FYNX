@@ -1,6 +1,7 @@
 package com.fynx.app.ui
 
 import android.Manifest
+import com.fynx.app.R
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Edit
@@ -58,6 +61,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -135,6 +143,7 @@ fun FynxAiAssistantPanel(
     var voiceConnecting by remember { mutableStateOf(false) }
     var voiceMuted by remember { mutableStateOf(false) }
     var voicePhase by remember { mutableStateOf("LISTENING") }
+    var pendingVoiceTranscript by remember { mutableStateOf<String?>(null) }
     var showVoiceScreen by remember { mutableStateOf(false) }
     var showComposerTools by remember { mutableStateOf(false) }
     var showTranslationDialog by remember { mutableStateOf(false) }
@@ -165,6 +174,10 @@ fun FynxAiAssistantPanel(
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val voicePreferences = remember(context) { context.getSharedPreferences("fynx_ai_voice_preferences", Context.MODE_PRIVATE) }
+    var selectedSpeechVoice by remember {
+        mutableStateOf(voicePreferences.getString("selected_voice", "marin") ?: "marin")
+    }
     var welcomeDisplayName by remember(currentUsername, currentUserDisplayName) {
         mutableStateOf(currentUserDisplayName.trim().takeUnless { it.isBlank() || it.equals("Your name", ignoreCase = true) }
             ?: currentUsername?.removePrefix("@")?.trim().orEmpty().ifBlank { "there" })
@@ -333,7 +346,7 @@ fun FynxAiAssistantPanel(
     }
 
 
-    fun requestReadAloud(messageId: String, text: String) {
+    fun requestReadAloud(messageId: String, text: String, voice: String = selectedSpeechVoice) {
         if (text.isBlank()) return
         stopReadAloud()
         readAloudMessageId = messageId
@@ -360,6 +373,8 @@ fun FynxAiAssistantPanel(
             val connection = readAloudEngine.connect(
                 receiveOnly = true,
                 createInitialResponse = false,
+                sessionMode = "speech",
+                speechVoice = voice,
                 onStateChanged = { state, error ->
                     if (state == FynxAiWebRtcEngine.State.FAILED) {
                         scope.launch {
@@ -640,7 +655,20 @@ fun FynxAiAssistantPanel(
         errorMessage = null
         voiceConnectionJob = scope.launch {
             try {
+                if (conversationId == null) {
+                    val created = FynxAiConversationClient.create(context)
+                    if (created.isFailure) {
+                        errorMessage = friendlyFynxAiError(
+                            created.exceptionOrNull() ?: IllegalStateException("Conversation unavailable"),
+                            "FYNX could not prepare your voice conversation. Please try again when the service is available."
+                        )
+                        return@launch
+                    }
+                    conversationId = created.getOrThrow().id
+                }
                 val result = voiceEngine.connect(
+                    createInitialResponse = false,
+                    sessionMode = "transcription",
                     onStateChanged = { state, error ->
                         voiceConnecting = state == FynxAiWebRtcEngine.State.CONNECTING
                         voiceConnected = state == FynxAiWebRtcEngine.State.CONNECTED
@@ -651,19 +679,13 @@ fun FynxAiAssistantPanel(
                     },
                     onEvent = { rawEvent ->
                         voicePhase = realtimeVoicePhase(rawEvent, voicePhase)
-                        parseRealtimeAssistantEvent(rawEvent)?.let { spoken ->
-                            appendAssistantMessage(spoken)
-                            val transcript = extractRealtimeUserTranscript(rawEvent)
-                            if (transcript != null && pendingMessageAction != null) {
-                                val normalized = transcript.trim().lowercase()
-                                    .replace(Regex("[^a-z0-9\\s]"), " ")
-                                    .replace(Regex("\\s+"), " ")
-                                    .trim()
-                                when {
-                                    normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$")) -> confirmPendingMessage()
-                                    normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$")) -> cancelPendingMessage()
-                                }
-                            }
+                        val eventType = runCatching { JSONObject(rawEvent).optString("type") }.getOrDefault("")
+                        if (eventType == "input_audio_buffer.speech_started" && readAloudMessageId != null) {
+                            // A new user turn interrupts the spoken Gemini answer.
+                            stopReadAloud()
+                        }
+                        extractRealtimeUserTranscript(rawEvent)?.let { transcript ->
+                            pendingVoiceTranscript = transcript
                         }
                     },
                     onToolResult = { name, output ->
@@ -703,7 +725,8 @@ fun FynxAiAssistantPanel(
         onDispose {
             generationJob?.cancel()
             stopReadAloud()
-            voiceEngine.close()
+            readAloudEngine.dispose()
+            voiceEngine.dispose()
         }
     }
 
@@ -811,6 +834,9 @@ fun FynxAiAssistantPanel(
                 }
                 pendingMessageAction = reply.pendingAction
                 failedPrompt = null
+                if (voiceConnected && reply.assistantMessage.text.isNotBlank()) {
+                    requestReadAloud(reply.assistantMessage.id, reply.assistantMessage.text)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -835,6 +861,25 @@ fun FynxAiAssistantPanel(
         }
         generationJob = activeJob
         activeJob.start()
+    }
+
+    LaunchedEffect(pendingVoiceTranscript, loading, creatingConversation, pendingMessageAction, voiceConnected) {
+        val transcript = pendingVoiceTranscript ?: return@LaunchedEffect
+        if (loading || creatingConversation || !voiceConnected) return@LaunchedEffect
+        pendingVoiceTranscript = null
+
+        val normalized = transcript.trim().lowercase()
+            .replace(Regex("[^a-z0-9\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        if (pendingMessageAction != null && normalized.matches(Regex("^(yes|yeah|yep|yup|sure|send|send it|yes send it|go ahead|do it)( please)?$"))) {
+            confirmPendingMessage()
+        } else if (pendingMessageAction != null && normalized.matches(Regex("^(no|nope|cancel|dont|do not|not now|stop)( please)?$"))) {
+            cancelPendingMessage()
+        } else {
+            // Spoken and typed requests use the same persisted conversation route and Gemini agent.
+            sendPrompt(transcript, true)
+        }
     }
 
     LaunchedEffect(listState) {
@@ -1338,6 +1383,16 @@ fun FynxAiAssistantPanel(
                     requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
                 }
             },
+            speechVoice = selectedSpeechVoice,
+            onSpeechVoiceSelected = { voice ->
+                selectedSpeechVoice = voice
+                voicePreferences.edit().putString("selected_voice", voice).apply()
+            },
+            onPreviewSpeechVoice = { voice ->
+                selectedSpeechVoice = voice
+                voicePreferences.edit().putString("selected_voice", voice).apply()
+                requestReadAloud("voice-preview-$voice", "Hello. I'm FYNX AI. How can I help you today?", voice)
+            },
             onMenu = {
                 showVoiceScreen = false
                 endVoiceSession()
@@ -1446,9 +1501,13 @@ internal fun FynxAiFullScreenVoice(
     onToggleMute: () -> Unit,
     onClose: () -> Unit,
     onRetry: () -> Unit,
+    speechVoice: String,
+    onSpeechVoiceSelected: (String) -> Unit,
+    onPreviewSpeechVoice: (String) -> Unit,
     onMenu: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showVoicePicker by remember { mutableStateOf(false) }
     val transition = rememberInfiniteTransition(label = "fynxVoiceOrb")
     val orbAnimation = when {
         error != null || muted -> Triple(1.0f, 1.0f, 900)
@@ -1476,25 +1535,71 @@ internal fun FynxAiFullScreenVoice(
         phase == "SPEAKING" -> "FYNX AI is speaking…"
         else -> "Listening…"
     }
-    Box(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().imePadding().navigationBarsPadding()) {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable(onClick = onMenu)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Return to AI chat", tint = Color.White, modifier = Modifier.size(27.dp))
+    if (showVoicePicker) {
+        AlertDialog(
+            onDismissRequest = { showVoicePicker = false },
+            title = { Text("FYNX AI voice") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Choose the voice FYNX uses when speaking its answers.")
+                    listOf("marin", "cedar", "coral", "ash").forEach { voice ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onSpeechVoiceSelected(voice) }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = speechVoice == voice, onClick = { onSpeechVoiceSelected(voice) })
+                            Text(voice.replaceFirstChar { it.uppercase() }, modifier = Modifier.padding(start = 8.dp))
+                        }
                     }
                 }
-                Box {
-                    Surface(shape = CircleShape, color = Color(0xFF292929), modifier = Modifier.size(58.dp).clickable { showSettings = true }) {
+            },
+            confirmButton = {
+                TextButton(onClick = { showVoicePicker = false; onPreviewSpeechVoice(speechVoice) }) {
+                    Text("Preview voice")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVoicePicker = false }) { Text("Done") }
+            }
+        )
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().imePadding().navigationBarsPadding()) {
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+            Box(
+                Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 18.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF292929),
+                    modifier = Modifier.align(Alignment.CenterStart).size(58.dp).clickable(onClick = onMenu)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Return to AI chat", tint = Color.White, modifier = Modifier.size(27.dp))
+                    }
+                }
+                Text(
+                    "FYNX AI",
+                    modifier = Modifier.align(Alignment.Center),
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(Modifier.align(Alignment.CenterEnd)) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF292929),
+                        modifier = Modifier.size(58.dp).clickable { showSettings = true }
+                    ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Tune, contentDescription = "Voice settings", tint = Color.White, modifier = Modifier.size(27.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = "FYNX AI voice settings", tint = Color.White, modifier = Modifier.size(27.dp))
                         }
                     }
                     DropdownMenu(expanded = showSettings, onDismissRequest = { showSettings = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Choose AI voice · $speechVoice") },
+                            leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                            onClick = { showSettings = false; showVoicePicker = true }
+                        )
                         DropdownMenuItem(
                             text = { Text(if (muted) "Unmute microphone" else "Mute microphone") },
                             leadingIcon = { Icon(if (muted) Icons.Default.Mic else Icons.Default.MicOff, contentDescription = null) },
@@ -1517,12 +1622,18 @@ internal fun FynxAiFullScreenVoice(
                         Box(Modifier.size(orbDiameter * 0.92f * pulse).clip(CircleShape).background(
                             Brush.verticalGradient(listOf(Color(0xFF78A6FF), Color(0xFFB9CCFF), Color(0xFFEAF1FF), Color(0xFF9DB8F5)))
                         ))
-                        Box(Modifier.size(orbDiameter * 0.92f).clip(CircleShape).background(
-                            Brush.radialGradient(listOf(Color.White.copy(alpha = .30f), Color.Transparent, Color(0xFF7399EF).copy(alpha = .10f)))
-                        ))
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("FYNX", color = Color(0xFF244FAD), fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                            Text("AI", color = Color(0xFF244FAD), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        val portraitSheet = ImageBitmap.imageResource(id = R.drawable.fynx_ai_voice_portraits)
+                        val portraitColumn = if (speechVoice == "cedar" || speechVoice == "ash") 1 else 0
+                        val portraitRow = if (speechVoice == "coral" || speechVoice == "ash") 1 else 0
+                        val tileSize = portraitSheet.width / 2
+                        Canvas(Modifier.size(orbDiameter * 0.92f).clip(CircleShape)) {
+                            drawImage(
+                                image = portraitSheet,
+                                srcOffset = IntOffset(portraitColumn * tileSize, portraitRow * tileSize),
+                                srcSize = IntSize(tileSize, tileSize),
+                                dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+                                filterQuality = FilterQuality.Medium
+                            )
                         }
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
