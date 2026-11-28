@@ -293,18 +293,32 @@ internal object FynxCampaignArtworkMedia {
         val info = inspectBytes(bytes, context.contentResolver.getType(uri))
         if (info.mimeType == "image/gif") {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val source = ImageDecoder.createSource(ByteBuffer.wrap(bytes))
-                return configureInfiniteGifLoop(ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
-                    val sourceSize = imageInfo.size
-                    val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
-                    decoder.setTargetSize(
-                        (sourceSize.width * sample).toInt().coerceAtLeast(1),
-                        (sourceSize.height * sample).toInt().coerceAtLeast(1)
-                    )
-                })
+                // Prefer a resolver-backed source for picker URIs. Some Android
+                // ImageDecoder implementations reject animated GIFs supplied as
+                // ByteBuffer even though the same bytes decode from a file/URI.
+                val decoded = runCatching {
+                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                    ImageDecoder.decodeDrawable(source) { decoder, imageInfo, _ ->
+                        val sourceSize = imageInfo.size
+                        val sample = minOf(1f, MAX_PREVIEW_DIMENSION.toFloat() / maxOf(sourceSize.width, sourceSize.height).coerceAtLeast(1))
+                        decoder.setTargetSize(
+                            (sourceSize.width * sample).toInt().coerceAtLeast(1),
+                            (sourceSize.height * sample).toInt().coerceAtLeast(1)
+                        )
+                    }
+                }.getOrNull()
+                if (decoded != null) return configureInfiniteGifLoop(decoded)
             }
+            // Bounded validation above has already checked dimensions, frame
+            // count, duration and aggregate decoded-frame budget. Keep a
+            // compatible animated fallback for URI-backed GIFs ImageDecoder
+            // cannot open on a particular Android build.
             val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
                 ?: throw IllegalArgumentException("This Android version could not decode the selected GIF.")
+            require(movie.width() in 1..2048 && movie.height() in 1..2048 &&
+                movie.width().toLong() * movie.height().toLong() <= 4_194_304L) {
+                "This GIF is too large to animate safely on this device."
+            }
             return FynxLegacyGifDrawable(movie)
         }
 
