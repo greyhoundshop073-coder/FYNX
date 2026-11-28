@@ -7,7 +7,7 @@ const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 assert.match(server, /registerCloudflareSfuRoutes\(\{[\s\S]*resolveActiveCall:/, "SFU routes must use the runtime-aware active-call authorizer");
 assert.match(server, /call\.status = "ACTIVE"/, "Railway direct calls must become SFU-eligible only after acceptance");
 assert.match(server, /fynx_realtime_group_call_participants/, "Joined group-call members must be eligible for SFU session authorization");
-assert.match(routes, /Authorization: \`Bearer \${env\.CLOUDFLARE_SFU_APP_SECRET}\`/, "Cloudflare secret must be used only for server-side API requests");
+assert.match(routes, /Authorization: `Bearer ${env\.CLOUDFLARE_SFU_APP_SECRET}`/, "Cloudflare secret must be used only for server-side API requests");
 assert.match(routes, /app\.post\("\/api\/calls\/sfu\/sessions", auth/, "SFU session creation must require FYNX authentication");
 assert.match(routes, /app\.post\("\/api\/calls\/sfu\/sessions\/:sessionId\/publish", auth/, "Publishing must require authentication");
 assert.match(routes, /app\.post\("\/api\/calls\/sfu\/sessions\/:sessionId\/subscribe", auth/, "Subscribing must require authentication");
