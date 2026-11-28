@@ -70,7 +70,7 @@ fun FynxPostMediaViewer(
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, "Close viewer", tint = Color.White) }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Back", tint = Color.White) }
                     Column(Modifier.weight(1f)) {
                         Text(post.authorDisplayName.ifBlank { post.authorUsername }, color = Color.White, style = MaterialTheme.typography.titleSmall)
                         Text("@" + post.authorUsername.removePrefix("@") + " • " + viewerRelative(post.timestamp), color = Color.White.copy(alpha = .72f), style = MaterialTheme.typography.labelSmall)
