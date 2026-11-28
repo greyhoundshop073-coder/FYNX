@@ -156,7 +156,7 @@ The active Neon Function for the existing FYNX testing branch was rechecked on 2
 
 The deployed Function's non-secret environment-variable-name inventory includes `GEMINI_API_KEY` and `JWT_SECRET`, but does not include `OPENAI_API_KEY`. Secret values were not read or disclosed. The Railway `fynx-backend-testing` service remains failed (last deployment 3 November 2026); it is not the active healthy endpoint used for this probe.
 
-Important distinction: the active Neon Function health check proves the service and database are reachable; it does not prove the Gemini key is valid, the Google project tier/quota is suitable, that the unmerged PR #611 usage-budget code is deployed, or that authenticated AI requests succeed. PR #611 remains open and unmerged. No OpenAI voice test can pass on the current Function until a valid server-side `OPENAI_API_KEY` is configured.
+Important distinctions: the active Neon Function health check proves the service and database are reachable; it does not prove the Gemini key is valid, the Google project tier/quota is suitable, that the unmerged PR #611 usage-budget code is deployed, or that authenticated AI requests succeed. PR #611 remains open and unmerged. In addition, the canonical Android `FynxBackendClient.kt` still defaults to the failed Railway testing URL, so the installed app is not yet routed to this healthy Neon Function. PR #597 contains the intended Neon URL/legacy-URL migration, but that branch is now diverged from canonical (12 commits ahead / 13 behind); reconcile and selectively port only the endpoint and directly related contract changes rather than merging its branch wholesale. This endpoint cutover is a prerequisite for authenticated Android AI tests. No OpenAI voice test can pass on the current Function until a valid server-side `OPENAI_API_KEY` is configured.
 
 Consequences:
 - The active backend health blocker is cleared for read-only service/database readiness. The authenticated Gemini/AI journey remains unverified.
@@ -169,7 +169,7 @@ Consequences:
 
 1. Complete exact-head Backend CI, Android build/test/lint and the Chat/Groups regression workflows for the latest PR #611 head.
 2. Verify the deployed Neon Function contains the required Stage 4 backend changes after PR #611 is reviewed and integrated; do not deploy an unmerged feature branch.
-3. Run authenticated Gemini text/image/conversation tests against the healthy Neon Function using an authorized test account; verify the key, quota, selected Google project tier and billing alerts.
+3. Reconcile PR #597's Neon client endpoint/default migration onto the latest canonical branch; do not merge its diverged history wholesale. Then run authenticated Gemini text/image/conversation tests against the healthy Neon Function using an authorized test account; verify the key, quota, selected Google project tier and billing alerts.
 4. Set owner-approved per-user and owner-wide daily/monthly Gemini spending values in the active existing backend environment. No monthly spend ceiling has been selected by this code change.
 5. Add and test OpenAI Realtime call-ID capture, sideband monitoring, usage token aggregation, per-user voice accounting and server-enforced duration/cost controls.
 6. Configure `OPENAI_API_KEY` only in the existing backend secret store, then run live OpenAI transcription and speech tests. Do not expose the key or switch production services as part of this source change.
