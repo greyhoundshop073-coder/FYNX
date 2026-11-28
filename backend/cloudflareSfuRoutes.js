@@ -17,9 +17,9 @@ function needsRenegotiation(result) {
   return result?.requiresImmediateRenegotiation === true || result?.sessionDescription?.type === "offer";
 }
 
-export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch, env = process.env, resolveActiveCall = null }) {
-  if (!app || !pool || typeof pool.query !== "function" || typeof auth !== "function") {
-    throw new Error("Cloudflare SFU routes require the app, shared database pool and authentication middleware.");
+export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchImpl = fetch, env = process.env, resolveActiveCall = null }) {
+  if (!app || !pool || typeof pool.query !== "function" || typeof auth !== "function" || typeof rateLimit !== "function") {
+    throw new Error("Cloudflare SFU routes require the app, shared database pool, authentication and shared rate-limit middleware.");
   }
   let schemaPromise;
   const ensureSchema = () => {
@@ -128,7 +128,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     );
   };
 
-  app.post("/api/calls/sfu/sessions", auth, route(async (req, res) => {
+  app.post("/api/calls/sfu/sessions", auth, rateLimit, route(async (req, res) => {
     const callId = req.body?.callId;
     if (!validId(callId, 80)) return res.status(400).json({ error: "valid callId is required" });
     if (!await getActiveCall(callId, req.user.sub)) return res.status(403).json({ error: "active call access required" });
@@ -142,7 +142,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     return res.status(201).json({ sessionId, mutationState: "READY" });
   }));
 
-  app.post("/api/calls/sfu/sessions/:sessionId/publish", auth, route(async (req, res) => {
+  app.post("/api/calls/sfu/sessions/:sessionId/publish", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId, sessionDescription, tracks } = req.body || {};
     if (!validId(sessionId) || !validId(callId, 80) || !validSdp(sessionDescription) || sessionDescription.type !== "offer" ||
@@ -182,7 +182,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     }
   }));
 
-  app.post("/api/calls/sfu/sessions/:sessionId/subscribe", auth, route(async (req, res) => {
+  app.post("/api/calls/sfu/sessions/:sessionId/subscribe", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId, publisherSessionId, trackNames } = req.body || {};
     if (!validId(sessionId) || !validId(publisherSessionId) || !validId(callId, 80) ||
@@ -215,7 +215,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     }
   }));
 
-  app.put("/api/calls/sfu/sessions/:sessionId/renegotiate", auth, route(async (req, res) => {
+  app.put("/api/calls/sfu/sessions/:sessionId/renegotiate", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId, sessionDescription } = req.body || {};
     if (!validId(sessionId) || !validId(callId, 80) || !validSdp(sessionDescription) || sessionDescription.type !== "answer") {
@@ -235,7 +235,7 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, fetchImpl = fetch
     }
   }));
 
-  app.post("/api/calls/sfu/sessions/:sessionId/close", auth, route(async (req, res) => {
+  app.post("/api/calls/sfu/sessions/:sessionId/close", auth, rateLimit, route(async (req, res) => {
     const { sessionId } = req.params;
     const { callId } = req.body || {};
     if (!validId(sessionId) || !validId(callId, 80)) return res.status(400).json({ error: "valid session and call IDs are required" });
