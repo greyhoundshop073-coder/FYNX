@@ -29,8 +29,8 @@ object FynxBackendClient {
     private const val KEY_BASE_URL = "base_url"
     private const val KEY_BASE_URL_EXPLICIT = "base_url_explicit"
     private const val LEGACY_ACCESS_TOKEN = "access_token"
-    private const val PRODUCTION_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
-    private const val DEBUG_TEST_BASE_URL = "https://fynx-backend-testing-testing.up.railway.app"
+    private const val PRODUCTION_BASE_URL = "https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech"
+    private const val DEBUG_TEST_BASE_URL = "https://br-floral-shape-b5mbajl5-fynxapi.compute.c-7.us-east-2.aws.neon.tech"
     private const val MAX_IDEMPOTENT_RETRIES = 2
     private const val RETRY_DELAY_MS = 750L
     private const val NETWORK_VALIDATION_WAIT_MS = 6_000L
@@ -63,10 +63,11 @@ object FynxBackendClient {
         val normalized = stored?.trimEnd('/')?.takeIf { it.isNotBlank() }
         val isDebuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-        // The canonical FYNX Android app uses the verified Railway backend.
-        // Retire only the separate Creative Studio host; do not migrate away
-        // from the active FYNX Railway service.
+        // The canonical FYNX app now uses the deployed Neon Function API.
+        // Migrate saved Railway/Render endpoints so existing installations do not
+        // keep calling an offline service after updating the app.
         val retiredBackendUrls = setOf(
+            "https://fynx-backend-testing-testing.up.railway.app",
             "https://ai-creative-studio-572v.onrender.com"
         )
         if (normalized in retiredBackendUrls) {
