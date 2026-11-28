@@ -345,7 +345,7 @@ fun FynxAiAssistantPanel(
     }
 
 
-    fun requestReadAloud(messageId: String, text: String) {
+    fun requestReadAloud(messageId: String, text: String, voice: String = selectedSpeechVoice) {
         if (text.isBlank()) return
         stopReadAloud()
         readAloudMessageId = messageId
@@ -373,7 +373,7 @@ fun FynxAiAssistantPanel(
                 receiveOnly = true,
                 createInitialResponse = false,
                 sessionMode = "speech",
-                speechVoice = selectedSpeechVoice,
+                speechVoice = voice,
                 onStateChanged = { state, error ->
                     if (state == FynxAiWebRtcEngine.State.FAILED) {
                         scope.launch {
@@ -1389,7 +1389,7 @@ fun FynxAiAssistantPanel(
             onPreviewSpeechVoice = { voice ->
                 selectedSpeechVoice = voice
                 voicePreferences.edit().putString("selected_voice", voice).apply()
-                requestReadAloud("voice-preview-$voice", "Hello. I'm FYNX AI. How can I help you today?")
+                requestReadAloud("voice-preview-$voice", "Hello. I'm FYNX AI. How can I help you today?", voice)
             },
             onMenu = {
                 showVoiceScreen = false
