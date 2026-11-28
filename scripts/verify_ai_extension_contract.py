@@ -42,7 +42,7 @@ android_workflow = read(".github/workflows/android-build.yml")
 android_build_gradle = read("app/build.gradle.kts")
 
 checks = [
-    ("FYNX voice does not package the unused Google on-device speech recognizer", "genai-speech-recognition" not in android_build_gradle),
+    ("FYNX AI uses OpenAI transcription while camera speech captions retain their required on-device recognizer", "sessionMode = \"transcription\"" in android_panel and "gpt-live-transcribe" in voice and "com.google.mlkit:genai-speech-recognition:1.0.0-alpha2" in android_build_gradle),
     ("AI conversation does not hold a database transaction across the Gemini network call", conversation.index('await db.query("COMMIT");', conversation.index("stage=\"persist_user_message\"")) < conversation.index("await runAssistantAgent({", conversation.index("stage=\"gemini_agent\"")) and conversation.index('await db.query("BEGIN");', conversation.index("stage=\"persist_assistant_reply\"")) > conversation.index("await runAssistantAgent({", conversation.index("stage=\"gemini_agent\""))),
     ("AI WebRTC factories are disposed when the Assistant screen leaves composition", "fun dispose() { close(); factory.dispose() }" in android_voice_engine and "readAloudEngine.dispose()" in android_panel and "voiceEngine.dispose()" in android_panel),
     ("FYNX AI translation is available from the existing composer tools menu", 'Text("Translate text")' in android_panel and "showTranslationDialog = true" in android_panel and "FynxAiTranslation.buildPrompt(translationSourceText, translationTargetLanguage)" in android_panel),

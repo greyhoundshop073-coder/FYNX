@@ -13,7 +13,9 @@ const assistantCommit = route.indexOf('await db.query("COMMIT");', assistantBegi
 assert.ok(userCommit >= 0 && geminiCall > userCommit, "user turn must commit before Gemini network work");
 assert.ok(assistantBegin > geminiCall && assistantCommit > assistantBegin, "assistant persistence must use a separate short transaction");
 assert.match(route, /DELETE FROM ai_messages WHERE id=\$1 AND user_id=\$2/, "failed Gemini turns must roll back their persisted user message");
-assert.doesNotMatch(build, /genai-speech-recognition/, "Google on-device GenAI speech recognition must not be packaged");
+assert.match(build, /com\.google\.mlkit:genai-speech-recognition:1\.0\.0-alpha2/, "camera speech captions still require the on-device recognizer");
+assert.doesNotMatch(panel, /GenAiSpeechRecognizer|com\.google\.mlkit\.genai\.speechrecognition/, "FYNX AI must not use Google on-device speech recognition");
+assert.match(panel, /sessionMode = "transcription"/, "FYNX AI microphone must use the OpenAI transcription session");
 assert.doesNotMatch(route, /OPENAI_API_KEY|OPENAI_MODEL/, "Gemini conversation route must not retain unused OpenAI assistant configuration");
 assert.match(engine, /fun dispose\(\) \{ close\(\); factory\.dispose\(\) \}/, "WebRTC factory must expose final native disposal");
 assert.match(engine, /initializeWebRtcRuntime\(appContext\)[\s\S]*private companion object[\s\S]*@Synchronized[\s\S]*webRtcRuntimeInitialized/, "WebRTC native runtime must be initialized once for both voice engines");
