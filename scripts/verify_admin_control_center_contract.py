@@ -13,6 +13,12 @@ ADVERTISING = ROOT / "backend/marketplaceAdvertising.js"
 SOCIAL = ROOT / "backend/socialRoutes.js"
 GROUPS = ROOT / "backend/groupRoutes.js"
 MARKETPLACE_CHECKOUT = ROOT / "backend/marketplaceCheckout.js"
+LOCAL_CAMPAIGN_STORE = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt"
+LOCAL_CAMPAIGN_CLIENT = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionClient.kt"
+LOCAL_CAMPAIGN_ADMIN = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt"
+MARKETPLACE_BANNER = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt"
+MARKETPLACE_PANEL = ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePanel.kt"
+SAMPLE_BANNER_ARTWORK = ROOT / "app/src/main/res/drawable-nodpi/fynx_marketplace_showcase.webp"
 if not SOURCE.is_file():
     sys.exit(f"Missing Admin Control Center source: {SOURCE}")
 source = SOURCE.read_text(encoding="utf-8")
@@ -27,12 +33,32 @@ marketplace_checkout = MARKETPLACE_CHECKOUT.read_text(encoding="utf-8") if MARKE
 def require(condition: bool, message: str) -> None:
     if not condition:
         sys.exit(f"ADMIN_CONTROL_CENTER_CONTRACT=FAIL: {message}")
+require('if (activeSection == "Music Library" && d.role == "OWNER")' in source and
+        'add("Music Library")' in source,
+        "the Music Library must have a dedicated Owner-only Admin section")
+campaign_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8") if LOCAL_CAMPAIGN_ADMIN.is_file() else ""
+require('if (activeSection == "Marketplace")' in source and
+        "FynxMarketplaceSeasonalPromotionAdminPanel()" in source and
+        'Text("Marketplace campaigns"' in campaign_admin_source and
+        "Marketplace banner campaigns" not in source,
+        "Marketplace campaign manager must have one clear title inside the Marketplace section")
+visual_test = ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt"
+require(visual_test.is_file(), "Admin publishing section emulator screenshot tests are missing")
+visual = visual_test.read_text(encoding="utf-8")
+require("FynxTheme(accent = FynxAccent.Blue, darkMode = false)" in visual and "MaterialTheme {" not in visual,
+        "Owner/Admin and offline banner runtime screenshots must use the approved FYNX Azure theme")
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-campaign-draft.png"):
+    require(screenshot in visual, f"Admin visual evidence test is missing {screenshot}")
+require('"GET"' in visual and "requestExecutorForTests" in visual,
+        "Admin screenshot fixtures must remain GET-only and must not perform publishing mutations")
+require('check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty())' in visual,
+        "Admin emulator fixture must assert that the Owner-only Music Library tab is hidden from ADMIN")
 
 require("fun FynxAdminControlCenterPanel()" in source, "control center composable is missing")
 require("FynxAdminClient.dashboard(context)" in source, "role must be fetched from the server")
 require("ensureTrustSafetySchema(routePool)" in backend and "openReports:counts[1]+counts[2]" in backend,
         "Overview open-report total must combine the account-report and content-moderation tables")
-require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
+require("countRows('fynx_admin_activity',\"action IN ('REPORT_REVIEWED','CONTENT_REPORT_REVIEW','APPEAL_DECIDED','ACCOUNT_STATUS_CHANGED') AND created_at >= NOW()-INTERVAL '24 hours'\")" in backend and
         "safetyActions24h:counts[4]" in backend and "safetyActions24h" in client and "counts.optInt(\"safetyActions24h\")" in client,
         "24-hour safety dashboard metric must count real recorded administrative safety decisions")
 require('d.role == "OWNER" || d.role == "ADMIN"' in source, "owner/admin dashboard gate is missing")
@@ -73,8 +99,8 @@ require("confirmationAction = null" in source,
         "confirmation must be cleared when dismissed or accepted")
 require("fun FynxAnnouncementsPanel(ownerAccess: Boolean = false)" in source,
         "existing owner announcement route parameter must remain compatible")
-require('if (activeSection == "Overview" && d.role == "OWNER")' in source,
-        "music administration must be visible only to the verified owner")
+require('if (activeSection == "Music Library" && d.role == "OWNER")' in source,
+        "music administration must be visible only to the verified owner in its dedicated section")
 require('"/api/admin/accounts/${encode(userId)}/status"' in client,
         "account status client must call the backend status route")
 require("app.patch('/api/admin/accounts/:userId/status'" in backend,
@@ -97,6 +123,14 @@ require("activityHasMore" in source and "Text(\"Previous\")" in source and "Text
         "activity history is missing bounded previous/next pagination")
 require("OFFSET $4" in backend and "limit+1" in backend and "Math.min(10000" in backend,
         "activity history API must use bounded database pagination")
+activity_route = backend[backend.index("app.get('/api/admin/activity'"):backend.index("app.get('/api/admin/revenue'")]
+require("POSITION(LOWER($1) IN LOWER(COALESCE(u.display_name,'')))>0" in activity_route,
+        "activity search must include actor display names as promised by the UI")
+require("res.set('Cache-Control','private, no-store')" in activity_route and "a.metadata" not in activity_route and "metadata:a.metadata" not in activity_route,
+        "activity audit responses must be private/non-cacheable and must not expose unused raw metadata")
+activity_db_test = (ROOT / "backend/test-admin-announcements-db.mjs").read_text(encoding="utf-8")
+require('q: "Admin Two"' in activity_db_test and 'Object.hasOwn(activityByDisplayName.body.activities[0], "metadata")' in activity_db_test and 'activitySecondPage' in activity_db_test,
+        "activity history needs PostgreSQL coverage for display-name search, metadata minimization and stable paging")
 require("REPORT_REVIEWED" in backend and "APPEAL_DECIDED" in backend, "safety review actions are not audited")
 require("if(actorRole!=='OWNER')return res.status(403)" in backend and "req.fynxAdminRole=actorRole" in backend,
         "admin roster and role changes must verify and record the true OWNER actor")
@@ -235,10 +269,13 @@ require(advertising.count("pg_advisory_xact_lock(hashtext($1))") >= 3 and
         "resuming a paused campaign must also enforce active campaign schedule overlap protection")
 panel = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8")
 banner = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionalBanner.kt").read_text(encoding="utf-8")
-require('Switch(checked = destinationLinkEnabled' in panel and 'destinationType = "NONE"' in panel and
-        'destination_type IN (\'NONE\', \'MARKETPLACE\', \'CATEGORY\', \'PRODUCT\', \'SHOP\')' in advertising and
-        'slide.destinationType == "NONE" -> Unit' in banner and 'if (slide.destinationType != "NONE") Button(' in banner,
-        "campaign destination switch must hide the CTA and suppress navigation when disabled, while preserving enabled destinations")
+require('Switch(checked = destinationLinkEnabled' in panel and
+        'destinationType = "NONE"' in panel and
+        "destination_type IN ('NONE', 'MARKETPLACE', 'CATEGORY', 'PRODUCT', 'SHOP')" in advertising and
+        'slide.destinationType == "NONE" -> Unit' in banner and
+        'val hasValidAction = slide.listing != null' in banner and 'if (hasValidAction) Button(' in banner and
+        'else -> Unit // Invalid or unknown campaign destinations must never fall back to the generic feed.' in banner,
+        "campaign destination switch must hide the CTA and suppress navigation when disabled, and invalid targets must fail closed")
 require("OffsetDateTime.parse(value.trim()).toInstant()" in (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceSeasonalPromotionAdminPanel.kt").read_text(encoding="utf-8"),
         "campaign editing must parse fractional-second UTC timestamps and WAT offsets without shifting their time")
 require("recordMusicAdminActivity" in social and "CREATE TABLE IF NOT EXISTS fynx_admin_activity" in social,
@@ -274,17 +311,118 @@ require("MAX_POSTGRES_BIGINT" in postgres_ids and "export function isPositivePos
         "announcement image IDs must use the shared positive PostgreSQL BIGINT validator before database access")
 
 # The Admin PR must not inherit Marketplace/Wallet visual failures when its live
-# OWNER/ADMIN backend is unavailable; instrumentation remains blocking and the
-# Admin runtime limitation must be explicit rather than reported as certified.
+# Offline role-fixture UI remains testable without the backend; live publishing
+# must stay clearly unverified when no healthy authenticated backend is present.
 workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
 runtime_runner = (ROOT / "scripts/run_android_runtime_certification.sh").read_text(encoding="utf-8")
 require("FYNX_ADMIN_VISUALS_ONLY" in workflow and "admin/control-center-complete-20261112" in workflow,
         "Admin PR must select its own runtime certification scope")
+emulator_workflow = (ROOT / ".github/workflows/android-build.yml").read_text(encoding="utf-8")
+emulator_runner = (ROOT / "scripts/run_android_runtime_emulator_certification.sh").read_text(encoding="utf-8")
+admin_branch = "workstream4/admin-trust-support-music-20261123"
+emulator_step_start = emulator_workflow.index("- name: Run Android instrumentation tests and capture the real FYNX UI")
+emulator_step_end = emulator_workflow.index("timeout-minutes:", emulator_step_start)
+emulator_step = emulator_workflow[emulator_step_start:emulator_step_end]
+require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in emulator_step,
+        "Admin PR must actually select the Android emulator/instrumentation step")
+kvm_step_start = emulator_workflow.index("- name: Enable KVM permissions for Android emulator")
+kvm_step_end = emulator_workflow.index("run: |", kvm_step_start)
+kvm_step = emulator_workflow[kvm_step_start:kvm_step_end]
+require("github.event.pull_request.head.ref == 'workstream4/admin-trust-support-music-20261123'" in kvm_step,
+        "Admin PR must select the KVM permission setup before starting the hardware-accelerated emulator")
+for screenshot in ("FYNX-admin-owner-music-library.png", "FYNX-admin-owner-marketplace-campaigns.png", "FYNX-admin-admin-marketplace-campaigns.png", "FYNX-marketplace-offline-campaign-draft.png"):
+    require(screenshot in emulator_runner, f"emulator runner must require collection of {screenshot}")
+require("ADMIN_SCREENSHOT_EVIDENCE=GREEN" in emulator_runner and "missing_admin_screenshots" in emulator_runner,
+        "Admin emulator certification must fail when any required screenshot is absent")
+require("printf '  - `%s`\\n' \"$screenshot\"" in emulator_runner and 'echo "  - `$screenshot`"' not in emulator_runner,
+        "Admin screenshot evidence manifest must print literal filenames rather than execute backtick command substitutions")
+chat_final_workflow = (ROOT / ".github/workflows/fynx-chat-final-closure.yml").read_text(encoding="utf-8")
+chat_parity_workflow = (ROOT / ".github/workflows/fynx-chat-group-parity-layout.yml").read_text(encoding="utf-8")
+require(admin_branch not in chat_final_workflow and admin_branch not in chat_parity_workflow,
+        "Admin branch must not create unrelated Chat workflow push triggers")
 require('if [ "${FYNX_ADMIN_VISUALS_ONLY:-0}" = "1" ]; then' in runtime_runner and
         "FYNX-admin-runtime-certification.md" in runtime_runner and
-        "ADMIN_RUNTIME_BLOCKED" in runtime_runner and
+        "LIVE_BACKEND_PUBLISHING_NOT_TESTED" in runtime_runner and
         'if [ "${TEST_EXIT}" -ne 0 ]; then' in runtime_runner,
-        "Admin runtime must report backend/auth blockage honestly while keeping Android instrumentation failures blocking")
+        "Admin runtime must separate offline role-fixture UI from untested live publishing while keeping Android instrumentation failures blocking")
+
+
+require(LOCAL_CAMPAIGN_STORE.is_file(), "private device-only Marketplace campaign draft storage is present")
+artwork_media_file = ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMedia.kt"
+require(artwork_media_file.is_file(), "bounded local campaign photo/GIF preview and validation are present")
+local_store_source = LOCAL_CAMPAIGN_STORE.read_text(encoding="utf-8")
+local_admin_source = LOCAL_CAMPAIGN_ADMIN.read_text(encoding="utf-8")
+local_client_source = LOCAL_CAMPAIGN_CLIENT.read_text(encoding="utf-8")
+banner_source = MARKETPLACE_BANNER.read_text(encoding="utf-8")
+marketplace_source = MARKETPLACE_PANEL.read_text(encoding="utf-8")
+artwork_media_source = artwork_media_file.read_text(encoding="utf-8")
+remote_media_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+messaging_source = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+storage_source = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
+server_source = (ROOT / "backend/server.js").read_text(encoding="utf-8")
+
+require("PaddingValues(horizontal = 8.dp, vertical = 8.dp)" in local_admin_source and
+        "PaddingValues(horizontal = 4.dp, vertical = 8.dp)" in local_admin_source and
+        "style = MaterialTheme.typography.labelSmall" in local_admin_source,
+        "campaign type and destination buttons must keep their full labels visible on narrow phone widths")
+require("marketplace-campaign-artwork" in local_store_source and "filesDir" in local_store_source,
+        "offline campaign artwork must be copied into app-private storage without a network request")
+require("MAX_ARTWORK_BYTES" in local_store_source and "MAX_CAMPAIGNS" in local_store_source and
+        "MAX_TOTAL_ARTWORK_BYTES" in local_store_source,
+        "offline campaign drafts and local artwork storage must have explicit limits")
+require("FynxCampaignArtworkMedia.inspectUri(appContext, source)" in local_store_source and
+        '"image/gif" -> "gif"' in local_store_source and
+        "FynxCampaignArtworkMedia.inspectFile(destination)" in local_store_source,
+        "offline GIF drafts must retain their original GIF format and be verified after copying")
+require('"Save offline draft"' in local_admin_source and
+        'saveOfflineDraft -> "Save offline draft"' in local_admin_source and
+        '"OFFLINE DRAFT · THIS DEVICE"' in local_admin_source and
+        '"Offline test mode"' not in local_admin_source and
+        '"Publish on this phone"' not in local_admin_source,
+        "device-only campaigns must be labelled as private offline drafts, never as globally published campaigns")
+require("FynxCampaignArtworkPreview(artworkUri!!" in local_admin_source and
+        "FynxCampaignArtworkPreview(Uri.parse(localArtworkUri)" in local_admin_source and
+        "FYNX campaign artwork preview" in artwork_media_source,
+        "Owner/Admin campaign editor must show an actual offline photo/GIF preview after selection and save")
+require("MAX_GIF_BYTES = 8 * 1024 * 1024" in artwork_media_source and
+        "MAX_GIF_DIMENSION = 1600" in artwork_media_source and
+        "MAX_GIF_PIXELS" in artwork_media_source and
+        "MAX_GIF_FRAMES = 60" in artwork_media_source and
+        "MAX_GIF_DURATION_MS = 15_000L" in artwork_media_source,
+        "animated GIFs must have explicit byte, dimension, pixel, frame-count and duration limits")
+require("Movie.decodeByteArray" in artwork_media_source and
+        "ImageDecoder.decodeDrawable" in artwork_media_source and
+        "FynxCampaignArtworkImageView" in artwork_media_source and
+        "getGlobalVisibleRect(rect)" in artwork_media_source,
+        "animated GIF preview must work across supported Android versions and pause outside the visible viewport")
+require("FynxCampaignArtworkMedia.inspectUri(context, uri)" in local_client_source and
+        'detectedMimeType == "image/gif"' in messaging_source and
+        "readMediaBytes(context, uri) to detectedMimeType" in messaging_source,
+        "published GIF uploads must validate the real file and preserve original animated bytes")
+require("image\\/(jpeg|png|webp|gif)" in storage_source and
+        "image" in server_source and "gif" in server_source,
+        "the existing signed media upload service must accept animated GIF files")
+buyer_load_start = local_client_source.index("suspend fun load(context:")
+buyer_load_end = local_client_source.index("suspend fun listForAdmin", buyer_load_start)
+buyer_load = local_client_source[buyer_load_start:buyer_load_end]
+require("FynxMarketplaceLocalCampaignStore" not in buyer_load and
+        "Result.success(remote.distinctBy { it.id }" in buyer_load,
+        "device-only drafts must never be returned by the shared Marketplace buyer campaign feed")
+require("FynxMarketplaceLocalCampaignStore" not in marketplace_source and
+        "localSeasonalCampaigns" not in marketplace_source,
+        "Marketplace buyer carousel must not observe or merge private Owner/Admin draft records")
+require("FynxMarketplaceLocalCampaignStore" in local_admin_source and
+        "FynxMarketplaceLocalCampaignStore.all(context)" in local_admin_source,
+        "Owner/Admin campaign editor must retain access to private drafts while offline")
+require("ensureSampleCampaign" not in local_store_source and
+        'if (id == "local-sample-fynx-marketplace") continue' in local_store_source,
+        "synthetic sample campaign must not be seeded or shown as a real Marketplace promotion")
+require("FynxCampaignArtworkMedia.isGifFile(target)" in remote_media_source and
+        "FynxCampaignArtworkMedia.decodeGifFile(target)" in remote_media_source,
+        "remote Marketplace media must detect and render cached GIFs even when cache MIME metadata is absent")
+require("MAX_CAMPAIGNS = 20" in local_store_source and
+        "seasonalPromotions.take(20).forEach" in banner_source,
+        "campaign draft storage and the Marketplace carousel must enforce an explicit finite campaign limit")
 
 print("ADMIN_CONTROL_CENTER_CONTRACT=GREEN")
 print(f"CONFIRMED_SENSITIVE_ACTION_FLOWS={confirmations}")

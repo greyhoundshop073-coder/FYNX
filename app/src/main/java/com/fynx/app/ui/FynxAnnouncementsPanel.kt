@@ -5,7 +5,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -40,28 +39,6 @@ fun FynxAnnouncementsPanel(ownerAccess: Boolean = false) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Card(
-            Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = FynxDesign.AzureBlue)
-        ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = RoundedCornerShape(14.dp), color = androidx.compose.ui.graphics.Color.White.copy(alpha = .18f)) {
-                        Icon(androidx.compose.material.icons.Icons.Default.Campaign, contentDescription = null,
-                            tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.padding(10.dp).size(26.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Official FYNX Announcements", style = MaterialTheme.typography.headlineSmall,
-                            color = androidx.compose.ui.graphics.Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                        Text("Official news from the FYNX team", color = androidx.compose.ui.graphics.Color.White.copy(alpha = .88f))
-                    }
-                }
-                Text("Product news, service notices and community updates—all in one trusted place.",
-                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = .94f), style = MaterialTheme.typography.bodyMedium)
-            }
-        }
         if (ownerAccess) {
             Card(
                 Modifier.fillMaxWidth(),
@@ -413,9 +390,22 @@ fun FynxAdminControlCenterPanel() {
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("Open appeals", d.openAppeals); StatCard("Safety actions · 24h", d.safetyActions24h) }
             Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity").forEach { section ->
-                    FilterChip(selected = activeSection == section, onClick = { activeSection = section }, label = { Text(section) })
+            val adminSections = buildList {
+                addAll(listOf("Overview", "Safety", "Marketplace", "People", "Announcements", "Activity"))
+                if (d.role == "OWNER") add("Music Library")
+            }
+            // A two-column grid keeps every section visible and reachable on narrow phones.
+            adminSections.chunked(2).forEach { sectionRow ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    sectionRow.forEach { section ->
+                        FilterChip(
+                            selected = activeSection == section,
+                            onClick = { activeSection = section },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(section, maxLines = 1) }
+                        )
+                    }
+                    if (sectionRow.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -491,16 +481,12 @@ fun FynxAdminControlCenterPanel() {
                 Spacer(Modifier.height(8.dp))
                 FynxSupportHubPanel(staffOnly = true)
             }
-            if (activeSection == "Overview" && d.role == "OWNER") {
-                Spacer(Modifier.height(20.dp))
-                Text("Music Library", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
+            if (activeSection == "Music Library" && d.role == "OWNER") {
+                Spacer(Modifier.height(12.dp))
+                Text("Official FYNX Music Catalogue", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Text("Add audio, publish tracks and manage the official catalogue. Music publishing remains restricted to the verified Owner account.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
                 FynxMusicAdminPanel()
-            }
-            if (activeSection == "Overview" && (d.role == "OWNER" || d.role == "ADMIN")) {
-                Spacer(Modifier.height(20.dp))
-                FynxMarketplaceSeasonalPromotionAdminPanel()
-                Spacer(Modifier.height(20.dp))
             }
             if (activeSection == "Safety") {
                 Text("Reported accounts", style = MaterialTheme.typography.titleMedium)
@@ -713,7 +699,9 @@ fun FynxAdminControlCenterPanel() {
                 }
             }
             if (activeSection == "Marketplace") {
-            Spacer(Modifier.height(20.dp)); Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FynxMarketplaceSeasonalPromotionAdminPanel()
+                Spacer(Modifier.height(20.dp))
+            Text("Marketplace protection cases", style = MaterialTheme.typography.titleMedium); Spacer(Modifier.height(6.dp)); Text("Review open buyer/seller disputes before money is released or refunded.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             if (protectionLoading) CircularProgressIndicator() else if (protectionError != null) {
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text(protectionError!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { refreshProtection++ }) { Text("Retry") } } }

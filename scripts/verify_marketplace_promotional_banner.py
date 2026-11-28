@@ -15,6 +15,15 @@ REPUTATION = (ROOT / "backend/marketplaceReputation.js").read_text(encoding="utf
 FEED_CACHE = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceFeedCache.kt").read_text(encoding="utf-8")
 MARKETPLACE_RELOAD = PANEL[PANEL.index("    fun reload()"):PANEL.index("    fun loadMoreListings()")]
 PROMOTION_MODELS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplacePromotionModels.kt").read_text(encoding="utf-8")
+ARTWORK_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxCampaignArtworkMedia.kt").read_text(encoding="utf-8")
+LOCAL_CAMPAIGNS = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxMarketplaceLocalCampaignStore.kt").read_text(encoding="utf-8")
+REMOTE_MEDIA = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxRemoteMedia.kt").read_text(encoding="utf-8")
+GIF_FILE_DECODER = ARTWORK_MEDIA[ARTWORK_MEDIA.index("    fun decodeGifFile(file: File)"):ARTWORK_MEDIA.index("    fun decodePreview(context: Context, uri: Uri)")]
+ARTWORK_MEDIA_TEST = (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxCampaignArtworkMediaTest.kt").read_text(encoding="utf-8")
+PRODUCT_LINK_HANDLER = PANEL[PANEL.index("onOpenProduct ="):PANEL.index("onOpenCategory =", PANEL.index("onOpenProduct ="))]
+PRODUCTION_MESSAGING = (ROOT / "app/src/main/java/com/fynx/app/ui/FynxProductionMessaging.kt").read_text(encoding="utf-8")
+MEDIA_STORAGE = (ROOT / "backend/mediaStorage.js").read_text(encoding="utf-8")
+BACKEND_SERVER = (ROOT / "backend/server.js").read_text(encoding="utf-8")
 
 checks = [
     ("Marketplace home uses the new full-width promotional banner", "MarketplacePromotionalBanner(" in PANEL and "weeklySeller = weeklySeller" in PANEL),
@@ -30,7 +39,7 @@ checks = [
     ("weekly winner product is fetched from the exact canonical listing before display", "loadExactMarketplaceListing(context, winner.featuredListingId)" in PANEL and "weeklySellerListing = exact" in PANEL),
     ("banner uses a full-width fixed-height photographic slide", "Modifier.width(width).height(MARKETPLACE_PROMO_BANNER_HEIGHT_DP.dp)" in BANNER and "MARKETPLACE_PROMO_BANNER_HEIGHT_DP = 224" in BANNER),
     ("banner uses real FYNX media with a crop fit", "FynxRemoteMedia(" in BANNER and "contentScale = ContentScale.Crop" in BANNER),
-    ("banner rotates automatically on a timer and supports manual horizontal swipes", "MARKETPLACE_PROMO_ROTATION_MS = 6_500L" in BANNER and "LaunchedEffect(slides.map { it.key })" in BANNER and "delay(MARKETPLACE_PROMO_ROTATION_MS)" in BANNER and "animateScrollToItem(next)" in BANNER and "userScrollEnabled = true" in BANNER),
+    ("banner rotates automatically on a timer and supports manual horizontal swipes", "MARKETPLACE_PROMO_ROTATION_MS = 6_500L" in BANNER and "LaunchedEffect(slides.map { it.key }, autoRotate)" in BANNER and "if (autoRotate && slides.size > 1)" in BANNER and "delay(MARKETPLACE_PROMO_ROTATION_MS)" in BANNER and "animateScrollToItem(next)" in BANNER and "userScrollEnabled = true" in BANNER),
     ("banner remains a normal vertical Marketplace feed item while listings load and after loading", 'item(key = "marketplace-loading-hero")' in PANEL and 'item(key = "marketplace-hero")' in PANEL and "loading && listings.isEmpty() -> LazyColumn(" in PANEL and "MarketplacePromotionalBanner(" in PANEL),
     ("empty Marketplace catalogue still displays the promotional banner above its empty state", 'item(key = "marketplace-empty-hero")' in PANEL and 'item(key = "marketplace-empty-state")' in PANEL and 'listings.isEmpty() -> LazyColumn(' in PANEL and "No products yet" in PANEL),
     ("promotional banner does not use sticky or overlay placement over product cards", "stickyHeader" not in PANEL and "absoluteOffset(" not in BANNER and "offset(" not in BANNER and "Column(modifier.fillMaxWidth()" in BANNER),
@@ -87,6 +96,121 @@ checks = [
     ("Seller Center inventory state is scoped to the signed-in seller account", "remember(sellerAccountKey) { mutableStateOf(emptyList<FynxMarketplaceClient.Listing>()) }" in SELLER_CENTER and "LaunchedEffect(sellerAccountKey) { refresh() }" in SELLER_CENTER),
     ("Seller Center keeps previously loaded inventory visible during refresh failures", "Previously loaded listings are shown" in SELLER_CENTER and "if (loading && listings.isEmpty() && archivedListings.isEmpty())" in SELLER_CENTER and "Refreshing your inventory…" in SELLER_CENTER),
     ("Seller Center retains same-account shop profile details during transient refresh errors", "Previously saved details are still shown" in SELLER_CENTER and "Keep this account's last confirmed shop details visible" in SELLER_CENTER),
+
+    ("production calendar celebrations stay enabled while isolated Marketplace fixtures exclude date-driven slides", "includeCalendarCelebrations: Boolean = true" in BANNER and "if (includeCalendarCelebrations) marketplaceCelebrationFor(localDate) else null" in BANNER and PANEL.count("includeCalendarCelebrations = testOnlyListings == null") >= 4 and "includeCalendarCelebrations = false" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceIsolatedScenarioComposeTest.kt").read_text(encoding="utf-8")),
+
+    ("Owner/Admin campaign editor previews the selected local image or GIF without needing a media URL",
+     "FynxCampaignArtworkPreview(artworkUri!!" in SEASONAL_ADMIN
+     and "FynxCampaignArtworkPreview(Uri.parse(localArtworkUri)" in SEASONAL_ADMIN
+     and "FYNX campaign artwork preview" in ARTWORK_MEDIA),
+    ("Offline campaign artwork is copied into app-private storage with GIF files retaining a .gif extension and failed unattached copies can be removed",
+     "FynxCampaignArtworkMedia.inspectUri(appContext, source)" in LOCAL_CAMPAIGNS
+     and '"image/gif" -> "gif"' in LOCAL_CAMPAIGNS
+     and "FynxCampaignArtworkMedia.inspectFile(destination)" in LOCAL_CAMPAIGNS
+     and "discardUnattachedArtwork" in LOCAL_CAMPAIGNS
+     and "discardUnattachedArtwork" in SEASONAL_ADMIN),
+
+    ("Private local campaign drafts and artwork are namespaced to the signed-in FYNX account",
+     "FynxAuthStore.accountStorageKey(context)" in LOCAL_CAMPAIGNS
+     and "MessageDigest.getInstance(\"SHA-256\")" in LOCAL_CAMPAIGNS
+     and "marketplace-campaign-artwork_" in LOCAL_CAMPAIGNS
+     and "privateCampaignDraftsAreIsolatedBetweenSignedInAccounts" in ARTWORK_MEDIA_TEST),
+    ("Device-local drafts never enter the shared Marketplace buyer campaign feed, and uncached refresh failures preserve the last displayed campaigns",
+     "FynxMarketplaceLocalCampaignStore" not in SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")]
+     and "Result.success(remote.distinctBy { it.id }" in SEASONAL_CLIENT
+     and "cached ?: return Result.failure(" in SEASONAL_CLIENT
+     and "getOrElse { return Result.failure(it) }" in SEASONAL_CLIENT),
+    ("Malformed successful campaign responses cannot poison the last-known-good offline cache",
+     SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")].index("parsePromotions(remoteRaw)") <
+         SEASONAL_CLIENT[SEASONAL_CLIENT.index("suspend fun load"):SEASONAL_CLIENT.index("suspend fun listForAdmin")].index('writeResponse(context, "seasonal_promotions"')
+     and "malformedSuccessfulPromotionResponseDoesNotReplaceLastKnownGoodCache" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceFeedCacheTest.kt").read_text(encoding="utf-8")),
+    ("Offline drafts are explicitly labelled as drafts rather than locally published campaigns",
+     'Text("Save offline draft"' in SEASONAL_ADMIN
+     and 'saveOfflineDraft -> "Save offline draft"' in SEASONAL_ADMIN
+     and '"OFFLINE DRAFT · THIS DEVICE"' in SEASONAL_ADMIN
+     and "Offline test mode" not in SEASONAL_ADMIN
+     and "Publish on this phone" not in SEASONAL_ADMIN),
+    ("Published campaigns cannot be silently copied into artwork-less local drafts",
+     'enabled = !saving && (editingCampaignId == null || editingCampaignLocal)' in SEASONAL_ADMIN
+     and "Published campaigns remain server-managed" in SEASONAL_ADMIN
+     and "publishedCampaignCannotBeSwitchedToOfflineDraftWithoutCopyingItsArtwork" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxAdminPublishingSectionsVisualTest.kt").read_text(encoding="utf-8")),
+    ("Synthetic sample campaigns are no longer seeded or shown to Marketplace buyers",
+     "ensureSampleCampaign" not in LOCAL_CAMPAIGNS
+     and 'if (id == "local-sample-fynx-marketplace") continue' in LOCAL_CAMPAIGNS),
+    ("Campaign GIF uploads are validated and original GIF bytes are preserved by the shared uploader",
+     "FynxCampaignArtworkMedia.inspectUri(context, uri)" in SEASONAL_CLIENT
+     and 'detectedMimeType == "image/gif"' in PRODUCTION_MESSAGING
+     and "readMediaBytes(context, uri) to detectedMimeType" in PRODUCTION_MESSAGING),
+    ("GIF validation limits file bytes, dimensions, animation frames, duration and decoded frame memory",
+     "MAX_GIF_BYTES = 8 * 1024 * 1024" in ARTWORK_MEDIA
+     and "MAX_GIF_DIMENSION = 1600" in ARTWORK_MEDIA
+     and "MAX_GIF_FRAMES = 60" in ARTWORK_MEDIA
+     and "MAX_GIF_DURATION_MS = 15_000L" in ARTWORK_MEDIA
+     and "MAX_GIF_TOTAL_FRAME_PIXELS = 32_000_000L" in ARTWORK_MEDIA
+     and "totalCanvasFramePixels <= MAX_GIF_TOTAL_FRAME_PIXELS" in ARTWORK_MEDIA
+     and "oversizedDecodedGifFrameBudgetIsRejectedBeforeDecoding" in ARTWORK_MEDIA_TEST),
+    ("The remote media renderer detects cached GIFs from file signatures, not only HTTP headers",
+     "FynxCampaignArtworkMedia.isGifFile(target)" in REMOTE_MEDIA
+     and "fun isGifFile(file: File)" in ARTWORK_MEDIA),
+    ("GIF animation uses lifecycle and visible-viewport gating while generic remote media respects its requested fit/crop mode",
+     "FynxCampaignArtworkImageView(ctx, gifScaleType)" in REMOTE_MEDIA
+     and "val gifScaleType = if (contentScale == ContentScale.Crop)" in REMOTE_MEDIA
+     and "getGlobalVisibleRect(rect)" in ARTWORK_MEDIA
+     and "ValueAnimator.areAnimatorsEnabled()" in ARTWORK_MEDIA
+     and "Movie.decodeByteArray" in ARTWORK_MEDIA
+     and "if (fitCenter) minOf(widthScale, heightScale)" in ARTWORK_MEDIA
+     and "remoteGifRendererKeepsFitCenterWhileCampaignArtworkUsesCrop" in ARTWORK_MEDIA_TEST),
+    ("Backend signed upload path already accepts image/gif without a new campaign-specific backend dependency",
+     "image\\/(jpeg|png|webp|gif)" in MEDIA_STORAGE
+     and r"\\(image\\)\\/" in BACKEND_SERVER
+     and "image/gif" in BACKEND_SERVER),
+
+    ("cached and downloaded GIFs receive the same full validation before decoding and keep a compatibility fallback",
+     "val artworkInfo = inspectFile(file)" in GIF_FILE_DECODER
+     and 'artworkInfo.mimeType == "image/gif"' in GIF_FILE_DECODER
+     and "MAX_GIF_BYTES" in ARTWORK_MEDIA
+     and "MAX_GIF_FRAMES" in ARTWORK_MEDIA
+     and "MAX_GIF_DURATION_MS" in ARTWORK_MEDIA
+     and "Movie.decodeByteArray" in GIF_FILE_DECODER),
+    ("Owner/Admin editor explicitly offers animated GIFs for both offline drafts and authenticated publishing",
+     "Choose a photo or animated GIF." in SEASONAL_ADMIN
+     and "private draft" in SEASONAL_ADMIN
+     and "authenticated media service" in SEASONAL_ADMIN),
+
+
+    ("campaign CTA buttons are shown only for listings or validated typed destinations",
+     "val hasValidAction = slide.listing != null" in BANNER
+     and "isValidMarketplaceCampaignDestination(slide.destinationType, slide.destinationValue)" in BANNER
+     and "if (hasValidAction) Button(" in BANNER),
+    ("invalid and unknown campaign destinations never fall back to generic Marketplace",
+     "else -> Unit // Invalid or unknown campaign destinations must never fall back to the generic feed." in BANNER
+     and "slide.destinationType == \\"MARKETPLACE\\" &&" in BANNER),
+    ("campaign CTA click-through routes exact product/category/shop targets and normalizes them",
+     "onOpenProduct(slide.destinationValue.trim())" in BANNER
+     and "MARKETPLACE_CAMPAIGN_CATEGORIES.firstOrNull" in BANNER
+     and 'onOpenSeller(slide.destinationValue.trim().removePrefix("@"))' in BANNER
+     and "seasonalCampaignCtasOpenExactProductCategoryAndShopTargets" in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceCampaignNavigationTest.kt").read_text(encoding="utf-8")),
+    ("malformed campaign responses with no valid rows cannot replace a good buyer cache",
+     "rows.length() > 0 && promotions.isEmpty()" in SEASONAL_CLIENT
+     and '"promotions":[null]' in (ROOT / "app/src/androidTest/java/com/fynx/app/ui/FynxMarketplaceFeedCacheTest.kt").read_text(encoding="utf-8")),
+    ("an unavailable promoted product leaves the campaign banner in place instead of opening unrelated listings",
+     "The Marketplace banner was left in place." in PRODUCT_LINK_HANDLER
+     and "showAllProducts = true" not in PRODUCT_LINK_HANDLER
+     and "Browse the current listings instead." not in PRODUCT_LINK_HANDLER),
+
+
+    ("Android instrumentation verifies a static campaign photo can be copied and previewed without network access",
+     "staticPhotoCanBeCopiedAndPreviewedWithoutNetworkAccess" in ARTWORK_MEDIA_TEST
+     and "FynxMarketplaceLocalCampaignStore.importArtwork(context, Uri.fromFile(source))" in ARTWORK_MEDIA_TEST
+     and "FynxCampaignArtworkMedia.decodePreview(context, Uri.fromFile(storedArtwork!!))" in ARTWORK_MEDIA_TEST
+     and "A static photo preview must remain a bitmap drawable" in ARTWORK_MEDIA_TEST),
+
+    ("Android instrumentation includes a real two-frame GIF decode test with no network dependency",
+     "twoFrameGifIsValidatedAndDecodedWithoutNetworkAccess" in ARTWORK_MEDIA_TEST
+     and 'assertEquals(2, info.frameCount)' in ARTWORK_MEDIA_TEST
+     and "FynxCampaignArtworkMedia.decodeGifFile(file)" in ARTWORK_MEDIA_TEST
+     and "invalidGifSignatureIsRejectedBeforeDecoding" in ARTWORK_MEDIA_TEST),
+
 ]
 
 failed = []

@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.runBlocking
 
 @RunWith(AndroidJUnit4::class)
 class FynxMarketplaceFeedCacheTest {
@@ -73,6 +74,35 @@ class FynxMarketplaceFeedCacheTest {
         FynxMarketplaceFeedCache.writeResponse(first, "seasonal_promotions", """{"promotions":[]}""")
         assertEquals("""{"promotions":[]}""", FynxMarketplaceFeedCache.readResponse(first, "seasonal_promotions", 60_000L))
         assertNull(FynxMarketplaceFeedCache.readResponse(second, "seasonal_promotions", 60_000L))
+    }
+
+    @Test fun malformedSuccessfulPromotionResponseDoesNotReplaceLastKnownGoodCache() = runBlocking {
+        val context = accountContext("buyer-one")
+        val validCache = """{"promotions":[]}"""
+        FynxMarketplaceFeedCache.writeResponse(context, "seasonal_promotions", validCache)
+        val invalidBodies = listOf(
+            """{"promotions":""",
+            """{"promotions":[null]}""",
+            """{}"""
+        )
+        try {
+            invalidBodies.forEach { invalidBody ->
+                FynxBackendClient.requestExecutorForTests = { _, method, path, _, _ ->
+                    assertEquals("GET", method)
+                    assertEquals("/api/marketplace/seasonal-feed", path)
+                    invalidBody
+                }
+                val result = FynxMarketplaceSeasonalPromotionClient.load(context)
+                assertTrue("Malformed HTTP 200 campaign data must be rejected: $invalidBody", result.isFailure)
+                assertEquals(
+                    "Malformed successful responses must not overwrite the last-known-good offline campaign cache",
+                    validCache,
+                    FynxMarketplaceFeedCache.readResponse(context, "seasonal_promotions", 60_000L)
+                )
+            }
+        } finally {
+            FynxBackendClient.requestExecutorForTests = null
+        }
     }
 
     private fun listing(id: String) = FynxRemoteSocialClient.MarketplaceListing(

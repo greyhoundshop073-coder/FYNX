@@ -973,9 +973,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
 
     fun reloadSeasonalPromotions() {
         scope.launch {
+            // Buyer Marketplace shows only server-published campaigns or the short-lived
+            // published-feed cache. Device-local drafts remain private to the Admin editor.
             FynxMarketplaceSeasonalPromotionClient.load(context)
                 .onSuccess { seasonalPromotions = it }
-            // Retain the current schedule on transient failures; fixed-date fallbacks remain available.
         }
     }
 
@@ -1463,6 +1464,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1472,12 +1474,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1533,6 +1533,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1542,12 +1543,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1598,6 +1597,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1607,12 +1607,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },
@@ -1725,6 +1723,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                             sponsoredPromotions = sponsoredPromotions,
                             seasonalPromotions = seasonalPromotions,
                             autoRotate = testOnlyListings == null,
+                            includeCalendarCelebrations = testOnlyListings == null,
                             onOpenListing = { selected = it },
                             onOpenSeller = { sellerStoreUsername = it },
                             onOpenProduct = { listingId ->
@@ -1734,12 +1733,10 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
                                             if (listing.active && listing.quantity > 0) selected = listing
                                             else {
                                                 error = "This promoted product is no longer available."
-                                                showAllProducts = true
                                             }
                                         }
                                         .onFailure {
-                                            error = "This promoted product could not be opened. Browse the current listings instead."
-                                            showAllProducts = true
+                                            error = "This promoted product could not be opened. The Marketplace banner was left in place."
                                         }
                                 }
                             },

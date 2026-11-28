@@ -119,7 +119,8 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                         onShopNow = {},
                         onOpenOrders = {},
                         onRefresh = {},
-                        autoRotate = false
+                        autoRotate = false,
+                        includeCalendarCelebrations = false
                     )
                     cardListings.forEach { listing ->
                         MarketplaceReferenceProductCard(
@@ -140,20 +141,15 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithText(firstDeal.title).fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
+        // Seasonal/owner campaigns can precede featured products. Find the real
+        // product action by identity instead of assuming it is carousel item zero.
+        scrollToPromoAction("Shop this product: ${firstDeal.title}")
         saveScreenshot("marketplace-test-great-deals.png")
 
         // Select the second real slide through the production LazyRow state. This keeps
         // listing-identity and destination assertions deterministic on slower emulators;
         // auto-rotation is exercised independently by the following test.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
-        compose.waitUntil(timeoutMillis = 3_000) {
-            runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
-        }
-        compose.onNodeWithText(secondDeal.title).assertIsDisplayed()
+        scrollToPromoAction("Shop this product: ${secondDeal.title}")
         // The whole production slide is clickable; tap its unique headline to prove that
         // the selected product identity, rather than a neighbouring card, is routed.
         compose.onNodeWithContentDescription("Shop this product: ${secondDeal.title}").performClick()
@@ -198,20 +194,42 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                     sponsoredPromotions = emptyList(),
                     seasonalPromotions = emptyList(),
                     onOpenListing = {}, onOpenSeller = {}, onOpenProduct = {}, onOpenCategory = {},
-                    onShopNow = {}, onOpenOrders = {}, onRefresh = {}
+                    onShopNow = {}, onOpenOrders = {}, onRefresh = {},
+                    includeCalendarCelebrations = false
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
-            compose.onAllNodesWithText(candidates.first().title).fetchSemanticsNodes().isNotEmpty()
+        // Isolated fixtures disable the real-date celebration fallback.
+        // Verify automatic rotation reaches the next eligible product without relying on a hard-coded carousel index.
+        scrollToPromoAction("Shop this product: ${candidates.first().title}")
+        compose.waitUntil(timeoutMillis = 20_000) {
+            compose.onAllNodesWithContentDescription("Shop this product: ${candidates[1].title}")
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText(candidates.first().title).assertIsDisplayed()
-        // Rotation is 6.5 seconds in production. Assert the next real listing headline,
-        // rather than a counter that the production promotional banner does not render.
-        compose.waitUntil(timeoutMillis = 9_000) {
-            runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
+        compose.onNodeWithContentDescription("Shop this product: ${candidates[1].title}")
+            .assertIsDisplayed()
+    }
+
+    private fun scrollToPromoAction(description: String) {
+        // The carousel is a horizontal LazyRow and can be hosted without a vertically
+        // scrollable parent (for example, the isolated auto-rotation test). Scroll its
+        // own LazyList semantics directly; performScrollTo() requires a parent scroll
+        // container and fails before the carousel can be inspected.
+        val carousel = compose.onNodeWithTag("fynx-marketplace-promo-carousel")
+        var found = false
+        for (index in 0 until 32) {
+            val scrolled = runCatching {
+                carousel.performScrollToIndex(index)
+                compose.waitForIdle()
+            }.isSuccess
+            if (!scrolled) break
+            if (compose.onAllNodesWithContentDescription(description).fetchSemanticsNodes().isNotEmpty()) {
+                found = true
+                break
+            }
         }
-        compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
+        assertTrue("Marketplace carousel did not expose '$description' in any slide", found)
+        compose.onNodeWithContentDescription(description).assertIsDisplayed()
     }
 
     private fun saveScreenshot(name: String) {

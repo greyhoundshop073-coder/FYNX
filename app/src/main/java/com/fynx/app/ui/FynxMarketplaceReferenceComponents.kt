@@ -172,7 +172,11 @@ internal fun MarketplaceReferenceSectionTitle(
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
         if (action != null && onAction != null) {
-            androidx.compose.material3.TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 4.dp)) {
+            androidx.compose.material3.TextButton(
+                onClick = onAction,
+                modifier = Modifier.semantics { contentDescription = "$action $title" },
+                contentPadding = PaddingValues(horizontal = 4.dp)
+            ) {
                 Text(action, color = MaterialTheme.colorScheme.primary)
             }
         }
