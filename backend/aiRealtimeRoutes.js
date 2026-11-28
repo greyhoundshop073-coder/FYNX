@@ -141,16 +141,17 @@ export function registerRealtimeAssistantRoutes({
       if (activeMonitor) {
         await activeMonitor.finish("completed");
       } else {
-        // A cold/serverless instance may not own the original WebSocket. Do not
-        // mark usage complete without the provider usage stream that prices it.
-        await settleUsage({
-          reservation: activeCall,
-          status: "failed",
-          databasePool
-        });
+        // A different warm instance may own the sideband. Leave its reservation
+        // open so that instance can persist final provider usage on socket close.
+        // A later reservation expires any orphan older than the two-hour bound.
       }
       activeRealtimeMonitors.delete(activeCall.callId);
-      return res.json({ ok: true, active: true, alreadyEnded: providerResult.alreadyEnded === true });
+      return res.json({
+        ok: true,
+        active: true,
+        alreadyEnded: providerResult.alreadyEnded === true,
+        usageFinalizationPending: !activeMonitor
+      });
     } catch (error) {
       console.error("realtime voice hangup", error?.message || error);
       return res.status(502).json({ error: "FYNX realtime voice session could not be closed cleanly" });
