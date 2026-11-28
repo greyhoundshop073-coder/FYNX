@@ -125,7 +125,7 @@ export function registerRealtimeAssistantRoutes({
   app.post("/api/assistant/realtime-session/hangup", assistantJsonBodyParser, async (req, res) => {
     const userId = authenticate(req, res);
     if (!userId) return;
-    const databasePool = getFynxDatabasePool();
+    const databasePool = databasePoolProvider();
     try {
       const activeCall = await findActiveCall(userId, databasePool);
       if (!activeCall) return res.json({ ok: true, active: false });
