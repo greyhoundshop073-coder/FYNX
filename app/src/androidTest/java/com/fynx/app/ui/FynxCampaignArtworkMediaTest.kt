@@ -13,6 +13,7 @@ import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 class FynxCampaignArtworkMediaTest {
     @Test
@@ -46,6 +47,9 @@ class FynxCampaignArtworkMediaTest {
     @Test
     fun staticPhotoCanBeCopiedAndPreviewedWithoutNetworkAccess() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val authPrefs = context.getSharedPreferences("fynx_auth", android.content.Context.MODE_PRIVATE)
+        val previousUsername = authPrefs.getString("username", null)
+        authPrefs.edit().putString("username", "fynx-photo-test-" + System.currentTimeMillis()).apply()
         val source = File.createTempFile("fynx-campaign-photo-", ".png", context.cacheDir)
         var storedArtwork: File? = null
         val bitmap = Bitmap.createBitmap(320, 180, Bitmap.Config.ARGB_8888)
@@ -71,6 +75,9 @@ class FynxCampaignArtworkMediaTest {
             bitmap.recycle()
             storedArtwork?.delete()
             source.delete()
+            val restore = authPrefs.edit()
+            if (previousUsername == null) restore.remove("username") else restore.putString("username", previousUsername)
+            restore.apply()
         }
     }
 
@@ -103,6 +110,66 @@ class FynxCampaignArtworkMediaTest {
             assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("decoded animation pixels"))
         } finally {
             file.delete()
+        }
+    }
+
+
+    @Test
+    fun privateCampaignDraftsAreIsolatedBetweenSignedInAccounts() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val authPrefs = context.getSharedPreferences("fynx_auth", android.content.Context.MODE_PRIVATE)
+        val previousUsername = authPrefs.getString("username", null)
+        val accountA = "fynx-draft-a-" + System.currentTimeMillis()
+        val accountB = "fynx-draft-b-" + System.currentTimeMillis()
+        val draftA = FynxMarketplaceSeasonalPromotion(
+            id = "local-" + UUID.randomUUID(),
+            promotionType = "SEASONAL",
+            occasionKey = "account-a-draft",
+            headline = "Private account A campaign",
+            body = "",
+            actionLabel = "Explore Marketplace",
+            artworkMediaId = "",
+            startsAt = "2026-11-28T00:00:00+01:00",
+            endsAt = "2026-12-05T00:00:00+01:00",
+            active = true,
+            localOnly = true
+        )
+        var draftBId: String? = null
+        try {
+            authPrefs.edit().putString("username", accountA).apply()
+            FynxMarketplaceLocalCampaignStore.upsert(context, draftA).getOrThrow()
+            assertEquals(listOf(draftA.id), FynxMarketplaceLocalCampaignStore.all(context).map { it.id })
+
+            authPrefs.edit().putString("username", accountB).apply()
+            assertTrue(
+                "A second signed-in account must not see the first account's private drafts",
+                FynxMarketplaceLocalCampaignStore.all(context).isEmpty()
+            )
+            val draftB = draftA.copy(
+                id = "local-" + UUID.randomUUID(),
+                occasionKey = "account-b-draft",
+                headline = "Private account B campaign"
+            )
+            draftBId = draftB.id
+            FynxMarketplaceLocalCampaignStore.upsert(context, draftB).getOrThrow()
+            assertEquals(listOf(draftB.id), FynxMarketplaceLocalCampaignStore.all(context).map { it.id })
+
+            authPrefs.edit().putString("username", accountA).apply()
+            assertEquals(
+                "Returning to account A must restore only that account's own draft",
+                listOf(draftA.id),
+                FynxMarketplaceLocalCampaignStore.all(context).map { it.id }
+            )
+        } finally {
+            authPrefs.edit().putString("username", accountA).apply()
+            FynxMarketplaceLocalCampaignStore.delete(context, draftA.id)
+            if (draftBId != null) {
+                authPrefs.edit().putString("username", accountB).apply()
+                FynxMarketplaceLocalCampaignStore.delete(context, draftBId)
+            }
+            val restore = authPrefs.edit()
+            if (previousUsername == null) restore.remove("username") else restore.putString("username", previousUsername)
+            restore.apply()
         }
     }
 
