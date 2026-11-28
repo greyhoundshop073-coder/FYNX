@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.webrtc.AudioTrack
 import org.webrtc.PeerConnection
@@ -29,12 +30,15 @@ import org.webrtc.VideoTrack
 enum class FynxCallHistoryFilter { ALL, MISSED, VIDEO, VOICE }
 
 @Composable
-fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}, onOutgoingCallConsumed: () -> Unit = {}) {
+fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, initialOutgoing: Boolean = false, initialIncomingCallId: String? = null, initialIncomingUserId: String? = null, initialListingId: String? = null, initialProductTitle: String? = null, initialSellerUsername: String? = null, currentUsername: String? = null, onIncomingCallConsumed: (String) -> Unit = {}, onOutgoingCallConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var activeCall by remember { mutableStateOf(initialName?.removePrefix("@").orEmpty().ifBlank { initialName }) }
     var video by remember { mutableStateOf(initialVideo) }
     var targetUserId by remember { mutableStateOf(initialIncomingUserId) }
+    var callListingId by remember(initialIncomingCallId, initialListingId) { mutableStateOf(initialListingId) }
+    var callProductTitle by remember(initialIncomingCallId, initialProductTitle) { mutableStateOf(initialProductTitle) }
+    var callSellerUsername by remember(initialIncomingCallId, initialSellerUsername) { mutableStateOf(initialSellerUsername) }
     var targetUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()) }
     var targetAvatarUsername by remember { mutableStateOf(initialName?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() && it != initialIncomingUserId }) }
     var endingCall by remember { mutableStateOf(false) }
@@ -44,6 +48,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var filter by remember { mutableStateOf(FynxCallHistoryFilter.ALL) }
     var realtimeState by remember { mutableStateOf(FynxRealtimeClient.State.DISCONNECTED) }
     var mediaConnected by remember { mutableStateOf(false) }
+    var mediaTransport by remember { mutableStateOf("pending") }
+    var directCallIsInitiator by remember { mutableStateOf(initialIncomingCallId == null && initialOutgoing) }
+    var relaySetupComplete by remember { mutableStateOf(false) }
+    var relayRefreshSeconds by remember { mutableLongStateOf(0L) }
     var session by remember {
         mutableStateOf<FynxCallSession?>(
             initialIncomingCallId?.let { callId ->
@@ -61,16 +69,64 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     var localVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var remoteVideoTrack by remember { mutableStateOf<VideoTrack?>(null) }
     var pendingIncomingAccept by remember { mutableStateOf(false) }
+    var pendingIncomingAcceptSignal by remember { mutableStateOf(false) }
+    var pendingOutgoingInvite by remember { mutableStateOf(false) }
+    val latestSession by rememberUpdatedState(session)
+    val latestTargetUserId by rememberUpdatedState(targetUserId)
     val mediaEngineForCleanup = remember { arrayOfNulls<FynxWebRtcCallEngine>(1) }
+    val sfuMediaForCleanup = remember { arrayOfNulls<FynxCloudflareSfuMediaEngine>(1) }
+
+    fun failCallSignaling(callId: String, detail: String? = null) {
+        scope.launch {
+            val failed = session?.takeIf { it.id == callId } ?: return@launch
+            val safeDetail = detail?.trim()?.take(160)?.takeIf { it.isNotBlank() }
+            errorMessage = safeDetail?.let { "The call could not be completed: $it" }
+                ?: "FYNX couldn't reach the call service. Check your connection and try again."
+            sfuMediaForCleanup[0]?.disconnect()
+            mediaEngineForCleanup[0]?.disconnect()
+            mediaConnected = false
+            mediaTransport = "pending"
+            localVideoTrack = null
+            remoteVideoTrack = null
+            FynxCallsStore.updateStatus(context, failed.id, "Unavailable", missed = false)
+            calls = FynxCallsStore.load(context)
+            activeCall = null
+            session = null
+            pendingIncomingAccept = false
+            pendingIncomingAcceptSignal = false
+            pendingOutgoingInvite = false
+            relaySetupComplete = false
+            relayRefreshSeconds = 0L
+            endingCall = false
+        }
+    }
 
     lateinit var realtimeClient: FynxRealtimeClient
     val mediaEngine = remember {
         FynxWebRtcCallEngine(
             context = context,
             callbacks = FynxWebRtcCallEngine.CallCallbacks(
-                onOffer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallOffer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
-                onAnswer = { sdp -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallAnswer(current.id, target, sdp, current.type == FynxCallType.VIDEO) },
-                onIceCandidate = { candidate -> val current = session; val target = targetUserId; if (current != null && target != null) realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO) },
+                onOffer = { sdp ->
+                    val current = session
+                    val target = targetUserId
+                    val sent = current != null && !target.isNullOrBlank() &&
+                        realtimeClient.sendCallOffer(current.id, target, sdp, current.type == FynxCallType.VIDEO)
+                    if (current != null && !sent) failCallSignaling(current.id)
+                },
+                onAnswer = { sdp ->
+                    val current = session
+                    val target = targetUserId
+                    val sent = current != null && !target.isNullOrBlank() &&
+                        realtimeClient.sendCallAnswer(current.id, target, sdp, current.type == FynxCallType.VIDEO)
+                    if (current != null && !sent) failCallSignaling(current.id)
+                },
+                onIceCandidate = { candidate ->
+                    val current = session
+                    val target = targetUserId
+                    val sent = current != null && !target.isNullOrBlank() &&
+                        realtimeClient.sendCallIce(current.id, target, candidate, current.type == FynxCallType.VIDEO)
+                    if (current != null && !sent) failCallSignaling(current.id)
+                },
                 onLocalVideoTrack = { track -> localVideoTrack = track.apply { setEnabled(true) } },
                 onRemoteAudioTrack = { track: AudioTrack -> track.setEnabled(true) },
                 onRemoteVideoTrack = { track: VideoTrack? -> remoteVideoTrack = track?.apply { setEnabled(true) } },
@@ -80,8 +136,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         PeerConnection.IceConnectionState.FAILED -> scope.launch {
                             val failed = session ?: return@launch
                             errorMessage = "The call connection failed. Please try again."
+                            sfuMediaForCleanup[0]?.disconnect()
                             mediaEngineForCleanup[0]?.disconnect()
                             mediaConnected = false
+                            mediaTransport = "pending"
                             localVideoTrack = null
                             remoteVideoTrack = null
                             FynxCallsStore.updateStatus(context, failed.id, "Failed", missed = false)
@@ -100,6 +158,86 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     }
     mediaEngineForCleanup[0] = mediaEngine
 
+    val sfuMedia = remember(mediaEngine) {
+        FynxCloudflareSfuMediaEngine(
+            context = context,
+            factory = mediaEngine.sfuPeerConnectionFactory(),
+            audioTrack = { mediaEngine.sfuLocalAudioTrack() },
+            videoTrack = { mediaEngine.sfuLocalVideoTrack() },
+            callbacks = FynxCloudflareSfuMediaEngine.Callbacks(
+                onRemoteVideoTrack = { _, track ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        remoteVideoTrack = track?.apply { setEnabled(true) }
+                    }
+                },
+                onRemoteAudioTrack = { _, track -> track.setEnabled(true) },
+                onConnectionState = { state ->
+                    scope.launch(Dispatchers.Main.immediate) {
+                        val connected = state == PeerConnection.IceConnectionState.CONNECTED ||
+                            state == PeerConnection.IceConnectionState.COMPLETED
+                        if (connected) {
+                            session?.let { current ->
+                                session = current.copy(state = FynxCallState.CONNECTED)
+                                FynxCallsStore.updateStatus(context, current.id, "Connected", missed = false)
+                                calls = FynxCallsStore.load(context)
+                            }
+                            errorMessage = null
+                        } else if (state == PeerConnection.IceConnectionState.FAILED) {
+                            errorMessage = "The secure media relay connection failed. FYNX is attempting direct recovery."
+                        }
+                    }
+                },
+                onError = { message ->
+                    scope.launch(Dispatchers.Main.immediate) { errorMessage = message }
+                }
+            )
+        )
+    }
+    sfuMediaForCleanup[0] = sfuMedia
+
+    suspend fun configureCallRelay(callId: String, restartOfferOwner: Boolean): Long {
+        val configuration = FynxCallIceServerProvider.fetch(context, callId).getOrNull()
+        if (session?.id != callId) return 0L
+        return if (configuration != null) {
+            mediaEngine.updateIceServers(configuration.servers, restartOfferOwner)
+            sfuMedia.updateIceServers(configuration.servers)
+            configuration.refreshAfterSeconds
+        } else {
+            errorMessage = "Call relay is not available yet. FYNX is trying a direct connection and will retry."
+            120L
+        }
+    }
+
+    fun beginCallRelaySetup(callId: String, restartOfferOwner: Boolean, onReady: (() -> Unit)? = null) {
+        scope.launch {
+            val refreshAfter = configureCallRelay(callId, restartOfferOwner)
+            if (session?.id != callId || refreshAfter <= 0L) return@launch
+            relayRefreshSeconds = refreshAfter
+            relaySetupComplete = true
+            onReady?.invoke()
+        }
+    }
+    suspend fun connectSfuOrFallback(current: FynxCallSession, sendOfferOnFailure: Boolean) {
+        val setup = runCatching { sfuMedia.connect(current.id) }
+        if (session?.id != current.id || mediaTransport == "fallback") {
+            if (setup.isSuccess) runCatching { sfuMedia.stop() }
+            return
+        }
+        if (setup.isSuccess) {
+            mediaTransport = "sfu"
+            errorMessage = null
+            return
+        }
+        mediaTransport = "fallback"
+        val detail = setup.exceptionOrNull()?.message?.take(160)?.takeIf { it.isNotBlank() }
+        errorMessage = if (detail == null) {
+            "Cloudflare media relay is unavailable. FYNX is using direct calling."
+        } else {
+            "Cloudflare media relay is unavailable: " + detail
+        }
+        if (sendOfferOnFailure) mediaEngine.createOffer()
+    }
+
     realtimeClient = remember {
         FynxRealtimeClient(
             context = context,
@@ -111,6 +249,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         "invite" -> if (!initialOutgoing && session == null) {
                             val incomingName = event.fromUsername?.removePrefix("@").orEmpty().ifBlank { event.fromUserId }
                             video = event.callType.equals("video", true)
+                            directCallIsInitiator = false
+                            mediaTransport = "pending"
+                            relaySetupComplete = false
+                            relayRefreshSeconds = 0L
                             targetUserId = event.fromUserId
                             targetUsername = incomingName
                             targetAvatarUsername = event.fromUsername?.removePrefix("@")?.trim()?.takeIf { it.isNotBlank() }
@@ -124,38 +266,53 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         }
                         "accept" -> if (session?.id == event.callId) {
                             session?.let { current ->
-                            if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                            session = FynxCallsFoundation.start(current)
-                            FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
-                            calls = FynxCallsStore.load(context)
-                            mediaEngine.createOffer()
+                                if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
+                                session = FynxCallsFoundation.start(current)
+                                FynxCallsStore.updateStatus(context, event.callId, "Accepted", missed = false)
+                                calls = FynxCallsStore.load(context)
+                                // Do not send the first offer until the relay configuration is applied.
+                                beginCallRelaySetup(current.id, restartOfferOwner = true) {
+                                    scope.launch { connectSfuOrFallback(current, sendOfferOnFailure = true) }
+                                }
                             }
                         }
                         "offer" -> if (session?.id == event.callId && !event.sdp.isNullOrBlank()) {
-                            session?.let { current ->
-                            if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                            mediaEngine.acceptOfferAndCreateAnswer(event.sdp)
-                            session = current.copy(state = FynxCallState.CONNECTING)
+                            val offerSdp = event.sdp
+                            val current = session
+                            if (current != null) scope.launch {
+                                val needsSfuCleanup = mediaTransport != "fallback"
+                                mediaTransport = "fallback"
+                                if (needsSfuCleanup) runCatching { sfuMedia.stop() }
+                                if (session?.id == current.id) {
+                                    if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
+                                    mediaEngine.acceptOfferAndCreateAnswer(offerSdp)
+                                    session = current.copy(state = FynxCallState.CONNECTING)
+                                }
                             }
                         }
-                        "answer" -> if (session?.id == event.callId && !event.sdp.isNullOrBlank()) mediaEngine.applyAnswer(event.sdp)
-                        "ice" -> if (session?.id == event.callId && event.candidate != null) mediaEngine.addRemoteIceCandidate(event.candidate.toWebRtcCandidate())
+                        "answer" -> if (mediaTransport == "fallback" && session?.id == event.callId && !event.sdp.isNullOrBlank()) mediaEngine.applyAnswer(event.sdp)
+                        "ice" -> if (mediaTransport == "fallback" && session?.id == event.callId && event.candidate != null) mediaEngine.addRemoteIceCandidate(event.candidate.toWebRtcCandidate())
                         "reject", "end" -> if (session?.id == event.callId) {
                             FynxCallsStore.updateStatus(context, event.callId, if (event.signalType == "reject") "Declined" else "Ended", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
+                            sfuMedia.disconnect(); mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
                         }
                         "busy" -> if (session?.id == event.callId) {
                             errorMessage = "@$targetUsername is already on another call."
                             FynxCallsStore.updateStatus(context, event.callId, "Busy", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
+                            sfuMediaForCleanup[0]?.disconnect()
+                            mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
                         }
                         "unavailable" -> if (session?.id == event.callId) {
                             errorMessage = "@${targetUsername ?: "This user"} is unavailable right now."
                             FynxCallsStore.updateStatus(context, event.callId, "Unavailable", missed = false)
                             calls = FynxCallsStore.load(context)
-                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false
+                            sfuMediaForCleanup[0]?.disconnect()
+                            mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
+                        }
+                        "error" -> session?.takeIf { event.callId.isBlank() || it.id == event.callId }?.let { current ->
+                            failCallSignaling(current.id, event.error)
                         }
                     }
                 }
@@ -166,8 +323,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
     DisposableEffect(Unit) {
         realtimeClient.connect()
         onDispose {
-            val active = session
-            val peerId = targetUserId
+            // The realtime client lives for this panel's lifetime; disposal must
+            // inspect the current call, not the initial composition snapshot.
+            val active = latestSession
+            val peerId = latestTargetUserId
             if (active != null && !peerId.isNullOrBlank()) {
                 val isRinging = active.state == FynxCallState.RINGING
                 val isVideo = active.type == FynxCallType.VIDEO
@@ -177,6 +336,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                     context, active.id, if (isRinging) "Declined" else "Ended", missed = false
                 )
             }
+            sfuMediaForCleanup[0]?.disconnect()
             mediaEngine.disconnect()
             realtimeClient.close()
         }
@@ -191,14 +351,14 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             if (pendingIncomingAccept) {
                 pendingIncomingAccept = false
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                realtimeClient.sendCallAccept(current.id, targetUserId ?: current.callerUsername, video)
+                pendingIncomingAcceptSignal = true
                 session = current.copy(state = FynxCallState.CONNECTING)
-                FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
+                FynxCallsStore.updateStatus(context, current.id, "Connecting", missed = false)
                 calls = FynxCallsStore.load(context)
             } else {
                 if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                targetUserId?.let { realtimeClient.sendCallInvite(current.id, it, video) }
-                FynxCallsStore.updateStatus(context, current.id, "Calling")
+                pendingOutgoingInvite = true
+                FynxCallsStore.updateStatus(context, current.id, "Connecting", missed = false)
                 calls = FynxCallsStore.load(context)
             }
         } else {
@@ -220,7 +380,12 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             errorMessage = "You cannot call your own account."
             return
         }
-        mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false
+        sfuMedia.disconnect()
+        mediaTransport = "pending"
+        mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
+        directCallIsInitiator = true
+        relaySetupComplete = false
+        relayRefreshSeconds = 0L
         video = isVideo; activeCall = username; targetUsername = username; targetAvatarUsername = username; errorMessage = null
         scope.launch {
             val resolvedId = resolveUser(username)
@@ -234,8 +399,8 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             val required = if (isVideo) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
             if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
                 mediaEngine.connect(newSession); mediaConnected = true
-                realtimeClient.sendCallInvite(id, resolvedId, isVideo)
-                FynxCallsStore.updateStatus(context, id, "Calling")
+                pendingOutgoingInvite = true
+                FynxCallsStore.updateStatus(context, id, "Connecting")
                 calls = FynxCallsStore.load(context)
             } else permissionLauncher.launch(required)
         }
@@ -267,33 +432,141 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         }
     }
 
+    LaunchedEffect(realtimeState, pendingOutgoingInvite, pendingIncomingAcceptSignal, session?.id) {
+        val current = session ?: return@LaunchedEffect
+        if (realtimeState != FynxRealtimeClient.State.CONNECTED) return@LaunchedEffect
+        if (pendingIncomingAcceptSignal) {
+            val peerId = targetUserId ?: current.callerUsername
+            // Fetch TURN while the server still has this exact invite in RINGING state.
+            // Apply it before accepting so the first incoming SDP answer uses relay candidates.
+            val refreshAfter = configureCallRelay(current.id, restartOfferOwner = false)
+            if (session?.id != current.id) return@LaunchedEffect
+            relayRefreshSeconds = refreshAfter.coerceAtLeast(120L)
+            relaySetupComplete = true
+            if (realtimeClient.sendCallAccept(current.id, peerId, video)) {
+                pendingIncomingAcceptSignal = false
+                FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
+                calls = FynxCallsStore.load(context)
+                errorMessage = null
+                scope.launch { connectSfuOrFallback(current, sendOfferOnFailure = false) }
+            } else {
+                errorMessage = "The secure call connection is reconnecting. Your answer will retry automatically."
+            }
+        } else if (pendingOutgoingInvite) {
+            val peerId = targetUserId
+            if (peerId.isNullOrBlank()) {
+                pendingOutgoingInvite = false
+                errorMessage = "The selected caller could not be resolved. Please try again."
+            } else if (realtimeClient.sendCallInvite(current.id, peerId, video, callListingId)) {
+                pendingOutgoingInvite = false
+                FynxCallsStore.updateStatus(context, current.id, "Calling", missed = false)
+                calls = FynxCallsStore.load(context)
+                errorMessage = null
+            } else {
+                errorMessage = "The secure call connection is reconnecting. Your call will retry automatically."
+            }
+        }
+    }
+
+    LaunchedEffect(session?.id, mediaTransport) {
+        val activeId = session?.id ?: return@LaunchedEffect
+        if (mediaTransport != "sfu") return@LaunchedEffect
+        var waitedWithoutRemote = 0L
+        try {
+            while (session?.id == activeId && mediaTransport == "sfu") {
+                sfuMedia.syncPublications(activeId)
+                if (sfuMedia.hasRemotePublisher()) waitedWithoutRemote = 0L
+                else waitedWithoutRemote += 2_500L
+                if (waitedWithoutRemote >= 10_000L && directCallIsInitiator) {
+                    sfuMedia.stop()
+                    if (session?.id == activeId) {
+                        mediaTransport = "fallback"
+                        errorMessage = "The other device is not on the media relay. Switching to direct calling."
+                        mediaEngine.createOffer()
+                    }
+                    return@LaunchedEffect
+                }
+                delay(2_500L)
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (session?.id == activeId && mediaTransport == "sfu") {
+                runCatching { sfuMedia.stop() }
+                mediaTransport = "fallback"
+                val detail = error.message?.take(160)?.takeIf { it.isNotBlank() }
+                errorMessage = if (detail == null) "The secure media relay needs recovery."
+                    else "The secure media relay needs recovery: " + detail
+                if (directCallIsInitiator) mediaEngine.createOffer()
+            }
+        }
+    }
+    LaunchedEffect(session?.id, relaySetupComplete) {
+        val activeId = session?.id ?: return@LaunchedEffect
+        if (!relaySetupComplete || relayRefreshSeconds <= 0L) return@LaunchedEffect
+        var refreshAfter = relayRefreshSeconds
+        while (session?.id == activeId && relaySetupComplete) {
+            delay(refreshAfter.coerceIn(60L, 86_400L) * 1_000L)
+            val refreshed = FynxCallIceServerProvider.fetch(context, activeId).getOrNull()
+            if (session?.id != activeId) return@LaunchedEffect
+            if (refreshed != null) {
+                mediaEngine.updateIceServers(refreshed.servers, restartOfferOwner = directCallIsInitiator)
+                if (mediaTransport == "sfu") {
+                    runCatching { sfuMedia.refreshIceServers(refreshed.servers) }
+                        .onFailure { errorMessage = "The secure media relay could not refresh. FYNX will retry." }
+                } else {
+                    sfuMedia.updateIceServers(refreshed.servers)
+                }
+                refreshAfter = refreshed.refreshAfterSeconds
+            } else {
+                errorMessage = "Call relay refresh failed. The current connection will be kept and FYNX will retry."
+                refreshAfter = 120L
+            }
+            relayRefreshSeconds = refreshAfter
+        }
+    }
+
     LaunchedEffect(session?.id, session?.state) {
         val current = session ?: return@LaunchedEffect
         val waitingForAnswer = current.state == FynxCallState.RINGING || current.state == FynxCallState.CONNECTING
         if (!waitingForAnswer) return@LaunchedEffect
         delay(60_000L)
         if (session?.id == current.id && (session?.state == FynxCallState.RINGING || session?.state == FynxCallState.CONNECTING)) {
-            targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) }
-            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
+            val endSignalSent = targetUserId?.let { realtimeClient.sendCallEnd(current.id, it, video) } == true
+            if (!endSignalSent) {
+                errorMessage = "The call timed out, but the other person may not have received the end signal."
+            }
+            sfuMediaForCleanup[0]?.disconnect()
+            mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null
             val incoming = current.state == FynxCallState.RINGING
             FynxCallsStore.updateStatus(context, current.id, if (incoming) "Missed" else "No answer", missed = incoming)
             calls = FynxCallsStore.load(context)
-            activeCall = null; session = null; pendingIncomingAccept = false
+            activeCall = null; session = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
         }
     }
 
     val activeSession = session
     val activePeerName = activeCall
     if (activePeerName != null && activeSession != null) {
+        if (!callProductTitle.isNullOrBlank() && !callListingId.isNullOrBlank()) {
+            Surface(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("MARKETPLACE LIVE PROOF", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(callProductTitle.orEmpty(), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text("Listing #${callListingId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    callSellerUsername?.let { Text("Seller: @${it.removePrefix("@")}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+                }
+            }
+        }
         FynxActiveCallPanel(name = activePeerName, session = activeSession, currentUsername = currentUsername, avatarUsername = targetAvatarUsername, realtimeState = realtimeState, localVideoTrack = localVideoTrack, remoteVideoTrack = remoteVideoTrack, errorMessage = errorMessage,
             onAnswer = {
                 val current = session ?: return@FynxActiveCallPanel
                 val required = if (video) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA) else arrayOf(Manifest.permission.RECORD_AUDIO)
                 if (required.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) {
                     if (!mediaConnected) { mediaEngine.connect(current); mediaConnected = true }
-                    realtimeClient.sendCallAccept(current.id, targetUserId ?: current.callerUsername, video)
+                    pendingIncomingAcceptSignal = true
                     session = current.copy(state = FynxCallState.CONNECTING)
-                    FynxCallsStore.updateStatus(context, current.id, "Answered", missed = false)
+                    FynxCallsStore.updateStatus(context, current.id, "Connecting", missed = false)
                     calls = FynxCallsStore.load(context)
                 } else {
                     pendingIncomingAccept = true
@@ -311,14 +584,18 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                 val current = session
                 val incoming = current?.state == FynxCallState.RINGING
                 if (current != null) {
-                    targetUserId?.let { peer ->
+                    val notifiedPeer = targetUserId?.let { peer ->
                         if (incoming) realtimeClient.sendCallReject(current.id, peer, video)
                         else realtimeClient.sendCallEnd(current.id, peer, video)
+                    } == true
+                    if (!notifiedPeer) {
+                        errorMessage = "Call ended on this device, but the other person may not have received the update."
                     }
                     FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = false)
                 }
-                mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
-                calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; endingCall = false
+                sfuMediaForCleanup[0]?.disconnect()
+                mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null
+                calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false; endingCall = false
             }
         )
         return
