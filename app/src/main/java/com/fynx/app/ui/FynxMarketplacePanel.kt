@@ -2343,7 +2343,6 @@ private fun MarketplaceDetails(
                     }
                     TextButton(onClick = onProfile) { Text("View shop") }
                 }
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (l.quantity > 0) "${l.quantity} available" else "Out of stock",
