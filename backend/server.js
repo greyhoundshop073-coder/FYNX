@@ -19,8 +19,14 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
+import { createFynxGroupCallSignalHandler, disconnectFynxGroupCallsForUser } from "./groupCallRealtime.js";
+import { resolveFynxMarketplaceCallContext } from "./marketplaceCallContext.js";
+import { isFynxCallBlocked } from "./callSafety.js";
+import { registerCloudflareSfuRoutes } from "./cloudflareSfuRoutes.js";
+import { registerCloudflareTurnRoutes } from "./cloudflareTurnRoutes.js";
 
 const { Pool } = pg;
+const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, calls: 30, general: 240 };
 export const app = express();
 export const server = http.createServer(app);
 const wss = process.env.FYNX_NEON_FUNCTION === "1" ? new WebSocketServer({ noServer: true }) : new WebSocketServer({ server, path: "/realtime" });
@@ -86,7 +92,6 @@ export function getRealtimeLocalUserIds() {
 // rate limits at the edge/load-balancer so limits remain effective across instances.
 const rateBuckets = new Map();
 const RATE_WINDOW_MS = 60_000;
-const RATE_LIMITS = { auth: 20, assistant: 20, media: 30, messages: 120, general: 240 };
 const MAX_RATE_BUCKETS = 20_000;
 const responseCache = new Map();
 const CACHE_TTL_MS = 15_000;
@@ -298,6 +303,10 @@ function broadcastToUser(userId, payload) {
     });
   }
 }
+const handleNodeGroupCallSignal = createFynxGroupCallSignalHandler({
+  pool,
+  emitToUser: async (userId, payload) => broadcastToUser(userId, payload)
+});
 async function broadcastMessage(message) {
   const payload = { type: "message", message };
   broadcastToUser(message.senderId, payload);
@@ -1426,6 +1435,14 @@ if (wss) {
       try {
         const body = JSON.parse(raw.toString());
         const signalType = typeof body?.signalType === "string" ? body.signalType.trim().toLowerCase() : "";
+        if (body?.type === "group_call") {
+          const handleGroupCall = process.env.FYNX_NEON_FUNCTION === "1"
+            ? globalThis.__fynxNeonHandleGroupCall
+            : handleNodeGroupCallSignal;
+          if (typeof handleGroupCall !== "function") return sendSocket(socket, { type: "group_call", groupId: body.groupId, callId: body.callId, signalType: "error", error: "group call service unavailable" });
+          await handleGroupCall(userId, user, socket, body);
+          return;
+        }
         if (body?.type !== "call") return;
         if (process.env.FYNX_NEON_FUNCTION === "1") {
           const handleCall = globalThis.__fynxNeonHandleCall;
@@ -1437,21 +1454,35 @@ if (wss) {
           const targetUserId = String(body?.toUserId || "");
           if (!targetUserId || targetUserId === userId) return sendSocket(socket, { type: "call", signalType: "error", error: "invalid call target" });
           if (signalType === "invite") {
-            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const mediaType = body?.callType === "video" ? "video" : "voice";
+            const blockedCallId = validCallId(body?.callId) ? body.callId : newCallId();
+            if (await isFynxCallBlocked(pool, userId, targetUserId)) {
+              return sendSocket(socket, { type: "call", callId: blockedCallId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" });
+            }
+            if (activeCalls.size >= 500) return sendSocket(socket, { type: "call", signalType: "error", error: "call capacity reached" });
             const existing = [...activeCalls.values()].find(call => call.callerId === userId || call.calleeId === userId || call.callerId === targetUserId || call.calleeId === targetUserId);
             if (existing) return sendSocket(socket, { type: "call", signalType: "busy", callId: existing.id, callType: existing.mediaType, fromUserId: targetUserId, toUserId: userId });
             const callId = validCallId(body?.callId) ? body.callId : newCallId();
-            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, createdAt: Date.now() };
+            const call = { id: callId, callerId: userId, calleeId: targetUserId, mediaType, status: "RINGING", createdAt: Date.now() };
             activeCalls.set(callId, call);
             if (!clientsByUserId.has(targetUserId)) { activeCalls.delete(callId); return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "unavailable" }); }
-            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null });
+            let marketplaceContext = null;
+            if (body?.listingId != null) {
+              try {
+                marketplaceContext = await resolveFynxMarketplaceCallContext(pool, userId, targetUserId, body.listingId);
+              } catch (error) {
+                activeCalls.delete(callId);
+                return sendSocket(socket, { type: "call", callId, callType: mediaType, fromUserId: targetUserId, toUserId: userId, signalType: "error", error: error?.message || "Marketplace product is unavailable." });
+              }
+            }
+            relayCallSignal(call, userId, "invite", { fromUsername: user.username || null, ...(marketplaceContext || {}) });
             return;
           }
           const callId = validCallId(body?.callId) ? body.callId : "";
           const call = activeCalls.get(callId);
           if (!call || ![call.callerId, call.calleeId].includes(userId) || ![call.callerId, call.calleeId].includes(targetUserId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
           if (signalType === "accept" || signalType === "reject" || signalType === "end") {
+            if (signalType === "accept") call.status = "ACTIVE";
             relayCallSignal(call, userId, signalType);
             if (signalType !== "accept") closeCall(callId, signalType, false);
             return;
@@ -1460,6 +1491,7 @@ if (wss) {
         const callId = validCallId(body?.callId) ? body.callId : "";
         const call = activeCalls.get(callId);
         if (!call || ![call.callerId, call.calleeId].includes(userId)) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call not found" });
+        if (call.status !== "ACTIVE") return sendSocket(socket, { type: "call", callId, signalType: "error", error: "call must be accepted before media can start" });
         if (!["offer", "answer", "ice"].includes(signalType)) return;
         const payload = validateSignalPayload(signalType, body);
         if (!payload) return sendSocket(socket, { type: "call", callId, signalType: "error", error: "invalid signaling payload" });
@@ -1482,6 +1514,11 @@ if (wss) {
       } else if (!sockets || !sockets.size) {
         broadcastPresence(userId, false);
         for (const [callId, call] of activeCalls) if (call.callerId === userId || call.calleeId === userId) closeCall(callId, "peer_disconnected");
+        disconnectFynxGroupCallsForUser({
+          pool,
+          userId,
+          emitToUser: async (targetUserId, payload) => broadcastToUser(targetUserId, payload)
+        }).catch((error) => console.error("[fynx-group-call] disconnect cleanup failed", error?.message || error));
       }
     });
   } catch { socket.close(1008, "invalid token"); }
@@ -1496,6 +1533,41 @@ export async function dispatchRealtimeConnection(socket, req) {
 }
 
 emailAuth.registerRoutes(app, auth);
+if (pool) {
+  const resolveActiveCall = async (callId, userId, { allowRinging = false } = {}) => {
+    // Railway/Node direct calls are live in this process's authenticated call map.
+    // Neon direct calls use the durable table; group calls use the joined roster in either runtime.
+    if (process.env.FYNX_NEON_FUNCTION !== "1") {
+      const call = activeCalls.get(callId);
+      if (call && (call.status === "ACTIVE" || (allowRinging && call.status === "RINGING")) && [call.callerId, call.calleeId].includes(String(userId))) {
+        return { id: call.id, kind: "direct" };
+      }
+    }
+    const direct = await pool.query(
+      `SELECT id FROM fynx_realtime_calls
+       WHERE id=$1 AND status=ANY($3::text[]) AND (caller_id=$2 OR callee_id=$2) LIMIT 1`,
+      [callId, String(userId), allowRinging ? ["RINGING", "ACTIVE"] : ["ACTIVE"]]
+    ).catch((error) => {
+      if (error?.code === "42P01") return { rows: [] };
+      throw error;
+    });
+    if (direct.rows[0]) return { id: direct.rows[0].id, kind: "direct" };
+    const group = await pool.query(
+      `SELECT c.id FROM fynx_realtime_group_calls c
+       JOIN fynx_realtime_group_call_participants p ON p.call_id=c.id
+       WHERE c.id=$1 AND c.status='ACTIVE'
+         AND p.user_id=$2 AND p.status='JOINED' LIMIT 1`,
+      [callId, String(userId)]
+    ).catch((error) => {
+      if (error?.code === "42P01") return { rows: [] };
+      throw error;
+    });
+    return group.rows[0] ? { id: group.rows[0].id, kind: "group" } : null;
+  };
+  const callRateLimit = rateLimit("calls", RATE_LIMITS.calls);
+  registerCloudflareSfuRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall });
+  registerCloudflareTurnRoutes({ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall: (callId, userId) => resolveActiveCall(callId, userId, { allowRinging: true }) });
+}
 registerSocialRoutes(app, { pool, auth, findUserByUsername });
 if (pool) registerTrustSafetyRoutes({ app, pool, auth });
 if (pool) registerMarketplaceTransactionRoutes({ app, pool, auth });
