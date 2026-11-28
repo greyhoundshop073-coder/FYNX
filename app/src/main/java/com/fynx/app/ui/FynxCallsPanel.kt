@@ -83,9 +83,9 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
             errorMessage = safeDetail?.let { "The call could not be completed: $it" }
                 ?: "FYNX couldn't reach the call service. Check your connection and try again."
             sfuMediaForCleanup[0]?.disconnect()
-            sfuMediaForCleanup[0]?.disconnect()
             mediaEngineForCleanup[0]?.disconnect()
             mediaConnected = false
+            mediaTransport = "pending"
             localVideoTrack = null
             remoteVideoTrack = null
             FynxCallsStore.updateStatus(context, failed.id, "Unavailable", missed = false)
@@ -136,8 +136,10 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                         PeerConnection.IceConnectionState.FAILED -> scope.launch {
                             val failed = session ?: return@launch
                             errorMessage = "The call connection failed. Please try again."
+                            sfuMediaForCleanup[0]?.disconnect()
                             mediaEngineForCleanup[0]?.disconnect()
                             mediaConnected = false
+                            mediaTransport = "pending"
                             localVideoTrack = null
                             remoteVideoTrack = null
                             FynxCallsStore.updateStatus(context, failed.id, "Failed", missed = false)
@@ -307,7 +309,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                             FynxCallsStore.updateStatus(context, event.callId, "Unavailable", missed = false)
                             calls = FynxCallsStore.load(context)
                             sfuMediaForCleanup[0]?.disconnect()
-                            mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
+                            mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null; session = null; activeCall = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
                         }
                         "error" -> session?.takeIf { event.callId.isBlank() || it.id == event.callId }?.let { current ->
                             failCallSignaling(current.id, event.error)
@@ -381,7 +383,6 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
         }
         sfuMedia.disconnect()
         mediaTransport = "pending"
-        sfuMediaForCleanup[0]?.disconnect()
         mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false
         directCallIsInitiator = true
         relaySetupComplete = false
@@ -595,7 +596,7 @@ fun FynxCallsPanel(initialName: String? = null, initialVideo: Boolean = false, i
                     FynxCallsStore.updateStatus(context, current.id, if (incoming) "Declined" else "Ended", missed = false)
                 }
                 sfuMediaForCleanup[0]?.disconnect()
-                mediaEngine.disconnect(); mediaConnected = false; localVideoTrack = null; remoteVideoTrack = null
+                mediaEngine.disconnect(); mediaConnected = false; mediaTransport = "pending"; localVideoTrack = null; remoteVideoTrack = null
                 calls = FynxCallsStore.load(context); activeCall = null; session = null; pendingIncomingAccept = false; pendingIncomingAcceptSignal = false; pendingOutgoingInvite = false; endingCall = false
             }
         )
