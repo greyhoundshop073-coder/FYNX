@@ -6,6 +6,8 @@ const server = fs.readFileSync(new URL("./server.js", import.meta.url), "utf8");
 
 assert.match(server, /registerCloudflareSfuRoutes\(\{ app, pool, auth, rateLimit: callRateLimit, resolveActiveCall \}\)/, "SFU routes must use the runtime-aware authorizer and shared rate limit");
 assert.match(server, /call\.status = "ACTIVE"/, "Railway direct calls must become SFU-eligible only after acceptance");
+assert.match(server, /allowRinging \? \["RINGING", "ACTIVE"\] : \["ACTIVE"\]/, "TURN may be prefetched only by an invited call participant before acceptance");
+assert.match(server, /resolveActiveCall: \(callId, userId\) => resolveActiveCall\(callId, userId, \{ allowRinging: true \}\)/, "TURN resolver must allow the invited ringing state without widening SFU access");
 assert.match(server, /fynx_realtime_group_call_participants/, "Joined group-call members must be eligible for SFU session authorization");
 assert.match(routes, /Authorization: `Bearer ${env\.CLOUDFLARE_SFU_APP_SECRET}`/, "Cloudflare secret must be used only for server-side API requests");
 assert.match(routes, /app\.post\("\/api\/calls\/sfu\/sessions", auth, rateLimit,/, "SFU session creation must require authentication and call rate limiting");
