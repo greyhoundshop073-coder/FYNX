@@ -102,6 +102,12 @@ class FynxAdminPublishingSectionsVisualTest {
                 }
             }
             compose.onNodeWithText("Choose photo or GIF").performScrollTo().performClick()
+            compose.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    compose.onNodeWithContentDescription("FYNX campaign artwork preview").assertIsDisplayed()
+                    true
+                }.getOrDefault(false)
+            }
             compose.onNodeWithContentDescription("FYNX campaign artwork preview").performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("Campaign key").performTextInput(occasionKey)
             compose.onNodeWithText("Banner headline").performTextInput(headline)
@@ -235,7 +241,7 @@ class FynxAdminPublishingSectionsVisualTest {
         check(compose.onAllNodesWithText("Music Library").fetchSemanticsNodes().isEmpty()) { "ADMIN must not see Owner-only Music Library navigation" }
         compose.onNodeWithText("Marketplace").performScrollTo().performClick()
         compose.onNodeWithText("Marketplace campaigns").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Save offline draft").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("fynx-campaign-save-button").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Campaign artwork (optional)").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Choose photo or GIF").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Marketplace campaigns").performScrollTo()
