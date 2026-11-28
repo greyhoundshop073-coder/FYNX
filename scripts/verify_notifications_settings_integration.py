@@ -46,7 +46,7 @@ appearance_dialog = read("app/src/main/java/com/fynx/app/ui/FynxChatWallpaper.kt
 design_system = read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt")
 check("Appearance offers exactly three clear global choices", all(option in appearance_dialog for option in ['Triple("System"', 'Triple("Light"', 'Triple("Dark"']) and 'Triple("Charcoal Black"' not in appearance_dialog and 'Triple("Black AMOLED"' not in appearance_dialog)
 check("Appearance choices are selectable cards with immediate callback", 'onClick = { onSelected(option) }' in appearance_dialog and 'Your choice is saved immediately' in appearance_dialog)
-check("Legacy dark appearance values remain safely supported by theme runtime", '"Charcoal Black" -> true' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt") and '"Black AMOLED" -> true' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt"))
+check("legacy dark appearance values remain safely supported by theme runtime", 'fynxEffectiveDarkMode' in design_system and '"Dark", "Charcoal Black", "Black AMOLED" -> true' in design_system)
 check("Black AMOLED is a true black Appearance state", 'appearance == "Black AMOLED"' in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt") and "AmoledBackground = Color.Black" in read("app/src/main/java/com/fynx/app/ui/FynxDesignSystem.kt"))
 check("Black AMOLED keeps white primary text", "AmoledTextPrimary = Color.White" in design_system)
 check("Green replaces Charcoal Black in the accent picker", 'listOf(FynxAccent.Blue, FynxAccent.Purple, FynxAccent.Green)' in appearance_dialog and 'FynxAccent.Green -> "Green"' in appearance_dialog)
