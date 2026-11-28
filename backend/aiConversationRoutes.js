@@ -1,17 +1,13 @@
 import { getFynxDatabasePool } from "./databasePool.js";
-import pg from "pg";
 import { getCachedMediaPayload } from "./mediaPayloadCache.js";
 import { assistantJsonBodyParser } from "./assistantJsonBodyParser.js";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { runAssistantAgent } from "./fynxAiToolRegistry.js";
+import { FynxAiUsageLimitError } from "./fynxAiUsageBudget.js";
 import { buildAiConversationContext, loadPersistedAiConversationHistory } from "./aiConversationContext.js";
 
-const { Pool } = pg;
-const DATABASE_URL = process.env.DATABASE_URL || "";
 const JWT_SECRET = process.env.JWT_SECRET || "";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const pool = getFynxDatabasePool();
 
 function authenticate(req) {
@@ -149,8 +145,12 @@ export function registerFynxAiConversationRoutes({ app }) {
     if(!message && !mediaIds.length) return res.status(400).json({error:"message or attachment is required"});
     if(message.length>4000 || mediaIds.length>4) return res.status(413).json({error:"message or attachment limit exceeded"});
     let stage="database_setup";
+    let db = null;
+    let userMessageId = null;
+    let userMessageCommitted = false;
+    let assistantMessageCommitted = false;
     try {
-      const db=requireDb(); await ensureSchema(db);
+      db=requireDb(); await ensureSchema(db);
       const conversation=await ownedConversation(db,req.params.id,userId);
       if(!conversation) return res.status(404).json({error:"conversation not found"});
       stage="attachment_validation";
@@ -159,53 +159,85 @@ export function registerFynxAiConversationRoutes({ app }) {
       const conversationHistory=await loadPersistedAiConversationHistory(db,conversation.id,userId);
       const history=conversationHistory.slice(-12);
       const context=buildAiConversationContext(conversationHistory);
-      stage="database_transaction";
+
+      // Keep the user turn and its attachments atomic, then release the DB
+      // connection/transaction before making the potentially slow Gemini call.
+      stage="persist_user_message";
       await db.query("BEGIN");
-      let committed = false;
       try {
         const userMessage=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'user',$3) RETURNING id,created_at",[conversation.id,userId,message]);
-        const userMessageId=String(userMessage.rows[0].id);
+        userMessageId=String(userMessage.rows[0].id);
         for(const image of images) await db.query("INSERT INTO ai_message_media(message_id,media_id,media_type) VALUES($1,$2,$3)",[userMessageId,image.id,image.type]);
-        if(wantsStream) {
-          res.status(200);
-          res.setHeader("Content-Type","text/event-stream; charset=utf-8");
-          res.setHeader("Cache-Control","no-cache, no-transform");
-          res.setHeader("Connection","keep-alive");
-          res.setHeader("X-Accel-Buffering","no");
-          res.flushHeaders?.();
-        }
-        stage="gemini_agent";
-        const agentResult = await runAssistantAgent({
-          message: message || "Analyze the attached image.",
-          userId,
-          history,
-          context,
-          imageInputs: images,
-          onTextChunk: wantsStream ? (chunk) => {
-            if(chunk && !res.destroyed && !res.writableEnded) {
-              res.write("data: " + JSON.stringify({type:"delta",text:chunk}) + "\n\n");
-            }
-          } : null
-        });
-        const reply = agentResult.reply;
-        stage="persist_assistant_reply";
-        const assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
+        await db.query("COMMIT");
+        userMessageCommitted = true;
+      } catch(error) {
+        await db.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+
+      if(wantsStream) {
+        res.status(200);
+        res.setHeader("Content-Type","text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control","no-cache, no-transform");
+        res.setHeader("Connection","keep-alive");
+        res.setHeader("X-Accel-Buffering","no");
+        res.flushHeaders?.();
+      }
+
+      // No PostgreSQL transaction is held while waiting for the external model.
+      stage="gemini_agent";
+      const agentResult = await runAssistantAgent({
+        message: message || "Analyze the attached image.",
+        userId,
+        history,
+        context,
+        imageInputs: images,
+        onTextChunk: wantsStream ? (chunk) => {
+          if(chunk && !res.destroyed && !res.writableEnded) {
+            res.write("data: " + JSON.stringify({type:"delta",text:chunk}) + "\n\n");
+          }
+        } : null
+      });
+      const reply = agentResult.reply;
+
+      stage="persist_assistant_reply";
+      await db.query("BEGIN");
+      let assistant;
+      try {
+        assistant=await db.query("INSERT INTO ai_messages(conversation_id,user_id,role,text) VALUES($1,$2,'assistant',$3) RETURNING id,created_at",[conversation.id,userId,reply]);
         await db.query("UPDATE ai_conversations SET updated_at=NOW(),title=CASE WHEN title='New conversation' AND $2<>'' THEN LEFT($2,120) ELSE title END WHERE id=$1",[conversation.id,message]);
         await db.query("COMMIT");
-        committed = true;
-        const responsePayload={conversationId:String(conversation.id),userMessageId:String(userMessageId),assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()},pendingAction:agentResult.pendingAction || null};
-        if(wantsStream) {
-          if(!res.destroyed && !res.writableEnded) {
-            res.write("data: " + JSON.stringify({type:"complete",...responsePayload}) + "\n\n");
+        assistantMessageCommitted = true;
+      } catch(error) {
+        await db.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+      const responsePayload={conversationId:String(conversation.id),userMessageId:String(userMessageId),assistantMessage:{id:String(assistant.rows[0].id),text:reply,timestamp:new Date(assistant.rows[0].created_at).getTime()},pendingAction:agentResult.pendingAction || null};
+      if(wantsStream) {
+        if(!res.destroyed && !res.writableEnded) {
+          res.write("data: " + JSON.stringify({type:"complete",...responsePayload}) + "\n\n");
+          res.end();
+        }
+        return;
+      }
+      return res.json(responsePayload);
+    } catch(error) {
+      // Preserve the old all-or-nothing conversation behavior without holding
+      // a DB transaction open across the Gemini network request.
+      if(db && userMessageCommitted && !assistantMessageCommitted && userMessageId) {
+        await db.query("DELETE FROM ai_messages WHERE id=$1 AND user_id=$2",[userMessageId,userId]).catch(() => {});
+      }
+      if (error instanceof FynxAiUsageLimitError) {
+        if (wantsStream && res.headersSent) {
+          if (!res.destroyed && !res.writableEnded) {
+            res.write("data: " + JSON.stringify({type:"error",message:error.message}) + "\n\n");
             res.end();
           }
           return;
         }
-        return res.json(responsePayload);
-      } finally {
-        if (!committed) await db.query("ROLLBACK").catch(() => {});
+        if (typeof res.setHeader === "function") res.setHeader("Retry-After", String(error.retryAfterSeconds));
+        return res.status(429).json({ error: error.message, retryAfterSeconds: error.retryAfterSeconds });
       }
-    } catch(error) {
       console.error("[fynx-ai] conversation message failed", JSON.stringify({
         stage,
         errorName:String(error?.name || "Error").slice(0,80),
