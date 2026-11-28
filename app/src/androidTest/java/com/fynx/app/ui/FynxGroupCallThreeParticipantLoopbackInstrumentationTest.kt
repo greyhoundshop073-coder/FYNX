@@ -127,5 +127,6 @@ class FynxGroupCallThreeParticipantLoopbackInstrumentationTest {
         } finally {
             engines.values.forEach { runCatching { it.disconnect() } }
         }
+        Unit
     }
 }
