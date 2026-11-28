@@ -374,7 +374,27 @@ class FynxRealtimeClient(
     fun sendCallOffer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "offer", JSONObject().put("sdp", sdp))
     fun sendCallAnswer(callId: String, targetUserId: String, sdp: String, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "answer", JSONObject().put("sdp", sdp))
     fun sendCallIce(callId: String, targetUserId: String, candidate: IceCandidate, video: Boolean) = sendCall(callId, targetUserId, if (video) "video" else "voice", "ice", JSONObject().put("candidate", JSONObject().apply { put("candidate", candidate.sdp); put("sdpMid", candidate.sdpMid); put("sdpMLineIndex", candidate.sdpMLineIndex) }))
-    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null): Boolean = sendJson(JSONObject().apply { put("type", "call"); put("callId", callId.replaceFirst("call-", "call_").take(80)); put("toUserId", targetUserId); put("callType", callType); put("signalType", signalType); extra?.keys()?.forEach { put(it, extra.get(it)) } })
+    private fun sendCall(callId: String, targetUserId: String, callType: String, signalType: String, extra: JSONObject? = null): Boolean {
+        if (!FynxCallTransportHardening.isValidCallId(callId) ||
+            targetUserId.isBlank() ||
+            !FynxCallTransportHardening.isValidCallType(callType) ||
+            !FynxCallTransportHardening.isValidCallSignal(signalType)
+        ) return false
+        if ((signalType == "offer" || signalType == "answer") &&
+            extra?.optString("sdp").orEmpty().let { it.isBlank() || it.length > 200_000 }
+        ) return false
+        if (signalType == "ice" &&
+            extra?.optJSONObject("candidate")?.optString("candidate").orEmpty().let { it.isBlank() || it.length > 20_000 }
+        ) return false
+        return sendJson(JSONObject().apply {
+            put("type", "call")
+            put("callId", callId.replaceFirst("call-", "call_").take(80))
+            put("toUserId", targetUserId)
+            put("callType", callType)
+            put("signalType", signalType)
+            extra?.keys()?.forEach { put(it, extra.get(it)) }
+        })
+    }
     fun sendTyping(recipientId: String, isTyping: Boolean) = sendJson(JSONObject().apply { put("type", "typing"); put("recipientId", recipientId); put("isTyping", isTyping) })
     fun sendRead(messageIds: List<String>) { val ids = messageIds.mapNotNull { it.toLongOrNull() }.take(100); if (ids.isNotEmpty()) sendJson(JSONObject().apply { put("type", "read"); put("messageIds", JSONArray(ids)) }) }
     fun acknowledgeMessage(messageId: String) { messageId.toLongOrNull()?.let { sendJson(JSONObject().put("type", "message_ack").put("messageId", it)) } }

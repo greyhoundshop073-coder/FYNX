@@ -209,3 +209,14 @@ Added JVM policy tests for muted-camera late join, voice-call no-video, and miss
 Rechecked the exact unified calling branch after comparing it with the camera/signaling branch #589. The current #599 head already contains both the legacy `onAddStream` callback and the Unified Plan `onAddTrack` callback in `FynxWebRtcCallEngine`; the latter forwards both remote AudioTrack and VideoTrack to the existing active-call callbacks. No duplicate callback was added.
 
 The dedicated video-call source verifier now explicitly guards this receive path so a future branch reconciliation cannot silently drop it. The callback's presence is source evidence only; remote-track delivery still needs real authenticated two-account runtime verification.
+
+
+## 13. 2026-11-28 Direct call transport failure handling
+
+Ported the call-transport failure behavior from the coordinated camera/signaling hardening work into the unified call branch while preserving the Marketplace listing-ID invite parameter. Direct WebRTC offer, answer and ICE callbacks now check whether the authenticated realtime client accepted each frame. If it did not, the active call is stopped, local media is released, pending invite/answer flags are cleared, call history is marked unavailable, and a retryable error is shown rather than leaving a false connecting screen.
+
+The Android direct-call send helper now validates call ID, target, media type and signal name, and bounds outgoing SDP and ICE candidate payloads before handing them to the authenticated socket. Remote signaling errors now use the same cleanup path. Hang-up timeout and manual end report when the local socket did not accept the terminal signal.
+
+Marketplace listing context remains attached to the outgoing invite; the added failure checks cover offer/answer/ICE only. Group signaling remains separately managed by its existing group event queue and per-peer state.
+
+This is app-side transport correctness. It does not certify that a live Railway/Neon realtime endpoint is healthy or that two physical devices can complete the call.

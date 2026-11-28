@@ -112,6 +112,20 @@ checks = {
         and "is AudioTrack -> callbacks.onRemoteAudioTrack(track)" in app["direct_engine"]
         and "is VideoTrack -> callbacks.onRemoteVideoTrack(track)" in app["direct_engine"]
         and "override fun onAddStream(stream: MediaStream)" in app["direct_engine"],
+    "Failed direct SDP and ICE delivery closes the call instead of leaving a false connecting state":
+        all(token in app["calls"] for token in (
+            "fun failCallSignaling(callId: String",
+            "if (current != null && !sent) failCallSignaling(current.id)",
+            "pendingIncomingAcceptSignal = false",
+            "pendingOutgoingInvite = false",
+            "mediaEngineForCleanup[0]?.disconnect()"
+        )),
+    "Direct realtime call frames validate identity, signal type and bounded SDP/ICE payloads":
+        "isValidCallId(callId)" in app["realtime"]
+        and "isValidCallType(callType)" in app["realtime"]
+        and "isValidCallSignal(signalType)" in app["realtime"]
+        and 'extra?.optString("sdp")' in app["realtime"]
+        and 'extra?.optJSONObject("candidate")?.optString("candidate")' in app["realtime"],
 
     # Group Chat has a separate group signaling contract and per-peer media.
     "Current Group Chat exposes a group video-call action":
