@@ -211,6 +211,6 @@ const unauthorized = await invoke("POST", "/api/calls/sfu/sessions", {
   userId: "99", body: { callId: "call_liveproof_1" }
 });
 assert.equal(unauthorized.statusCode, 403);
-assert.ok(!JSON.stringify([create.body, publish.body, answer.body, close.body]).includes("test-secret"));
+assert.ok(!JSON.stringify([create.body, publish.body, answerSubscribe.body, close.body]).includes("test-secret"));
 
 console.log("Cloudflare SFU lifecycle tests passed (call authorization, mutation fencing, renegotiation, subscription, end-of-call cleanup).");
