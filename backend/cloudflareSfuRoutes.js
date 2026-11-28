@@ -166,7 +166,15 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
         await finishMutation(sessionId, "RECOVERY_REQUIRED");
         return res.status(502).json({ error: "media service did not return the expected publication answer; replace or recover this session" });
       }
-      const successful = Array.isArray(result?.tracks) ? result.tracks.filter((track) => !track.errorCode && !track.errorDescription) : [];
+      const returnedTracks = Array.isArray(result?.tracks) ? result.tracks : [];
+      const successful = returnedTracks.filter((track) => !track.errorCode && !track.errorDescription);
+      const returnedNames = successful.map((track) => String(track.trackName || ""));
+      const returnedMids = successful.map((track) => String(track.mid || ""));
+      const publicationIsExact = returnedTracks.length === tracks.length &&
+        successful.length === tracks.length &&
+        new Set(returnedNames).size === tracks.length &&
+        new Set(returnedMids).size === tracks.length &&
+        tracks.every((track) => returnedNames.includes(track.trackName));
       for (const track of successful) {
         const source = tracks.find((item) => item.trackName === track.trackName);
         if (source) await pool.query(
@@ -176,9 +184,9 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
           [callId, String(req.user.sub), sessionId, source.trackName, source.mid]
         );
       }
-      if (successful.length !== tracks.length) {
+      if (!publicationIsExact) {
         await finishMutation(sessionId, "RECOVERY_REQUIRED");
-        return res.status(502).json({ error: "one or more media tracks could not be published; the session must be recovered before further changes" });
+        return res.status(502).json({ error: "Cloudflare did not confirm each requested publication exactly once; the session must be recovered before further changes" });
       }
       await finishMutation(sessionId, needsRenegotiation(result) ? "AWAITING_RENEGOTIATION" : "READY");
       return res.json({ ...result, mutationState: needsRenegotiation(result) ? "AWAITING_RENEGOTIATION" : "READY" });
@@ -250,7 +258,10 @@ export function registerCloudflareSfuRoutes({ app, pool, auth, rateLimit, fetchI
       const successfulTracks = receivedTracks.filter((track) =>
         !track?.errorCode && !track?.errorDescription && validId(String(track?.mid || ""), 16)
       );
-      if (successfulTracks.length !== trackNames.length ||
+      const successfulMids = successfulTracks.map((track) => String(track.mid));
+      if (receivedTracks.length !== trackNames.length ||
+          successfulTracks.length !== trackNames.length ||
+          new Set(successfulMids).size !== trackNames.length ||
           (needsRenegotiation(result) && (!validSdp(result?.sessionDescription) || result.sessionDescription.type !== "offer"))) {
         await finishMutation(sessionId, "RECOVERY_REQUIRED");
         return res.status(502).json({ error: "one or more requested media tracks could not be subscribed or negotiated; replace or recover this session" });
