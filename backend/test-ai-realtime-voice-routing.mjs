@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { buildRealtimeSessionConfig, isValidRealtimeSessionMode, FYNX_AI_REALTIME_VOICES, resolveFynxAiVoice } from "./aiVoiceSession.js";
+import {
+  buildRealtimeSessionConfig, isValidRealtimeSessionMode,
+  FYNX_AI_REALTIME_VOICES, resolveFynxAiVoice,
+  parseFynxRealtimeCallId, createRealtimeCall, createRealtimeAnswer,
+  hangupFynxRealtimeCall
+} from "./aiVoiceSession.js";
 
 assert.equal(isValidRealtimeSessionMode("assistant"), true);
 assert.equal(isValidRealtimeSessionMode("transcription"), true);
@@ -34,5 +39,44 @@ assert.equal(legacy.audio.output.voice, "marin");
 assert.ok(legacy.tools.length > 0);
 assert.equal(legacy.tool_choice, "auto");
 assert.throws(() => buildRealtimeSessionConfig("unexpected"), /Unsupported/);
+assert.equal(parseFynxRealtimeCallId("/v1/realtime/calls/rtc_123456"), "rtc_123456");
+assert.equal(parseFynxRealtimeCallId("https://api.openai.com/v1/realtime/calls/rtc_call-456_abc"), "rtc_call-456_abc");
+assert.throws(() => parseFynxRealtimeCallId("https://example.com/v1/realtime/calls/rtc_123456"), /unexpected/);
+assert.throws(() => parseFynxRealtimeCallId("/v1/realtime/calls/not-a-call"), /invalid/);
+
+const fakeCreateFetch = async (url, options) => {
+  assert.equal(url, "https://api.openai.com/v1/realtime/calls");
+  assert.equal(options.method, "POST");
+  assert.equal(options.headers.Authorization, "Bearer test-provider-key");
+  assert.ok(options.body instanceof FormData);
+  assert.equal(options.body.get("sdp"), "v=0 test-offer");
+  return new Response("v=0 test-answer", {
+    status: 201,
+    headers: { Location: "/v1/realtime/calls/rtc_testcall123" }
+  });
+};
+const created = await createRealtimeCall(
+  "v=0 test-offer", "assistant", "marin",
+  { apiKey: "test-provider-key", fetchImpl: fakeCreateFetch }
+);
+assert.deepEqual(created, { answer: "v=0 test-answer", callId: "rtc_testcall123" });
+const legacyAnswer = await createRealtimeAnswer(
+  "v=0 test-offer", "speech", "cedar",
+  { apiKey: "test-provider-key", fetchImpl: fakeCreateFetch }
+);
+assert.equal(legacyAnswer, "v=0 test-answer");
+let hangupRequest;
+await hangupFynxRealtimeCall("rtc_testcall123", {
+  apiKey: "test-provider-key",
+  fetchImpl: async (url, options) => {
+    hangupRequest = { url, options };
+    return new Response(null, { status: 200 });
+  }
+});
+assert.equal(hangupRequest.url, "https://api.openai.com/v1/realtime/calls/rtc_testcall123/hangup");
+assert.equal(hangupRequest.options.method, "POST");
+assert.equal(hangupRequest.options.headers.Authorization, "Bearer test-provider-key");
+await assert.rejects(() => hangupFynxRealtimeCall("invalid", { apiKey: "test-provider-key" }), /valid FYNX Realtime call ID/);
+
 
 console.log("FYNX AI voice routing tests GREEN: transcription cannot answer or call tools; speech only speaks supplied text; legacy mode remains compatible");
