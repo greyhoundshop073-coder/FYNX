@@ -197,3 +197,8 @@ Voice selection follow-up: Android now provides a selectable OpenAI Realtime spe
 ## Transcription model compatibility update
 
 The live microphone path now defaults to `gpt-live-transcribe`, with the existing `OPENAI_TRANSCRIPTION_MODEL` environment override retained. This replaces the deprecated `gpt-4o-mini-transcribe` default ahead of its February 26, 2027 shutdown. The voice routing test asserts the selected default. Provider runtime behavior still requires a valid OpenAI key and live backend certification.
+
+
+## Voice portrait integration
+
+The Android voice orb now renders a distinct generated portrait for each of the four selectable voices from one 320×320 WebP 2×2 sprite sheet bundled at `app/src/main/res/drawable-nodpi/fynx_ai_voice_portraits.webp` (9,452 bytes). Marin maps to the top-left portrait, Cedar top-right, Coral bottom-left and Ash bottom-right. The outer Azure-blue circular frame remains in place. This is a single compressed asset rather than four separately packaged files; final visual crop and device-memory behavior still require APK/device verification.

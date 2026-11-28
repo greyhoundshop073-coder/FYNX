@@ -148,7 +148,7 @@ Wallet and Money Tools starters may explain general navigation and concepts only
 The dashboard must distinguish contextual discovery cards (which start a conversation) from Explore FYNX shortcuts (which open real app destinations). Do not keep a shortcut that routes back to the assistant itself or implies a separate AI tool screen that does not exist.
 
 
-Voice selection follow-up: Android now provides a selectable OpenAI Realtime speech voice and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. Physical-device voice-quality and preview checks remain part of runtime certification.
+Voice selection follow-up: Android provides four selectable OpenAI Realtime speech voices and a speech-only sample preview. The selected voice is persisted locally and applies only to spoken playback of saved Gemini answers; microphone transcription and Gemini answer generation remain unchanged. The FYNX AI voice orb now displays a distinct matching portrait for each selected voice (Marin, Cedar, Coral, Ash) using one compressed 2×2 WebP sprite sheet (~9.3 KB) bundled in drawable-nodpi. Physical-device voice-quality, crop/layout and preview checks remain part of runtime certification.
 
 
 Live microphone transcription defaults to OpenAI's current `gpt-live-transcribe` model (overridable through `OPENAI_TRANSCRIPTION_MODEL`). The previous `gpt-4o-mini-transcribe` default is deprecated and scheduled for shutdown on February 26, 2027; the new default keeps the app on the recommended Realtime transcription path.
