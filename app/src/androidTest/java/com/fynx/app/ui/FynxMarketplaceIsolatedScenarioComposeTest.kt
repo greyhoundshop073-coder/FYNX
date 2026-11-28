@@ -22,11 +22,14 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Runs real FYNX production Marketplace composables against data compiled only
@@ -88,6 +91,10 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         val expectedDealId = candidates[1].id
         val firstDeal = dealListings.first { it.id == candidates.first().id }
         val secondDeal = dealListings.first { it.id == expectedDealId }
+        // Dated campaign slides can precede products; follow the real Marketplace order.
+        val featuredSlideStartIndex = if (
+            marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) != null
+        ) 1 else 0
         var openedDealId: String? = null
         var openedCardId: String? = null
         var favoriteActions = 0
@@ -140,16 +147,18 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
         compose.onNodeWithText(FynxMarketplaceIsolatedTestFixtures.banner).assertIsDisplayed()
         compose.onNodeWithText("WALLET TEST MODE ONLY — no money is moved").assertIsDisplayed()
         compose.onNodeWithText("Discover on FYNX").performScrollTo().assertIsDisplayed()
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag("fynx-marketplace-promo-carousel").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(featuredSlideStartIndex)
+        compose.waitUntil(timeoutMillis = 8_000) {
             compose.onAllNodesWithText(firstDeal.title).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(firstDeal.title).assertIsDisplayed()
         saveScreenshot("marketplace-test-great-deals.png")
 
-        // Select the second real slide through the production LazyRow state. This keeps
-        // listing-identity and destination assertions deterministic on slower emulators;
-        // auto-rotation is exercised independently by the following test.
-        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(1)
+        // Select the next actual product slide after any dated campaign slide.
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(featuredSlideStartIndex + 1)
         compose.waitUntil(timeoutMillis = 3_000) {
             runCatching { compose.onNodeWithText(secondDeal.title).assertIsDisplayed() }.isSuccess
         }
@@ -188,6 +197,9 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
             }
         )
         assertTrue(candidates.size >= 2)
+        val featuredSlideStartIndex = if (
+            marketplaceCelebrationFor(LocalDate.now(ZoneId.of("Africa/Lagos"))) != null
+        ) 1 else 0
         compose.setContent {
             MaterialTheme {
                 MarketplacePromotionalBanner(
@@ -202,16 +214,34 @@ class FynxMarketplaceIsolatedScenarioComposeTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 3_000) {
+        compose.waitUntil(timeoutMillis = 5_000) {
+            compose.onAllNodesWithTag("fynx-marketplace-promo-carousel").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("fynx-marketplace-promo-carousel").performScrollToIndex(featuredSlideStartIndex)
+        compose.waitUntil(timeoutMillis = 8_000) {
             compose.onAllNodesWithText(candidates.first().title).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(candidates.first().title).assertIsDisplayed()
         // Rotation is 6.5 seconds in production. Assert the next real listing headline,
         // rather than a counter that the production promotional banner does not render.
-        compose.waitUntil(timeoutMillis = 9_000) {
+        compose.waitUntil(timeoutMillis = 12_000) {
             runCatching { compose.onNodeWithText(candidates[1].title).assertIsDisplayed() }.isSuccess
         }
         compose.onNodeWithText(candidates[1].title).assertIsDisplayed()
+    }
+
+    @Test
+    fun sellerActivityLabelsUseTheLastActiveTimestampNotListingAge() {
+        val now = 2_000_000_000_000L
+        assertEquals("Active just now", marketplaceSellerActivityLabel(now - 20_000L, now))
+        assertEquals("Active 5 minutes ago", marketplaceSellerActivityLabel(now - 5L * 60_000L, now))
+        assertEquals("Active 1 hour ago", marketplaceSellerActivityLabel(now - 60L * 60_000L, now))
+        assertEquals("Active 2 hours ago", marketplaceSellerActivityLabel(now - 2L * 60L * 60L * 1000L, now))
+        assertEquals("Active yesterday", marketplaceSellerActivityLabel(now - 24L * 60L * 60L * 1000L, now))
+        assertEquals("Active 3 days ago", marketplaceSellerActivityLabel(now - 3L * 24L * 60L * 60L * 1000L, now))
+        assertNull(marketplaceSellerActivityLabel(null, now))
+        assertNull(marketplaceSellerActivityLabel(0L, now))
+        assertNull(marketplaceSellerActivityLabel(now + 1L, now))
     }
 
     private fun saveScreenshot(name: String) {

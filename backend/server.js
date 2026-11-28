@@ -19,7 +19,7 @@ import { registerMarketplaceAdvertisingRoutes } from "./marketplaceAdvertising.j
 import { registerTrustSafetyRoutes } from "./trustSafety.js";
 import { createEmailDelivery } from "./emailDelivery.js";
 import { createEmailAuthController } from "./emailAuthRoutes.js";
-import { visiblePresenceUserIds } from "./presencePrivacy.js";
+import { recordPresenceActivity, visibleLastActiveAtByUserId, visiblePresenceUserIds } from "./presencePrivacy.js";
 
 const { Pool } = pg;
 export const app = express();
@@ -392,12 +392,27 @@ app.get("/api/presence", auth, async (req, res) => {
     const connectedUserIds = [...clientsByUserId.entries()]
       .filter(([, sockets]) => sockets && [...sockets].some((socket) => socket.readyState === 1))
       .map(([userId]) => String(userId));
-    const visibleIds = await visiblePresenceUserIds(String(req.user.sub), connectedUserIds);
+    const viewerId = String(req.user.sub);
+    const [visibleIds, lastActiveAtByUserId] = await Promise.all([
+      visiblePresenceUserIds(viewerId, connectedUserIds),
+      visibleLastActiveAtByUserId(viewerId)
+    ]);
     res.set("Cache-Control", "private, no-store");
-    return res.json({ onlineUserIds: [...visibleIds] });
+    return res.json({ onlineUserIds: [...visibleIds], lastActiveAtByUserId });
   } catch (error) {
     console.error("[fynx-presence] snapshot failed", error?.message || error);
     return res.status(503).json({ error: "presence unavailable" });
+  }
+});
+
+app.post("/api/presence/heartbeat", auth, async (req, res) => {
+  try {
+    const lastActiveAtEpochMs = await recordPresenceActivity(String(req.user.sub));
+    res.set("Cache-Control", "private, no-store");
+    return res.json({ lastActiveAtEpochMs });
+  } catch (error) {
+    console.error("[fynx-presence] heartbeat failed", error?.message || error);
+    return res.status(503).json({ error: "presence heartbeat unavailable" });
   }
 });
 

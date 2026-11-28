@@ -25,20 +25,53 @@ import kotlin.random.Random
  */
 object FynxOnlinePresenceStore {
     private val onlineUserIds = mutableStateMapOf<String, Boolean>()
+    private val lastActiveAtByUserId = mutableStateMapOf<String, Long>()
 
     fun setOnline(userId: String, online: Boolean) {
         val id = userId.trim()
         if (id.isBlank()) return
-        if (online) onlineUserIds[id] = true else onlineUserIds.remove(id)
+        if (online) {
+            onlineUserIds[id] = true
+            lastActiveAtByUserId.remove(id)
+        } else {
+            onlineUserIds.remove(id)
+            lastActiveAtByUserId[id] = System.currentTimeMillis()
+        }
     }
 
     fun replaceSnapshot(userIds: Set<String>) {
+        val normalized = userIds.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+        val newlyOffline = onlineUserIds.keys - normalized
+        val now = System.currentTimeMillis()
+        newlyOffline.forEach { lastActiveAtByUserId[it] = now }
         onlineUserIds.clear()
-        userIds.map { it.trim() }.filter { it.isNotBlank() }.forEach { onlineUserIds[it] = true }
+        normalized.forEach {
+            onlineUserIds[it] = true
+            lastActiveAtByUserId.remove(it)
+        }
+    }
+
+    fun replaceLastActiveSnapshot(lastActiveAt: Map<String, Long>) {
+        val previouslyKnown = lastActiveAtByUserId.toMap()
+        lastActiveAtByUserId.clear()
+        lastActiveAt.forEach { (rawId, timestamp) ->
+            val id = rawId.trim()
+            if (id.isNotBlank() && timestamp > 0L && !isOnline(id)) {
+                lastActiveAtByUserId[id] = maxOf(timestamp, previouslyKnown[id] ?: 0L)
+            }
+        }
     }
 
     fun isOnline(userId: String?): Boolean = !userId.isNullOrBlank() && onlineUserIds[userId.trim()] == true
-    fun clear() = onlineUserIds.clear()
+    fun lastActiveAt(userId: String?): Long? =
+        if (userId.isNullOrBlank()) null else lastActiveAtByUserId[userId.trim()]
+
+    fun clearOnline() = onlineUserIds.clear()
+
+    fun clear() {
+        onlineUserIds.clear()
+        lastActiveAtByUserId.clear()
+    }
 }
 
 /** Authenticated realtime transport for messages and ephemeral chat/call signals. */

@@ -229,20 +229,47 @@ fun FynxApp(deepLinkDestination: FynxDeepLinkDestination? = null, deepLinkReques
             FynxOnlinePresenceStore.clear()
             return@LaunchedEffect
         }
+        var lastHeartbeatAttemptAtMs = 0L
         while (true) {
-            FynxBackendClient.get(context, "/api/presence").onSuccess { raw ->
-                val ids = runCatching {
-                    val users = org.json.JSONObject(raw).optJSONArray("onlineUserIds")
-                    buildSet {
-                        if (users != null) {
-                            for (index in 0 until users.length()) add(users.optString(index).trim())
+            val appIsForeground = lifecycleOwner.lifecycle.currentState.isAtLeast(
+                androidx.lifecycle.Lifecycle.State.STARTED
+            )
+            if (appIsForeground) {
+                val now = System.currentTimeMillis()
+                if (now - lastHeartbeatAttemptAtMs >= 60_000L) {
+                    lastHeartbeatAttemptAtMs = now
+                    // Record foreground activity without making presence a login or browsing dependency.
+                    FynxBackendClient.postJson(context, "/api/presence/heartbeat", "{}")
+                }
+                FynxBackendClient.get(context, "/api/presence").onSuccess { raw ->
+                    val snapshot = org.json.JSONObject(raw)
+                    val ids = runCatching {
+                        val users = snapshot.optJSONArray("onlineUserIds")
+                        buildSet {
+                            if (users != null) {
+                                for (index in 0 until users.length()) add(users.optString(index).trim())
+                            }
                         }
-                    }
-                }.getOrDefault(emptySet())
-                FynxOnlinePresenceStore.replaceSnapshot(ids)
-            }.onFailure {
-                // Fail closed while the backend is unavailable so stale green dots disappear.
-                FynxOnlinePresenceStore.clear()
+                    }.getOrDefault(emptySet())
+                    val lastActiveAt = runCatching {
+                        val activity = snapshot.optJSONObject("lastActiveAtByUserId")
+                        buildMap {
+                            if (activity != null) {
+                                val keys = activity.keys()
+                                while (keys.hasNext()) {
+                                    val id = keys.next().trim()
+                                    val timestamp = activity.optLong(id, 0L)
+                                    if (id.isNotBlank() && timestamp > 0L) put(id, timestamp)
+                                }
+                            }
+                        }
+                    }.getOrDefault(emptyMap())
+                    FynxOnlinePresenceStore.replaceLastActiveSnapshot(lastActiveAt)
+                    FynxOnlinePresenceStore.replaceSnapshot(ids)
+                }.onFailure {
+                    // Fail closed for green dots while retaining last confirmed activity history.
+                    FynxOnlinePresenceStore.clearOnline()
+                }
             }
             delay(20_000L)
         }

@@ -31,6 +31,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -207,12 +209,52 @@ internal fun MarketplaceSellerPresenceAvatar(
     }
 }
 
+internal fun marketplaceSellerActivityLabel(lastActiveAtEpochMs: Long?, nowEpochMs: Long): String? {
+    val lastActive = lastActiveAtEpochMs ?: return null
+    if (lastActive <= 0L || nowEpochMs < lastActive) return null
+    val elapsed = nowEpochMs - lastActive
+    val minute = 60_000L
+    val hour = 60L * minute
+    val day = 24L * hour
+    return when {
+        elapsed < minute -> "Active just now"
+        elapsed < hour -> {
+            val minutes = (elapsed / minute).coerceAtLeast(1L)
+            "Active $minutes minute${if (minutes == 1L) "" else "s"} ago"
+        }
+        elapsed < day -> {
+            val hours = (elapsed / hour).coerceAtLeast(1L)
+            "Active $hours hour${if (hours == 1L) "" else "s"} ago"
+        }
+        elapsed < 2L * day -> "Active yesterday"
+        elapsed < 7L * day -> "Active ${elapsed / day} days ago"
+        elapsed < 30L * day -> {
+            val weeks = (elapsed / (7L * day)).coerceAtLeast(1L)
+            "Active $weeks week${if (weeks == 1L) "" else "s"} ago"
+        }
+        elapsed < 365L * day -> {
+            val months = (elapsed / (30L * day)).coerceAtLeast(1L)
+            "Active $months month${if (months == 1L) "" else "s"} ago"
+        }
+        else -> {
+            val years = (elapsed / (365L * day)).coerceAtLeast(1L)
+            "Active $years year${if (years == 1L) "" else "s"} ago"
+        }
+    }
+}
+
 @Composable
 internal fun MarketplaceSellerOnlineLabel(userId: String?) {
-    if (FynxOnlinePresenceStore.isOnline(userId)) {
+    val online = FynxOnlinePresenceStore.isOnline(userId)
+    val label = if (online) "Active now" else marketplaceSellerActivityLabel(
+        FynxOnlinePresenceStore.lastActiveAt(userId),
+        System.currentTimeMillis()
+    )
+    label?.let {
         Text(
-            "Active now",
-            color = FynxDesign.ClassicGreen,
+            it,
+            color = if (online) FynxDesign.ClassicGreen
+            else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
             maxLines = 1
         )
@@ -274,7 +316,9 @@ internal fun MarketplaceReferenceProductCard(
 
     Surface(
         onClick = onOpen,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().semantics {
+            contentDescription = "Shop this product: ${listing.title}"
+        },
         shape = RoundedCornerShape(16.dp),
         color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp

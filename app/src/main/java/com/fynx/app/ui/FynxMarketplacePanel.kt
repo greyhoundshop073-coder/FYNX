@@ -1953,6 +1953,7 @@ fun FynxMarketplacePanel(currentUsername: String = "preview", onOpenProfile: (St
             testOnlyReviews = testOnlyReviews,
             canPurchase = !isOwnListing,
             sellerReputation = sellerReputations[sellerKey],
+            sellerPhotoId = sellerPhotoIds[sellerKey],
             onProfile = { sellerStoreUsername = listing.sellerUsername; selected = null },
             onContact = { contactSeller(listing.sellerUsername, listing.id) },
             onBuyNow = { selected = null; checkoutListing = listing },
@@ -2253,7 +2254,8 @@ private fun MarketplaceDetails(
     onOpenAssistant: (String) -> Unit,
     onReport: () -> Unit,
     onClose: () -> Unit,
-    testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null
+    testOnlyReviews: List<FynxRemoteSocialClient.MarketplaceProductReview>? = null,
+    sellerPhotoId: String? = null
 ) {
     val context = LocalContext.current
     val reviewScope = rememberCoroutineScope()
@@ -2312,14 +2314,28 @@ private fun MarketplaceDetails(
                 Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                marketplacePostedTimeLabel(l.createdAtEpochMs, System.currentTimeMillis())?.let { posted ->
+                    Text(posted, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
-                        sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                        MarketplaceSellerPresenceAvatar(
+                            l.sellerId,
+                            sellerPhotoId,
+                            l.sellerDisplayName.ifBlank { l.sellerUsername },
+                            l.sellerUsername,
+                            Modifier.size(40.dp),
+                            onlineDotSize = 10.dp
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Seller:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(l.sellerDisplayName.ifBlank { l.sellerUsername }, fontWeight = FontWeight.SemiBold)
+                            MarketplaceSellerOnlineLabel(l.sellerId)
+                            sellerReputation?.let { MarketplaceSellerTierBadge(it.tier) }
                         if (l.location.isNotBlank()) {
                             Text("Location: ${l.location}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

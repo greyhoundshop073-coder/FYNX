@@ -13,6 +13,25 @@ const pending = new Map();
 const callBlockCache = new Map();
 const callBlockPending = new Map();
 const CACHE_TTL_MS = 5_000;
+let presenceSchemaPromise;
+
+async function ensurePresenceSchema() {
+  if (!pool) throw new Error("Presence database is unavailable.");
+  if (!presenceSchemaPromise) {
+    presenceSchemaPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS fynx_user_presence (
+        user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS fynx_user_presence_last_active_idx
+        ON fynx_user_presence(last_active_at DESC);
+    `).catch((error) => {
+      presenceSchemaPromise = null;
+      throw error;
+    });
+  }
+  await presenceSchemaPromise;
+}
 
 function viewerIdFromRequest(req) {
   try {
@@ -92,6 +111,60 @@ export async function visiblePresenceUserIds(viewerId, onlineUserIds) {
         )
   `, [viewer, ids]);
   return new Set(result.rows.map((row) => String(row.user_id)));
+}
+
+/** Saves a timestamp for an authenticated foreground session heartbeat. */
+export async function recordPresenceActivity(userId) {
+  const user = String(userId || "").trim();
+  if (!/^\d+$/.test(user)) throw new Error("A valid authenticated user is required.");
+  await ensurePresenceSchema();
+  const result = await pool.query(`
+    INSERT INTO fynx_user_presence (user_id, last_active_at)
+    VALUES ($1, NOW())
+    ON CONFLICT (user_id) DO UPDATE SET last_active_at = EXCLUDED.last_active_at
+    RETURNING (EXTRACT(EPOCH FROM last_active_at) * 1000)::bigint AS last_active_at_epoch_ms
+  `, [user]);
+  const timestamp = Number(result.rows?.[0]?.last_active_at_epoch_ms);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) throw new Error("Last-active timestamp could not be recorded.");
+  return timestamp;
+}
+
+/** Returns only activity timestamps allowed by the target account's online-visibility setting. */
+export async function visibleLastActiveAtByUserId(viewerId) {
+  const viewer = String(viewerId || "").trim();
+  if (!/^\d+$/.test(viewer) || !pool) return {};
+  await ensurePresenceSchema();
+  const result = await pool.query(`
+    SELECT presence.user_id::text AS user_id,
+           (EXTRACT(EPOCH FROM presence.last_active_at) * 1000)::bigint AS last_active_at_epoch_ms
+      FROM fynx_user_presence presence
+      LEFT JOIN privacy_settings p ON p.user_id = presence.user_id
+     WHERE presence.user_id = $1::bigint
+        OR (
+          (
+            COALESCE(p.online_visibility, 'My friends') = 'Everyone'
+            OR (
+              COALESCE(p.online_visibility, 'My friends') = 'My friends'
+              AND EXISTS (
+                SELECT 1 FROM friendships f
+                 WHERE ((f.user_id = $1 AND f.friend_id = presence.user_id)
+                     OR (f.user_id = presence.user_id AND f.friend_id = $1))
+                   AND f.status = 'accepted'
+              )
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM blocks b
+             WHERE (b.blocker_id = $1 AND b.blocked_id = presence.user_id)
+                OR (b.blocker_id = presence.user_id AND b.blocked_id = $1)
+          )
+        )
+     ORDER BY presence.last_active_at DESC
+     LIMIT 5000
+  `, [viewer]);
+  return Object.fromEntries(result.rows
+    .map((row) => [String(row.user_id), Number(row.last_active_at_epoch_ms)])
+    .filter(([, timestamp]) => Number.isFinite(timestamp) && timestamp > 0));
 }
 
 async function areCallPeersBlocked(userId, targetId) {
